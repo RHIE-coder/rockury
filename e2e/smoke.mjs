@@ -1,12 +1,14 @@
-// 빌드된 Rockury 앱 구동 스모크 — 설계 선택 → Definition → 버전 컷 → 운영부 Environments.
+// 빌드된 Rockury 앱 구동 스모크 — 설계 선택 → Definition → 버전 컷 → 운영부(Console/Migration).
 // 주의: getByRole 계열은 이 창을 크래시시킴 → CSS/text 로케이터만 사용.
-// 운영부 섹션(Environments 연결 테스트)은 test-db(mysql:13306)가 떠 있어야 한다 → `npm run db:up`.
+// 운영부 섹션(연결 테스트)은 test-db(mysql:13306)가 떠 있어야 한다 → `npm run db:up`.
+// ⚠ 이 스모크는 **실 앱 DB(~/Library/Application Support/Rockury)를 절대 건드리지 않는다**.
+//    격리된 임시 userData 로 앱을 띄우고(--user-data-dir), 종료 시 그 임시 디렉터리만 지운다.
 import { _electron as electron } from 'playwright-core'
 import { createRequire } from 'node:module'
 import * as path from 'node:path'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { homedir } from 'node:os'
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // playwright-core 는 앱 node_modules 에서 해석(디렉터리 무관하게 안전)
@@ -18,13 +20,13 @@ const electronBin = path.join(
     : 'node_modules/electron/dist/electron'
 )
 const MAIN = path.join(APP, 'out/main/index.js')
-const DB = path.join(homedir(), 'Library/Application Support/Rockury/rockury.db')
+// 격리된 임시 userData — 실 앱 DB 를 건드리지 않는 clean 시드.
+const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'rockury-e2e-'))
 
 if (!fs.existsSync(MAIN)) {
   console.error('먼저 `npm run build` 를 실행하세요 (out/main/index.js 없음).')
   process.exit(1)
 }
-for (const f of [DB, DB + '-wal', DB + '-shm']) if (fs.existsSync(f)) fs.rmSync(f)
 
 let pass = true
 const check = (label, cond) => {
@@ -32,8 +34,10 @@ const check = (label, cond) => {
   if (!cond) pass = false
 }
 
-const app = await electron.launch({ executablePath: electronBin, args: [MAIN], timeout: 30_000 })
-const page = await app.firstWindow()
+const launch = () =>
+  electron.launch({ executablePath: electronBin, args: [MAIN, `--user-data-dir=${USER_DATA}`], timeout: 30_000 })
+let app = await launch()
+let page = await app.firstWindow()
 const click = (sel) => page.locator(sel).first().click()
 const body = () => page.evaluate(() => document.body.innerText)
 // CodeMirror(.cm-content)에 SQL 입력 — 전체선택→삭제→타이핑→자동완성 팝업 닫기.
@@ -189,12 +193,15 @@ try {
   await page.waitForSelector('text=기준선', { timeout: 8_000 })
   check('Migration › Logs: 기준선 로그 체인', (await body()).includes('기준선'))
 
-  // 재시작(reload) 후 연결 잔존 — SQLite 영속(연결은 설계 무관 전역)
-  await page.reload()
+  // ⭐ 콜드 재시작(프로세스 종료→재기동, 같은 userData) 후 연결 잔존 — 진짜 영속 검증.
+  //    (renderer reload 가 아니라 실제 앱을 껐다 켠다. 사용자가 겪은 시나리오.)
+  await app.close()
+  app = await launch()
+  page = await app.firstWindow()
   await page.waitForSelector('text=Studio', { timeout: 15_000 })
   await click('button:has-text("Connections")')
   await page.waitForSelector('text=E2E-mysql', { timeout: 8_000 })
-  check('재시작 후 연결 잔존(SQLite 영속)', (await body()).includes('E2E-mysql'))
+  check('콜드 재시작 후 연결 잔존(SQLite 영속)', (await body()).includes('E2E-mysql'))
 
   console.log(pass ? '\nALL PASS' : '\nSOME FAILED')
 } catch (e) {
@@ -202,6 +209,6 @@ try {
   pass = false
 } finally {
   await app.close().catch(() => {})
-  for (const f of [DB, DB + '-wal', DB + '-shm']) if (fs.existsSync(f)) fs.rmSync(f)
+  fs.rmSync(USER_DATA, { recursive: true, force: true }) // 임시 userData 만 정리(실 DB 무관)
 }
 process.exit(pass ? 0 : 1)
