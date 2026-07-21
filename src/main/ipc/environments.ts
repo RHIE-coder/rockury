@@ -1,37 +1,22 @@
 import { ipcMain } from 'electron'
-import {
-  environmentService,
-  type EnvironmentFormData
-} from '../services/environmentService'
+import { environmentService } from '../services/environmentService'
 import { envelope } from './envelope'
 
 /**
- * 운영부 Environment IPC — 봉투 패턴(`{success,data,error}`) 규약(§ops-plan Phase 0/1).
- * 렌더러는 preload 의 unwrap 을 거쳐 성공 시 data, 실패 시 throw 로 받는다.
+ * Environment(바인딩) IPC(§IA · 결정 B) — (connection × design) 마이그레이션 상태.
+ * 접속·연결 테스트는 connections IPC 담당.
  */
 export function registerEnvironmentIpc(): void {
-  ipcMain.handle('environments:list', (_e, designId: string) =>
-    envelope(() => environmentService.list(designId))
+  ipcMain.handle('environments:find', (_e, connectionId: string, designId: string) =>
+    envelope(() => environmentService.find(connectionId, designId))
   )
-  ipcMain.handle('environments:create', (_e, form: EnvironmentFormData) =>
-    envelope(() => environmentService.create(form))
+  ipcMain.handle('environments:ensure', (_e, connectionId: string, designId: string, targetVersion: string) =>
+    envelope(() => environmentService.ensure(connectionId, designId, targetVersion))
   )
-  ipcMain.handle('environments:update', (_e, id: string, form: Partial<EnvironmentFormData>) =>
-    envelope(() => environmentService.update(id, form))
-  )
-  ipcMain.handle('environments:delete', (_e, id: string) =>
-    envelope(() => environmentService.delete(id))
+  ipcMain.handle('environments:setTarget', (_e, id: string, version: string) =>
+    envelope(() => environmentService.setTarget(id, version))
   )
   ipcMain.handle('environments:setApplied', (_e, id: string, version: string) =>
     envelope(() => environmentService.setApplied(id, version))
-  )
-  ipcMain.handle('environments:reorder', (_e, orderedIds: string[]) =>
-    envelope(() => environmentService.reorder(orderedIds))
-  )
-  ipcMain.handle('environments:test', (_e, form: EnvironmentFormData) =>
-    envelope(() => environmentService.testConnection(form))
-  )
-  ipcMain.handle('environments:testById', (_e, id: string) =>
-    envelope(() => environmentService.testConnectionById(id))
   )
 }

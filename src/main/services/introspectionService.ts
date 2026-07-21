@@ -2,7 +2,7 @@ import { decrypt } from '../infra/crypto'
 import { closeMysqlConnection, createMysqlConnection } from '../infra/db/mysqlClient'
 import { closePgConnection, createPgConnection } from '../infra/db/pgClient'
 import { closeSqliteConnection, createSqliteConnection } from '../infra/db/sqliteClient'
-import { getEnvironmentWithPassword } from '../store/environments'
+import { getConnectionWithPassword } from '../store/connections'
 import { introspectMysql } from './introspection/mysql'
 import { introspectPg } from './introspection/postgres'
 import { introspectSqlite } from './introspection/sqlite'
@@ -14,9 +14,9 @@ import type { IntrospectedSchema } from './introspection/types'
  * 정규화(IR→TableDef)는 렌더러 순수 함수가 담당 — 여기선 원시 IR 만.
  */
 export const introspectionService = {
-  async run(envId: string): Promise<IntrospectedSchema> {
-    const env = getEnvironmentWithPassword(envId)
-    if (!env) throw new Error(`환경을 찾을 수 없습니다: ${envId}`)
+  async run(connectionId: string): Promise<IntrospectedSchema> {
+    const env = getConnectionWithPassword(connectionId)
+    if (!env) throw new Error(`연결을 찾을 수 없습니다: ${connectionId}`)
     const password = env.encryptedPassword ? decrypt(env.encryptedPassword) : ''
 
     if (env.dbType === 'mysql' || env.dbType === 'mariadb') {

@@ -70,24 +70,24 @@ try {
   await page.waitForTimeout(500)
   check('버전 컷 후 v0.3.15 등장', (await body()).includes('v0.3.15'))
 
-  // ── 운영부: Environments 생성 + mysql test-db 연결 테스트 ──
-  await click('button:has-text("Environments")')
+  // ── 운영부: Connection(1급) 생성 + mysql test-db 연결 테스트 (설계 불필요) ──
+  await click('button:has-text("Connections")')
   await page.waitForTimeout(300)
-  await click('button:has-text("새 환경")')
-  await page.waitForSelector('text=환경 이름', { timeout: 5_000 })
-  await page.locator('input[placeholder*="개발"]').fill('E2E-mysql')
-  await page.locator('input[placeholder="3306"]').fill('13306') // test-db mysql 포트
+  await click('button:has-text("새 연결")')
+  await page.waitForSelector('text=연결 이름', { timeout: 5_000 })
+  await page.locator('input[placeholder*="운영 DB"]').fill('E2E-mysql')
+  await page.locator('input[placeholder="3306"]').fill('13306') // test-db mysql 포트 (기본 벤더 mysql)
   await page.locator('input[placeholder="testdb"]').fill('testdb')
   await page.locator('input[placeholder="test"]').fill('test')
   await page.locator('input[type="password"]').fill('test')
   await click('button:has-text("연결 테스트")')
   await page.waitForSelector('text=연결 성공', { timeout: 15_000 })
-  check('Environments: mysql test-db 연결 성공(serverVersion)', (await body()).includes('연결 성공'))
-  await click('button[type="submit"]:has-text("환경 만들기")')
+  check('Connections: mysql test-db 연결 성공(serverVersion)', (await body()).includes('연결 성공'))
+  await click('button[type="submit"]:has-text("연결 만들기")')
   await page.waitForSelector('text=E2E-mysql', { timeout: 5_000 })
-  check('환경 카드(E2E-mysql) 생성', (await body()).includes('E2E-mysql'))
+  check('연결 카드(E2E-mysql) 생성', (await body()).includes('E2E-mysql'))
 
-  // 카드 클릭 → active Env → Console › Object 로 실 DB 역설계(Phase 2a)
+  // 카드 클릭 → active Connection → Console › Object 로 실 DB 역설계(Phase 2a)
   await click('div[role="button"]:has-text("E2E-mysql")')
   await page.waitForTimeout(200)
   await click('button:has-text("Console")')
@@ -143,15 +143,12 @@ try {
   await page.waitForSelector('text=기준선', { timeout: 8_000 })
   check('Migration › Logs: 기준선 로그 체인', (await body()).includes('기준선'))
 
-  // 재시작(reload) 후 환경 잔존 — SQLite 영속(적용버전은 아직 —)
+  // 재시작(reload) 후 연결 잔존 — SQLite 영속(연결은 설계 무관 전역)
   await page.reload()
   await page.waitForSelector('text=Studio', { timeout: 15_000 })
-  await click('button:has-text("Design")')
-  await click('[role="menuitem"]:has-text("commerce-core")')
-  await page.waitForTimeout(300)
-  await click('button:has-text("Environments")')
+  await click('button:has-text("Connections")')
   await page.waitForSelector('text=E2E-mysql', { timeout: 8_000 })
-  check('재시작 후 환경 잔존(SQLite 영속)', (await body()).includes('E2E-mysql'))
+  check('재시작 후 연결 잔존(SQLite 영속)', (await body()).includes('E2E-mysql'))
 
   console.log(pass ? '\nALL PASS' : '\nSOME FAILED')
 } catch (e) {

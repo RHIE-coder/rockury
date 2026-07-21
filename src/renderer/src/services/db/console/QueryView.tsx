@@ -1,10 +1,8 @@
 import { AlertTriangle, Loader2, Play, Terminal, X } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
-import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
-import { useActiveDesign } from '../designs/store'
-import { useDesignEnvironments } from '../environments/store'
+import { useActiveConnection } from '../connections/store'
 import { useQueryStore } from './query/store'
 
 const MAX_ROWS = 500
@@ -22,10 +20,7 @@ function cell(v: unknown): { text: string; muted?: boolean } {
  * DDL 은 즉시 실행되며 자동 커밋 경고를 띄운다(MySQL 롤백 불가).
  */
 export function QueryView() {
-  const design = useActiveDesign()
-  const envId = useNav((s) => s.contextValues['env'])
-  const environments = useDesignEnvironments(design?.id ?? null)
-  const env = environments.find((e) => e.id === envId) ?? null
+  const conn = useActiveConnection()
 
   const sql = useQueryStore((s) => s.sql)
   const setSql = useQueryStore((s) => s.setSql)
@@ -39,23 +34,13 @@ export function QueryView() {
   const rollback = useQueryStore((s) => s.rollback)
   const dismissError = useQueryStore((s) => s.dismissError)
 
-  if (!design) {
+  if (!conn) {
     return (
       <PlaceholderView
         icon={Terminal}
         depth="depth 3 · Console › Query"
-        title="설계를 먼저 선택하세요"
-        subtitle="운영부는 설계에 소속된 환경을 기준으로 동작합니다."
-      />
-    )
-  }
-  if (!envId || !env) {
-    return (
-      <PlaceholderView
-        icon={Terminal}
-        depth="depth 3 · Console › Query"
-        title="환경을 선택하세요"
-        subtitle="상단 컨텍스트 바의 Env 셀렉터에서 대상 환경을 고르면 SQL 을 실행할 수 있습니다."
+        title="연결을 선택하세요"
+        subtitle="상단 컨텍스트 바의 Connection 셀렉터에서 대상을 고르면 SQL 을 실행할 수 있습니다."
       />
     )
   }
@@ -69,11 +54,11 @@ export function QueryView() {
       <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
         <div className="flex flex-col">
           <h2 className="text-[14px] font-bold text-fg">
-            Query <span className="font-normal text-muted">· {env.name}</span>
+            Query <span className="font-normal text-muted">· {conn.name}</span>
           </h2>
           <p className="text-[12px] text-muted">SQL 실행 · DML 은 커밋 전 확인, DDL 은 자동 커밋</p>
         </div>
-        <Button size="sm" disabled={!canRun} onClick={() => void run(envId)}>
+        <Button size="sm" disabled={!canRun} onClick={() => void run(conn.id)}>
           {loading ? <Loader2 className="animate-spin" /> : <Play />} 실행
           <span className="ml-1 text-[10px] opacity-70">⌘↵</span>
         </Button>
@@ -86,7 +71,7 @@ export function QueryView() {
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canRun) {
             e.preventDefault()
-            void run(envId)
+            void run(conn.id)
           }
         }}
         spellCheck={false}

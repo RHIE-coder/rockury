@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { registerWindowIpc } from './ipc/window'
 import { registerStoreIpc } from './ipc/store'
+import { registerConnectionIpc } from './ipc/connections'
 import { registerEnvironmentIpc } from './ipc/environments'
 import { registerIntrospectionIpc } from './ipc/introspection'
 import { registerQueryIpc } from './ipc/query'
@@ -47,6 +48,7 @@ app.setName('Rockury')
 app.whenReady().then(() => {
   registerWindowIpc()
   registerStoreIpc()
+  registerConnectionIpc()
   registerEnvironmentIpc()
   registerIntrospectionIpc()
   registerQueryIpc()

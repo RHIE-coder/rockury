@@ -2,12 +2,10 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Boxes, KeyRound, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { Badge } from '@renderer/ui/badge'
-import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import type { ConstraintKind, TableDef } from '../workspaces/definition/types'
-import { useActiveDesign } from '../designs/store'
-import { useDesignEnvironments } from '../environments/store'
+import { useActiveConnection } from '../connections/store'
 import { columnKeyKinds } from './introspection'
 import { useConsoleStore } from './store'
 
@@ -114,37 +112,25 @@ function TableCard({ table }: { table: TableDef }) {
  * Phase 2a introspection 의 첫 소비자. 결과 TableDef[] 는 Diagram/Migration 과 공유된다.
  */
 export function ObjectView() {
-  const design = useActiveDesign()
-  const envId = useNav((s) => s.contextValues['env'])
-  const environments = useDesignEnvironments(design?.id ?? null)
-  const env = environments.find((e) => e.id === envId) ?? null
+  const conn = useActiveConnection()
+  const connId = conn?.id ?? null
 
-  const tables = useConsoleStore((s) => (envId ? s.byEnv[envId] : undefined))
-  const loading = useConsoleStore((s) => (envId ? s.loading[envId] : false))
-  const error = useConsoleStore((s) => (envId ? s.error[envId] : null))
+  const tables = useConsoleStore((s) => (connId ? s.byEnv[connId] : undefined))
+  const loading = useConsoleStore((s) => (connId ? s.loading[connId] : false))
+  const error = useConsoleStore((s) => (connId ? s.error[connId] : null))
   const load = useConsoleStore((s) => s.load)
 
   useEffect(() => {
-    if (envId && design) void load(envId, design.id)
-  }, [envId, design, load])
+    if (connId) void load(connId, connId)
+  }, [connId, load])
 
-  if (!design) {
+  if (!conn) {
     return (
       <PlaceholderView
         icon={Boxes}
         depth="depth 3 · Console › Object"
-        title="설계를 먼저 선택하세요"
-        subtitle="운영부는 설계에 소속된 환경을 기준으로 동작합니다."
-      />
-    )
-  }
-  if (!envId || !env) {
-    return (
-      <PlaceholderView
-        icon={Boxes}
-        depth="depth 3 · Console › Object"
-        title="환경을 선택하세요"
-        subtitle="상단 컨텍스트 바의 Env 셀렉터(또는 Environments 카드)에서 대상 환경을 고르면 실 DB 를 역설계해 객체를 보여줍니다."
+        title="연결을 선택하세요"
+        subtitle="상단 컨텍스트 바의 Connection 셀렉터(또는 Connections 카드)에서 대상을 고르면 실 DB 를 역설계해 객체를 보여줍니다."
       />
     )
   }
@@ -154,7 +140,7 @@ export function ObjectView() {
       <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
         <div className="flex flex-col">
           <h2 className="text-[14px] font-bold text-fg">
-            Object <span className="font-normal text-muted">· {env.name}</span>
+            Object <span className="font-normal text-muted">· {conn.name}</span>
           </h2>
           <p className="text-[12px] text-muted">
             {loading
@@ -168,7 +154,7 @@ export function ObjectView() {
           size="sm"
           variant="outline"
           disabled={loading}
-          onClick={() => void load(envId, design.id, true)}
+          onClick={() => void load(conn.id, conn.id, true)}
         >
           {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
         </Button>

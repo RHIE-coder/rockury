@@ -21,11 +21,10 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/ui/select'
-import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useActiveDesign, type DesignDef } from '../designs/store'
-import { useDesignEnvironments, type EnvironmentDef } from '../environments/store'
+import { useActiveConnection, type ConnectionDef } from '../connections/store'
 import { useDesignVersions } from '../versions/store'
 import type { SchemaDiff } from '../versions/diff'
 import { isEmptyDiff } from '../versions/diff'
@@ -33,19 +32,26 @@ import { useMigrationStore } from './store'
 
 interface Ctx {
   design: DesignDef
-  env: EnvironmentDef
-  envId: string
+  connection: ConnectionDef
 }
 
-/** 공통 가드 — 설계·환경이 있어야 운영부 Migration 이 동작한다. */
+/**
+ * 공통 가드 — Migration 은 실제(Connection)를 설계 버전과 대조하므로 **둘 다** 필요하다.
+ * (Console 은 Connection 만으로 되지만, 마이그레이션은 설계가 있어야 diff 대상이 생긴다.)
+ */
 function useCtx(): { ctx: Ctx | null; fallback: ReactElement | null } {
   const design = useActiveDesign()
-  const envId = useNav((s) => s.contextValues['env'])
-  const environments = useDesignEnvironments(design?.id ?? null)
-  const env = environments.find((e) => e.id === envId) ?? null
-  if (!design) return { ctx: null, fallback: <Guard title="설계를 먼저 선택하세요" /> }
-  if (!envId || !env) return { ctx: null, fallback: <Guard title="환경을 선택하세요" sub="Env 셀렉터에서 대상 환경을 고르세요." /> }
-  return { ctx: { design, env, envId }, fallback: null }
+  const connection = useActiveConnection()
+  if (!connection)
+    return { ctx: null, fallback: <Guard title="연결을 선택하세요" sub="Connection 셀렉터에서 대상 실 DB 를 고르세요." /> }
+  if (!design)
+    return {
+      ctx: null,
+      fallback: (
+        <Guard title="설계를 선택하세요" sub="마이그레이션은 실제(연결)를 설계 버전과 대조합니다. 상단 Design 셀렉터에서 대상 설계를 고르세요." />
+      )
+    }
+  return { ctx: { design, connection }, fallback: null }
 }
 
 function Guard({ title, sub }: { title: string; sub?: string }): ReactElement {
@@ -58,7 +64,6 @@ const STATUS_COLOR: Record<string, string> = {
   modified: 'text-accent-2'
 }
 
-/** SchemaDiff 요약 — 카운트 + 변경 테이블 칩. */
 function DiffSummary({ diff }: { diff: SchemaDiff }): ReactElement {
   const s = diff.summary
   return (
@@ -92,12 +97,15 @@ function ErrorBar(): ReactElement | null {
   )
 }
 
-function Header({ title, env, children }: { title: string; env: EnvironmentDef; children?: ReactNode }): ReactElement {
+function Header({ title, ctx, children }: { title: string; ctx: Ctx; children?: ReactNode }): ReactElement {
+  const binding = useMigrationStore((s) => s.binding)
   return (
     <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
       <div className="flex flex-col">
-        <h2 className="text-[14px] font-bold text-fg">{title} <span className="font-normal text-muted">· {env.name}</span></h2>
-        <p className="text-[12px] text-muted">타깃 {env.targetVersion || '—'} · 적용 {env.appliedVersion || '—'}</p>
+        <h2 className="text-[14px] font-bold text-fg">
+          {title} <span className="font-normal text-muted">· {ctx.connection.name} ↔ {ctx.design.name}</span>
+        </h2>
+        <p className="text-[12px] text-muted">타깃 {binding?.targetVersion || '—'} · 적용 {binding?.appliedVersion || '—'}</p>
       </div>
       <div className="flex items-center gap-1.5">{children}</div>
     </div>
@@ -108,16 +116,18 @@ function Header({ title, env, children }: { title: string; env: EnvironmentDef; 
 export function DriftView(): ReactElement {
   const { ctx, fallback } = useCtx()
   const st = useMigrationStore()
+  const cid = ctx?.connection.id
+  const did = ctx?.design.id
   useEffect(() => {
-    if (ctx) void st.loadDrift(ctx.envId, ctx.design.id)
+    if (cid && did) void st.loadDrift(cid, did)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx?.envId, ctx?.design.id])
+  }, [cid, did])
   if (!ctx) return fallback!
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Drift" env={ctx.env}>
-        <Button size="sm" variant="outline" disabled={st.loading} onClick={() => void st.loadDrift(ctx.envId, ctx.design.id)}>
+      <Header title="Drift" ctx={ctx}>
+        <Button size="sm" variant="outline" disabled={st.loading} onClick={() => void st.loadDrift(ctx.connection.id, ctx.design.id)}>
           {st.loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 다시 검사
         </Button>
       </Header>
@@ -132,7 +142,7 @@ export function DriftView(): ReactElement {
               드리프트는 "마지막에 남긴 실제 모습(post-apply 스냅샷)"과 지금을 비교합니다. 먼저 현재 실제
               상태를 기준선으로 캡처하세요.
             </p>
-            <Button size="sm" disabled={st.loading} onClick={() => void st.captureBaseline(ctx.envId, ctx.design.id, ctx.env.appliedVersion || '')}>
+            <Button size="sm" disabled={st.loading} onClick={() => void st.captureBaseline(ctx.connection.id, ctx.design.id, st.binding?.appliedVersion || '')}>
               <Camera /> 현재 상태를 기준선으로 캡처
             </Button>
           </div>
@@ -140,7 +150,7 @@ export function DriftView(): ReactElement {
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2 text-[13px] font-semibold text-accent-2"><AlertTriangle className="size-4" /> 드리프트 감지됨 (기준선 {st.baselineVersion || '—'} 대비)</div>
             <DiffSummary diff={st.driftDiff} />
-            <Button size="sm" variant="outline" onClick={() => void st.captureBaseline(ctx.envId, ctx.design.id, ctx.env.appliedVersion || '')}>
+            <Button size="sm" variant="outline" onClick={() => void st.captureBaseline(ctx.connection.id, ctx.design.id, st.binding?.appliedVersion || '')}>
               <Camera /> 현재 상태로 기준선 갱신
             </Button>
           </div>
@@ -162,8 +172,8 @@ export function PlanView(): ReactElement {
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Plan" env={ctx.env}>
-        <Select value={st.targetVersion ?? ctx.env.targetVersion ?? undefined} onValueChange={(v) => void st.loadPlan(ctx.envId, ctx.design.id, dialect, v)}>
+      <Header title="Plan" ctx={ctx}>
+        <Select value={st.targetVersion ?? st.binding?.targetVersion ?? undefined} onValueChange={(v) => void st.loadPlan(ctx.connection.id, ctx.design.id, dialect, v)}>
           <SelectTrigger size="sm" className="w-36 font-mono">
             <SelectValue placeholder={versions.length ? '타깃 버전' : '버전 없음'} />
           </SelectTrigger>
@@ -227,7 +237,7 @@ export function RunView(): ReactElement {
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Run" env={ctx.env} />
+      <Header title="Run" ctx={ctx} />
       <ErrorBar />
       <div className="min-h-0 flex-1 overflow-auto p-5">
         {!plan || plan.statements.length === 0 ? (
@@ -248,7 +258,7 @@ export function RunView(): ReactElement {
 
             {!st.tx ? (
               <div>
-                <Button size="sm" disabled={!canRun} onClick={() => void st.run(ctx.envId)}>
+                <Button size="sm" disabled={!canRun} onClick={() => void st.run(ctx.connection.id)}>
                   {st.loading ? <Loader2 className="animate-spin" /> : <Play />} 트랜잭션으로 실행
                 </Button>
               </div>
@@ -258,7 +268,7 @@ export function RunView(): ReactElement {
                   {st.tx.statements}개 문 실행됨 · 영향 <b className="font-mono">{st.tx.affected}</b>행 · 아직 커밋되지 않았습니다
                 </span>
                 <Button size="sm" variant="ghost" onClick={() => void st.rollback()}>롤백</Button>
-                <Button size="sm" onClick={() => void st.confirm(ctx.envId, ctx.design.id)}>커밋</Button>
+                <Button size="sm" onClick={() => void st.confirm(ctx.connection.id, ctx.design.id)}>커밋</Button>
               </div>
             )}
             <p className="text-[11.5px] text-muted">
@@ -278,16 +288,18 @@ const KIND_LABEL: Record<string, string> = { baseline: '기준선', drift: '드�
 export function LogsView(): ReactElement {
   const { ctx, fallback } = useCtx()
   const st = useMigrationStore()
+  const cid = ctx?.connection.id
+  const did = ctx?.design.id
   useEffect(() => {
-    if (ctx) void st.loadLogs(ctx.envId)
+    if (cid && did) void st.loadLogs(cid, did)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx?.envId])
+  }, [cid, did])
   if (!ctx) return fallback!
 
   return (
     <div className="flex h-full flex-col">
-      <Header title="Logs" env={ctx.env}>
-        <Button size="sm" variant="outline" onClick={() => void st.loadLogs(ctx.envId)}><RefreshCw /> 새로고침</Button>
+      <Header title="Logs" ctx={ctx}>
+        <Button size="sm" variant="outline" onClick={() => void st.loadLogs(ctx.connection.id, ctx.design.id)}><RefreshCw /> 새로고침</Button>
       </Header>
       <ErrorBar />
       <div className="min-h-0 flex-1 overflow-auto p-5">

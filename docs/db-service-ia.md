@@ -148,6 +148,7 @@ nav 는 "깊이는 데이터다" 원칙. 관련 타입은 `src/renderer/src/nav/
 | dialect ⊂ Design | 벤더(방언)는 Design 생성 시 1회 결정되는 고정 속성. 설계 화면·DDL 은 네이티브 구문 그대로("표를 보면 그 벤더다"), 벤더 이동은 명시적 **포팅**(리포트 딸린 새 Design 생성)으로만 | 벤더 전용 타입(INET·JSONB 등) 자유도 + DBA 가독성. 중립 모델의 손실·혼란 회피. Design 1:N Env 라 전 환경 동일 벤더가 구조적으로 보장되고, Env 생성 시 Connection 벤더 일치 검증이 공짜 |
 | Design 생성 진입점 | nav 모듈이 아니라 **컨텍스트 바 Design 드롭다운의 "새 설계…" 액션**(+ 빈 상태 CTA). 관리(이름변경·삭제·포팅)는 추후 Overview 가 담당 | ②-a 유지(depth 안 늘림) · 워크스페이스 스위처 관례 |
 | ③-a Version=경계 객체 | Version 은 설계↔운영이 공유하는 경계 객체. 설계=**렌즈**(컨텍스트 바 Version 셀렉터, Draft/커밋본 읽기전용), 운영=**환경 바인딩**(Env 가 운반). 관리 홈=Versions 모듈. 조율자=**Migration**(액션)+**Overview**(대시보드). 별도 L1 서비스로 승격하지 않음 | 사용자 지적("양쪽에서 바인딩, 중간에서 조율") 반영. Studio 가 Version 을 소유하지 않고 렌더만 |
+| **B — Connection 1급 분리** (구현됨, `①-a`/`dialect⊂Design` 일부 대체) | **Connection**(접속, 설계 무관)을 1급으로 승격. **Console 은 Connection 만으로 동작**(설계 없이 모니터링/조회). **Environment = (connection × design) 바인딩**으로 Migration 에서만 필요. 컨텍스트 바 ops 셀렉터는 **Env → Connection**. dbType 은 Connection 속성(폼 자유선택); 벤더-설계 일치 검증은 Migration 바인딩 시점으로 이동 | 사용자 지적: "운영 DB 모니터링만 할 수도 있는데 왜 Design 강제?". Console(Reverse/조회)은 접속만 필요하고, 설계는 Migration(diff 대상)에만 필요 — 관심사 분리. IA 원안 "Connection ≠ Environment" 복원 |
 
 ---
 

@@ -36,7 +36,7 @@ import { DesignDialogs } from './designs/DesignDialogs'
 import { useDesignsStore } from './designs/store'
 import { TimelineView } from './versions/TimelineView'
 import { VersionDiffView } from './versions/VersionDiffView'
-import { EnvironmentsView } from './environments/EnvironmentsView'
+import { ConnectionsView } from './connections/ConnectionsView'
 import { ObjectView } from './console/ObjectView'
 import { QueryView } from './console/QueryView'
 import { DataView } from './console/DataView'
@@ -100,12 +100,13 @@ export const dbService: Service = {
       options: [{ id: 'draft', label: 'Draft', hint: '편집 중' }]
     },
     {
-      // 환경도 런타임 생성 데이터 → 골격엔 하드코딩하지 않는다. 운영부에서만 활성.
-      id: 'env',
-      label: 'Env',
+      // 연결(1급)도 런타임 데이터 → connections/store 가 옵션을 주입한다. 운영부에서만 활성.
+      // Console 은 이 연결만으로 동작하고, Migration 은 여기에 active Design 을 더해 바인딩한다.
+      id: 'conn',
+      label: 'Connection',
       icon: Server,
       activeInAreas: ['ops'],
-      placeholder: '환경 선택',
+      placeholder: '연결 선택',
       options: []
     }
   ],
@@ -147,11 +148,11 @@ export const dbService: Service = {
 
     // ── 운영부 ──────────────────────────────────────────────────────────────
     {
-      id: 'environments',
-      label: 'Environments',
+      id: 'connections',
+      label: 'Connections',
       icon: Server,
       area: 'ops',
-      workspace: EnvironmentsView
+      workspace: ConnectionsView
     },
     {
       id: 'console',

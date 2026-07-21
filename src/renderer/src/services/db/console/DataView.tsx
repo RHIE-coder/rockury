@@ -11,12 +11,10 @@ import {
   X
 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
-import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import type { TableDef } from '../workspaces/definition/types'
-import { useActiveDesign } from '../designs/store'
-import { useDesignEnvironments } from '../environments/store'
+import { useActiveConnection } from '../connections/store'
 import { useConsoleStore } from './store'
 import { canEdit, pkColumns } from './data/sqlBuilder'
 import { PAGE_SIZE, rowKey, useDataStore } from './data/store'
@@ -34,27 +32,22 @@ function display(v: unknown): string {
  * **PK 없으면 읽기전용**(§ops-plan). 타입별 셀 에디터/타임존은 향후(현재 텍스트 + NULL 표시).
  */
 export function DataView() {
-  const design = useActiveDesign()
-  const envId = useNav((s) => s.contextValues['env'])
-  const environments = useDesignEnvironments(design?.id ?? null)
-  const env = environments.find((e) => e.id === envId) ?? null
+  const conn = useActiveConnection()
+  const connId = conn?.id ?? null
 
-  const tables = useConsoleStore((s) => (envId ? s.byEnv[envId] : undefined))
-  const introLoading = useConsoleStore((s) => (envId ? s.loading[envId] : false))
+  const tables = useConsoleStore((s) => (connId ? s.byEnv[connId] : undefined))
+  const introLoading = useConsoleStore((s) => (connId ? s.loading[connId] : false))
   const loadIntro = useConsoleStore((s) => s.load)
 
   const d = useDataStore()
-  const dialect = design?.dialect
+  const dialect = conn?.dbType
 
   useEffect(() => {
-    if (envId && design) void loadIntro(envId, design.id)
-  }, [envId, design, loadIntro])
+    if (connId) void loadIntro(connId, connId)
+  }, [connId, loadIntro])
 
-  if (!design) {
-    return <PlaceholderView icon={Table2} depth="depth 3 · Console › Data" title="설계를 먼저 선택하세요" subtitle="운영부는 설계에 소속된 환경 기준으로 동작합니다." />
-  }
-  if (!envId || !env) {
-    return <PlaceholderView icon={Table2} depth="depth 3 · Console › Data" title="환경을 선택하세요" subtitle="Env 셀렉터에서 대상 환경을 고르면 실 DB 테이블을 조회/편집할 수 있습니다." />
+  if (!conn) {
+    return <PlaceholderView icon={Table2} depth="depth 3 · Console › Data" title="연결을 선택하세요" subtitle="Connection 셀렉터에서 대상을 고르면 실 DB 테이블을 조회/편집할 수 있습니다." />
   }
 
   const selected: TableDef | null = tables?.find((t) => t.name === d.table) ?? null
@@ -76,7 +69,7 @@ export function DataView() {
             <button
               key={t.id}
               type="button"
-              onClick={() => dialect && void d.selectTable(envId, dialect, t)}
+              onClick={() => dialect && void d.selectTable(conn.id, dialect, t)}
               className={cn(
                 'flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-[12px] outline-none hover:bg-panel',
                 t.name === d.table ? 'bg-accent-soft/50 text-accent' : 'text-fg'
@@ -120,7 +113,7 @@ export function DataView() {
                   size="sm"
                   variant="outline"
                   disabled={d.loading}
-                  onClick={() => dialect && void d.load(envId, dialect, selected)}
+                  onClick={() => dialect && void d.load(conn.id, dialect, selected)}
                 >
                   {d.loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
                 </Button>
@@ -142,7 +135,7 @@ export function DataView() {
                     <Button
                       size="sm"
                       disabled={d.loading || statements.length === 0}
-                      onClick={() => dialect && void d.save(envId, dialect, selected)}
+                      onClick={() => dialect && void d.save(conn.id, dialect, selected)}
                     >
                       저장(트랜잭션)
                     </Button>
@@ -172,7 +165,7 @@ export function DataView() {
                 <Button size="sm" variant="ghost" onClick={() => void d.rollback()}>
                   롤백
                 </Button>
-                <Button size="sm" onClick={() => dialect && void d.confirm(envId, dialect, selected)}>
+                <Button size="sm" onClick={() => dialect && void d.confirm(conn.id, dialect, selected)}>
                   커밋
                 </Button>
               </div>
@@ -284,10 +277,10 @@ export function DataView() {
                 {d.rows.length}행 표시 · 페이지 {d.page + 1}
               </span>
               <div className="flex items-center gap-1">
-                <Button size="sm" variant="ghost" disabled={d.page === 0 || d.loading} onClick={() => dialect && void d.setPage(envId, dialect, selected, d.page - 1)}>
+                <Button size="sm" variant="ghost" disabled={d.page === 0 || d.loading} onClick={() => dialect && void d.setPage(conn.id, dialect, selected, d.page - 1)}>
                   <ChevronLeft />
                 </Button>
-                <Button size="sm" variant="ghost" disabled={d.rows.length < PAGE_SIZE || d.loading} onClick={() => dialect && void d.setPage(envId, dialect, selected, d.page + 1)}>
+                <Button size="sm" variant="ghost" disabled={d.rows.length < PAGE_SIZE || d.loading} onClick={() => dialect && void d.setPage(conn.id, dialect, selected, d.page + 1)}>
                   <ChevronRight />
                 </Button>
               </div>

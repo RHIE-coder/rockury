@@ -24,6 +24,20 @@ export function getDb(): DatabaseSync {
 
 /** 스키마 마이그레이션 — designs + tables(문서형). 이후 versions/snapshots/logs 확장 예정. */
 function migrate(d: DatabaseSync): void {
+  // 레거시 정리(dev): environments 가 구(舊) 엔드포인트 스키마면 Connection 분리 전 형태 →
+  // 바인딩 스키마로 재작성하기 위해 관련 ops 테이블을 드롭한다(운영부는 신규라 데이터 손실 무해).
+  const hasEnv = d
+    .prepare(`SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='environments'`)
+    .get() as unknown as { c: number }
+  if (hasEnv.c > 0) {
+    const legacy = d
+      .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('environments') WHERE name='db_type'`)
+      .get() as unknown as { c: number }
+    if (legacy.c > 0) {
+      d.exec('DROP TABLE IF EXISTS migration_logs; DROP TABLE IF EXISTS env_snapshots; DROP TABLE IF EXISTS environments;')
+    }
+  }
+
   d.exec(`
     CREATE TABLE IF NOT EXISTS designs (
       id          TEXT PRIMARY KEY,
@@ -55,9 +69,9 @@ function migrate(d: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_versions_design ON versions(design_id);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_versions_design_number ON versions(design_id, number);
 
-    CREATE TABLE IF NOT EXISTS environments (
+    -- Connection: 원시 접속(엔드포인트/자격증명), 설계 무관. Console 을 구동.
+    CREATE TABLE IF NOT EXISTS connections (
       id                 TEXT PRIMARY KEY,
-      design_id          TEXT NOT NULL,
       name               TEXT NOT NULL,
       db_type            TEXT NOT NULL,
       host               TEXT NOT NULL DEFAULT '',
@@ -67,12 +81,22 @@ function migrate(d: DatabaseSync): void {
       encrypted_password TEXT NOT NULL DEFAULT '',
       ssl_enabled        INTEGER NOT NULL DEFAULT 0,
       ssl_config         TEXT,
-      target_version     TEXT NOT NULL DEFAULT '',
-      applied_version    TEXT,
       sort_order         INTEGER NOT NULL DEFAULT 0,
       created_at         TEXT NOT NULL,
       updated_at         TEXT NOT NULL
     );
+
+    -- Environment: (connection × design) 바인딩 + 타깃/적용 버전. Migration 전용 상태.
+    CREATE TABLE IF NOT EXISTS environments (
+      id              TEXT PRIMARY KEY,
+      connection_id   TEXT NOT NULL,
+      design_id       TEXT NOT NULL,
+      target_version  TEXT NOT NULL DEFAULT '',
+      applied_version TEXT,
+      created_at      TEXT NOT NULL,
+      updated_at      TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_env_conn_design ON environments(connection_id, design_id);
     CREATE INDEX IF NOT EXISTS idx_environments_design ON environments(design_id);
 
     CREATE TABLE IF NOT EXISTS env_snapshots (

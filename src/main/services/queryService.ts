@@ -6,7 +6,7 @@ import { decrypt } from '../infra/crypto'
 import { closeMysqlConnection, createMysqlConnection } from '../infra/db/mysqlClient'
 import { closePgConnection, createPgConnection } from '../infra/db/pgClient'
 import { closeSqliteConnection, createSqliteConnection } from '../infra/db/sqliteClient'
-import { getEnvironmentWithPassword } from '../store/environments'
+import { getConnectionWithPassword } from '../store/connections'
 import { splitStatements } from './query/splitStatements'
 
 /**
@@ -46,12 +46,12 @@ interface TxSession {
 const sessions = new Map<string, TxSession>()
 
 export const queryService = {
-  async run(envId: string, sql: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<QueryResult> {
+  async run(connectionId: string, sql: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<QueryResult> {
     const statements = splitStatements(sql)
     if (statements.length === 0) throw new Error('실행할 SQL 이 없습니다.')
 
     const start = Date.now()
-    const handle = await open(envId)
+    const handle = await open(connectionId)
     try {
       const result = await execScript(handle, statements, timeoutMs)
       return { ...result, executionTimeMs: Date.now() - start }
@@ -60,9 +60,9 @@ export const queryService = {
     }
   },
 
-  async txBegin(envId: string): Promise<TxBeginResult> {
+  async txBegin(connectionId: string): Promise<TxBeginResult> {
     await sweepStale()
-    const handle = await open(envId)
+    const handle = await open(connectionId)
     try {
       await begin(handle)
     } catch (e) {
@@ -93,13 +93,13 @@ export const queryService = {
 
   /** 파라미터 바인드 즉시 실행(새 연결). 데이터 편집의 개별 문에 쓰인다. */
   async runParams(
-    envId: string,
+    connectionId: string,
     sql: string,
     params: unknown[],
     timeoutMs = DEFAULT_TIMEOUT_MS
   ): Promise<QueryResult> {
     const start = Date.now()
-    const handle = await open(envId)
+    const handle = await open(connectionId)
     try {
       const result = await execOne(handle, sql, timeoutMs, params)
       return { ...result, executionTimeMs: Date.now() - start }
@@ -162,9 +162,9 @@ async function sweepStale(): Promise<void> {
   }
 }
 
-async function open(envId: string): Promise<Handle> {
-  const env = getEnvironmentWithPassword(envId)
-  if (!env) throw new Error(`환경을 찾을 수 없습니다: ${envId}`)
+async function open(connectionId: string): Promise<Handle> {
+  const env = getConnectionWithPassword(connectionId)
+  if (!env) throw new Error(`연결을 찾을 수 없습니다: ${connectionId}`)
   const password = env.encryptedPassword ? decrypt(env.encryptedPassword) : ''
 
   if (env.dbType === 'mysql' || env.dbType === 'mariadb') {

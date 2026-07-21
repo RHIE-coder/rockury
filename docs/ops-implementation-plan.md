@@ -1,13 +1,20 @@
 # 운영부(ops) 구현 플랜 & 세션 인수인계
 
 > 목적: 컨텍스트 clear 후 이 문서 + `docs/db-service-ia.md` 만 읽고 바로 이어서 작업하기 위한 재개점.
-> 최종 갱신: 2026-07-21 (**Phase 0/1/2a/2b/2c/3 완료** — 운영부 전 기능 실동작. 남은 것: 2e Diagram(real) + 향후 향상)
+> 최종 갱신: 2026-07-21 (**Phase 0/1/2a/2b/2c/3 완료 + Connection 1급 분리(결정 B)**. 남은 것: 2e Diagram + 향후 향상)
 
 ---
 
 ## 1. 지금까지 구현된 것 (설계부 = 대체로 완성)
 
-DB 서비스의 **설계부(design)** 는 로컬 SQLite 저장소 위에 실제 동작한다. **운영부(ops)도 대부분 실동작** — Environments(연결/테스트), Console(Object 역설계·Query 실행·Data 편집, 모두 트랜잭션 게이트), Migration(Drift/Plan/Run/Logs). 남은 것: Console Diagram(2e, 시각화) + 향후 향상들.
+DB 서비스의 **설계부(design)** 는 로컬 SQLite 저장소 위에 실제 동작한다. **운영부(ops)도 대부분 실동작**.
+
+**결정 B — Connection 1급 분리(IA 원안 복원)**: 접속은 이제 **Connection**(설계 무관 1급 엔티티)이다.
+- **Connections 모듈**(구 Environments): 원시 접속 CRUD + 연결 테스트. **설계 없이** Console 을 쓸 수 있다(모니터링/조회 유스케이스 — 사용자 요구).
+- **Console**(Object/Data/Query)은 **활성 Connection** 으로 동작(컨텍스트 바 `conn` 셀렉터). dbType 은 연결 자체 속성.
+- **Environment = (connection × design) 바인딩**(target/appliedVersion 보유). **Migration 전용** — 활성 Connection + 활성 Design 으로 자동 확보(`environments.ensure`). 별도 UI/셀렉터 없음.
+- main: `store/connections.ts`+`services/connectionService.ts`(+`ipc/connections.ts`), `store/environments.ts`+`environmentService`는 바인딩(ensure/setTarget/setApplied)으로 축소. introspection/query 서비스는 connectionId 로 접속.
+- 렌더러: `connections/`(store 전역 하이드레이션 + 옵션 주입, ConnectionsView, ConnectionDialog(dbType 자유선택)). 구 `environments/` 렌더러 삭제.
 
 ### 로컬 메타 저장소 (Rockury 자체 DB)
 - 엔진: **Electron 43 번들 Node 24의 내장 `node:sqlite`** (`DatabaseSync`). 네이티브 모듈 없음 → `electron-rebuild` 불필요.
