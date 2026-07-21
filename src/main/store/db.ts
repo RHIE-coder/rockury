@@ -1,7 +1,19 @@
-import { app } from 'electron'
-import { join } from 'path'
 import { DatabaseSync } from 'node:sqlite'
 import { SEED_TABLES, SEED_VERSIONS } from './seed'
+
+/**
+ * DB 파일 경로 주입 seam — db.ts 는 electron 을 import 하지 않는다(테스트 가능성).
+ * main 진입점(app.whenReady)에서 `setDbPath(userData/rockury.db)` 를 호출하고,
+ * 테스트는 임시 파일 경로를 주입한다(`ROCKURY_DB_PATH` 또는 setDbPath). 실 앱 DB 무관.
+ */
+let dbPath: string | null = process.env.ROCKURY_DB_PATH ?? null
+export function setDbPath(p: string): void {
+  dbPath = p
+}
+function resolveDbFile(): string {
+  if (!dbPath) throw new Error('DB 경로 미설정 — main 진입점에서 setDbPath() 를 먼저 호출하세요.')
+  return dbPath
+}
 
 /**
  * Rockury 로컬 메타 저장소 (설계·버전·스냅샷·이력의 지상 진실 — IA §4).
@@ -14,8 +26,7 @@ let db: DatabaseSync | null = null
 
 export function getDb(): DatabaseSync {
   if (db) return db
-  const file = join(app.getPath('userData'), 'rockury.db')
-  db = new DatabaseSync(file)
+  db = new DatabaseSync(resolveDbFile())
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
   migrate(db)
   seed(db)

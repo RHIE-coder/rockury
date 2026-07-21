@@ -8,6 +8,7 @@ import { registerIntrospectionIpc } from './ipc/introspection'
 import { registerQueryIpc } from './ipc/query'
 import { registerMigrationIpc } from './ipc/migration'
 import { registerCollectionIpc } from './ipc/collections'
+import { setDbPath } from './store/db'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -47,6 +48,8 @@ function createWindow(): void {
 app.setName('Rockury')
 
 app.whenReady().then(() => {
+  // 로컬 저장소 DB 경로 주입(userData). getDb() 첫 호출 전에 설정한다.
+  setDbPath(join(app.getPath('userData'), 'rockury.db'))
   registerWindowIpc()
   registerStoreIpc()
   registerConnectionIpc()
