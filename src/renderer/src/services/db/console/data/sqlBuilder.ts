@@ -1,0 +1,120 @@
+import type { TableDef } from '../../workspaces/definition/types'
+import type { DialectId } from '../../dialects'
+
+/**
+ * 데이터 편집 SQL 빌더(§ops-plan Phase 2b) — **파라미터 바인드**로 문을 만든다(문자열 조립 금지).
+ * rky sqlBuilder(escapeValue 문자열 삽입)의 결함을 고쳐, 값은 전부 바인드 파라미터로 분리한다.
+ * 방언별 식별자 인용(mysql=백틱, pg/sqlite=쌍따옴표)과 플레이스홀더(pg=$n, 그 외=?)를 처리.
+ * 순수 함수 → 테스트 의무 대상.
+ */
+export type SqlDialect = DialectId
+
+export interface Statement {
+  sql: string
+  params: unknown[]
+}
+
+export function quoteIdent(dialect: SqlDialect, name: string): string {
+  if (dialect === 'postgresql' || dialect === 'sqlite') return `"${name.replace(/"/g, '""')}"`
+  return `\`${name.replace(/`/g, '``')}\``
+}
+
+const ph = (dialect: SqlDialect, i: number): string => (dialect === 'postgresql' ? `$${i}` : '?')
+const safeInt = (n: number): number => Math.max(0, Math.floor(Number.isFinite(n) ? n : 0))
+
+export interface SelectOptions {
+  limit: number
+  offset: number
+  orderBy?: { column: string; direction: 'ASC' | 'DESC' }
+}
+
+/** SELECT * … LIMIT/OFFSET. limit/offset 은 정수로 정제해 인라인(값 없음). */
+export function buildSelect(dialect: SqlDialect, table: string, opts: SelectOptions): string {
+  const q = (n: string): string => quoteIdent(dialect, n)
+  let sql = `SELECT * FROM ${q(table)}`
+  if (opts.orderBy) {
+    sql += ` ORDER BY ${q(opts.orderBy.column)} ${opts.orderBy.direction === 'DESC' ? 'DESC' : 'ASC'}`
+  }
+  sql += ` LIMIT ${safeInt(opts.limit)} OFFSET ${safeInt(opts.offset)}`
+  return sql
+}
+
+export function buildInsert(
+  dialect: SqlDialect,
+  table: string,
+  values: Record<string, unknown>
+): Statement {
+  const cols = Object.keys(values)
+  if (cols.length === 0) throw new Error('INSERT: 컬럼이 없습니다')
+  const q = (n: string): string => quoteIdent(dialect, n)
+  const params: unknown[] = []
+  let i = 1
+  const valSql = cols
+    .map((c) => {
+      params.push(values[c])
+      return ph(dialect, i++)
+    })
+    .join(', ')
+  return { sql: `INSERT INTO ${q(table)} (${cols.map(q).join(', ')}) VALUES (${valSql})`, params }
+}
+
+export function buildUpdate(
+  dialect: SqlDialect,
+  table: string,
+  pkColumns: string[],
+  pkValues: Record<string, unknown>,
+  changes: Record<string, unknown>
+): Statement {
+  const changed = Object.keys(changes)
+  if (changed.length === 0) throw new Error('UPDATE: 변경할 컬럼이 없습니다')
+  if (pkColumns.length === 0) throw new Error('UPDATE: PK 가 없어 안전하게 수정할 수 없습니다')
+  const q = (n: string): string => quoteIdent(dialect, n)
+  const params: unknown[] = []
+  let i = 1
+  const setSql = changed
+    .map((c) => {
+      params.push(changes[c])
+      return `${q(c)} = ${ph(dialect, i++)}`
+    })
+    .join(', ')
+  const whereSql = pkColumns
+    .map((pk) => {
+      params.push(pkValues[pk])
+      return `${q(pk)} = ${ph(dialect, i++)}`
+    })
+    .join(' AND ')
+  return { sql: `UPDATE ${q(table)} SET ${setSql} WHERE ${whereSql}`, params }
+}
+
+export function buildDelete(
+  dialect: SqlDialect,
+  table: string,
+  pkColumns: string[],
+  pkValues: Record<string, unknown>
+): Statement {
+  if (pkColumns.length === 0) throw new Error('DELETE: PK 가 없어 안전하게 삭제할 수 없습니다')
+  const q = (n: string): string => quoteIdent(dialect, n)
+  const params: unknown[] = []
+  let i = 1
+  const whereSql = pkColumns
+    .map((pk) => {
+      params.push(pkValues[pk])
+      return `${q(pk)} = ${ph(dialect, i++)}`
+    })
+    .join(' AND ')
+  return { sql: `DELETE FROM ${q(table)} WHERE ${whereSql}`, params }
+}
+
+/** 테이블의 PK 컬럼명(순서 유지). PK 제약의 컬럼 참조를 컬럼명으로 해석. */
+export function pkColumns(table: TableDef): string[] {
+  const pk = table.constraints.find((c) => c.kind === 'pk')
+  if (!pk) return []
+  return pk.columns
+    .map((ref) => table.columns.find((c) => c.id === ref.columnId)?.name)
+    .filter((n): n is string => !!n)
+}
+
+/** PK 가 있어야 편집 가능(§ops-plan — PK 없으면 읽기전용). */
+export function canEdit(table: TableDef): boolean {
+  return pkColumns(table).length > 0
+}

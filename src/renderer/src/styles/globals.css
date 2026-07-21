@@ -1,0 +1,105 @@
+@import 'tailwindcss';
+
+/*
+ * Rockury 디자인 토큰 — 화이트 테마 고정. "Rockury Signature" 팔레트.
+ *   Rock(단단함)   = 그래파이트 ink (구조·헤더)
+ *   Mercury(속도)  = 퀵실버 시안 accent (1차 강조·활성)
+ *   실행 스파크     = 테라코타 accent-2 (2차 강조·실행)
+ * @theme 로 선언한 --color-* 는 Tailwind 유틸리티(bg-*, text-*, border-*)로 자동 생성된다.
+ */
+@theme {
+  --color-canvas: #ffffff;
+  --color-panel: #f6f7f8;
+  --color-panel-strong: #eceef1;
+  --color-line: #e2e5e9;
+  --color-ink: #17202b;
+  --color-fg: #232b34;
+  --color-muted: #64707c;
+
+  /* 1차 강조 — Mercury(퀵실버 시안) */
+  --color-accent: #0e7490;
+  --color-accent-soft: #e2f3f7;
+  /* 2차 강조 — 실행 스파크(테라코타) */
+  --color-accent-2: #b0613f;
+  --color-accent-2-soft: #f6e6dd;
+
+  /* 시맨틱 */
+  --color-success: #3f9277;
+  --color-success-soft: #e6f2ed;
+  --color-warning: #bf7326;
+  --color-danger: #b0524c;
+  --color-info: #3f72a8;
+  --color-info-soft: #e9f0f8;
+
+  --radius-card: 10px;
+}
+
+/*
+ * shadcn/ui 시맨틱 토큰 — 위 Rockury 팔레트에 매핑한 값.
+ * 기존 토큰(accent=Mercury 시안, muted=텍스트색)과 이름이 겹치지 않도록
+ * shadcn 표준 시맨틱 이름(primary/secondary/destructive/border/input/ring …)만 추가한다.
+ *   primary   = Mercury 시안 (1차 강조 버튼)
+ *   secondary = panel-strong (보조 채움)
+ *   ring      = 포커스 링 = primary
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #232b34;
+  --primary: #0e7490;
+  --primary-foreground: #ffffff;
+  --secondary: #eceef1;
+  --secondary-foreground: #232b34;
+  --destructive: #b0524c;
+  --border: #e2e5e9;
+  --input: #e2e5e9;
+  --ring: #0e7490;
+  --radius: 0.625rem;
+}
+
+/* `inline` → 생성 유틸리티가 위 CSS 변수를 직접 참조 → bg-primary/90 같은 알파 변조 동작 */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-fg);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', 'Apple SD Gothic Neo',
+    sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* 데스크탑 앱 느낌: 텍스트 드래그 선택 기본 비활성(입력/에디터 영역은 개별 허용) */
+* {
+  user-select: none;
+}
+input,
+textarea,
+[contenteditable='true'],
+.selectable {
+  user-select: text;
+}
