@@ -7,6 +7,7 @@ import {
   buildSelect,
   buildUpdate,
   pkColumns,
+  type Filter,
   type Statement
 } from './sqlBuilder'
 
@@ -16,6 +17,8 @@ import {
  * PK 없으면 편집 불가(sqlBuilder.canEdit) — 커밋 문 생성 자체가 PK 를 요구한다.
  */
 export const PAGE_SIZE = 50
+export const PAGE_SIZES = [25, 50, 100, 200] as const
+export type SortState = { column: string; direction: 'ASC' | 'DESC' } | null
 
 /** 행 식별 키 — PK 컬럼 값들의 직렬화(원본 행 기준). */
 export function rowKey(pkCols: string[], row: Record<string, unknown>): string {
@@ -32,6 +35,9 @@ interface DataState {
   columns: string[]
   rows: Record<string, unknown>[]
   page: number
+  pageSize: number
+  orderBy: SortState
+  filters: Filter[]
   loading: boolean
   error: string | null
 
@@ -46,6 +52,9 @@ interface DataState {
   selectTable: (envId: string, dialect: DialectId, tableDef: TableDef) => Promise<void>
   load: (envId: string, dialect: DialectId, tableDef: TableDef) => Promise<void>
   setPage: (envId: string, dialect: DialectId, tableDef: TableDef, page: number) => Promise<void>
+  setPageSize: (envId: string, dialect: DialectId, tableDef: TableDef, size: number) => Promise<void>
+  toggleSort: (envId: string, dialect: DialectId, tableDef: TableDef, column: string) => Promise<void>
+  setFilters: (envId: string, dialect: DialectId, tableDef: TableDef, filters: Filter[]) => Promise<void>
 
   editCell: (key: string, col: string, value: unknown) => void
   toggleDelete: (key: string) => void
@@ -74,6 +83,9 @@ export const useDataStore = create<DataState>()((set, get) => ({
   columns: [],
   rows: [],
   page: 0,
+  pageSize: PAGE_SIZE,
+  orderBy: null,
+  filters: [],
   loading: false,
   error: null,
   edits: {},
@@ -82,18 +94,21 @@ export const useDataStore = create<DataState>()((set, get) => ({
   tx: null,
 
   selectTable: async (envId, dialect, tableDef) => {
-    set({ table: tableDef.name, page: 0, ...clearPending() })
+    set({ table: tableDef.name, page: 0, orderBy: null, filters: [], ...clearPending() })
     await get().load(envId, dialect, tableDef)
   },
 
   load: async (envId, dialect, tableDef) => {
     set({ loading: true, error: null })
     try {
-      const sql = buildSelect(dialect, tableDef.name, {
-        limit: PAGE_SIZE,
-        offset: get().page * PAGE_SIZE
+      const { pageSize, page, orderBy, filters } = get()
+      const { sql, params } = buildSelect(dialect, tableDef.name, {
+        limit: pageSize,
+        offset: page * pageSize,
+        orderBy: orderBy ?? undefined,
+        filters
       })
-      const r = await window.rockury.query.run(envId, sql)
+      const r = await window.rockury.query.runParams(envId, sql, params)
       // 컬럼은 introspection 순서를 우선(빈 결과여도 헤더 유지), 없으면 결과 컬럼.
       const columns = tableDef.columns.length ? tableDef.columns.map((c) => c.name) : r.columns
       set({ rows: r.rows, columns, loading: false })
@@ -104,6 +119,28 @@ export const useDataStore = create<DataState>()((set, get) => ({
 
   setPage: async (envId, dialect, tableDef, page) => {
     set({ page: Math.max(0, page) })
+    await get().load(envId, dialect, tableDef)
+  },
+
+  setPageSize: async (envId, dialect, tableDef, size) => {
+    set({ pageSize: size, page: 0 })
+    await get().load(envId, dialect, tableDef)
+  },
+
+  toggleSort: async (envId, dialect, tableDef, column) => {
+    const cur = get().orderBy
+    const next: SortState =
+      !cur || cur.column !== column
+        ? { column, direction: 'ASC' }
+        : cur.direction === 'ASC'
+          ? { column, direction: 'DESC' }
+          : null
+    set({ orderBy: next, page: 0 })
+    await get().load(envId, dialect, tableDef)
+  },
+
+  setFilters: async (envId, dialect, tableDef, filters) => {
+    set({ filters, page: 0 })
     await get().load(envId, dialect, tableDef)
   },
 

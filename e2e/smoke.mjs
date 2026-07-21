@@ -143,6 +143,11 @@ try {
   await page.waitForSelector('th:has-text("email")', { timeout: 15_000 })
   check('Console › Data: users 행 조회', (await body()).includes('email'))
 
+  // 컬럼 정렬(ORDER BY — 파라미터 바인드 SELECT 재조회)
+  await click('th button:has-text("email")')
+  await page.waitForTimeout(500)
+  check('Console › Data: 컬럼 정렬 재조회', (await body()).includes('email'))
+
   // 첫 행 first_name(2번째 입력) 수정 → 저장 → 게이트 → 롤백
   await page.locator('tbody tr').first().locator('input').nth(1).fill('E2E-edit')
   await page.waitForSelector('button:has-text("저장")', { timeout: 5_000 })

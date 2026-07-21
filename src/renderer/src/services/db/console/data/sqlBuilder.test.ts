@@ -25,17 +25,34 @@ describe('quoteIdent', () => {
 
 describe('buildSelect', () => {
   it('LIMIT/OFFSET 정수 인라인 + ORDER BY', () => {
-    expect(buildSelect('postgresql', 'users', { limit: 25, offset: 50 })).toBe(
-      'SELECT * FROM "users" LIMIT 25 OFFSET 50'
-    )
+    expect(buildSelect('postgresql', 'users', { limit: 25, offset: 50 })).toEqual({
+      sql: 'SELECT * FROM "users" LIMIT 25 OFFSET 50',
+      params: []
+    })
     expect(
-      buildSelect('mysql', 'users', { limit: 10, offset: 0, orderBy: { column: 'id', direction: 'DESC' } })
+      buildSelect('mysql', 'users', { limit: 10, offset: 0, orderBy: { column: 'id', direction: 'DESC' } }).sql
     ).toBe('SELECT * FROM `users` ORDER BY `id` DESC LIMIT 10 OFFSET 0')
   })
   it('음수/비정상 limit 은 0 으로 정제', () => {
-    expect(buildSelect('sqlite', 't', { limit: -5, offset: NaN })).toBe(
-      'SELECT * FROM "t" LIMIT 0 OFFSET 0'
-    )
+    expect(buildSelect('sqlite', 't', { limit: -5, offset: NaN }).sql).toBe('SELECT * FROM "t" LIMIT 0 OFFSET 0')
+  })
+  it('필터는 파라미터 바인드 WHERE (pg $n)', () => {
+    const s = buildSelect('postgresql', 'users', {
+      limit: 50,
+      offset: 0,
+      filters: [
+        { column: 'email', op: 'LIKE', value: '%a%' },
+        { column: 'age', op: '>', value: '18' },
+        { column: 'deleted_at', op: 'IS NULL', value: '' }
+      ]
+    })
+    expect(s.sql).toBe('SELECT * FROM "users" WHERE "email" LIKE $1 AND "age" > $2 AND "deleted_at" IS NULL LIMIT 50 OFFSET 0')
+    expect(s.params).toEqual(['%a%', '18'])
+  })
+  it('빈 값 필터는 무시(IS NULL 제외)', () => {
+    const s = buildSelect('mysql', 't', { limit: 50, offset: 0, filters: [{ column: 'a', op: '=', value: '' }] })
+    expect(s.sql).toBe('SELECT * FROM `t` LIMIT 50 OFFSET 0')
+    expect(s.params).toEqual([])
   })
 })
 

@@ -22,21 +22,46 @@ export function quoteIdent(dialect: SqlDialect, name: string): string {
 const ph = (dialect: SqlDialect, i: number): string => (dialect === 'postgresql' ? `$${i}` : '?')
 const safeInt = (n: number): number => Math.max(0, Math.floor(Number.isFinite(n) ? n : 0))
 
+/** 필터 연산자 — 값 없는 IS NULL / IS NOT NULL 포함. */
+export type FilterOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IS NULL' | 'IS NOT NULL'
+export const FILTER_OPS: FilterOp[] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IS NULL', 'IS NOT NULL']
+export const NO_VALUE_OPS: FilterOp[] = ['IS NULL', 'IS NOT NULL']
+
+export interface Filter {
+  column: string
+  op: FilterOp
+  value: string
+}
+
 export interface SelectOptions {
   limit: number
   offset: number
   orderBy?: { column: string; direction: 'ASC' | 'DESC' }
+  filters?: Filter[]
 }
 
-/** SELECT * … LIMIT/OFFSET. limit/offset 은 정수로 정제해 인라인(값 없음). */
-export function buildSelect(dialect: SqlDialect, table: string, opts: SelectOptions): string {
+/** SELECT * … [WHERE …] [ORDER BY …] LIMIT/OFFSET. WHERE 값은 파라미터 바인드(문자열 조립 금지). */
+export function buildSelect(dialect: SqlDialect, table: string, opts: SelectOptions): Statement {
   const q = (n: string): string => quoteIdent(dialect, n)
+  const params: unknown[] = []
+  let i = 1
   let sql = `SELECT * FROM ${q(table)}`
+
+  const clauses = (opts.filters ?? [])
+    .filter((f) => f.column && (NO_VALUE_OPS.includes(f.op) || f.value !== ''))
+    .map((f) => {
+      if (f.op === 'IS NULL') return `${q(f.column)} IS NULL`
+      if (f.op === 'IS NOT NULL') return `${q(f.column)} IS NOT NULL`
+      params.push(f.value)
+      return `${q(f.column)} ${f.op} ${ph(dialect, i++)}`
+    })
+  if (clauses.length) sql += ` WHERE ${clauses.join(' AND ')}`
+
   if (opts.orderBy) {
     sql += ` ORDER BY ${q(opts.orderBy.column)} ${opts.orderBy.direction === 'DESC' ? 'DESC' : 'ASC'}`
   }
   sql += ` LIMIT ${safeInt(opts.limit)} OFFSET ${safeInt(opts.offset)}`
-  return sql
+  return { sql, params }
 }
 
 export function buildInsert(
