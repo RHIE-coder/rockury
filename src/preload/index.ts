@@ -6,6 +6,8 @@ import type { EnvironmentRecord } from '../main/store/environments'
 import type { IntrospectedSchema } from '../main/services/introspection/types'
 import type { QueryResult, TxBeginResult, ExplainResult } from '../main/services/queryService'
 import type { AppendHistoryInput, QueryHistoryRecord } from '../main/store/queryHistory'
+import type { FolderRecord, SavedQueryRecord } from '../main/store/savedQueries'
+import type { CollectionRecord, CollectionItemRecord } from '../main/store/collections'
 import type {
   CreateLogInput,
   CreateSnapshotInput,
@@ -150,6 +152,35 @@ const api = {
       unwrap(ipcRenderer.invoke('query:historyList', connectionId)),
     historyClear: (connectionId: string): Promise<void> =>
       unwrap(ipcRenderer.invoke('query:historyClear', connectionId))
+  },
+  // 운영부 — 저장 쿼리 라이브러리(폴더 트리).
+  savedQueries: {
+    tree: (connectionId: string): Promise<{ folders: FolderRecord[]; queries: SavedQueryRecord[] }> =>
+      unwrap(ipcRenderer.invoke('sq:tree', connectionId)),
+    createFolder: (input: { connectionId: string; parentId: string | null; name: string }): Promise<FolderRecord> =>
+      unwrap(ipcRenderer.invoke('sq:createFolder', input)),
+    createQuery: (input: { connectionId: string; folderId: string | null; name: string; sql: string }): Promise<SavedQueryRecord> =>
+      unwrap(ipcRenderer.invoke('sq:createQuery', input)),
+    renameFolder: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('sq:renameFolder', id, name)),
+    updateQuery: (id: string, patch: { name?: string; sql?: string }): Promise<void> =>
+      unwrap(ipcRenderer.invoke('sq:updateQuery', id, patch)),
+    deleteFolder: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('sq:deleteFolder', id)),
+    deleteQuery: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('sq:deleteQuery', id)),
+    reorderTree: (items: { id: string; kind: 'folder' | 'query'; parentId: string | null; sortOrder: number }[]): Promise<void> =>
+      unwrap(ipcRenderer.invoke('sq:reorderTree', items))
+  },
+  // 운영부 — 컬렉션(순서 있는 쿼리 묶음 · Run-All).
+  collections: {
+    list: (connectionId: string): Promise<CollectionRecord[]> => unwrap(ipcRenderer.invoke('col:list', connectionId)),
+    items: (collectionId: string): Promise<CollectionItemRecord[]> => unwrap(ipcRenderer.invoke('col:items', collectionId)),
+    create: (input: { connectionId: string; name: string }): Promise<CollectionRecord> => unwrap(ipcRenderer.invoke('col:create', input)),
+    rename: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('col:rename', id, name)),
+    delete: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('col:delete', id)),
+    addItem: (input: { collectionId: string; name: string; sql: string }): Promise<CollectionItemRecord> =>
+      unwrap(ipcRenderer.invoke('col:addItem', input)),
+    updateItem: (id: string, patch: { name?: string; sql?: string }): Promise<void> => unwrap(ipcRenderer.invoke('col:updateItem', id, patch)),
+    deleteItem: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('col:deleteItem', id)),
+    reorderItems: (orderedIds: string[]): Promise<void> => unwrap(ipcRenderer.invoke('col:reorderItems', orderedIds))
   },
   // 운영부 — Migration 스냅샷 기준선 + 로그 체인(환경 바인딩 id 로 키).
   migration: {

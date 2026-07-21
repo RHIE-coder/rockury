@@ -135,6 +135,50 @@ function migrate(d: DatabaseSync): void {
       created_at    TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_query_history_conn ON query_history(connection_id);
+
+    -- 저장 쿼리 라이브러리 (연결 스코프, 폴더 트리)
+    CREATE TABLE IF NOT EXISTS query_folders (
+      id            TEXT PRIMARY KEY,
+      connection_id TEXT NOT NULL,
+      parent_id     TEXT,
+      name          TEXT NOT NULL,
+      sort_order    INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_query_folders_conn ON query_folders(connection_id);
+
+    CREATE TABLE IF NOT EXISTS saved_queries (
+      id            TEXT PRIMARY KEY,
+      connection_id TEXT NOT NULL,
+      folder_id     TEXT,
+      name          TEXT NOT NULL,
+      sql_text      TEXT NOT NULL DEFAULT '',
+      sort_order    INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_saved_queries_conn ON saved_queries(connection_id);
+
+    -- 컬렉션 (순서 있는 쿼리 묶음 — Run-All)
+    CREATE TABLE IF NOT EXISTS collections (
+      id            TEXT PRIMARY KEY,
+      connection_id TEXT NOT NULL,
+      name          TEXT NOT NULL,
+      sort_order    INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_collections_conn ON collections(connection_id);
+
+    CREATE TABLE IF NOT EXISTS collection_items (
+      id            TEXT PRIMARY KEY,
+      collection_id TEXT NOT NULL,
+      name          TEXT NOT NULL DEFAULT '',
+      sql_text      TEXT NOT NULL DEFAULT '',
+      sort_order    INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_collection_items_coll ON collection_items(collection_id);
   `)
 }
 

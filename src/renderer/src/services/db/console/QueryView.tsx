@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, History, Loader2, Play, Route, Terminal, WandSparkles, X } from 'lucide-react'
+import { AlertTriangle, History, Loader2, Play, Route, Save, Terminal, WandSparkles, X } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
@@ -93,6 +93,18 @@ export function QueryView() {
             onClick={() => setSql(formatSql(sql, conn.dbType))}
           >
             <WandSparkles /> 포맷
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!sql.trim()}
+            title="쿼리 라이브러리에 저장 (Collection 탭)"
+            onClick={() => {
+              const name = sql.trim().split('\n')[0].slice(0, 40)
+              void window.rockury.savedQueries.createQuery({ connectionId: conn.id, folderId: null, name, sql })
+            }}
+          >
+            <Save /> 저장
           </Button>
           <Button
             size="sm"

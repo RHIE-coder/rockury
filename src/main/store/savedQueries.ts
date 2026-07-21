@@ -1,0 +1,152 @@
+import { randomUUID } from 'node:crypto'
+import { getDb } from './db'
+
+/**
+ * 저장 쿼리 라이브러리 저장소(§ops 향상 — Collection). 연결 스코프, 폴더 트리.
+ * 트리 재배치(reparent+reorder)는 렌더러가 계산한 (id,parentId,sortOrder) 목록을 한 번에 반영.
+ */
+export interface FolderRecord {
+  id: string
+  connectionId: string
+  parentId: string | null
+  name: string
+  sortOrder: number
+}
+export interface SavedQueryRecord {
+  id: string
+  connectionId: string
+  folderId: string | null
+  name: string
+  sql: string
+  sortOrder: number
+}
+
+interface FolderRow {
+  id: string
+  connection_id: string
+  parent_id: string | null
+  name: string
+  sort_order: number
+}
+interface QueryRow {
+  id: string
+  connection_id: string
+  folder_id: string | null
+  name: string
+  sql_text: string
+  sort_order: number
+}
+
+const toFolder = (r: FolderRow): FolderRecord => ({
+  id: r.id,
+  connectionId: r.connection_id,
+  parentId: r.parent_id,
+  name: r.name,
+  sortOrder: r.sort_order
+})
+const toQuery = (r: QueryRow): SavedQueryRecord => ({
+  id: r.id,
+  connectionId: r.connection_id,
+  folderId: r.folder_id,
+  name: r.name,
+  sql: r.sql_text,
+  sortOrder: r.sort_order
+})
+
+export function listTree(connectionId: string): {
+  folders: FolderRecord[]
+  queries: SavedQueryRecord[]
+} {
+  const d = getDb()
+  const folders = (
+    d.prepare('SELECT * FROM query_folders WHERE connection_id = ? ORDER BY sort_order').all(connectionId) as unknown as FolderRow[]
+  ).map(toFolder)
+  const queries = (
+    d.prepare('SELECT * FROM saved_queries WHERE connection_id = ? ORDER BY sort_order').all(connectionId) as unknown as QueryRow[]
+  ).map(toQuery)
+  return { folders, queries }
+}
+
+export function createFolder(input: { connectionId: string; parentId: string | null; name: string }): FolderRecord {
+  const d = getDb()
+  const id = `qf_${randomUUID()}`
+  const now = new Date().toISOString()
+  const { max } = d
+    .prepare('SELECT COALESCE(MAX(sort_order),0) AS max FROM query_folders WHERE connection_id = ?')
+    .get(input.connectionId) as unknown as { max: number }
+  d.prepare(
+    'INSERT INTO query_folders (id, connection_id, parent_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, input.connectionId, input.parentId, input.name, max + 1, now, now)
+  return toFolder(d.prepare('SELECT * FROM query_folders WHERE id = ?').get(id) as unknown as FolderRow)
+}
+
+export function createSavedQuery(input: {
+  connectionId: string
+  folderId: string | null
+  name: string
+  sql: string
+}): SavedQueryRecord {
+  const d = getDb()
+  const id = `sq_${randomUUID()}`
+  const now = new Date().toISOString()
+  const { max } = d
+    .prepare('SELECT COALESCE(MAX(sort_order),0) AS max FROM saved_queries WHERE connection_id = ?')
+    .get(input.connectionId) as unknown as { max: number }
+  d.prepare(
+    'INSERT INTO saved_queries (id, connection_id, folder_id, name, sql_text, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, input.connectionId, input.folderId, input.name, input.sql, max + 1, now, now)
+  return toQuery(d.prepare('SELECT * FROM saved_queries WHERE id = ?').get(id) as unknown as QueryRow)
+}
+
+export function renameFolder(id: string, name: string): void {
+  getDb().prepare('UPDATE query_folders SET name = ?, updated_at = ? WHERE id = ?').run(name, new Date().toISOString(), id)
+}
+export function updateSavedQuery(id: string, patch: { name?: string; sql?: string }): void {
+  const d = getDb()
+  if (patch.name !== undefined) d.prepare('UPDATE saved_queries SET name = ?, updated_at = ? WHERE id = ?').run(patch.name, new Date().toISOString(), id)
+  if (patch.sql !== undefined) d.prepare('UPDATE saved_queries SET sql_text = ?, updated_at = ? WHERE id = ?').run(patch.sql, new Date().toISOString(), id)
+}
+
+/** 폴더 삭제 — 하위 폴더/쿼리까지 cascade. */
+export function deleteFolder(id: string): void {
+  const d = getDb()
+  d.exec('BEGIN')
+  try {
+    const descend = (fid: string): void => {
+      const children = d.prepare('SELECT id FROM query_folders WHERE parent_id = ?').all(fid) as unknown as { id: string }[]
+      for (const c of children) descend(c.id)
+      d.prepare('DELETE FROM saved_queries WHERE folder_id = ?').run(fid)
+      d.prepare('DELETE FROM query_folders WHERE id = ?').run(fid)
+    }
+    descend(id)
+    d.exec('COMMIT')
+  } catch (e) {
+    d.exec('ROLLBACK')
+    throw e
+  }
+}
+
+export function deleteSavedQuery(id: string): void {
+  getDb().prepare('DELETE FROM saved_queries WHERE id = ?').run(id)
+}
+
+/** 트리 재배치 — 렌더러가 계산한 (id,kind,parentId,sortOrder)를 일괄 반영. */
+export function reorderTree(
+  items: { id: string; kind: 'folder' | 'query'; parentId: string | null; sortOrder: number }[]
+): void {
+  const d = getDb()
+  const now = new Date().toISOString()
+  const uf = d.prepare('UPDATE query_folders SET parent_id = ?, sort_order = ?, updated_at = ? WHERE id = ?')
+  const uq = d.prepare('UPDATE saved_queries SET folder_id = ?, sort_order = ?, updated_at = ? WHERE id = ?')
+  d.exec('BEGIN')
+  try {
+    items.forEach((it, i) => {
+      if (it.kind === 'folder') uf.run(it.parentId, i, now, it.id)
+      else uq.run(it.parentId, i, now, it.id)
+    })
+    d.exec('COMMIT')
+  } catch (e) {
+    d.exec('ROLLBACK')
+    throw e
+  }
+}

@@ -40,6 +40,7 @@ import { ConnectionsView } from './connections/ConnectionsView'
 import { ObjectView } from './console/ObjectView'
 import { QueryView } from './console/QueryView'
 import { DataView } from './console/DataView'
+import { CollectionView } from './console/CollectionView'
 import { DriftView, PlanView, RunView, LogsView } from './migration/views'
 
 /**
@@ -163,6 +164,7 @@ export const dbService: Service = {
         { id: 'diagram', label: 'Diagram', icon: Network, workspace: view(Network, 'depth 3 · Console › Diagram', 'Diagram', '실 DB 를 Reverse(introspection) 한 ERD') },
         { id: 'data', label: 'Data', icon: Table2, workspace: DataView },
         { id: 'query', label: 'Query', icon: Terminal, workspace: QueryView },
+        { id: 'collection', label: 'Collection', icon: Layers, workspace: CollectionView },
         { id: 'object', label: 'Object', icon: Boxes, workspace: ObjectView }
       ]
     },

@@ -7,6 +7,7 @@ import { registerEnvironmentIpc } from './ipc/environments'
 import { registerIntrospectionIpc } from './ipc/introspection'
 import { registerQueryIpc } from './ipc/query'
 import { registerMigrationIpc } from './ipc/migration'
+import { registerCollectionIpc } from './ipc/collections'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -53,6 +54,7 @@ app.whenReady().then(() => {
   registerIntrospectionIpc()
   registerQueryIpc()
   registerMigrationIpc()
+  registerCollectionIpc()
   createWindow()
 
   app.on('activate', () => {
