@@ -1,8 +1,8 @@
 // 빌드된 Rockury 앱 구동 스모크 — 설계 선택 → Definition → 버전 컷 → 운영부(Console/Migration).
 // 주의: getByRole 계열은 이 창을 크래시시킴 → CSS/text 로케이터만 사용.
 // 운영부 섹션(연결 테스트)은 test-db(mysql:13306)가 떠 있어야 한다 → `npm run db:up`.
-// ⚠ 이 스모크는 **실 앱 DB(~/Library/Application Support/Rockury)를 절대 건드리지 않는다**.
-//    격리된 임시 userData 로 앱을 띄우고(--user-data-dir), 종료 시 그 임시 디렉터리만 지운다.
+// ⚠ 이 스모크는 **실 앱 DB(userData)를 절대 건드리지 않는다** — 격리된 임시 userData 로
+//    앱을 띄우고(--user-data-dir), 종료 시 그 임시 디렉터리만 지운다. (e2e/isolation.test.ts 가 강제)
 import { _electron as electron } from 'playwright-core'
 import { createRequire } from 'node:module'
 import * as path from 'node:path'

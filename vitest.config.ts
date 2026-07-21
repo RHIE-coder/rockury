@@ -6,7 +6,8 @@ import { defineConfig } from 'vitest/config'
  */
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts'],
+    // src 순수 로직 + e2e 안전 불변식(격리) 가드.
+    include: ['src/**/*.test.ts', 'e2e/**/*.test.ts'],
     environment: 'node'
   }
 })

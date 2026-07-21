@@ -26,6 +26,14 @@ Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 
 
 > 이 규칙은 `/clear` 후에도 유효하다. 테스트를 건너뛰고 싶으면 **먼저 사용자에게 명시적으로 확인**받는다.
 
+## 🔒 절대 불변식 (기계가 강제 — 어기면 CI/테스트가 실패)
+1. **테스트·스크립트는 실 사용자 데이터를 절대 파괴하지 않는다.**
+   - 앱 로컬 DB(`~/Library/Application Support/Rockury/rockury.db`)를 테스트가 지우거나 그 경로로 앱을 띄우면 **안 된다**.
+   - e2e 는 **반드시 격리된 임시 userData**(`--user-data-dir=<mkdtemp>`)로 앱을 띄우고 그 임시 디렉터리만 정리한다.
+   - 이 불변식은 `e2e/isolation.test.ts` 가 `smoke.mjs` 를 검사해 강제한다(실 경로 참조/실 DB rmSync 시 `npm test` 실패). **회귀 시 즉시 빨간불.**
+2. **커밋 게이트는 git pre-commit 훅이 강제한다**(`scripts/git-hooks/pre-commit`, `core.hooksPath` 로 추적·공유). `npm run typecheck && npm test && npm run build` 통과해야 커밋된다. `npm install` 시 `prepare` 가 훅 경로를 자동 설정. **`--no-verify` 우회는 사용자 승인 없이 쓰지 않는다.**
+3. **e2e 는 버리는 1회용이 아니라 누적 회귀 자산이다.** 새 실 앱 흐름은 스모크에 체크를 더해 쌓고, 지우지 않는다.
+
 ## 검증 인프라
 - 단위: `npm test`(vitest). watch: `npm run test:watch`.
 - e2e 스모크: `npm run build && npm run e2e` (Playwright `_electron`). 함정·패턴은 `e2e/README.md`.

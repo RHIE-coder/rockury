@@ -1,0 +1,10 @@
+#!/bin/sh
+# Rockury pre-commit 게이트 (CLAUDE.md 테스트 의무 강제) — 통과 못 하면 커밋 차단.
+# 우회가 필요하면 `git commit --no-verify` (권장하지 않음, 사용자 판단).
+# e2e 는 docker test-db 가 필요해 여기서 제외(별도 `npm run db:up && npm run e2e`).
+set -e
+echo "[pre-commit] typecheck · test · build (통과해야 커밋)"
+npm run typecheck
+npm test
+npm run build >/dev/null
+echo "[pre-commit] ✔ 통과"
