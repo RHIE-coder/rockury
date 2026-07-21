@@ -64,7 +64,7 @@ export function appendHistory(input: AppendHistoryInput): QueryHistoryRecord {
   const d = getDb()
   const now = new Date().toISOString()
   const latest = d
-    .prepare('SELECT * FROM query_history WHERE connection_id = ? ORDER BY created_at DESC LIMIT 1')
+    .prepare('SELECT * FROM query_history WHERE connection_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1')
     .get(input.connectionId) as Row | undefined
 
   // 직전 항목과 동일 쿼리면 갱신(중복 접기).
@@ -103,7 +103,7 @@ export function appendHistory(input: AppendHistoryInput): QueryHistoryRecord {
   // 오래된 항목 정리(연결별 최근 KEEP 건 유지).
   d.prepare(
     `DELETE FROM query_history WHERE connection_id = ? AND id NOT IN (
-       SELECT id FROM query_history WHERE connection_id = ? ORDER BY created_at DESC LIMIT ?
+       SELECT id FROM query_history WHERE connection_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?
      )`
   ).run(input.connectionId, input.connectionId, KEEP)
   return toRecord(
@@ -113,7 +113,7 @@ export function appendHistory(input: AppendHistoryInput): QueryHistoryRecord {
 
 export function listHistory(connectionId: string, limit = 100): QueryHistoryRecord[] {
   const rows = getDb()
-    .prepare('SELECT * FROM query_history WHERE connection_id = ? ORDER BY created_at DESC LIMIT ?')
+    .prepare('SELECT * FROM query_history WHERE connection_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
     .all(connectionId, limit) as unknown as Row[]
   return rows.map(toRecord)
 }
