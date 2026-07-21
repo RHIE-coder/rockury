@@ -1,0 +1,67 @@
+# Rockury 테스트 데이터베이스 스택.
+# 모든 서비스는 default 가 아닌 전용 `rockury` 브리지 네트워크에 묶인다.
+# 실행은 npm run db:up / db:down / db:status (scripts/test-db/*.mjs 참고).
+
+name: rockury-test-db
+
+networks:
+  rockury:
+    name: rockury-net
+    driver: bridge
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: rockury-test-mysql
+    networks: [rockury]
+    ports:
+      - "13306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: test
+      MYSQL_PASSWORD: test
+    volumes:
+      - ./init/mysql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-utest", "-ptest"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mariadb:
+    image: mariadb:11
+    container_name: rockury-test-mariadb
+    networks: [rockury]
+    ports:
+      - "13307:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: testdb
+      MARIADB_USER: test
+      MARIADB_PASSWORD: test
+    volumes:
+      - ./init/mariadb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgresql:
+    image: postgres:16
+    container_name: rockury-test-postgresql
+    networks: [rockury]
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    volumes:
+      - ./init/postgresql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d testdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
