@@ -5,6 +5,7 @@ import type { ConnectionFormData, TestConnectionResult } from '../main/services/
 import type { EnvironmentRecord } from '../main/store/environments'
 import type { IntrospectedSchema } from '../main/services/introspection/types'
 import type { QueryResult, TxBeginResult, ExplainResult } from '../main/services/queryService'
+import type { AppendHistoryInput, QueryHistoryRecord } from '../main/store/queryHistory'
 import type {
   CreateLogInput,
   CreateSnapshotInput,
@@ -142,7 +143,13 @@ const api = {
     txRollback: (txId: string): Promise<void> =>
       unwrap(ipcRenderer.invoke('query:txRollback', txId)),
     explain: (connectionId: string, sql: string): Promise<ExplainResult> =>
-      unwrap(ipcRenderer.invoke('query:explain', connectionId, sql))
+      unwrap(ipcRenderer.invoke('query:explain', connectionId, sql)),
+    historyAppend: (input: AppendHistoryInput): Promise<QueryHistoryRecord> =>
+      unwrap(ipcRenderer.invoke('query:historyAppend', input)),
+    historyList: (connectionId: string): Promise<QueryHistoryRecord[]> =>
+      unwrap(ipcRenderer.invoke('query:historyList', connectionId)),
+    historyClear: (connectionId: string): Promise<void> =>
+      unwrap(ipcRenderer.invoke('query:historyClear', connectionId))
   },
   // 운영부 — Migration 스냅샷 기준선 + 로그 체인(환경 바인딩 id 로 키).
   migration: {

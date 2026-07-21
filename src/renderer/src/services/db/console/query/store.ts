@@ -23,6 +23,19 @@ export interface ExplainState {
   explainSql: string
 }
 
+export interface HistoryRow {
+  id: string
+  connectionId: string
+  sql: string
+  kind: string
+  status: 'success' | 'error'
+  rowCount: number
+  affectedRows: number | null
+  execMs: number | null
+  error: string
+  createdAt: string
+}
+
 interface QueryState {
   sql: string
   setSql: (s: string) => void
@@ -35,11 +48,14 @@ interface QueryState {
   tx: PendingTx | null
   explaining: boolean
   explain: ExplainState | null
+  history: HistoryRow[]
+  lastConn: string | null
 
-  run: (envId: string) => Promise<void>
+  run: (connectionId: string) => Promise<void>
   runExplain: (connectionId: string) => Promise<void>
   confirm: () => Promise<void>
   rollback: () => Promise<void>
+  loadHistory: (connectionId: string) => Promise<void>
   dismissError: () => void
 }
 
@@ -49,6 +65,20 @@ interface QueryState {
  *  - dml  : txBegin→txExec(영향행수) → 사용자가 confirm/rollback
  *  - ddl  : 즉시 실행 + 자동 커밋 경고
  */
+async function recordHistory(
+  connectionId: string,
+  sql: string,
+  kind: string,
+  status: 'success' | 'error',
+  extra: { rowCount?: number; affectedRows?: number | null; execMs?: number | null; error?: string } = {}
+): Promise<void> {
+  try {
+    await window.rockury.query.historyAppend({ connectionId, sql, kind, status, ...extra })
+  } catch {
+    // 히스토리 기록 실패는 실행 자체에 영향 주지 않음 — 무시.
+  }
+}
+
 export const useQueryStore = create<QueryState>()((set, get) => ({
   sql: '',
   setSql: (s) => set({ sql: s }),
@@ -59,8 +89,10 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
   tx: null,
   explaining: false,
   explain: null,
+  history: [],
+  lastConn: null,
 
-  run: async (envId) => {
+  run: async (connectionId) => {
     const sql = get().sql
     const c = classifyStatement(sql)
     if (c.kind === 'empty') {
@@ -69,21 +101,29 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
     }
     // 이전 대기 트랜잭션이 있으면 먼저 롤백.
     if (get().tx) await get().rollback()
-    set({ loading: true, error: null, result: null, ddlWarning: false, tx: null, explain: null })
+    set({ loading: true, error: null, result: null, ddlWarning: false, tx: null, explain: null, lastConn: connectionId })
     try {
       if (c.kind === 'dml') {
-        const { txId } = await window.rockury.query.txBegin(envId)
+        // DML 은 프리뷰 — 히스토리는 커밋 시점에 기록.
+        const { txId } = await window.rockury.query.txBegin(connectionId)
         const r = await window.rockury.query.txExec(txId, sql)
         set({
           result: r,
           tx: { txId, verb: c.verb, affectedRows: r.affectedRows ?? 0, destructive: c.destructive }
         })
       } else {
-        const r = await window.rockury.query.run(envId, sql)
+        const r = await window.rockury.query.run(connectionId, sql)
         set({ result: r, ddlWarning: c.kind === 'ddl' })
+        await recordHistory(connectionId, sql, c.kind, 'success', { rowCount: r.rowCount, affectedRows: r.affectedRows ?? null, execMs: r.executionTimeMs })
+        await get().loadHistory(connectionId)
       }
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      const msg = e instanceof Error ? e.message : String(e)
+      set({ error: msg })
+      if (c.kind !== 'dml') {
+        await recordHistory(connectionId, sql, c.kind, 'error', { error: msg })
+        await get().loadHistory(connectionId)
+      }
     } finally {
       set({ loading: false })
     }
@@ -105,11 +145,15 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
   },
 
   confirm: async () => {
-    const tx = get().tx
+    const { tx, lastConn, sql } = get()
     if (!tx) return
     try {
       await window.rockury.query.txCommit(tx.txId)
       set({ tx: null })
+      if (lastConn) {
+        await recordHistory(lastConn, sql, 'dml', 'success', { affectedRows: tx.affectedRows })
+        await get().loadHistory(lastConn)
+      }
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), tx: null })
     }
@@ -124,6 +168,15 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
       // 이미 정리됐을 수 있음 — 무시
     }
     set({ tx: null, result: null })
+  },
+
+  loadHistory: async (connectionId) => {
+    try {
+      const rows = (await window.rockury.query.historyList(connectionId)) as HistoryRow[]
+      set({ history: rows })
+    } catch {
+      // 무시
+    }
   },
 
   dismissError: () => set({ error: null })

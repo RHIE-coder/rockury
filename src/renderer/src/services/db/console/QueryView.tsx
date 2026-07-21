@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { AlertTriangle, Loader2, Play, Route, Terminal, WandSparkles, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, History, Loader2, Play, Route, Terminal, WandSparkles, X } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
@@ -27,9 +27,15 @@ export function QueryView() {
   const conn = useActiveConnection()
   const tables = useConsoleStore((s) => (conn ? s.byEnv[conn.id] : undefined))
   const loadIntro = useConsoleStore((s) => s.load)
+  const history = useQueryStore((s) => s.history)
+  const loadHistory = useQueryStore((s) => s.loadHistory)
+  const [showHistory, setShowHistory] = useState(false)
   useEffect(() => {
-    if (conn) void loadIntro(conn.id, conn.id)
-  }, [conn, loadIntro])
+    if (conn) {
+      void loadIntro(conn.id, conn.id)
+      void loadHistory(conn.id)
+    }
+  }, [conn, loadIntro, loadHistory])
 
   const sql = useQueryStore((s) => s.sql)
   const setSql = useQueryStore((s) => s.setSql)
@@ -73,6 +79,14 @@ export function QueryView() {
         <div className="flex items-center gap-1.5">
           <Button
             size="sm"
+            variant={showHistory ? 'soft' : 'ghost'}
+            title="쿼리 히스토리"
+            onClick={() => setShowHistory((v) => !v)}
+          >
+            <History /> 히스토리
+          </Button>
+          <Button
+            size="sm"
             variant="outline"
             disabled={!sql.trim()}
             title="SQL 정형화"
@@ -107,6 +121,42 @@ export function QueryView() {
           placeholder="SELECT * FROM users LIMIT 10;"
         />
       </div>
+
+      {/* 히스토리 패널 — 클릭 시 에디터로 불러오기(rky 의 TODO 완성) */}
+      {showHistory && (
+        <div className="max-h-56 shrink-0 overflow-auto border-b border-line bg-panel/40">
+          {history.length === 0 ? (
+            <div className="px-5 py-3 text-[12px] text-muted">히스토리가 없습니다</div>
+          ) : (
+            history.map((h) => (
+              <button
+                key={h.id}
+                type="button"
+                onClick={() => {
+                  setSql(h.sql)
+                  setShowHistory(false)
+                }}
+                className="flex w-full items-center gap-2 border-b border-line/50 px-5 py-1.5 text-left outline-none hover:bg-panel"
+              >
+                <span
+                  className={cn(
+                    'size-1.5 shrink-0 rounded-full',
+                    h.status === 'success' ? 'bg-success' : 'bg-destructive'
+                  )}
+                />
+                <span className="w-10 shrink-0 font-mono text-[10px] uppercase text-muted">{h.kind}</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-fg" title={h.sql}>
+                  {h.sql}
+                </span>
+                <span className="shrink-0 text-[10.5px] text-muted">
+                  {h.affectedRows != null ? `${h.affectedRows}행` : `${h.rowCount}행`}
+                  {h.execMs != null ? ` · ${h.execMs}ms` : ''}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
 
       {/* 트랜잭션 게이트 바 */}
       {tx && (

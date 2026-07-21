@@ -126,6 +126,12 @@ try {
   await page.waitForTimeout(300)
   check('Console › Query: 롤백 후 게이트 해제', !(await body()).includes('아직 커밋되지'))
 
+  // 히스토리 — 실행한 SELECT 가 기록됨
+  await click('button:has-text("히스토리")')
+  await page.waitForTimeout(300)
+  check('Console › Query: 히스토리 기록', (await body()).includes('SELECT id, email FROM users'))
+  await click('button:has-text("히스토리")')
+
   // Console › Data — 조회 + 편집(수정→트랜잭션 게이트→롤백)(Phase 2b)
   await click('button:has-text("Data")')
   await page.waitForSelector('aside button:has-text("users")', { timeout: 15_000 })

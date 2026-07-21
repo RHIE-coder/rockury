@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { queryService } from '../services/queryService'
+import { appendHistory, clearHistory, listHistory, type AppendHistoryInput } from '../store/queryHistory'
 import { envelope } from './envelope'
 
 /**
@@ -26,5 +27,14 @@ export function registerQueryIpc(): void {
   )
   ipcMain.handle('query:explain', (_e, connectionId: string, sql: string) =>
     envelope(() => queryService.explain(connectionId, sql))
+  )
+  ipcMain.handle('query:historyAppend', (_e, input: AppendHistoryInput) =>
+    envelope(() => appendHistory(input))
+  )
+  ipcMain.handle('query:historyList', (_e, connectionId: string) =>
+    envelope(() => listHistory(connectionId))
+  )
+  ipcMain.handle('query:historyClear', (_e, connectionId: string) =>
+    envelope(() => clearHistory(connectionId))
   )
 }
