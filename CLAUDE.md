@@ -1,8 +1,12 @@
 # Rockury — 작업 규칙 (매 세션 자동 로드)
 
 Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 · 화이트 테마 고정.
-현재 집중: **DB 서비스**. 설계부(Studio/Versions)는 로컬 SQLite(`node:sqlite`) 위에 구현됨. 운영부(Environments/Console/Migration)는 미구현.
-설계 배경·결정은 `docs/db-service-ia.md`, 다음 작업 계획은 `docs/ops-implementation-plan.md` 참고.
+현재 집중: **DB 서비스**. 설계부(Studio/Versions)·운영부(Environments/Console/Migration) 모두 로컬 SQLite(`node:sqlite`) + 실 드라이버(mysql2/pg/node:sqlite) 위에 구현됨. 남은 것은 선택적 향상(2e Diagram 등).
+설계 배경·결정은 `docs/db-service-ia.md`, 진행/재개점은 `docs/ops-implementation-plan.md` 참고.
+
+## 🌿 Git 규칙 (MUST)
+- **main 브랜치에서 직접 작업·커밋한다. feature 브랜치를 만들지 않는다.** (사용자 지시 — 기본 "브랜치 먼저" 관례를 이 프로젝트에선 덮어씀.)
+- 커밋/푸시는 사용자가 요청할 때만. 커밋 메시지 끝에 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 
 ## ✅ 테스트 의무 (MUST — 예외 없음)
 
