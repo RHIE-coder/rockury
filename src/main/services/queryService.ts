@@ -8,6 +8,13 @@ import { closePgConnection, createPgConnection } from '../infra/db/pgClient'
 import { closeSqliteConnection, createSqliteConnection } from '../infra/db/sqliteClient'
 import { getConnectionWithPassword } from '../store/connections'
 import { splitStatements } from './query/splitStatements'
+import {
+  buildExplainAnalyzeSql,
+  needsRollback,
+  parseExplainSummary,
+  queryType,
+  type ExplainDbType
+} from './query/explainSql'
 
 /**
  * 쿼리 실행 서비스(§ops-plan Phase 2c) — 활성 환경의 실 DB 에 SQL 을 실행한다.
@@ -28,6 +35,11 @@ export interface QueryResult {
 export interface TxBeginResult {
   txId: string
   dbType: string
+}
+export interface ExplainResult {
+  planRows: Record<string, unknown>[]
+  summary: string
+  explainSql: string
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -140,6 +152,33 @@ export const queryService = {
 
   async txRollback(txId: string): Promise<void> {
     await safeRollback(txId)
+  },
+
+  /** 실행 계획(EXPLAIN/ANALYZE). DML 은 BEGIN→EXPLAIN→ROLLBACK 으로 실제 반영을 막는다. */
+  async explain(connectionId: string, sql: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ExplainResult> {
+    const conn = getConnectionWithPassword(connectionId)
+    if (!conn) throw new Error(`연결을 찾을 수 없습니다: ${connectionId}`)
+    const dbType = conn.dbType as ExplainDbType
+    const qt = queryType(sql)
+    const esql = buildExplainAnalyzeSql(dbType, sql, qt)
+
+    const handle = await open(connectionId)
+    try {
+      let rows: Record<string, unknown>[]
+      if (needsRollback(dbType, qt)) {
+        await begin(handle)
+        try {
+          rows = (await execOne(handle, esql, timeoutMs)).rows
+        } finally {
+          await rollback(handle)
+        }
+      } else {
+        rows = (await execOne(handle, esql, timeoutMs)).rows
+      }
+      return { planRows: rows, summary: parseExplainSummary(rows, dbType), explainSql: esql }
+    } finally {
+      await close(handle)
+    }
   }
 }
 

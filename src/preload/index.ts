@@ -4,7 +4,7 @@ import type { ConnectionRecord, DbType } from '../main/store/connections'
 import type { ConnectionFormData, TestConnectionResult } from '../main/services/connectionService'
 import type { EnvironmentRecord } from '../main/store/environments'
 import type { IntrospectedSchema } from '../main/services/introspection/types'
-import type { QueryResult, TxBeginResult } from '../main/services/queryService'
+import type { QueryResult, TxBeginResult, ExplainResult } from '../main/services/queryService'
 import type {
   CreateLogInput,
   CreateSnapshotInput,
@@ -140,7 +140,9 @@ const api = {
       unwrap(ipcRenderer.invoke('query:txExecParams', txId, sql, params)),
     txCommit: (txId: string): Promise<void> => unwrap(ipcRenderer.invoke('query:txCommit', txId)),
     txRollback: (txId: string): Promise<void> =>
-      unwrap(ipcRenderer.invoke('query:txRollback', txId))
+      unwrap(ipcRenderer.invoke('query:txRollback', txId)),
+    explain: (connectionId: string, sql: string): Promise<ExplainResult> =>
+      unwrap(ipcRenderer.invoke('query:explain', connectionId, sql))
   },
   // 운영부 — Migration 스냅샷 기준선 + 로그 체인(환경 바인딩 id 로 키).
   migration: {

@@ -1,8 +1,12 @@
-import { AlertTriangle, Loader2, Play, Terminal, X } from 'lucide-react'
+import { useEffect } from 'react'
+import { AlertTriangle, Loader2, Play, Route, Terminal, WandSparkles, X } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
+import { SqlEditor } from '@renderer/ui/SqlEditor'
 import { useActiveConnection } from '../connections/store'
+import { useConsoleStore } from './store'
+import { buildSchemaMap, formatSql } from './query/schema'
 import { useQueryStore } from './query/store'
 
 const MAX_ROWS = 500
@@ -21,6 +25,11 @@ function cell(v: unknown): { text: string; muted?: boolean } {
  */
 export function QueryView() {
   const conn = useActiveConnection()
+  const tables = useConsoleStore((s) => (conn ? s.byEnv[conn.id] : undefined))
+  const loadIntro = useConsoleStore((s) => s.load)
+  useEffect(() => {
+    if (conn) void loadIntro(conn.id, conn.id)
+  }, [conn, loadIntro])
 
   const sql = useQueryStore((s) => s.sql)
   const setSql = useQueryStore((s) => s.setSql)
@@ -29,7 +38,10 @@ export function QueryView() {
   const loading = useQueryStore((s) => s.loading)
   const ddlWarning = useQueryStore((s) => s.ddlWarning)
   const tx = useQueryStore((s) => s.tx)
+  const explaining = useQueryStore((s) => s.explaining)
+  const explain = useQueryStore((s) => s.explain)
   const run = useQueryStore((s) => s.run)
+  const runExplain = useQueryStore((s) => s.runExplain)
   const confirm = useQueryStore((s) => s.confirm)
   const rollback = useQueryStore((s) => s.rollback)
   const dismissError = useQueryStore((s) => s.dismissError)
@@ -58,26 +70,43 @@ export function QueryView() {
           </h2>
           <p className="text-[12px] text-muted">SQL 실행 · DML 은 커밋 전 확인, DDL 은 자동 커밋</p>
         </div>
-        <Button size="sm" disabled={!canRun} onClick={() => void run(conn.id)}>
-          {loading ? <Loader2 className="animate-spin" /> : <Play />} 실행
-          <span className="ml-1 text-[10px] opacity-70">⌘↵</span>
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!sql.trim()}
+            title="SQL 정형화"
+            onClick={() => setSql(formatSql(sql, conn.dbType))}
+          >
+            <WandSparkles /> 포맷
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!sql.trim() || explaining || loading}
+            title="실행 계획(EXPLAIN) — 실제 반영 없음"
+            onClick={() => void runExplain(conn.id)}
+          >
+            {explaining ? <Loader2 className="animate-spin" /> : <Route />} EXPLAIN
+          </Button>
+          <Button size="sm" disabled={!canRun} onClick={() => void run(conn.id)}>
+            {loading ? <Loader2 className="animate-spin" /> : <Play />} 실행
+            <span className="ml-1 text-[10px] opacity-70">⌘↵</span>
+          </Button>
+        </div>
       </div>
 
-      {/* SQL 편집기(간이) */}
-      <textarea
-        value={sql}
-        onChange={(e) => setSql(e.target.value)}
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canRun) {
-            e.preventDefault()
-            void run(conn.id)
-          }
-        }}
-        spellCheck={false}
-        placeholder="SELECT * FROM users LIMIT 10;"
-        className="h-40 shrink-0 resize-none border-b border-line bg-canvas px-5 py-3 font-mono text-[13px] leading-relaxed text-fg outline-none placeholder:text-muted"
-      />
+      {/* SQL 편집기 — CodeMirror (스키마 자동완성 + 하이라이트) */}
+      <div className="h-44 shrink-0 overflow-auto border-b border-line px-2 py-1">
+        <SqlEditor
+          value={sql}
+          onChange={setSql}
+          onRun={() => canRun && void run(conn.id)}
+          schema={buildSchemaMap(tables ?? [])}
+          dialect={conn.dbType}
+          placeholder="SELECT * FROM users LIMIT 10;"
+        />
+      </div>
 
       {/* 트랜잭션 게이트 바 */}
       {tx && (
@@ -112,6 +141,19 @@ export function QueryView() {
       {ddlWarning && !tx && (
         <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-5 py-2 text-[12px] text-muted">
           <AlertTriangle className="size-3.5" /> DDL 은 즉시 자동 커밋되었습니다(롤백 불가).
+        </div>
+      )}
+
+      {explain && (
+        <div className="shrink-0 border-b border-line bg-panel/50 px-5 py-2">
+          <div className="flex items-center gap-1.5 text-[12px] text-fg">
+            <Route className="size-3.5 text-accent" />
+            <span className="font-semibold">실행 계획</span>
+            {explain.summary && <span className="text-muted">· {explain.summary}</span>}
+          </div>
+          <div className="mt-1 truncate font-mono text-[11px] text-muted" title={explain.explainSql}>
+            {explain.explainSql}
+          </div>
         </div>
       )}
 

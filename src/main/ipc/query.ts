@@ -24,4 +24,7 @@ export function registerQueryIpc(): void {
   ipcMain.handle('query:txRollback', (_e, txId: string) =>
     envelope(() => queryService.txRollback(txId))
   )
+  ipcMain.handle('query:explain', (_e, connectionId: string, sql: string) =>
+    envelope(() => queryService.explain(connectionId, sql))
+  )
 }

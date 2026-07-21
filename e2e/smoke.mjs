@@ -36,6 +36,14 @@ const app = await electron.launch({ executablePath: electronBin, args: [MAIN], t
 const page = await app.firstWindow()
 const click = (sel) => page.locator(sel).first().click()
 const body = () => page.evaluate(() => document.body.innerText)
+// CodeMirror(.cm-content)에 SQL 입력 — 전체선택→삭제→타이핑→자동완성 팝업 닫기.
+const typeSql = async (text) => {
+  await page.locator('.cm-content').click()
+  await page.keyboard.press('ControlOrMeta+A')
+  await page.keyboard.press('Backspace')
+  await page.keyboard.type(text)
+  await page.keyboard.press('Escape')
+}
 
 try {
   await page.waitForSelector('text=Studio', { timeout: 15_000 })
@@ -96,16 +104,21 @@ try {
   const obj = await body()
   check('Console › Object: 실 DB 역설계(users/user_roles)', obj.includes('users') && obj.includes('user_roles'))
 
-  // Console › Query — SELECT 실행(Phase 2c)
+  // Console › Query — CodeMirror 에디터로 SELECT 실행(Phase 2c + 향상)
   await click('button:has-text("Query")')
-  await page.waitForSelector('textarea', { timeout: 5_000 })
-  await page.locator('textarea').fill('SELECT id, email FROM users LIMIT 3')
+  await page.waitForSelector('.cm-content', { timeout: 5_000 })
+  await typeSql('SELECT id, email FROM users LIMIT 3')
   await click('button:has-text("실행")')
   await page.waitForSelector('th:has-text("email")', { timeout: 15_000 })
   check('Console › Query: SELECT 결과 그리드', (await body()).includes('email'))
 
+  // EXPLAIN — 실행 계획(실제 반영 없음)
+  await click('button:has-text("EXPLAIN")')
+  await page.waitForSelector('text=실행 계획', { timeout: 15_000 })
+  check('Console › Query: EXPLAIN 실행 계획', (await body()).includes('실행 계획'))
+
   // ⭐ 파괴적 트랜잭션 게이트 — WHERE 없는 UPDATE → 커밋 대기 바 → 롤백
-  await page.locator('textarea').fill('UPDATE users SET is_active = is_active')
+  await typeSql('UPDATE users SET is_active = is_active')
   await click('button:has-text("실행")')
   await page.waitForSelector('text=아직 커밋되지', { timeout: 15_000 })
   check('Console › Query: DML 트랜잭션 게이트(커밋 대기)', (await body()).includes('아직 커밋되지'))

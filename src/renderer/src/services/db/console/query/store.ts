@@ -17,6 +17,12 @@ interface PendingTx {
   destructive: boolean
 }
 
+export interface ExplainState {
+  summary: string
+  planRows: Record<string, unknown>[]
+  explainSql: string
+}
+
 interface QueryState {
   sql: string
   setSql: (s: string) => void
@@ -27,8 +33,11 @@ interface QueryState {
   ddlWarning: boolean
   /** 대기 중 DML 트랜잭션(커밋/롤백 필요). */
   tx: PendingTx | null
+  explaining: boolean
+  explain: ExplainState | null
 
   run: (envId: string) => Promise<void>
+  runExplain: (connectionId: string) => Promise<void>
   confirm: () => Promise<void>
   rollback: () => Promise<void>
   dismissError: () => void
@@ -48,6 +57,8 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
   loading: false,
   ddlWarning: false,
   tx: null,
+  explaining: false,
+  explain: null,
 
   run: async (envId) => {
     const sql = get().sql
@@ -58,7 +69,7 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
     }
     // 이전 대기 트랜잭션이 있으면 먼저 롤백.
     if (get().tx) await get().rollback()
-    set({ loading: true, error: null, result: null, ddlWarning: false, tx: null })
+    set({ loading: true, error: null, result: null, ddlWarning: false, tx: null, explain: null })
     try {
       if (c.kind === 'dml') {
         const { txId } = await window.rockury.query.txBegin(envId)
@@ -75,6 +86,21 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
       set({ error: e instanceof Error ? e.message : String(e) })
     } finally {
       set({ loading: false })
+    }
+  },
+
+  runExplain: async (connectionId) => {
+    const sql = get().sql
+    if (classifyStatement(sql).kind === 'empty') {
+      set({ error: '설명할 SQL 을 입력하세요.' })
+      return
+    }
+    set({ explaining: true, error: null, explain: null })
+    try {
+      const r = await window.rockury.query.explain(connectionId, sql)
+      set({ explain: r, explaining: false })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e), explaining: false })
     }
   },
 
