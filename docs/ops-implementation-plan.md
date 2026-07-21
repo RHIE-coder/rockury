@@ -1,7 +1,8 @@
 # 운영부(ops) 구현 플랜 & 세션 인수인계
 
 > 목적: 컨텍스트 clear 후 이 문서 + `docs/db-service-ia.md` 만 읽고 바로 이어서 작업하기 위한 재개점.
-> 최종 갱신: 2026-07-21 (**Phase 0/1/2a/2b/2c/3 완료 + Connection 1급 분리(결정 B)**. 남은 것: 2e Diagram + 향후 향상)
+> 최종 갱신: 2026-07-21 (**Phase 0~3 + Connection 1급 분리 + Console 심화(rky 이식)** 완료. 남은 것: 2e Diagram 등)
+> Console 심화: Query(CodeMirror+스키마 자동완성+포매터, EXPLAIN, 히스토리) · Data(필터/정렬/페이지크기, 타입별 셀 에디터+NULL+FK 룩업+JSON, Export) · **Collection**(저장쿼리 폴더 DnD 트리 + 컬렉션 Run-All=tx 게이트). rky 결함(문자열SQL/비트랜잭션/반쪽 히스토리)은 반복하지 않고 파라미터 바인드·tx·정상 히스토리로 이식.
 
 ---
 
