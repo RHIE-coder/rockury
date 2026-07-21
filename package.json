@@ -22,7 +22,8 @@
     "db:up": "node scripts/test-db/setup.mjs",
     "db:down": "node scripts/test-db/teardown.mjs",
     "db:reset": "npm run db:down && npm run db:up",
-    "db:status": "node scripts/test-db/status.mjs"
+    "db:status": "node scripts/test-db/status.mjs",
+    "db:seed-connections": "electron scripts/seed-connections.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
