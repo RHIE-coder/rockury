@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "node e2e/smoke.mjs",
+    "surface-verify": "node e2e/surface/verify.mjs",
     "db:up": "node scripts/test-db/setup.mjs",
     "db:down": "node scripts/test-db/teardown.mjs",
     "db:reset": "npm run db:down && npm run db:up",

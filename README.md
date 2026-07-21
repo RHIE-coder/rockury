@@ -20,7 +20,7 @@ npm run build      # 프로덕션 번들 (out/)
 npm run e2e        # 빌드된 앱 구동 스모크 (Playwright _electron). build 선행 필요
 ```
 
-> 변경 게이트: `npm run typecheck && npm test && npm run build`. 순수 로직을 추가하면 옆에 `*.test.ts` 를 함께 둔다. e2e 함정·패턴은 `e2e/README.md`, 이후 작업 계획은 `docs/ops-implementation-plan.md`.
+> 변경 게이트: `npm run typecheck && npm test && npm run build`. 순수 로직을 추가하면 옆에 `*.test.ts` 를 함께 둔다. e2e 함정·패턴은 `e2e/README.md`, 이후 작업 계획은 `docs/before-steward-background/ops-implementation-plan.md`.
 
 ## 🧭 공통 레이아웃 셸 — 가변 깊이 내비게이션
 "깊이는 레이아웃 코드가 아니라 데이터다." 각 서비스가 트리(Service → Module → View)를 선언하면 셸이 존재하는 계층만 렌더한다.
