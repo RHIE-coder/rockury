@@ -10,6 +10,7 @@ import {
   type Filter,
   type Statement
 } from './sqlBuilder'
+import { genUuid } from './genValue'
 
 /**
  * Data 브라우저 스토어(§ops-plan Phase 2b) — 선택 테이블 행 조회 + pending 편집 버퍼.
@@ -57,6 +58,7 @@ interface DataState {
   setFilters: (envId: string, dialect: DialectId, tableDef: TableDef, filters: Filter[]) => Promise<void>
 
   editCell: (key: string, col: string, value: unknown) => void
+  resetCell: (key: string, col: string) => void
   toggleDelete: (key: string) => void
   addRow: () => void
   editInsert: (tempId: string, col: string, value: unknown) => void
@@ -94,6 +96,15 @@ export const useDataStore = create<DataState>()((set, get) => ({
   tx: null,
 
   selectTable: async (envId, dialect, tableDef) => {
+    // 커밋 대기 중인 트랜잭션이 열려 있으면 먼저 롤백한다 — 안 그러면 main 세션이 락을 문 채 방치된다(고아 tx).
+    const openTx = get().tx
+    if (openTx) {
+      try {
+        await window.rockury.query.txRollback(openTx.txId)
+      } catch {
+        // 이미 정리됐을 수 있음
+      }
+    }
     set({ table: tableDef.name, page: 0, orderBy: null, filters: [], ...clearPending() })
     await get().load(envId, dialect, tableDef)
   },
@@ -147,6 +158,18 @@ export const useDataStore = create<DataState>()((set, get) => ({
   editCell: (key, col, value) =>
     set((s) => ({ edits: { ...s.edits, [key]: { ...s.edits[key], [col]: value } } })),
 
+  resetCell: (key, col) =>
+    set((s) => {
+      const row = s.edits[key]
+      if (!row || !(col in row)) return {}
+      const next = { ...row }
+      delete next[col]
+      const edits = { ...s.edits }
+      if (Object.keys(next).length === 0) delete edits[key]
+      else edits[key] = next
+      return { edits }
+    }),
+
   toggleDelete: (key) =>
     set((s) => {
       const deletes = { ...s.deletes }
@@ -156,9 +179,8 @@ export const useDataStore = create<DataState>()((set, get) => ({
     }),
 
   addRow: () =>
-    set((s) => ({
-      inserts: [...s.inserts, { tempId: `new_${s.inserts.length}_${s.rows.length}`, values: {} }]
-    })),
+    // tempId 는 충돌 없는 유일값이어야 한다 — 인덱스 기반은 add/remove/add 시 재사용돼 중복 INSERT 를 낳는다.
+    set((s) => ({ inserts: [...s.inserts, { tempId: `new_${genUuid()}`, values: {} }] })),
 
   editInsert: (tempId, col, value) =>
     set((s) => ({

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   columnKeyKinds,
   normalizeSchema,
+  splitTablesAndViews,
   type IntrospectedSchema
 } from './introspection'
 
@@ -86,6 +87,36 @@ describe('normalizeSchema', () => {
       'd'
     )
     expect(empty).toEqual([])
+  })
+})
+
+describe('splitTablesAndViews — 테이블/뷰 분리(#4)', () => {
+  it('isView 기준으로 가른다', () => {
+    const withView = normalizeSchema(
+      {
+        ...ir,
+        tables: [
+          { name: 'users', comment: '' },
+          { name: 'v_user_summary', comment: '', isView: true }
+        ],
+        columns: [
+          { table: 'users', name: 'id', type: 'char(36)', nullable: false, default: null, comment: '', ordinal: 1 },
+          { table: 'v_user_summary', name: 'total', type: 'int', nullable: true, default: null, comment: '', ordinal: 1 }
+        ],
+        keys: [{ table: 'users', name: 'PRIMARY', kind: 'pk', column: 'id', ordinal: 1, direction: 'ASC' }],
+        foreignKeys: []
+      },
+      'd'
+    )
+    const { tables, views } = splitTablesAndViews(withView)
+    expect(tables.map((t) => t.name)).toEqual(['users'])
+    expect(views.map((t) => t.name)).toEqual(['v_user_summary'])
+    expect(views[0].isView).toBe(true)
+  })
+
+  it('뷰가 없으면 views 는 빈 배열', () => {
+    const { views } = splitTablesAndViews(normalizeSchema(ir, 'd'))
+    expect(views).toEqual([])
   })
 })
 

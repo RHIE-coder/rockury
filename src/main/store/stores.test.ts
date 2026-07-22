@@ -7,13 +7,17 @@ import {
   createFolder,
   createSavedQuery,
   deleteFolder,
+  deleteSavedQuery,
   listTree,
-  reorderTree
+  reorderTree,
+  updateSavedQuery
 } from './savedQueries'
 import {
   addItem,
+  addReference,
   createCollection,
   deleteCollection,
+  deleteItem,
   listCollections,
   listItems,
   reorderItems
@@ -69,6 +73,36 @@ describe('collections', () => {
     deleteCollection(col.id)
     expect(listCollections(CONN).find((c) => c.id === col.id)).toBeUndefined()
     expect(listItems(col.id)).toEqual([])
+  })
+})
+
+describe('collections — 저장쿼리 참조(hybrid) + 삭제 가드', () => {
+  it('참조 아이템은 원본 이름/SQL 을 실효값으로, 원본 수정 시 반영', () => {
+    const q = createSavedQuery({ connectionId: CONN, folderId: null, name: 'ref-q', sql: 'SELECT 42' })
+    const col = createCollection({ connectionId: CONN, name: 'refs' })
+    const item = addReference({ collectionId: col.id, savedQueryId: q.id })
+    const items = listItems(col.id)
+    expect(items[0].savedQueryId).toBe(q.id)
+    expect(items[0].name).toBe('ref-q')
+    expect(items[0].sql).toBe('SELECT 42')
+
+    // 원본 수정 → 참조 아이템에 자동 반영(사본이 아니라 링크)
+    updateSavedQuery(q.id, { sql: 'SELECT 99' })
+    expect(listItems(col.id)[0].sql).toBe('SELECT 99')
+
+    // 참조 중 원본 삭제는 거부(삭제 가드)
+    expect(() => deleteSavedQuery(q.id)).toThrow(/사용 중/)
+    // 참조 제거 후엔 삭제 가능
+    deleteItem(item.id)
+    expect(() => deleteSavedQuery(q.id)).not.toThrow()
+  })
+
+  it('즉석(ad-hoc) 아이템은 savedQueryId=null 이고 자체 SQL 을 쓴다', () => {
+    const col = createCollection({ connectionId: CONN, name: 'adhoc' })
+    addItem({ collectionId: col.id, name: 'x', sql: 'SELECT 1' })
+    const it = listItems(col.id)[0]
+    expect(it.savedQueryId).toBeNull()
+    expect(it.sql).toBe('SELECT 1')
   })
 })
 

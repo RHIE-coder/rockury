@@ -10,6 +10,8 @@ export type FkAction = 'RESTRICT' | 'CASCADE' | 'SET NULL' | 'SET DEFAULT' | 'NO
 export interface RawTable {
   name: string
   comment: string
+  /** 뷰(view/matview)면 true. 일반 테이블은 false/undefined. */
+  isView?: boolean
 }
 
 export interface RawColumn {

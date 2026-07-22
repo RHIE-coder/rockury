@@ -183,14 +183,22 @@ function migrate(d: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_collections_conn ON collections(connection_id);
 
     CREATE TABLE IF NOT EXISTS collection_items (
-      id            TEXT PRIMARY KEY,
-      collection_id TEXT NOT NULL,
-      name          TEXT NOT NULL DEFAULT '',
-      sql_text      TEXT NOT NULL DEFAULT '',
-      sort_order    INTEGER NOT NULL DEFAULT 0
+      id             TEXT PRIMARY KEY,
+      collection_id  TEXT NOT NULL,
+      saved_query_id TEXT,
+      name           TEXT NOT NULL DEFAULT '',
+      sql_text       TEXT NOT NULL DEFAULT '',
+      sort_order     INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_collection_items_coll ON collection_items(collection_id);
   `)
+
+  // 추가 마이그레이션(구 스키마 호환): collection_items 가 저장쿼리를 "참조"할 수 있도록 컬럼 추가.
+  // CREATE IF NOT EXISTS 는 기존 테이블에 컬럼을 더하지 못하므로 pragma 로 확인 후 ALTER.
+  const hasRef = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('collection_items') WHERE name='saved_query_id'`)
+    .get() as unknown as { c: number }
+  if (hasRef.c === 0) d.exec('ALTER TABLE collection_items ADD COLUMN saved_query_id TEXT')
 }
 
 /** 첫 실행 시드 — commerce-core (MySQL) 설계 + 예제 테이블. designs 가 비어 있을 때만. */

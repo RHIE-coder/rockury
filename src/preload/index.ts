@@ -178,6 +178,8 @@ const api = {
     delete: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('col:delete', id)),
     addItem: (input: { collectionId: string; name: string; sql: string }): Promise<CollectionItemRecord> =>
       unwrap(ipcRenderer.invoke('col:addItem', input)),
+    addReference: (input: { collectionId: string; savedQueryId: string }): Promise<CollectionItemRecord> =>
+      unwrap(ipcRenderer.invoke('col:addReference', input)),
     updateItem: (id: string, patch: { name?: string; sql?: string }): Promise<void> => unwrap(ipcRenderer.invoke('col:updateItem', id, patch)),
     deleteItem: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('col:deleteItem', id)),
     reorderItems: (orderedIds: string[]): Promise<void> => unwrap(ipcRenderer.invoke('col:reorderItems', orderedIds))

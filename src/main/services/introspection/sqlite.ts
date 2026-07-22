@@ -18,10 +18,10 @@ export function introspectSqlite(db: DatabaseSync): IntrospectedSchema {
   const all = <T>(sql: string, ...params: string[]): T[] =>
     db.prepare(sql).all(...params) as unknown as T[]
 
-  const tableRows = all<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
+  const tableRows = all<{ name: string; type: string }>(
+    `SELECT name, type FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name`
   )
-  const tables: RawTable[] = tableRows.map((r) => ({ name: r.name, comment: '' }))
+  const tables: RawTable[] = tableRows.map((r) => ({ name: r.name, comment: '', isView: r.type === 'view' }))
 
   const columns: RawColumn[] = []
   const keys: RawKey[] = []

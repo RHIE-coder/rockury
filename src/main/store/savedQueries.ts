@@ -127,7 +127,18 @@ export function deleteFolder(id: string): void {
 }
 
 export function deleteSavedQuery(id: string): void {
-  getDb().prepare('DELETE FROM saved_queries WHERE id = ?').run(id)
+  const d = getDb()
+  // 삭제 가드 — 컬렉션이 이 쿼리를 참조 중이면 거부하고 어느 컬렉션인지 알린다.
+  const refs = d
+    .prepare(
+      `SELECT DISTINCT c.name AS name FROM collection_items ci
+       JOIN collections c ON c.id = ci.collection_id WHERE ci.saved_query_id = ?`
+    )
+    .all(id) as unknown as { name: string }[]
+  if (refs.length > 0) {
+    throw new Error(`이 쿼리는 컬렉션에서 사용 중이라 삭제할 수 없습니다: ${refs.map((r) => r.name).join(', ')}`)
+  }
+  d.prepare('DELETE FROM saved_queries WHERE id = ?').run(id)
 }
 
 /** 트리 재배치 — 렌더러가 계산한 (id,kind,parentId,sortOrder)를 일괄 반영. */

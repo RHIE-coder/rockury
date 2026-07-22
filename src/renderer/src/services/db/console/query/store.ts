@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { classifyStatement } from './classify'
+import { classifyScript, classifyStatement } from './classify'
 
 /** main queryService.QueryResult 와 동일 형태(구조적). */
 export interface QueryResult {
@@ -50,9 +50,16 @@ interface QueryState {
   explain: ExplainState | null
   history: HistoryRow[]
   lastConn: string | null
+  /** 라이브러리에서 로드된 저장쿼리 id — 있으면 자동저장 대상(T17). */
+  activeSavedQueryId: string | null
+  /** 그 저장쿼리가 속한 연결 id — 자동저장은 이 연결에서만(다른 연결 작업물이 덮어쓰지 않도록). */
+  activeSavedConn: string | null
 
-  run: (connectionId: string) => Promise<void>
-  runExplain: (connectionId: string) => Promise<void>
+  /** 저장쿼리를 에디터로 로드(자동저장 연결 — 연결 id 로 스코프). */
+  loadSaved: (id: string, sql: string, connId: string) => void
+  /** execSql 을 주면 그걸 실행(키워드 치환된 SQL). 없으면 state.sql. */
+  run: (connectionId: string, execSql?: string) => Promise<void>
+  runExplain: (connectionId: string, execSql?: string) => Promise<void>
   confirm: () => Promise<void>
   rollback: () => Promise<void>
   loadHistory: (connectionId: string) => Promise<void>
@@ -91,10 +98,15 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
   explain: null,
   history: [],
   lastConn: null,
+  activeSavedQueryId: null,
+  activeSavedConn: null,
 
-  run: async (connectionId) => {
-    const sql = get().sql
-    const c = classifyStatement(sql)
+  loadSaved: (id, sql, connId) => set({ sql, activeSavedQueryId: id, activeSavedConn: connId }),
+
+  run: async (connectionId, execSql) => {
+    const sql = execSql ?? get().sql
+    // ⭐ 스크립트 전체를 보고 라우팅한다 — 첫 문만 보면 뒤에 숨은 DML 이 게이트를 우회해 자동 커밋된다.
+    const c = classifyScript(sql)
     if (c.kind === 'empty') {
       set({ error: '실행할 SQL 을 입력하세요.' })
       return
@@ -129,8 +141,8 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
     }
   },
 
-  runExplain: async (connectionId) => {
-    const sql = get().sql
+  runExplain: async (connectionId, execSql) => {
+    const sql = execSql ?? get().sql
     if (classifyStatement(sql).kind === 'empty') {
       set({ error: '설명할 SQL 을 입력하세요.' })
       return

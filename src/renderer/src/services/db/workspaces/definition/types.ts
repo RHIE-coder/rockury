@@ -50,4 +50,6 @@ export interface TableDef {
   comment: string
   columns: Column[]
   constraints: Constraint[]
+  /** 운영부 introspection 에서 뷰(view/matview)로 판별되면 true(설계부에선 미사용). */
+  isView?: boolean
 }

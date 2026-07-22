@@ -11,6 +11,7 @@ import {
 } from '../store/savedQueries'
 import {
   addItem,
+  addReference,
   createCollection,
   deleteCollection,
   deleteItem,
@@ -51,6 +52,7 @@ export function registerCollectionIpc(): void {
   ipcMain.handle('col:rename', (_e, id: string, name: string) => envelope(() => renameCollection(id, name)))
   ipcMain.handle('col:delete', (_e, id: string) => envelope(() => deleteCollection(id)))
   ipcMain.handle('col:addItem', (_e, input: { collectionId: string; name: string; sql: string }) => envelope(() => addItem(input)))
+  ipcMain.handle('col:addReference', (_e, input: { collectionId: string; savedQueryId: string }) => envelope(() => addReference(input)))
   ipcMain.handle('col:updateItem', (_e, id: string, patch: { name?: string; sql?: string }) => envelope(() => updateItem(id, patch)))
   ipcMain.handle('col:deleteItem', (_e, id: string) => envelope(() => deleteItem(id)))
   ipcMain.handle('col:reorderItems', (_e, orderedIds: string[]) => envelope(() => reorderItems(orderedIds)))

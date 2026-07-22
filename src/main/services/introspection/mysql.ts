@@ -23,13 +23,14 @@ export async function introspectMysql(
     return rows as T[]
   }
 
-  const tableRows = await q<{ name: string; comment: string }>(
-    `SELECT TABLE_NAME AS name, IFNULL(TABLE_COMMENT,'') AS comment
+  // BASE TABLE + VIEW 를 함께 읽고 종류로 가른다.
+  const tableRows = await q<{ name: string; comment: string; ttype: string }>(
+    `SELECT TABLE_NAME AS name, IFNULL(TABLE_COMMENT,'') AS comment, TABLE_TYPE AS ttype
      FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE IN ('BASE TABLE','VIEW')
      ORDER BY TABLE_NAME`
   )
-  const tables: RawTable[] = tableRows.map((r) => ({ name: r.name, comment: r.comment }))
+  const tables: RawTable[] = tableRows.map((r) => ({ name: r.name, comment: r.comment, isView: r.ttype === 'VIEW' }))
 
   const colRows = await q<{
     tbl: string

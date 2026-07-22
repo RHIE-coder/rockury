@@ -17,13 +17,15 @@ import {
 export async function introspectPg(client: Client): Promise<IntrospectedSchema> {
   const q = async <T>(sql: string): Promise<T[]> => (await client.query(sql)).rows as T[]
 
-  const tableRows = await q<{ name: string; comment: string }>(
-    `SELECT c.relname AS name, COALESCE(obj_description(c.oid), '') AS comment
+  // 일반 테이블(r/p) + 뷰(v)/구체화뷰(m). 파티션 자식은 제외.
+  const tableRows = await q<{ name: string; comment: string; is_view: boolean }>(
+    `SELECT c.relname AS name, COALESCE(obj_description(c.oid), '') AS comment,
+            (c.relkind IN ('v','m')) AS is_view
      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = current_schema() AND c.relkind IN ('r','p') AND NOT c.relispartition
+     WHERE n.nspname = current_schema() AND c.relkind IN ('r','p','v','m') AND NOT c.relispartition
      ORDER BY c.relname`
   )
-  const tables: RawTable[] = tableRows.map((r) => ({ name: r.name, comment: r.comment }))
+  const tables: RawTable[] = tableRows.map((r) => ({ name: r.name, comment: r.comment, isView: r.is_view }))
 
   const colRows = await q<{
     tbl: string
@@ -44,7 +46,7 @@ export async function introspectPg(client: Client): Promise<IntrospectedSchema> 
      JOIN pg_class c ON c.oid = a.attrelid
      JOIN pg_namespace n ON n.oid = c.relnamespace
      LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-     WHERE n.nspname = current_schema() AND c.relkind IN ('r','p') AND NOT c.relispartition
+     WHERE n.nspname = current_schema() AND c.relkind IN ('r','p','v','m') AND NOT c.relispartition
        AND a.attnum > 0 AND NOT a.attisdropped
      ORDER BY c.relname, a.attnum`
   )

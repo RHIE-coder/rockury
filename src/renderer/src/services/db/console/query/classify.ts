@@ -48,3 +48,65 @@ export function classifyStatement(sql: string): StatementClass {
   }
   return { kind: 'read', verb, destructive: false }
 }
+
+/**
+ * SQL 을 문(statement) 단위로 나눈다 — 세미콜론 기준이되 문자열/식별자 인용·주석 안의 `;` 는 무시한다.
+ * (main splitStatements 와 같은 규칙의 렌더러판 — 실행 라우팅 판정에만 쓴다.) 순수 함수 → 테스트 의무.
+ */
+export function splitSql(sql: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let quote: string | null = null // "'" | '"' | '`'
+  let i = 0
+  const n = sql.length
+  while (i < n) {
+    const ch = sql[i]
+    const next = sql[i + 1]
+    if (quote) {
+      cur += ch
+      if (ch === quote) {
+        if (ch === "'" && next === "'") { cur += next; i += 2; continue } // '' 이스케이프
+        quote = null
+      }
+      i++
+      continue
+    }
+    if (ch === '-' && next === '-') {
+      const end = sql.indexOf('\n', i)
+      const stop = end === -1 ? n : end
+      cur += sql.slice(i, stop)
+      i = stop
+      continue
+    }
+    if (ch === '/' && next === '*') {
+      const end = sql.indexOf('*/', i + 2)
+      const stop = end === -1 ? n : end + 2
+      cur += sql.slice(i, stop)
+      i = stop
+      continue
+    }
+    if (ch === "'" || ch === '"' || ch === '`') { quote = ch; cur += ch; i++; continue }
+    if (ch === ';') { if (cur.trim()) out.push(cur.trim()); cur = ''; i++; continue }
+    cur += ch
+    i++
+  }
+  if (cur.trim()) out.push(cur.trim())
+  return out
+}
+
+/**
+ * 스크립트(여러 문) 전체의 실행 성격을 판정한다 — 라우팅 안전용.
+ * 어느 한 문장이라도 DML 이면 **전체를 트랜잭션 게이트로**(뒤에 숨은 DML 이 자동 커밋되는 구멍 차단).
+ * DDL 만 섞였으면 ddl(자동 커밋 경고), 전부 읽기면 read. 단일 문은 classifyStatement 와 동일.
+ */
+export function classifyScript(sql: string): StatementClass {
+  const classes = splitSql(sql)
+    .map(classifyStatement)
+    .filter((c) => c.kind !== 'empty')
+  if (classes.length === 0) return { kind: 'empty', verb: '', destructive: false }
+  if (classes.length === 1) return classes[0]
+  const destructive = classes.some((c) => c.destructive)
+  if (classes.some((c) => c.kind === 'dml')) return { kind: 'dml', verb: '여러 문', destructive }
+  if (classes.some((c) => c.kind === 'ddl')) return { kind: 'ddl', verb: '여러 문', destructive }
+  return { kind: 'read', verb: '여러 문', destructive: false }
+}
