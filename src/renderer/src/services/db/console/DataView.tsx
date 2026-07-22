@@ -110,10 +110,34 @@ export function DataView() {
   const [cfilter, setCfilter] = useState<KindFilter>('ALL')
   const [jsonEdit, setJsonEdit] = useState<{ key: string; col: string; text: string } | null>(null)
   const [fkEdit, setFkEdit] = useState<{ key: string; col: string; ref: { table: string; column: string }; insert?: string } | null>(null)
+  // 컬럼 폭(리사이즈). 이름→px. 없으면 기본폭.
+  const [colW, setColW] = useState<Record<string, number>>({})
+  const resizing = useRef<{ name: string; startX: number; startW: number } | null>(null)
 
   useEffect(() => {
     if (connId) void loadIntro(connId, connId)
   }, [connId, loadIntro])
+
+  // 컬럼 리사이즈 — 헤더 오른쪽 핸들 드래그로 폭 조절(전역 mousemove/up).
+  useEffect(() => {
+    const onMove = (e: MouseEvent): void => {
+      const r = resizing.current
+      if (!r) return
+      setColW((w) => ({ ...w, [r.name]: Math.max(72, r.startW + (e.clientX - r.startX)) }))
+    }
+    const onUp = (): void => {
+      if (resizing.current) {
+        resizing.current = null
+        document.body.style.cursor = ''
+      }
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
 
   // 연결이 바뀌면 이전 연결에서 열린 커밋 대기 트랜잭션을 롤백한다(고아 tx/락 방지).
   useEffect(() => {
@@ -121,10 +145,21 @@ export function DataView() {
     if (s.tx) void s.rollback()
   }, [connId])
 
-  // 테이블이 바뀌면 컬럼 숨김 상태 초기화.
+  // 테이블이 바뀌면 컬럼 숨김·폭 상태 초기화.
   useEffect(() => {
     setHidden(new Set())
+    setColW({})
   }, [d.table])
+
+  const DEFAULT_COL_W = 160
+  const NUM_COL_W = 56
+  const ACT_COL_W = 32
+  const startResize = (name: string, e: React.MouseEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    resizing.current = { name, startX: e.clientX, startW: colW[name] ?? DEFAULT_COL_W }
+    document.body.style.cursor = 'col-resize'
+  }
 
   if (!conn) {
     return <PlaceholderView icon={Table2} depth="depth 3 · Console › Data" title="연결을 선택하세요" subtitle="Connection 셀렉터에서 대상을 고르면 실 DB 테이블을 조회/편집할 수 있습니다." />
@@ -230,8 +265,10 @@ export function DataView() {
                     <KindBadge kind={c.kind} />
                     <span className="min-w-0 truncate font-mono text-[11.5px] text-fg">{c.name}</span>
                   </span>
-                  <span className="truncate font-mono text-[10.5px] text-muted">
-                    {c.table} · {c.columns.join(', ')}
+                  <span className="flex items-center gap-1.5">
+                    {/* 테이블 라벨 — 스캔 편하게 색을 달리한 별도 칸 */}
+                    <span className="shrink-0 rounded bg-indigo-100 px-1 font-mono text-[10.5px] font-semibold text-indigo-700">{c.table}</span>
+                    <span className="min-w-0 truncate font-mono text-[10.5px] text-muted">{c.columns.join(', ')}</span>
                   </span>
                   {c.refLabel && <span className="truncate font-mono text-[10.5px] text-accent">{c.refLabel}</span>}
                 </button>
@@ -372,23 +409,39 @@ export function DataView() {
               )}
 
               <div className="min-h-0 flex-1 overflow-auto">
-                <table className="w-full border-collapse text-[12px]">
+                <table
+                  className="table-fixed border-collapse text-[12px]"
+                  style={{ width: NUM_COL_W + (editable ? ACT_COL_W : 0) + shownColumns.reduce((s, c) => s + (colW[c.name] ?? DEFAULT_COL_W), 0) }}
+                >
+                  <colgroup>
+                    <col style={{ width: NUM_COL_W }} />
+                    {editable && <col style={{ width: ACT_COL_W }} />}
+                    {shownColumns.map((c) => (
+                      <col key={c.id} style={{ width: colW[c.name] ?? DEFAULT_COL_W }} />
+                    ))}
+                  </colgroup>
                   <thead className="sticky top-0 bg-panel">
                     <tr>
-                      <th className="w-14 border-b border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
-                      {editable && <th className="w-8 border-b border-line px-1 py-1.5" />}
+                      <th className="border-b border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
+                      {editable && <th className="border-b border-line px-1 py-1.5" />}
                       {shownColumns.map((c) => {
                         const sorted = d.orderBy?.column === c.name ? d.orderBy.direction : null
                         const badges = badgeLabels(keyKinds.get(c.id))
                         return (
-                          <th key={c.id} className="border-b border-line px-3 py-1.5 text-left align-top font-mono font-semibold text-fg">
-                            <button type="button" onClick={() => dialect && void d.toggleSort(connId!, dialect, selected, c.name)} className="flex items-center gap-1.5 outline-none hover:text-accent" title="정렬">
+                          <th key={c.id} className="relative border-b border-line px-3 py-1.5 text-left align-top font-mono font-semibold text-fg">
+                            <button type="button" onClick={() => dialect && void d.toggleSort(connId!, dialect, selected, c.name)} className="flex items-center gap-1.5 overflow-hidden outline-none hover:text-accent" title="정렬">
                               {badges.map((b) => <span key={b} className="rounded bg-accent-soft px-1 text-[9px] font-bold text-accent">{b}</span>)}
-                              <span>{c.name}</span>
-                              {sorted === 'ASC' && <ChevronUp className="size-3" />}
-                              {sorted === 'DESC' && <ChevronDown className="size-3" />}
+                              <span className="truncate">{c.name}</span>
+                              {sorted === 'ASC' && <ChevronUp className="size-3 shrink-0" />}
+                              {sorted === 'DESC' && <ChevronDown className="size-3 shrink-0" />}
                             </button>
-                            <div className="mt-0.5 text-[10px] font-normal lowercase text-muted">{typeLabel(c.type)}</div>
+                            <div className="mt-0.5 truncate text-[10px] font-normal lowercase text-muted">{typeLabel(c.type)}</div>
+                            {/* 컬럼 폭 조절 핸들 */}
+                            <span
+                              onMouseDown={(e) => startResize(c.name, e)}
+                              title="드래그하여 폭 조절"
+                              className="absolute -right-0.5 top-0 z-10 h-full w-1.5 cursor-col-resize select-none hover:bg-accent/40"
+                            />
                           </th>
                         )
                       })}
@@ -418,7 +471,7 @@ export function DataView() {
                             if (!editable) {
                               const shownVal = row[c.name] == null ? 'NULL' : kind === 'date' ? formatDateCell(row[c.name], tzMode, tz) : display(row[c.name])
                               return (
-                                <td key={c.id} className="group/cell relative max-w-[320px] border-b border-line/50 px-3 py-1 font-mono">
+                                <td key={c.id} className="group/cell relative overflow-hidden border-b border-line/50 px-3 py-1 font-mono">
                                   <span className={cn('block truncate', row[c.name] == null ? 'italic text-muted' : 'text-fg')} title={display(row[c.name])}>{shownVal}</span>
                                   {row[c.name] != null && (
                                     <button type="button" title="셀 값 복사" onClick={() => copy(display(row[c.name]))} className="absolute right-1 top-1/2 hidden -translate-y-1/2 text-muted hover:text-accent group-hover/cell:block"><Copy className="size-3" /></button>
@@ -427,7 +480,7 @@ export function DataView() {
                               )
                             }
                             return (
-                              <td key={c.id} className="border-b border-line/50 p-0">
+                              <td key={c.id} className="border-b border-line/50 overflow-hidden p-0">
                                 <EditableCell
                                   kind={kind}
                                   value={val}
@@ -456,7 +509,7 @@ export function DataView() {
                             <button type="button" title="추가 취소" onClick={() => d.removeInsert(ins.tempId)} className="text-muted hover:text-destructive"><X className="size-3.5" /></button>
                           </td>
                           {shownColumns.map((c) => (
-                            <td key={c.id} className="border-b border-line/50 p-0">
+                            <td key={c.id} className="border-b border-line/50 overflow-hidden p-0">
                               <NewCell
                                 kind={columnKind(c.type)}
                                 value={ins.values[c.name]}
@@ -627,7 +680,7 @@ function EditableCell({
   onJson: () => void
   onFk: (ref: { table: string; column: string }) => void
 }) {
-  const base = cn('w-full min-w-[80px] bg-transparent px-3 py-1 font-mono text-[12px] outline-none focus:bg-accent-soft/40', changed ? 'text-accent-2' : 'text-fg')
+  const base = cn('w-full min-w-0 bg-transparent px-3 py-1 font-mono text-[12px] outline-none focus:bg-accent-soft/40', changed ? 'text-accent-2' : 'text-fg')
   const nullBtn = (
     <button type="button" title="NULL 로 설정" disabled={disabled} onClick={() => onChange(null)} className="px-1 text-[10px] text-muted hover:text-destructive">NULL</button>
   )
@@ -712,7 +765,7 @@ function DateCell({ value, changed, disabled, tzMode, tz, onChange, onReset }: {
           const n = normalizeDateTime(raw)
           if (n) onChange(n)
         }}
-        className={cn('w-full min-w-[120px] bg-transparent px-3 py-1 font-mono text-[12px] outline-none focus:bg-accent-soft/40', changed ? 'text-accent-2' : isNull ? 'italic text-muted' : 'text-fg')}
+        className={cn('w-full min-w-0 bg-transparent px-3 py-1 font-mono text-[12px] outline-none focus:bg-accent-soft/40', changed ? 'text-accent-2' : isNull ? 'italic text-muted' : 'text-fg')}
       />
       {focused && (
         <div className="absolute left-0 top-full z-20 mt-0.5 flex items-center gap-1 rounded border border-line bg-canvas px-1.5 py-1 shadow-lg">
@@ -743,7 +796,7 @@ function UuidCell({ value, changed, disabled, onChange }: {
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onChange={(e) => onChange(e.target.value)}
-        className={cn('w-full min-w-[220px] bg-transparent px-3 py-1 font-mono text-[12px] outline-none focus:bg-accent-soft/40', changed ? 'text-accent-2' : isNull ? 'italic text-muted' : 'text-fg')}
+        className={cn('w-full min-w-0 bg-transparent px-3 py-1 font-mono text-[12px] outline-none focus:bg-accent-soft/40', changed ? 'text-accent-2' : isNull ? 'italic text-muted' : 'text-fg')}
       />
       {focused && (
         <div className="absolute left-0 top-full z-20 mt-0.5 flex items-center gap-1 rounded border border-line bg-canvas px-1.5 py-1 shadow-lg">
@@ -760,7 +813,7 @@ function NewCell({ kind, value, fk, onFk, onChange }: { kind: ReturnType<typeof 
   const text = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value)
   return (
     <div className="flex items-center">
-      <input value={text} placeholder="(기본값)" onChange={(e) => onChange(e.target.value)} className="w-full min-w-[80px] bg-transparent px-3 py-1 font-mono text-[12px] text-success outline-none focus:bg-success-soft" />
+      <input value={text} placeholder="(기본값)" onChange={(e) => onChange(e.target.value)} className="w-full min-w-0 bg-transparent px-3 py-1 font-mono text-[12px] text-success outline-none focus:bg-success-soft" />
       {fk && onFk && <button type="button" onClick={() => onFk(fk)} className="shrink-0 px-1 text-[10px] font-bold text-sky-600 hover:text-accent" title={`${fk.table} 참조 선택`}>FK</button>}
       {!fk && kind === 'uuid' && <button type="button" onClick={() => onChange(genUuid())} className="px-1 text-[10px] text-muted hover:text-accent" title="UUID 생성">UUID</button>}
       {!fk && kind === 'date' && <button type="button" onClick={() => onChange(nowDateTime())} className="px-1 text-[10px] text-muted hover:text-accent" title="현재 시각">NOW</button>}

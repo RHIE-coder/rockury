@@ -5,8 +5,9 @@ import { classifyStatement } from '../query/classify'
 
 /** 구조적 레코드 타입(main 과 동일 형태). */
 interface Folder { id: string; connectionId: string; parentId: string | null; name: string; sortOrder: number }
-interface SavedQuery { id: string; connectionId: string; folderId: string | null; name: string; sql: string; sortOrder: number }
-interface Collection { id: string; connectionId: string; name: string; sortOrder: number }
+interface SavedQuery { id: string; connectionId: string; folderId: string | null; name: string; description: string; sql: string; sortOrder: number }
+interface CollFolder { id: string; connectionId: string; parentId: string | null; name: string; sortOrder: number }
+interface Collection { id: string; connectionId: string; folderId: string | null; name: string; sortOrder: number }
 interface Item { id: string; collectionId: string; savedQueryId: string | null; name: string; sql: string; sortOrder: number }
 
 export type ItemStatus = 'pending' | 'running' | 'ok' | 'error' | 'skipped'
@@ -19,6 +20,7 @@ interface CollectionState {
   connectionId: string | null
   folders: Folder[]
   queries: SavedQuery[]
+  collectionFolders: CollFolder[]
   collections: Collection[]
   activeCollectionId: string | null
   items: Item[]
@@ -40,9 +42,13 @@ interface CollectionState {
   remove: (kind: 'folder' | 'query', id: string) => Promise<void>
   applyReorder: (flat: { id: string; kind: 'folder' | 'query'; parentId: string | null }[]) => Promise<void>
 
-  addCollection: (name: string) => Promise<void>
+  addCollection: (name: string, folderId?: string | null) => Promise<void>
   renameCollection: (id: string, name: string) => Promise<void>
   removeCollection: (id: string) => Promise<void>
+  addCollectionFolder: (name: string, parentId?: string | null) => Promise<void>
+  renameCollectionFolder: (id: string, name: string) => Promise<void>
+  removeCollectionFolder: (id: string) => Promise<void>
+  applyCollectionReorder: (flat: { id: string; kind: 'folder' | 'collection'; parentId: string | null }[]) => Promise<void>
   addItem: (name: string, sql: string) => Promise<void>
   addReference: (savedQueryId: string) => Promise<void>
   updateItem: (id: string, patch: { name?: string; sql?: string }) => Promise<void>
@@ -67,10 +73,19 @@ export function toLibNodes(folders: Folder[], queries: SavedQuery[]): LibNode[] 
   ]
 }
 
+/** 컬렉션 트리 소스(collectionFolders+collections) → LibNode[]. 컬렉션은 리프('query' 로 매핑해 tree 유틸 재사용). */
+export function toCollLibNodes(folders: CollFolder[], collections: Collection[]): LibNode[] {
+  return [
+    ...folders.map((f) => ({ id: f.id, parentId: f.parentId, kind: 'folder' as const, name: f.name, sortOrder: f.sortOrder })),
+    ...collections.map((c) => ({ id: c.id, parentId: c.folderId, kind: 'query' as const, name: c.name, sortOrder: c.sortOrder }))
+  ]
+}
+
 export const useCollectionStore = create<CollectionState>()((set, get) => ({
   connectionId: null,
   folders: [],
   queries: [],
+  collectionFolders: [],
   collections: [],
   activeCollectionId: null,
   items: [],
@@ -83,11 +98,12 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
 
   load: async (connectionId) => {
     try {
-      const [tree, collections] = await Promise.all([
+      const [tree, collections, collectionFolders] = await Promise.all([
         window.rockury.savedQueries.tree(connectionId),
-        window.rockury.collections.list(connectionId)
+        window.rockury.collections.list(connectionId),
+        window.rockury.collections.folders(connectionId)
       ])
-      set({ connectionId, folders: tree.folders, queries: tree.queries, collections })
+      set({ connectionId, folders: tree.folders, queries: tree.queries, collections, collectionFolders })
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) })
     }
@@ -134,12 +150,33 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
     if (cid) await get().load(cid)
   },
 
-  addCollection: async (name) => {
+  addCollection: async (name, folderId = null) => {
     const cid = get().connectionId
     if (!cid) return
-    const col = await window.rockury.collections.create({ connectionId: cid, name })
+    const col = await window.rockury.collections.create({ connectionId: cid, name, folderId })
     await get().load(cid)
     await get().selectCollection(col.id)
+  },
+  addCollectionFolder: async (name, parentId = null) => {
+    const cid = get().connectionId
+    if (!cid) return
+    await window.rockury.collections.createFolder({ connectionId: cid, parentId, name })
+    await get().load(cid)
+  },
+  renameCollectionFolder: async (id, name) => {
+    await window.rockury.collections.renameFolder(id, name)
+    const cid = get().connectionId
+    if (cid) await get().load(cid)
+  },
+  removeCollectionFolder: async (id) => {
+    await window.rockury.collections.deleteFolder(id)
+    const cid = get().connectionId
+    if (cid) await get().load(cid)
+  },
+  applyCollectionReorder: async (flat) => {
+    await window.rockury.collections.reorderTree(flat.map((f, i) => ({ ...f, sortOrder: i })))
+    const cid = get().connectionId
+    if (cid) await get().load(cid)
   },
   renameCollection: async (id, name) => {
     await window.rockury.collections.rename(id, name)
@@ -268,10 +305,21 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
   },
 
   confirm: async () => {
-    const tx = get().tx
+    const { tx, connectionId, items, itemStatus } = get()
     if (!tx) return
     try {
       await window.rockury.query.txCommit(tx.txId)
+      // 커밋된(ok) 아이템을 History 에 기록(source=collection).
+      if (connectionId) {
+        for (const it of items) {
+          if (itemStatus[it.id] !== 'ok') continue
+          try {
+            await window.rockury.query.historyAppend({ connectionId, source: 'collection', sql: it.sql, kind: classifyStatement(it.sql).kind, status: 'success' })
+          } catch {
+            // 무시
+          }
+        }
+      }
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) })
     }

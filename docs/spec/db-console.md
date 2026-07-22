@@ -91,3 +91,22 @@
 - **AC-4 (결과)** 각 SELECT 결과를 모달로 확인.
 - **AC-5 (개별 실행·원자성)** 아이템을 하나씩 실행할 수 있다. 단, 개별 실행은 **개별 커밋하지 않고** 열린 트랜잭션에
   이어 붙는다(없으면 새로 연다) — 커밋/롤백 전까지 하나의 원자적 트랜잭션. 도중 한 문장이 실패하면 세션 전체가 롤백된다.
+
+---
+
+## 재설계(레거시 rky-mvp 구조 이식) — 갱신된 화면 구성
+
+### Surface db-console.query (재설계) — 저장쿼리를 "객체"로
+- **AC-R1** 좌측 = 저장쿼리 **폴더/파일 트리**(검색·새폴더/새쿼리·우클릭 rename/move to/delete·DnD 재정렬).
+- **AC-R2** 중앙 = 선택한 쿼리 편집기: 이름·설명 인라인 편집(자동저장) + SQL 편집기(Run/Format/EXPLAIN, {{키워드}}) + 결과 그리드.
+- **AC-R3** 우측 = Schema 패널(토글, 기본 열림) — 테이블/뷰·컬럼(클릭 삽입·미리보기).
+
+### Surface db-console.collection (재설계) — 컬렉션 폴더 트리 + QUERIES 소스
+- **AC-R1** 좌측 = 컬렉션 **폴더/파일 트리**(검색·새폴더/새컬렉션·rename·delete·DnD). (`collection_folders` + `collections.folder_id`)
+- **AC-R2** 중앙 = 선택 컬렉션의 아이템 + Run-All/개별 실행(원자성) + 결과 모달.
+- **AC-R3** 우측 = QUERIES(저장쿼리 트리) — 클릭해 컬렉션에 참조 추가.
+
+### Surface db-console.history (신설) — 다중 소스 실행 이력 (독립 뷰)
+- **AC-1** Query/Data/Collection 실행을 `source` 로 구분해 기록(`query_history.source`). 커밋된 것만 기록(tx 게이트 경로).
+- **AC-2** 독립 Console 뷰(Query 하위 아님 — 소스가 셋이라). Time/Source/SQL/Rows/Speed/Status + 소스필터 + SQL 검색 + 페이지네이션.
+- **AC-3** 행 클릭 시 SQL 을 Query 에디터로 보낸다. 이력 비우기.

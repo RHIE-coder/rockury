@@ -17,6 +17,7 @@ export interface SavedQueryRecord {
   connectionId: string
   folderId: string | null
   name: string
+  description: string
   sql: string
   sortOrder: number
 }
@@ -33,6 +34,7 @@ interface QueryRow {
   connection_id: string
   folder_id: string | null
   name: string
+  description: string
   sql_text: string
   sort_order: number
 }
@@ -49,6 +51,7 @@ const toQuery = (r: QueryRow): SavedQueryRecord => ({
   connectionId: r.connection_id,
   folderId: r.folder_id,
   name: r.name,
+  description: r.description ?? '',
   sql: r.sql_text,
   sortOrder: r.sort_order
 })
@@ -101,10 +104,12 @@ export function createSavedQuery(input: {
 export function renameFolder(id: string, name: string): void {
   getDb().prepare('UPDATE query_folders SET name = ?, updated_at = ? WHERE id = ?').run(name, new Date().toISOString(), id)
 }
-export function updateSavedQuery(id: string, patch: { name?: string; sql?: string }): void {
+export function updateSavedQuery(id: string, patch: { name?: string; description?: string; sql?: string }): void {
   const d = getDb()
-  if (patch.name !== undefined) d.prepare('UPDATE saved_queries SET name = ?, updated_at = ? WHERE id = ?').run(patch.name, new Date().toISOString(), id)
-  if (patch.sql !== undefined) d.prepare('UPDATE saved_queries SET sql_text = ?, updated_at = ? WHERE id = ?').run(patch.sql, new Date().toISOString(), id)
+  const now = new Date().toISOString()
+  if (patch.name !== undefined) d.prepare('UPDATE saved_queries SET name = ?, updated_at = ? WHERE id = ?').run(patch.name, now, id)
+  if (patch.description !== undefined) d.prepare('UPDATE saved_queries SET description = ?, updated_at = ? WHERE id = ?').run(patch.description, now, id)
+  if (patch.sql !== undefined) d.prepare('UPDATE saved_queries SET sql_text = ?, updated_at = ? WHERE id = ?').run(patch.sql, now, id)
 }
 
 /** 폴더 삭제 — 하위 폴더/쿼리까지 cascade. */

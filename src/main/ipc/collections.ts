@@ -13,11 +13,16 @@ import {
   addItem,
   addReference,
   createCollection,
+  createCollectionFolder,
   deleteCollection,
+  deleteCollectionFolder,
   deleteItem,
+  listCollectionFolders,
   listCollections,
   listItems,
   renameCollection,
+  renameCollectionFolder,
+  reorderCollectionTree,
   reorderItems,
   updateItem
 } from '../store/collections'
@@ -36,7 +41,7 @@ export function registerCollectionIpc(): void {
     envelope(() => createSavedQuery(input))
   )
   ipcMain.handle('sq:renameFolder', (_e, id: string, name: string) => envelope(() => renameFolder(id, name)))
-  ipcMain.handle('sq:updateQuery', (_e, id: string, patch: { name?: string; sql?: string }) =>
+  ipcMain.handle('sq:updateQuery', (_e, id: string, patch: { name?: string; description?: string; sql?: string }) =>
     envelope(() => updateSavedQuery(id, patch))
   )
   ipcMain.handle('sq:deleteFolder', (_e, id: string) => envelope(() => deleteFolder(id)))
@@ -47,9 +52,14 @@ export function registerCollectionIpc(): void {
 
   // ── 컬렉션 ──
   ipcMain.handle('col:list', (_e, connectionId: string) => envelope(() => listCollections(connectionId)))
+  ipcMain.handle('col:folders', (_e, connectionId: string) => envelope(() => listCollectionFolders(connectionId)))
   ipcMain.handle('col:items', (_e, collectionId: string) => envelope(() => listItems(collectionId)))
-  ipcMain.handle('col:create', (_e, input: { connectionId: string; name: string }) => envelope(() => createCollection(input)))
+  ipcMain.handle('col:create', (_e, input: { connectionId: string; name: string; folderId?: string | null }) => envelope(() => createCollection(input)))
+  ipcMain.handle('col:createFolder', (_e, input: { connectionId: string; parentId: string | null; name: string }) => envelope(() => createCollectionFolder(input)))
   ipcMain.handle('col:rename', (_e, id: string, name: string) => envelope(() => renameCollection(id, name)))
+  ipcMain.handle('col:renameFolder', (_e, id: string, name: string) => envelope(() => renameCollectionFolder(id, name)))
+  ipcMain.handle('col:deleteFolder', (_e, id: string) => envelope(() => deleteCollectionFolder(id)))
+  ipcMain.handle('col:reorderTree', (_e, items: { id: string; kind: 'folder' | 'collection'; parentId: string | null; sortOrder: number }[]) => envelope(() => reorderCollectionTree(items)))
   ipcMain.handle('col:delete', (_e, id: string) => envelope(() => deleteCollection(id)))
   ipcMain.handle('col:addItem', (_e, input: { collectionId: string; name: string; sql: string }) => envelope(() => addItem(input)))
   ipcMain.handle('col:addReference', (_e, input: { collectionId: string; savedQueryId: string }) => envelope(() => addReference(input)))

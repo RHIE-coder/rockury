@@ -119,6 +119,27 @@ describe('queryHistory (dedup)', () => {
   })
 })
 
+describe('queryHistory (다중 소스)', () => {
+  it('source 를 기록·구분하고, 다른 소스의 동일 SQL 은 dedup 하지 않는다', () => {
+    const c = 'conn_src'
+    appendHistory({ connectionId: c, source: 'query', sql: 'SELECT 1', kind: 'read', status: 'success', rowCount: 1 })
+    appendHistory({ connectionId: c, source: 'data', sql: 'SELECT 1', kind: 'read', status: 'success', rowCount: 1 })
+    const rows = listHistory(c)
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.source).sort()).toEqual(['data', 'query'])
+
+    // 같은 소스 연속 동일 SQL → dedup(접힘)
+    appendHistory({ connectionId: c, source: 'data', sql: 'SELECT   1', kind: 'read', status: 'success', rowCount: 1 })
+    expect(listHistory(c)).toHaveLength(2)
+  })
+
+  it('source 미지정 시 기본 query', () => {
+    const c = 'conn_src_default'
+    appendHistory({ connectionId: c, sql: 'SELECT 2', kind: 'read', status: 'success' })
+    expect(listHistory(c)[0].source).toBe('query')
+  })
+})
+
 describe('migration (스냅샷 + 로그)', () => {
   it('스냅샷 저장→최신 조회(checksum), 로그 append→list', () => {
     const env = 'env_test'

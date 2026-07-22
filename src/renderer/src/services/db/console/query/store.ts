@@ -26,6 +26,7 @@ export interface ExplainState {
 export interface HistoryRow {
   id: string
   connectionId: string
+  source: string
   sql: string
   kind: string
   status: 'success' | 'error'

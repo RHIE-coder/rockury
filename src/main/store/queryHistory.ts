@@ -8,9 +8,13 @@ import { normalizeSqlKey } from '../services/query/historyKey'
  *  - **직전 동일 쿼리는 새 행 대신 시각/통계만 갱신**(연속 중복 접기),
  *  - 연결별 최근 200건만 유지.
  */
+/** 실행 소스 — Query 뷰 / Data 편집 / Collection 실행. */
+export type HistorySource = 'query' | 'data' | 'collection'
+
 export interface QueryHistoryRecord {
   id: string
   connectionId: string
+  source: HistorySource
   sql: string
   kind: string
   status: 'success' | 'error'
@@ -23,6 +27,7 @@ export interface QueryHistoryRecord {
 
 export interface AppendHistoryInput {
   connectionId: string
+  source?: HistorySource
   sql: string
   kind: string
   status: 'success' | 'error'
@@ -35,6 +40,7 @@ export interface AppendHistoryInput {
 interface Row {
   id: string
   connection_id: string
+  source: string
   sql_text: string
   kind: string
   status: string
@@ -50,6 +56,7 @@ const KEEP = 200
 const toRecord = (r: Row): QueryHistoryRecord => ({
   id: r.id,
   connectionId: r.connection_id,
+  source: (r.source as HistorySource) ?? 'query',
   sql: r.sql_text,
   kind: r.kind,
   status: r.status as 'success' | 'error',
@@ -63,12 +70,13 @@ const toRecord = (r: Row): QueryHistoryRecord => ({
 export function appendHistory(input: AppendHistoryInput): QueryHistoryRecord {
   const d = getDb()
   const now = new Date().toISOString()
+  const source: HistorySource = input.source ?? 'query'
   const latest = d
     .prepare('SELECT * FROM query_history WHERE connection_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1')
     .get(input.connectionId) as Row | undefined
 
-  // 직전 항목과 동일 쿼리면 갱신(중복 접기).
-  if (latest && normalizeSqlKey(latest.sql_text) === normalizeSqlKey(input.sql)) {
+  // 직전 항목과 동일 소스·쿼리면 갱신(중복 접기).
+  if (latest && latest.source === source && normalizeSqlKey(latest.sql_text) === normalizeSqlKey(input.sql)) {
     d.prepare(
       'UPDATE query_history SET kind=?, status=?, row_count=?, affected_rows=?, exec_ms=?, error=?, created_at=? WHERE id=?'
     ).run(
@@ -86,11 +94,12 @@ export function appendHistory(input: AppendHistoryInput): QueryHistoryRecord {
 
   const id = `qh_${randomUUID()}`
   d.prepare(
-    `INSERT INTO query_history (id, connection_id, sql_text, kind, status, row_count, affected_rows, exec_ms, error, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO query_history (id, connection_id, source, sql_text, kind, status, row_count, affected_rows, exec_ms, error, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.connectionId,
+    source,
     input.sql,
     input.kind,
     input.status,

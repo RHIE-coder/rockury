@@ -41,6 +41,7 @@ import { ObjectView } from './console/ObjectView'
 import { QueryView } from './console/QueryView'
 import { DataView } from './console/DataView'
 import { CollectionView } from './console/CollectionView'
+import { HistoryView } from './console/HistoryView'
 import { DriftView, PlanView, RunView, LogsView } from './migration/views'
 
 /**
@@ -165,6 +166,7 @@ export const dbService: Service = {
         { id: 'data', label: 'Data', icon: Table2, workspace: DataView },
         { id: 'query', label: 'Query', icon: Terminal, workspace: QueryView },
         { id: 'collection', label: 'Collection', icon: Layers, workspace: CollectionView },
+        { id: 'history', label: 'History', icon: History, workspace: HistoryView },
         { id: 'object', label: 'Object', icon: Boxes, workspace: ObjectView }
       ]
     },

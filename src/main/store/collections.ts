@@ -6,9 +6,17 @@ import { getDb } from './db'
  * 아이템은 **저장쿼리 참조**(saved_query_id, 원본 링크 → 원본 수정 시 반영) 또는
  * **즉석 SQL**(sql_text, 라이브러리에 없는 임시 쿼리) 둘 중 하나. name/sql 은 resolve 된 실효값.
  */
+export interface CollectionFolderRecord {
+  id: string
+  connectionId: string
+  parentId: string | null
+  name: string
+  sortOrder: number
+}
 export interface CollectionRecord {
   id: string
   connectionId: string
+  folderId: string | null
   name: string
   sortOrder: number
 }
@@ -24,9 +32,17 @@ export interface CollectionItemRecord {
   sortOrder: number
 }
 
+interface CollFolderRow {
+  id: string
+  connection_id: string
+  parent_id: string | null
+  name: string
+  sort_order: number
+}
 interface CollRow {
   id: string
   connection_id: string
+  folder_id: string | null
   name: string
   sort_order: number
 }
@@ -41,7 +57,8 @@ interface ItemRow {
   ref_sql: string | null
 }
 
-const toColl = (r: CollRow): CollectionRecord => ({ id: r.id, connectionId: r.connection_id, name: r.name, sortOrder: r.sort_order })
+const toColl = (r: CollRow): CollectionRecord => ({ id: r.id, connectionId: r.connection_id, folderId: r.folder_id, name: r.name, sortOrder: r.sort_order })
+const toCollFolder = (r: CollFolderRow): CollectionFolderRecord => ({ id: r.id, connectionId: r.connection_id, parentId: r.parent_id, name: r.name, sortOrder: r.sort_order })
 const toItem = (r: ItemRow): CollectionItemRecord => ({
   id: r.id,
   collectionId: r.collection_id,
@@ -72,19 +89,80 @@ export function listItems(collectionId: string): CollectionItemRecord[] {
   ).map(toItem)
 }
 
-export function createCollection(input: { connectionId: string; name: string }): CollectionRecord {
+export function createCollection(input: { connectionId: string; name: string; folderId?: string | null }): CollectionRecord {
   const d = getDb()
   const id = `col_${randomUUID()}`
   const now = new Date().toISOString()
   const { max } = d.prepare('SELECT COALESCE(MAX(sort_order),0) AS max FROM collections WHERE connection_id = ?').get(input.connectionId) as unknown as { max: number }
-  d.prepare('INSERT INTO collections (id, connection_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
-    id, input.connectionId, input.name, max + 1, now, now
+  d.prepare('INSERT INTO collections (id, connection_id, folder_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    id, input.connectionId, input.folderId ?? null, input.name, max + 1, now, now
   )
   return toColl(d.prepare('SELECT * FROM collections WHERE id = ?').get(id) as unknown as CollRow)
 }
 
 export function renameCollection(id: string, name: string): void {
   getDb().prepare('UPDATE collections SET name = ?, updated_at = ? WHERE id = ?').run(name, new Date().toISOString(), id)
+}
+
+// ── 컬렉션 폴더 트리(저장쿼리 트리와 동형) ──
+export function listCollectionFolders(connectionId: string): CollectionFolderRecord[] {
+  return (
+    getDb().prepare('SELECT * FROM collection_folders WHERE connection_id = ? ORDER BY sort_order').all(connectionId) as unknown as CollFolderRow[]
+  ).map(toCollFolder)
+}
+
+export function createCollectionFolder(input: { connectionId: string; parentId: string | null; name: string }): CollectionFolderRecord {
+  const d = getDb()
+  const id = `cf_${randomUUID()}`
+  const now = new Date().toISOString()
+  const { max } = d.prepare('SELECT COALESCE(MAX(sort_order),0) AS max FROM collection_folders WHERE connection_id = ?').get(input.connectionId) as unknown as { max: number }
+  d.prepare('INSERT INTO collection_folders (id, connection_id, parent_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    id, input.connectionId, input.parentId, input.name, max + 1, now, now
+  )
+  return toCollFolder(d.prepare('SELECT * FROM collection_folders WHERE id = ?').get(id) as unknown as CollFolderRow)
+}
+
+export function renameCollectionFolder(id: string, name: string): void {
+  getDb().prepare('UPDATE collection_folders SET name = ?, updated_at = ? WHERE id = ?').run(name, new Date().toISOString(), id)
+}
+
+/** 폴더 삭제 — 하위 폴더 cascade. 폴더 안 컬렉션은 최상위로 올린다(데이터 보존). */
+export function deleteCollectionFolder(id: string): void {
+  const d = getDb()
+  d.exec('BEGIN')
+  try {
+    const descend = (fid: string): void => {
+      for (const c of d.prepare('SELECT id FROM collection_folders WHERE parent_id = ?').all(fid) as unknown as { id: string }[]) descend(c.id)
+      d.prepare('UPDATE collections SET folder_id = NULL WHERE folder_id = ?').run(fid)
+      d.prepare('DELETE FROM collection_folders WHERE id = ?').run(fid)
+    }
+    descend(id)
+    d.exec('COMMIT')
+  } catch (e) {
+    d.exec('ROLLBACK')
+    throw e
+  }
+}
+
+/** 컬렉션 트리 재배치 — 렌더러가 계산한 (id,kind,parentId,sortOrder) 일괄 반영. */
+export function reorderCollectionTree(
+  items: { id: string; kind: 'folder' | 'collection'; parentId: string | null; sortOrder: number }[]
+): void {
+  const d = getDb()
+  const now = new Date().toISOString()
+  const uf = d.prepare('UPDATE collection_folders SET parent_id = ?, sort_order = ?, updated_at = ? WHERE id = ?')
+  const uc = d.prepare('UPDATE collections SET folder_id = ?, sort_order = ?, updated_at = ? WHERE id = ?')
+  d.exec('BEGIN')
+  try {
+    items.forEach((it, i) => {
+      if (it.kind === 'folder') uf.run(it.parentId, i, now, it.id)
+      else uc.run(it.parentId, i, now, it.id)
+    })
+    d.exec('COMMIT')
+  } catch (e) {
+    d.exec('ROLLBACK')
+    throw e
+  }
 }
 
 export function deleteCollection(id: string): void {

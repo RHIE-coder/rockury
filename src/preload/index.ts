@@ -7,7 +7,7 @@ import type { IntrospectedSchema } from '../main/services/introspection/types'
 import type { QueryResult, TxBeginResult, ExplainResult } from '../main/services/queryService'
 import type { AppendHistoryInput, QueryHistoryRecord } from '../main/store/queryHistory'
 import type { FolderRecord, SavedQueryRecord } from '../main/store/savedQueries'
-import type { CollectionRecord, CollectionItemRecord } from '../main/store/collections'
+import type { CollectionRecord, CollectionItemRecord, CollectionFolderRecord } from '../main/store/collections'
 import type {
   CreateLogInput,
   CreateSnapshotInput,
@@ -162,7 +162,7 @@ const api = {
     createQuery: (input: { connectionId: string; folderId: string | null; name: string; sql: string }): Promise<SavedQueryRecord> =>
       unwrap(ipcRenderer.invoke('sq:createQuery', input)),
     renameFolder: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('sq:renameFolder', id, name)),
-    updateQuery: (id: string, patch: { name?: string; sql?: string }): Promise<void> =>
+    updateQuery: (id: string, patch: { name?: string; description?: string; sql?: string }): Promise<void> =>
       unwrap(ipcRenderer.invoke('sq:updateQuery', id, patch)),
     deleteFolder: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('sq:deleteFolder', id)),
     deleteQuery: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('sq:deleteQuery', id)),
@@ -172,9 +172,14 @@ const api = {
   // 운영부 — 컬렉션(순서 있는 쿼리 묶음 · Run-All).
   collections: {
     list: (connectionId: string): Promise<CollectionRecord[]> => unwrap(ipcRenderer.invoke('col:list', connectionId)),
+    folders: (connectionId: string): Promise<CollectionFolderRecord[]> => unwrap(ipcRenderer.invoke('col:folders', connectionId)),
     items: (collectionId: string): Promise<CollectionItemRecord[]> => unwrap(ipcRenderer.invoke('col:items', collectionId)),
-    create: (input: { connectionId: string; name: string }): Promise<CollectionRecord> => unwrap(ipcRenderer.invoke('col:create', input)),
+    create: (input: { connectionId: string; name: string; folderId?: string | null }): Promise<CollectionRecord> => unwrap(ipcRenderer.invoke('col:create', input)),
+    createFolder: (input: { connectionId: string; parentId: string | null; name: string }): Promise<CollectionFolderRecord> => unwrap(ipcRenderer.invoke('col:createFolder', input)),
     rename: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('col:rename', id, name)),
+    renameFolder: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('col:renameFolder', id, name)),
+    deleteFolder: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('col:deleteFolder', id)),
+    reorderTree: (items: { id: string; kind: 'folder' | 'collection'; parentId: string | null; sortOrder: number }[]): Promise<void> => unwrap(ipcRenderer.invoke('col:reorderTree', items)),
     delete: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('col:delete', id)),
     addItem: (input: { collectionId: string; name: string; sql: string }): Promise<CollectionItemRecord> =>
       unwrap(ipcRenderer.invoke('col:addItem', input)),

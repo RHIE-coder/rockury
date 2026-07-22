@@ -136,6 +136,7 @@ function migrate(d: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS query_history (
       id            TEXT PRIMARY KEY,
       connection_id TEXT NOT NULL,
+      source        TEXT NOT NULL DEFAULT 'query',
       sql_text      TEXT NOT NULL,
       kind          TEXT NOT NULL DEFAULT '',
       status        TEXT NOT NULL DEFAULT 'success',
@@ -164,6 +165,7 @@ function migrate(d: DatabaseSync): void {
       connection_id TEXT NOT NULL,
       folder_id     TEXT,
       name          TEXT NOT NULL,
+      description   TEXT NOT NULL DEFAULT '',
       sql_text      TEXT NOT NULL DEFAULT '',
       sort_order    INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT NOT NULL,
@@ -171,10 +173,23 @@ function migrate(d: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_saved_queries_conn ON saved_queries(connection_id);
 
+    -- 컬렉션 폴더 (컬렉션도 폴더 트리로 관리 — 저장쿼리 트리와 동형)
+    CREATE TABLE IF NOT EXISTS collection_folders (
+      id            TEXT PRIMARY KEY,
+      connection_id TEXT NOT NULL,
+      parent_id     TEXT,
+      name          TEXT NOT NULL,
+      sort_order    INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_collection_folders_conn ON collection_folders(connection_id);
+
     -- 컬렉션 (순서 있는 쿼리 묶음 — Run-All)
     CREATE TABLE IF NOT EXISTS collections (
       id            TEXT PRIMARY KEY,
       connection_id TEXT NOT NULL,
+      folder_id     TEXT,
       name          TEXT NOT NULL,
       sort_order    INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT NOT NULL,
@@ -199,6 +214,24 @@ function migrate(d: DatabaseSync): void {
     .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('collection_items') WHERE name='saved_query_id'`)
     .get() as unknown as { c: number }
   if (hasRef.c === 0) d.exec('ALTER TABLE collection_items ADD COLUMN saved_query_id TEXT')
+
+  // query_history.source — 다중 소스(query/data/collection) 구분. 구 스키마 호환 ALTER.
+  const hasSource = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('query_history') WHERE name='source'`)
+    .get() as unknown as { c: number }
+  if (hasSource.c === 0) d.exec(`ALTER TABLE query_history ADD COLUMN source TEXT NOT NULL DEFAULT 'query'`)
+
+  // saved_queries.description — 저장쿼리 설명(Query 뷰 편집기). 구 스키마 호환 ALTER.
+  const hasDesc = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('saved_queries') WHERE name='description'`)
+    .get() as unknown as { c: number }
+  if (hasDesc.c === 0) d.exec(`ALTER TABLE saved_queries ADD COLUMN description TEXT NOT NULL DEFAULT ''`)
+
+  // collections.folder_id — 컬렉션 폴더 트리. 구 스키마 호환 ALTER.
+  const hasColFolder = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('collections') WHERE name='folder_id'`)
+    .get() as unknown as { c: number }
+  if (hasColFolder.c === 0) d.exec('ALTER TABLE collections ADD COLUMN folder_id TEXT')
 }
 
 /** 첫 실행 시드 — commerce-core (MySQL) 설계 + 예제 테이블. designs 가 비어 있을 때만. */

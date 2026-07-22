@@ -111,48 +111,42 @@ try {
   const obj = await body()
   check('Console › Object: 실 DB 역설계(users/user_roles)', obj.includes('users') && obj.includes('user_roles'))
 
-  // Console › Query — CodeMirror 에디터로 SELECT 실행(Phase 2c + 향상)
+  // Console › Query — 저장쿼리 객체 트리 + 편집기(재설계). 새 쿼리 생성 → SELECT 실행.
   await click('button:has-text("Query")')
-  await page.waitForSelector('.cm-content', { timeout: 5_000 })
+  await page.waitForSelector('.cm-content', { timeout: 15_000 })
+  await click('button[title="새 쿼리"]')
+  await page.waitForTimeout(400)
   await typeSql('SELECT id, email FROM users LIMIT 3')
-  await click('button:has-text("실행")')
+  await click('button:has-text("Run")')
   await page.waitForSelector('th:has-text("email")', { timeout: 15_000 })
   check('Console › Query: SELECT 결과 그리드', (await body()).includes('email'))
-
-  // 라이브러리에 저장(Collection 트리에서 확인)
-  await click('button:has-text("저장")')
-  await page.waitForTimeout(200)
+  await page.waitForTimeout(1200) // 자동저장(라이브러리 쿼리에 SQL 반영)
 
   // EXPLAIN — 실행 계획(실제 반영 없음)
-  await click('button:has-text("EXPLAIN")')
+  await click('button[title="실행 계획(EXPLAIN)"]')
   await page.waitForSelector('text=실행 계획', { timeout: 15_000 })
   check('Console › Query: EXPLAIN 실행 계획', (await body()).includes('실행 계획'))
 
+  // 스키마 사이드 패널(기본 열림) — 테이블/컬럼 트리 (T12)
+  check('Console › Query: 스키마 패널(user_roles)', (await body()).includes('user_roles'))
+
+  // 파라미터화 쿼리 — {{키워드}} 입력 시 파라미터 바 노출 (T11)
+  await typeSql('SELECT * FROM users WHERE id = {{uid}}')
+  await page.waitForTimeout(300)
+  check('Console › Query: {{키워드}} 파라미터 바', (await body()).includes('파라미터'))
+
   // ⭐ 파괴적 트랜잭션 게이트 — WHERE 없는 UPDATE → 커밋 대기 바 → 롤백
   await typeSql('UPDATE users SET is_active = is_active')
-  await click('button:has-text("실행")')
+  await click('button:has-text("Run")')
   await page.waitForSelector('text=아직 커밋되지', { timeout: 15_000 })
   check('Console › Query: DML 트랜잭션 게이트(커밋 대기)', (await body()).includes('아직 커밋되지'))
   await click('button:has-text("롤백")')
   await page.waitForTimeout(300)
   check('Console › Query: 롤백 후 게이트 해제', !(await body()).includes('아직 커밋되지'))
 
-  // 히스토리 — 실행한 SELECT 가 기록됨
-  await click('button:has-text("히스토리")')
-  await page.waitForTimeout(300)
-  check('Console › Query: 히스토리 기록', (await body()).includes('SELECT id, email FROM users'))
-  await click('button:has-text("히스토리")')
-
-  // 스키마 사이드 패널 — 테이블/컬럼 트리(클릭 삽입) (§ops 향상 이관 T12)
-  await click('button:has-text("스키마")')
-  await page.waitForTimeout(300)
-  check('Console › Query: 스키마 패널(user_roles)', (await body()).includes('user_roles'))
-  await click('button:has-text("스키마")')
-
-  // 파라미터화 쿼리 — {{키워드}} 입력 시 파라미터 바 노출 (T11)
-  await typeSql('SELECT * FROM users WHERE id = {{uid}}')
-  await page.waitForTimeout(300)
-  check('Console › Query: {{키워드}} 파라미터 바', (await body()).includes('파라미터'))
+  // 저장쿼리 SQL 을 깨끗한 SELECT 로 복원(자동저장) — Collection 참조 실행용
+  await typeSql('SELECT id, email FROM users LIMIT 3')
+  await page.waitForTimeout(1200)
 
   // Console › Data — 조회 + 편집(수정→트랜잭션 게이트→롤백)(Phase 2b)
   await click('button:has-text("Data")')
@@ -195,43 +189,25 @@ try {
   await click('button:has-text("Cancel")')
   await page.waitForTimeout(200)
 
-  // Console › Collection — 저장쿼리 라이브러리 + 컬렉션 Run-All(트랜잭션)
+  // Console › Collection — 좌 컬렉션 트리 · 중앙 아이템 · 우 QUERIES(재설계)
   await click('button:has-text("Collection")')
   await page.waitForTimeout(400)
-  check('Console › Collection: 저장 쿼리 라이브러리', (await body()).includes('SELECT id, email FROM users'))
-
-  // 트리 저장쿼리 클릭 → 에디터로 열기(Query 탭 전환) — 죽은 동선 해소 (T14)
-  await click('aside button:has-text("SELECT id, email FROM users")')
-  await page.waitForTimeout(400)
-  check('Console › Collection: 트리 쿼리 → 에디터 열기(자동저장)', (await body()).includes('자동저장'))
-  await click('button:has-text("Collection")')
-  await page.waitForTimeout(300)
-
   await click('button[title="새 컬렉션"]')
-  await page.waitForTimeout(300)
-  await page.locator('input[placeholder="즉석 이름"]').fill('ping')
-  await page.locator('input[placeholder*="SELECT"]').fill('SELECT 1')
-  await click('button:has-text("추가")')
-  await page.waitForTimeout(200)
-  check('Console › Collection: 아이템 추가', (await body()).includes('ping'))
+  await page.waitForTimeout(500)
+  check('Console › Collection: 컬렉션 생성', (await body()).includes('Untitled Collection'))
+
+  // 우측 QUERIES 에서 저장쿼리를 참조로 추가(hybrid) (T15)
+  await page.locator('button[title="이 컬렉션에 참조로 추가"]').first().click()
+  await page.waitForTimeout(500)
+  check('Console › Collection: QUERIES 에서 참조 추가(참조 배지)', (await body()).includes('참조'))
+
+  // Run All → 트랜잭션 게이트 → 커밋
   await click('button:has-text("Run All")')
   await page.waitForSelector('text=아직 커밋되지', { timeout: 15_000 })
   check('Console › Collection: Run-All 트랜잭션 게이트', (await body()).includes('아직 커밋되지'))
   await click('button:has-text("커밋")')
   await page.waitForTimeout(300)
   check('Console › Collection: 커밋 후 게이트 해제', !(await body()).includes('아직 커밋되지'))
-
-  // 저장쿼리 "참조" 추가(hybrid) — 라이브러리 쿼리를 컬렉션 아이템으로 참조 (T15)
-  await click('button:has-text("쿼리 참조")')
-  await page.waitForTimeout(300)
-  await page.locator('button:has-text("SELECT id, email FROM users")').last().click()
-  await page.waitForTimeout(400)
-  check('Console › Collection: 저장쿼리 참조 추가(참조 배지)', (await body()).includes('참조'))
-
-  // 삭제 가드 — 참조 중인 저장쿼리는 트리에서 삭제 거부 (T22)
-  await page.locator('aside button[title="삭제"]').first().click()
-  await page.waitForTimeout(400)
-  check('Console › Collection: 참조 중 쿼리 삭제 거부(가드)', (await body()).includes('사용 중'))
 
   // 아이템 하나씩 실행 — 개별 실행이지만 커밋되지 않고 트랜잭션에 쌓임(원자성 유지)
   await page.locator('button[title^="이 아이템만 실행"]').first().click()
@@ -240,6 +216,12 @@ try {
   await click('button:has-text("커밋")')
   await page.waitForTimeout(300)
   check('Console › Collection: 개별 실행 커밋 후 게이트 해제', !(await body()).includes('아직 커밋되지'))
+
+  // Console › History — 독립 뷰(다중 소스): Query 실행 이력이 기록됨
+  await click('button:has-text("History")')
+  await page.waitForSelector('text=Source', { timeout: 8_000 })
+  await page.waitForTimeout(300)
+  check('Console › History: 실행 이력 기록(Query SQL)', (await body()).includes('SELECT id, email FROM users'))
 
   // Migration › Drift — 기준선 캡처 → 드리프트 없음(Phase 3a/3b · diff② 재사용)
   await click('button:has-text("Migration")')

@@ -1,22 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
   Download,
-  History,
+  FilePlus2,
+  FolderPlus,
   Loader2,
   Play,
   Route,
-  Save,
   Search,
   Table2,
   Terminal,
+  Trash2,
   WandSparkles,
   X
 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
-import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { SqlEditor } from '@renderer/ui/SqlEditor'
@@ -32,8 +43,11 @@ import { applyKeywords, extractKeywords } from './query/keywords'
 import { parseExplainTree } from './query/explainTree'
 import { toCsv, toJson } from './data/exportRows'
 import { useQueryStore } from './query/store'
+import { flattenTree, getProjection, removeChildrenOf, type FlatNode } from './collection/tree'
+import { toLibNodes, useCollectionStore } from './collection/store'
 
 const MAX_ROWS = 500
+const INDENT = 14
 
 function cell(v: unknown): { text: string; muted?: boolean } {
   if (v === null || v === undefined) return { text: 'NULL', muted: true }
@@ -52,32 +66,22 @@ function download(name: string, text: string, mime: string): void {
 }
 
 /**
- * Console › Query(운영부 · depth 3) — 활성 환경에 SQL 을 실행한다(§ops 향상, 레거시 이관).
- * 파라미터화 쿼리({{키워드}}), 스키마 사이드 패널(클릭 삽입·테이블 미리보기), EXPLAIN 트리,
- * 결과 export(CSV/JSON), 히스토리 검색/필터, 라이브러리 쿼리 자동저장.
- * DML 은 트랜잭션 게이트, DDL 은 즉시 자동 커밋 경고.
+ * Console › Query(운영부 · depth 3) — 저장 쿼리를 "객체"로 관리(레거시 rky-mvp 이식).
+ * 좌: 저장쿼리 폴더/파일 트리(검색·새폴더/쿼리·우클릭 rename/move/delete·DnD).
+ * 중앙: 선택 쿼리 편집기(이름/설명 인라인 편집 + 자동저장, {{키워드}} 파라미터, Run/Format/EXPLAIN) + 결과.
+ * 우: Schema 패널(토글, 테이블/뷰·컬럼). DML 은 트랜잭션 게이트.
  */
 export function QueryView() {
   const conn = useActiveConnection()
   const tables = useConsoleStore((s) => (conn ? s.byEnv[conn.id] : undefined))
   const loadIntro = useConsoleStore((s) => s.load)
-  const history = useQueryStore((s) => s.history)
-  const loadHistory = useQueryStore((s) => s.loadHistory)
-  const [showHistory, setShowHistory] = useState(false)
-  const [showSchema, setShowSchema] = useState(false)
-  const [preview, setPreview] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (conn) {
-      void loadIntro(conn.id, conn.id)
-      void loadHistory(conn.id)
-    }
-  }, [conn, loadIntro, loadHistory])
+  const lib = useCollectionStore()
 
   const sql = useQueryStore((s) => s.sql)
   const setSql = useQueryStore((s) => s.setSql)
-  const activeSavedQueryId = useQueryStore((s) => s.activeSavedQueryId)
-  const activeSavedConn = useQueryStore((s) => s.activeSavedConn)
+  const activeId = useQueryStore((s) => s.activeSavedQueryId)
+  const activeConn = useQueryStore((s) => s.activeSavedConn)
+  const loadSaved = useQueryStore((s) => s.loadSaved)
   const result = useQueryStore((s) => s.result)
   const error = useQueryStore((s) => s.error)
   const loading = useQueryStore((s) => s.loading)
@@ -91,19 +95,33 @@ export function QueryView() {
   const rollback = useQueryStore((s) => s.rollback)
   const dismissError = useQueryStore((s) => s.dismissError)
 
-  // 파라미터 키워드
+  const [showSchema, setShowSchema] = useState(true)
+  const [treeFilter, setTreeFilter] = useState('')
+  const [preview, setPreview] = useState<string | null>(null)
+  const [ctx, setCtx] = useState<{ x: number; y: number; id: string; kind: 'folder' | 'query' } | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [offsetLeft, setOffsetLeft] = useState(0)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+
+  useEffect(() => {
+    if (conn) {
+      void loadIntro(conn.id, conn.id)
+      void lib.load(conn.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conn?.id])
+
+  // 자동저장(디바운스 1s) — 라이브러리 쿼리 SQL. 저장쿼리 연결 스코프.
+  useEffect(() => {
+    if (!activeId || activeConn !== conn?.id) return
+    const t = setTimeout(() => void window.rockury.savedQueries.updateQuery(activeId, { sql }), 1000)
+    return () => clearTimeout(t)
+  }, [sql, activeId, activeConn, conn?.id])
+
   const keywords = useMemo(() => extractKeywords(sql), [sql])
   const [kw, setKw] = useState<Record<string, string>>({})
   const missing = keywords.filter((k) => !(kw[k]?.trim()))
-
-  // 라이브러리 쿼리 자동저장(디바운스 1s). 저장쿼리가 속한 연결에서만 — 다른 연결 작업물이 덮어쓰지 않도록.
-  useEffect(() => {
-    if (!activeSavedQueryId || activeSavedConn !== conn?.id) return
-    const t = setTimeout(() => {
-      void window.rockury.savedQueries.updateQuery(activeSavedQueryId, { sql })
-    }, 1000)
-    return () => clearTimeout(t)
-  }, [sql, activeSavedQueryId, activeSavedConn, conn?.id])
 
   if (!conn) {
     return (
@@ -116,196 +134,300 @@ export function QueryView() {
     )
   }
 
+  const flat = flattenTree(toLibNodes(lib.folders, lib.queries))
+  const q = treeFilter.trim().toLowerCase()
+  const visible = (dragId ? removeChildrenOf(flat, [dragId]) : flat).filter(
+    (n) => !q || n.name.toLowerCase().includes(q)
+  )
+  const active = lib.queries.find((x) => x.id === activeId) ?? null
+
   const rows = result?.rows ?? []
   const shown = rows.slice(0, MAX_ROWS)
   const canRun = !loading && sql.trim().length > 0 && !tx && missing.length === 0
   const effectiveSql = (): string => applyKeywords(sql, kw)
 
+  const selectQuery = (id: string, s: string): void => loadSaved(id, s, conn.id)
+
+  const newQuery = async (folderId: string | null = null): Promise<void> => {
+    const rec = await window.rockury.savedQueries.createQuery({ connectionId: conn.id, folderId, name: 'Untitled Query', sql: '' })
+    await lib.load(conn.id)
+    selectQuery(rec.id, '')
+  }
+
+  const renameNode = (kind: 'folder' | 'query', id: string, name: string): void => void lib.rename(kind, id, name)
+  const patchActive = (patch: { name?: string; description?: string }): void => {
+    if (!activeId) return
+    void window.rockury.savedQueries.updateQuery(activeId, patch).then(() => lib.load(conn.id))
+  }
+
+  const onDragStart = (e: DragStartEvent): void => setDragId(String(e.active.id))
+  const onDragMove = (e: DragMoveEvent): void => setOffsetLeft(e.delta.x)
+  const onDragEnd = (e: DragEndEvent): void => {
+    const a = String(e.active.id)
+    const over = e.over ? String(e.over.id) : null
+    setDragId(null)
+    setOffsetLeft(0)
+    if (!over) return
+    const proj = getProjection(visible, a, over, Math.round(offsetLeft / INDENT))
+    const ids = visible.map((n) => n.id)
+    const from = ids.indexOf(a)
+    const to = ids.indexOf(over)
+    if (from < 0 || to < 0) return
+    const reordered = [...visible]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    void lib.applyReorder(reordered.map((n) => ({ id: n.id, kind: n.kind, parentId: n.id === a ? proj.parentId : n.parentId })))
+  }
+
+  const moveTo = (id: string, kind: 'folder' | 'query', parentId: string | null): void => {
+    void lib.applyReorder(flat.map((n) => ({ id: n.id, kind: n.kind, parentId: n.id === id ? parentId : n.parentId })))
+    setCtx(null)
+    void id
+    void kind
+  }
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
-        <div className="flex flex-col">
-          <h2 className="text-[14px] font-bold text-fg">
-            Query <span className="font-normal text-muted">· {conn.name}</span>
-            {activeSavedQueryId && <span className="ml-2 text-[11px] text-accent">· 자동저장</span>}
-          </h2>
-          <p className="text-[12px] text-muted">DML 커밋 확인 · DDL 자동 커밋 · {'{{키워드}}'} 파라미터</p>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Button size="sm" variant={showSchema ? 'soft' : 'ghost'} title="스키마 패널" onClick={() => setShowSchema((v) => !v)}>
-            <Table2 /> 스키마
-          </Button>
-          <Button size="sm" variant={showHistory ? 'soft' : 'ghost'} title="쿼리 히스토리" onClick={() => setShowHistory((v) => !v)}>
-            <History /> 히스토리
-          </Button>
-          <Button size="sm" variant="outline" disabled={!sql.trim()} title="SQL 정형화" onClick={() => setSql(formatSql(sql, conn.dbType))}>
-            <WandSparkles /> 포맷
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!sql.trim()}
-            title="쿼리 라이브러리에 저장 (Collection 탭)"
-            onClick={async () => {
-              const name = sql.trim().split('\n')[0].slice(0, 40)
-              const q = await window.rockury.savedQueries.createQuery({ connectionId: conn.id, folderId: null, name, sql })
-              // 새로 만든 쿼리로 자동저장을 재링크 — 이전에 열려 있던 저장쿼리를 덮어쓰지 않도록.
-              useQueryStore.getState().loadSaved(q.id, sql, conn.id)
-            }}
-          >
-            <Save /> 저장
-          </Button>
-          <Button size="sm" variant="outline" disabled={!sql.trim() || explaining || loading || missing.length > 0} title="실행 계획(EXPLAIN)" onClick={() => void runExplain(conn.id, effectiveSql())}>
-            {explaining ? <Loader2 className="animate-spin" /> : <Route />} EXPLAIN
-          </Button>
-          <Button size="sm" disabled={!canRun} onClick={() => void run(conn.id, effectiveSql())}>
-            {loading ? <Loader2 className="animate-spin" /> : <Play />} 실행
-            <span className="ml-1 text-[10px] opacity-70">⌘↵</span>
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1">
-        {showSchema && (
-          <SchemaPanel
-            tables={tables ?? []}
-            onInsert={(name) => setSql(sql + (sql && !sql.endsWith(' ') ? ' ' : '') + name)}
-            onPreview={(t) => setPreview(t)}
-          />
-        )}
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* SQL 편집기 */}
-          <div className="h-44 shrink-0 overflow-auto border-b border-line px-2 py-1">
-            <SqlEditor
-              value={sql}
-              onChange={setSql}
-              onRun={() => canRun && void run(conn.id, effectiveSql())}
-              schema={buildSchemaMap(tables ?? [])}
-              dialect={conn.dbType}
-              placeholder="SELECT * FROM users WHERE id = {{userId}};"
-            />
+    <div className="flex h-full min-h-0" onClick={() => ctx && setCtx(null)}>
+      {/* 좌: QUERIES 트리 */}
+      <aside className="flex w-64 shrink-0 flex-col border-r border-line">
+        <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <span>Queries</span>
+          <div className="flex items-center gap-1">
+            <button type="button" title="새 폴더" onClick={() => void lib.addFolder('New Folder')} className="text-muted hover:text-fg"><FolderPlus className="size-3.5" /></button>
+            <button type="button" title="새 쿼리" onClick={() => void newQuery()} className="text-muted hover:text-fg"><FilePlus2 className="size-3.5" /></button>
           </div>
-
-          {/* 파라미터 키워드 입력 */}
-          {keywords.length > 0 && (
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel/40 px-5 py-2 text-[12px]">
-              <span className="text-muted">파라미터:</span>
-              {keywords.map((k) => (
-                <label key={k} className="flex items-center gap-1">
-                  <span className="font-mono text-[11px] text-accent">{`{{${k}}}`}</span>
-                  <Input
-                    value={kw[k] ?? ''}
-                    onChange={(e) => setKw((v) => ({ ...v, [k]: e.target.value }))}
-                    placeholder="값"
-                    className="h-7 w-32 text-[12px]"
-                  />
-                </label>
+        </div>
+        <div className="flex items-center gap-1.5 border-b border-line px-2 pb-2">
+          <Search className="size-3.5 text-muted" />
+          <input value={treeFilter} onChange={(e) => setTreeFilter(e.target.value)} placeholder="Filter queries..." className="w-full bg-transparent text-[12px] outline-none" />
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto py-1">
+          <DndContext sensors={sensors} onDragStart={onDragStart} onDragMove={onDragMove} onDragEnd={onDragEnd}>
+            <SortableContext items={visible.map((n) => n.id)} strategy={verticalListSortingStrategy}>
+              {visible.map((n) => (
+                <QueryTreeRow
+                  key={n.id}
+                  node={n}
+                  active={n.kind === 'query' && n.id === activeId}
+                  editing={editingId === n.id}
+                  onSelect={() => n.kind === 'query' && selectQuery(n.id, n.sql ?? '')}
+                  onEditStart={() => setEditingId(n.id)}
+                  onEditEnd={() => setEditingId(null)}
+                  onRename={(name) => renameNode(n.kind, n.id, name)}
+                  onContext={(x, y) => setCtx({ x, y, id: n.id, kind: n.kind })}
+                />
               ))}
-              {missing.length > 0 && <span className="text-[11px] text-destructive">미입력: {missing.join(', ')}</span>}
-            </div>
-          )}
+            </SortableContext>
+          </DndContext>
+          {flat.length === 0 && <div className="px-4 py-2 text-[11.5px] text-muted">저장된 쿼리가 없어요. + 로 새 쿼리를 만드세요.</div>}
+        </div>
+      </aside>
 
-          {/* 히스토리 패널 — 종류 필터 + 검색 + 클릭 Re-run */}
-          {showHistory && <HistoryPanel history={history} onPick={(s) => { setSql(s); setShowHistory(false) }} />}
-
-          {/* 트랜잭션 게이트 */}
-          {tx && (
-            <div className={cn('flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-[12.5px]', tx.destructive ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-accent/30 bg-accent-soft/50 text-fg')}>
-              {tx.destructive && <AlertTriangle className="size-4 shrink-0 text-destructive" />}
-              <span className="min-w-0 flex-1">
-                <span className="font-semibold">{tx.verb}</span> 실행됨 · 영향 <span className="font-mono font-semibold">{tx.affectedRows}</span>행 · 아직 커밋되지 않았습니다
-                {tx.destructive && ' — WHERE 절이 없어 전체가 영향받습니다'}
-              </span>
-              <Button size="sm" variant="ghost" onClick={() => void rollback()}>롤백</Button>
-              <Button size="sm" variant={tx.destructive ? 'destructive' : 'default'} onClick={() => void confirm()}>커밋</Button>
-            </div>
-          )}
-
-          {ddlWarning && !tx && (
-            <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-5 py-2 text-[12px] text-muted">
-              <AlertTriangle className="size-3.5" /> DDL 은 즉시 자동 커밋되었습니다(롤백 불가).
-            </div>
-          )}
-
-          {explain && <ExplainPanel explain={explain} dialect={conn.dbType} />}
-
-          {error && (
-            <div className="flex shrink-0 items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2.5 text-[12px] text-destructive">
-              <span className="min-w-0 flex-1 whitespace-pre-wrap font-mono">{error}</span>
-              <button type="button" onClick={dismissError} className="shrink-0 opacity-70 hover:opacity-100"><X className="size-3.5" /></button>
-            </div>
-          )}
-
-          {/* 결과 */}
-          <div className="min-h-0 flex-1 overflow-auto">
-            {loading ? (
-              <div className="flex h-full items-center justify-center text-[13px] text-muted">
-                <Loader2 className="mr-2 size-4 animate-spin" /> 실행 중…
-              </div>
-            ) : result && result.columns.length > 0 ? (
-              <div className="overflow-auto">
-                <table className="w-full border-collapse text-[12px]">
-                  <thead className="sticky top-0 bg-panel">
-                    <tr>
-                      <th className="border-b border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
-                      {result.columns.map((c) => (
-                        <th key={c} className="border-b border-line px-3 py-1.5 text-left font-mono font-semibold text-fg">{c}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {shown.map((row, i) => (
-                      <tr key={i} className="hover:bg-panel/60">
-                        <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-muted">{i + 1}</td>
-                        {result.columns.map((c) => {
-                          const { text, muted } = cell(row[c])
-                          return (
-                            <td key={c} className={cn('max-w-[360px] truncate border-b border-line/50 px-3 py-1 font-mono', muted ? 'italic text-muted' : 'text-fg')} title={text}>{text}</td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex items-center gap-3 px-5 py-2 text-[11px] text-muted">
-                  <span>
-                    {result.rowCount}행
-                    {rows.length > MAX_ROWS && ` · 상위 ${MAX_ROWS}행만 표시`}
-                    {typeof result.executionTimeMs === 'number' && ` · ${result.executionTimeMs}ms`}
-                  </span>
-                  <button type="button" className="flex items-center gap-1 hover:text-accent" onClick={() => download('query-result.csv', toCsv(result.columns, rows), 'text/csv')}><Download className="size-3" /> CSV</button>
-                  <button type="button" className="flex items-center gap-1 hover:text-accent" onClick={() => download('query-result.json', toJson(rows), 'application/json')}><Download className="size-3" /> JSON</button>
-                </div>
-              </div>
-            ) : result ? (
-              <div className="flex h-full flex-col items-center justify-center gap-1 text-[13px] text-muted">
-                <span>{typeof result.affectedRows === 'number' ? `${result.affectedRows}행 영향` : '결과 집합 없음'}</span>
-                <span className="text-[11px]">{result.executionTimeMs}ms</span>
-              </div>
+      {/* 중앙: 편집기 */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-start justify-between gap-2 border-b border-line px-5 py-2.5">
+          <div className="min-w-0 flex-1">
+            {active ? (
+              <>
+                <input
+                  key={active.id}
+                  defaultValue={active.name}
+                  onBlur={(e) => e.target.value.trim() && e.target.value !== active.name && patchActive({ name: e.target.value.trim() })}
+                  className="w-full max-w-md bg-transparent text-[15px] font-bold text-fg outline-none"
+                />
+                <input
+                  key={`${active.id}-desc`}
+                  defaultValue={active.description}
+                  onBlur={(e) => e.target.value !== active.description && patchActive({ description: e.target.value })}
+                  placeholder="Add description..."
+                  className="mt-0.5 w-full max-w-md bg-transparent text-[12px] text-muted outline-none"
+                />
+              </>
             ) : (
-              <div className="flex h-full items-center justify-center text-[13px] text-muted">SQL 을 실행하면 결과가 여기 표시됩니다</div>
+              <>
+                <h2 className="text-[15px] font-bold text-fg">Untitled Query <span className="text-[11px] font-normal text-muted">· 미저장</span></h2>
+                <button type="button" onClick={() => void newQuery()} className="mt-0.5 text-[12px] text-accent hover:underline">라이브러리에 저장하기</button>
+              </>
             )}
           </div>
+          <Button size="sm" variant={showSchema ? 'soft' : 'outline'} title="스키마 패널" onClick={() => setShowSchema((v) => !v)}>
+            <Table2 /> Schema
+          </Button>
+        </div>
+
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-1.5 text-[12px]">
+          <span className="font-semibold text-muted">SQL Editor</span>
+          <div className="flex items-center gap-1.5">
+            <span className="mr-1 text-[10px] text-muted">⌘+Enter to run</span>
+            <Button size="sm" variant="outline" disabled={!sql.trim()} title="SQL 정형화" onClick={() => setSql(formatSql(sql, conn.dbType))}><WandSparkles /></Button>
+            <Button size="sm" variant="outline" disabled={!sql.trim() || explaining || loading || missing.length > 0} title="실행 계획(EXPLAIN)" onClick={() => void runExplain(conn.id, effectiveSql())}>
+              {explaining ? <Loader2 className="animate-spin" /> : <Route />}
+            </Button>
+            <Button size="sm" disabled={!canRun} onClick={() => void run(conn.id, effectiveSql())}>
+              {loading ? <Loader2 className="animate-spin" /> : <Play />} Run
+            </Button>
+          </div>
+        </div>
+
+        <div className="h-44 shrink-0 overflow-auto border-b border-line px-2 py-1">
+          <SqlEditor
+            value={sql}
+            onChange={setSql}
+            onRun={() => canRun && void run(conn.id, effectiveSql())}
+            schema={buildSchemaMap(tables ?? [])}
+            dialect={conn.dbType}
+            placeholder="SELECT * FROM users WHERE id = {{userId}};"
+          />
+        </div>
+
+        {keywords.length > 0 && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel/40 px-5 py-2 text-[12px]">
+            <span className="text-muted">파라미터:</span>
+            {keywords.map((k) => (
+              <label key={k} className="flex items-center gap-1">
+                <span className="font-mono text-[11px] text-accent">{`{{${k}}}`}</span>
+                <input value={kw[k] ?? ''} onChange={(e) => setKw((v) => ({ ...v, [k]: e.target.value }))} placeholder="값" className="h-7 w-32 rounded border border-line bg-canvas px-1.5 text-[12px] outline-none" />
+              </label>
+            ))}
+            {missing.length > 0 && <span className="text-[11px] text-destructive">미입력: {missing.join(', ')}</span>}
+          </div>
+        )}
+
+        {tx && (
+          <div className={cn('flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-[12.5px]', tx.destructive ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-accent/30 bg-accent-soft/50 text-fg')}>
+            {tx.destructive && <AlertTriangle className="size-4 shrink-0 text-destructive" />}
+            <span className="min-w-0 flex-1"><span className="font-semibold">{tx.verb}</span> 실행됨 · 영향 <span className="font-mono font-semibold">{tx.affectedRows}</span>행 · 아직 커밋되지 않았습니다{tx.destructive && ' — WHERE 절이 없어 전체가 영향받습니다'}</span>
+            <Button size="sm" variant="ghost" onClick={() => void rollback()}>롤백</Button>
+            <Button size="sm" variant={tx.destructive ? 'destructive' : 'default'} onClick={() => void confirm()}>커밋</Button>
+          </div>
+        )}
+        {ddlWarning && !tx && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-5 py-2 text-[12px] text-muted"><AlertTriangle className="size-3.5" /> DDL 은 즉시 자동 커밋되었습니다(롤백 불가).</div>
+        )}
+        {explain && <ExplainPanel explain={explain} dialect={conn.dbType} />}
+        {error && (
+          <div className="flex shrink-0 items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2.5 text-[12px] text-destructive">
+            <span className="min-w-0 flex-1 whitespace-pre-wrap font-mono">{error}</span>
+            <button type="button" onClick={dismissError} className="shrink-0 opacity-70 hover:opacity-100"><X className="size-3.5" /></button>
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-auto">
+          {loading ? (
+            <div className="flex h-full items-center justify-center text-[13px] text-muted"><Loader2 className="mr-2 size-4 animate-spin" /> 실행 중…</div>
+          ) : result && result.columns.length > 0 ? (
+            <div className="overflow-auto">
+              <table className="w-full border-collapse text-[12px]">
+                <thead className="sticky top-0 bg-panel">
+                  <tr>
+                    <th className="border-b border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
+                    {result.columns.map((c) => <th key={c} className="border-b border-line px-3 py-1.5 text-left font-mono font-semibold text-fg">{c}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((row, i) => (
+                    <tr key={i} className="hover:bg-panel/60">
+                      <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-muted">{i + 1}</td>
+                      {result.columns.map((c) => {
+                        const { text, muted } = cell(row[c])
+                        return <td key={c} className={cn('max-w-[360px] truncate border-b border-line/50 px-3 py-1 font-mono', muted ? 'italic text-muted' : 'text-fg')} title={text}>{text}</td>
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex items-center gap-3 px-5 py-2 text-[11px] text-muted">
+                <span>{result.rowCount}행{rows.length > MAX_ROWS && ` · 상위 ${MAX_ROWS}행만 표시`}{typeof result.executionTimeMs === 'number' && ` · ${result.executionTimeMs}ms`}</span>
+                <button type="button" className="flex items-center gap-1 hover:text-accent" onClick={() => download('query-result.csv', toCsv(result.columns, rows), 'text/csv')}><Download className="size-3" /> CSV</button>
+                <button type="button" className="flex items-center gap-1 hover:text-accent" onClick={() => download('query-result.json', toJson(rows), 'application/json')}><Download className="size-3" /> JSON</button>
+              </div>
+            </div>
+          ) : result ? (
+            <div className="flex h-full flex-col items-center justify-center gap-1 text-[13px] text-muted">
+              <span>{typeof result.affectedRows === 'number' ? `${result.affectedRows}행 영향` : '결과 집합 없음'}</span>
+              <span className="text-[11px]">{result.executionTimeMs}ms</span>
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-[13px] text-muted">SQL 을 실행하면 결과가 여기 표시됩니다</div>
+          )}
         </div>
       </div>
+
+      {showSchema && <SchemaPanel tables={tables ?? []} onInsert={(name) => setSql(sql + (sql && !sql.endsWith(' ') ? ' ' : '') + name)} onPreview={(t) => setPreview(t)} onClose={() => setShowSchema(false)} />}
+
+      {/* 우클릭 컨텍스트 메뉴 */}
+      {ctx && (
+        <div className="fixed z-50 w-52 rounded-md border border-line bg-canvas py-1 text-[12px] shadow-lg" style={{ left: ctx.x, top: ctx.y }} onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-panel" onClick={() => { setEditingId(ctx.id); setCtx(null) }}>이름 변경</button>
+          {ctx.kind === 'query' && lib.folders.length > 0 && (
+            <>
+              <div className="px-3 pt-1.5 text-[10.5px] uppercase text-muted">Move to</div>
+              <button type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-panel" onClick={() => moveTo(ctx.id, ctx.kind, null)}>(최상위)</button>
+              {lib.folders.map((f) => (
+                <button key={f.id} type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-panel" onClick={() => moveTo(ctx.id, ctx.kind, f.id)}>{f.name}</button>
+              ))}
+            </>
+          )}
+          <button type="button" className="flex w-full items-center gap-2 border-t border-line px-3 py-1.5 text-left text-destructive hover:bg-panel" onClick={() => { void lib.remove(ctx.kind, ctx.id); setCtx(null) }}><Trash2 className="size-3.5" /> 삭제</button>
+        </div>
+      )}
 
       {preview && <TablePreviewModal connectionId={conn.id} dialect={conn.dbType} table={preview} onClose={() => setPreview(null)} />}
     </div>
   )
 }
 
+/** 트리 한 행 — 폴더/쿼리. 클릭 선택, 더블클릭/컨텍스트 이름변경, 우클릭 메뉴, DnD. */
+function QueryTreeRow({ node, active, editing, onSelect, onEditStart, onEditEnd, onRename, onContext }: { node: FlatNode; active: boolean; editing: boolean; onSelect: () => void; onEditStart: () => void; onEditEnd: () => void; onRename: (name: string) => void; onContext: (x: number, y: number) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: node.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition, paddingLeft: node.depth * INDENT + 8 }}
+      onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY) }}
+      className={cn('flex items-center gap-1.5 py-1 pr-2 text-[12px]', isDragging && 'opacity-50', active && 'bg-accent-soft/60')}
+    >
+      <span {...attributes} {...listeners} className="cursor-grab text-muted">
+        {node.kind === 'folder' ? <ChevronDown className="size-3.5" /> : <span className="inline-block w-3.5" />}
+      </span>
+      {editing ? (
+        <input
+          autoFocus
+          defaultValue={node.name}
+          onBlur={(e) => { onEditEnd(); if (e.target.value.trim() && e.target.value !== node.name) onRename(e.target.value.trim()) }}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          className="h-6 w-40 rounded border border-line bg-canvas px-1 text-[12px] outline-none"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={onSelect}
+          onDoubleClick={onEditStart}
+          className={cn('min-w-0 flex-1 truncate text-left font-mono', node.kind === 'folder' ? 'font-semibold text-fg' : active ? 'font-semibold text-accent' : 'text-fg')}
+          title={node.kind === 'query' ? node.sql : node.name}
+        >
+          {node.name}
+        </button>
+      )}
+    </div>
+  )
+}
+
 /** 스키마 사이드 패널 — 테이블/컬럼 트리 + 검색 + 클릭 삽입 + 테이블 미리보기. */
-function SchemaPanel({ tables, onInsert, onPreview }: { tables: TableDef[]; onInsert: (name: string) => void; onPreview: (table: string) => void }) {
+function SchemaPanel({ tables, onInsert, onPreview, onClose }: { tables: TableDef[]; onInsert: (name: string) => void; onPreview: (table: string) => void; onClose: () => void }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const query = q.trim().toLowerCase()
   const filtered = tables.filter((t) => !query || t.name.toLowerCase().includes(query) || t.columns.some((c) => c.name.toLowerCase().includes(query)))
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-line">
+    <aside className="flex w-64 shrink-0 flex-col border-l border-line">
+      <div className="flex items-center justify-between border-b border-line px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <span>Schema</span>
+        <button type="button" onClick={onClose} className="text-muted hover:text-fg"><X className="size-3.5" /></button>
+      </div>
       <div className="flex items-center gap-1.5 border-b border-line px-2 py-2">
         <Search className="size-3.5 text-muted" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="테이블/컬럼 검색" className="w-full bg-transparent text-[12px] outline-none" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter..." className="w-full bg-transparent text-[12px] outline-none" />
       </div>
       <div className="min-h-0 flex-1 overflow-auto py-1">
         {filtered.map((t) => {
@@ -314,68 +436,27 @@ function SchemaPanel({ tables, onInsert, onPreview }: { tables: TableDef[]; onIn
           return (
             <div key={t.id}>
               <div className="flex items-center gap-1 px-2 py-1 text-[12px]">
-                <button type="button" onClick={() => setOpen((o) => ({ ...o, [t.name]: !expanded }))} className="text-muted">
-                  {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                </button>
-                <button type="button" onClick={() => onInsert(t.name)} className="min-w-0 flex-1 truncate text-left font-mono font-semibold text-fg hover:text-accent" title="에디터에 삽입">
-                  {t.name}
-                </button>
-                {t.isView && <span className="rounded bg-accent-soft px-1 text-[9px] font-bold text-accent">V</span>}
+                <button type="button" onClick={() => setOpen((o) => ({ ...o, [t.name]: !expanded }))} className="text-muted">{expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}</button>
+                <button type="button" onClick={() => onInsert(t.name)} className={cn('min-w-0 flex-1 truncate text-left font-mono', t.isView ? 'text-accent' : 'font-semibold text-fg', 'hover:text-accent')} title="에디터에 삽입">{t.name}</button>
                 <button type="button" onClick={() => onPreview(t.name)} className="text-muted hover:text-accent" title="미리보기(SELECT * LIMIT 50)"><Table2 className="size-3" /></button>
+                <span className="text-[10.5px] text-muted">{t.columns.length}</span>
               </div>
-              {expanded &&
-                t.columns.map((c) => {
-                  const badges = badgeLabels(kinds.get(c.id))
-                  return (
-                    <button key={c.id} type="button" onClick={() => onInsert(c.name)} className="flex w-full items-center gap-1.5 py-0.5 pl-8 pr-2 text-left font-mono text-[11px] text-muted hover:bg-panel hover:text-accent">
-                      {badges.map((b) => <span key={b} className="rounded bg-accent-soft px-1 text-[8.5px] font-bold text-accent">{b}</span>)}
-                      <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                      <span className="shrink-0 text-[10px] opacity-60">{c.type}</span>
-                    </button>
-                  )
-                })}
+              {expanded && t.columns.map((c) => {
+                const badges = badgeLabels(kinds.get(c.id))
+                return (
+                  <button key={c.id} type="button" onClick={() => onInsert(c.name)} className="flex w-full items-center gap-1.5 py-0.5 pl-8 pr-2 text-left font-mono text-[11px] text-muted hover:bg-panel hover:text-accent">
+                    {badges.map((b) => <span key={b} className="rounded bg-accent-soft px-1 text-[8.5px] font-bold text-accent">{b}</span>)}
+                    <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                    <span className="shrink-0 text-[10px] opacity-60">{c.type}</span>
+                  </button>
+                )
+              })}
             </div>
           )
         })}
         {filtered.length === 0 && <div className="px-3 py-2 text-[11.5px] text-muted">일치 없음</div>}
       </div>
     </aside>
-  )
-}
-
-/** 히스토리 패널 — 종류 필터 + 검색 + 클릭 Re-run. */
-function HistoryPanel({ history, onPick }: { history: { id: string; sql: string; kind: string; status: string; rowCount: number; affectedRows: number | null; execMs: number | null }[]; onPick: (sql: string) => void }) {
-  const [kind, setKind] = useState<'all' | 'read' | 'dml' | 'ddl'>('all')
-  const [q, setQ] = useState('')
-  const query = q.trim().toLowerCase()
-  const rows = history.filter((h) => (kind === 'all' || h.kind === kind) && (!query || h.sql.toLowerCase().includes(query)))
-  return (
-    <div className="max-h-56 shrink-0 overflow-auto border-b border-line bg-panel/40">
-      <div className="sticky top-0 flex items-center gap-1.5 border-b border-line/50 bg-panel/80 px-5 py-1.5">
-        {(['all', 'read', 'dml', 'ddl'] as const).map((k) => (
-          <button key={k} type="button" onClick={() => setKind(k)} className={cn('rounded px-1.5 py-0.5 text-[10.5px] font-semibold uppercase outline-none', kind === k ? 'bg-accent text-white' : 'bg-panel-strong text-muted hover:text-fg')}>{k}</button>
-        ))}
-        <div className="ml-auto flex items-center gap-1">
-          <Search className="size-3 text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" className="w-28 bg-transparent text-[11px] outline-none" />
-        </div>
-      </div>
-      {rows.length === 0 ? (
-        <div className="px-5 py-3 text-[12px] text-muted">히스토리가 없습니다</div>
-      ) : (
-        rows.map((h) => (
-          <button key={h.id} type="button" onClick={() => onPick(h.sql)} className="flex w-full items-center gap-2 border-b border-line/50 px-5 py-1.5 text-left outline-none hover:bg-panel">
-            <span className={cn('size-1.5 shrink-0 rounded-full', h.status === 'success' ? 'bg-success' : 'bg-destructive')} />
-            <span className="w-10 shrink-0 font-mono text-[10px] uppercase text-muted">{h.kind}</span>
-            <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-fg" title={h.sql}>{h.sql}</span>
-            <span className="shrink-0 text-[10.5px] text-muted">
-              {h.affectedRows != null ? `${h.affectedRows}행` : `${h.rowCount}행`}
-              {h.execMs != null ? ` · ${h.execMs}ms` : ''}
-            </span>
-          </button>
-        ))
-      )}
-    </div>
   )
 }
 
@@ -391,16 +472,12 @@ function ExplainPanel({ explain, dialect }: { explain: { summary: string; planRo
         <span className="font-semibold">실행 계획</span>
         {explain.summary && <span className="text-muted">· {explain.summary}</span>}
       </button>
-      {open && (
-        <div className="mt-1.5">
-          {tree ? <JsonTree data={tree} /> : <div className="font-mono text-[11px] text-muted">{explain.explainSql}</div>}
-        </div>
-      )}
+      {open && <div className="mt-1.5">{tree ? <JsonTree data={tree} /> : <div className="font-mono text-[11px] text-muted">{explain.explainSql}</div>}</div>}
     </div>
   )
 }
 
-/** 재귀 JSON 트리 — 접기/펼치기(EXPLAIN 계획용, 방언 무관). */
+/** 재귀 JSON 트리 — 접기/펼치기(EXPLAIN 계획용). */
 function JsonTree({ data, depth = 0, label }: { data: unknown; depth?: number; label?: string }) {
   const [open, setOpen] = useState(depth < 3)
   const isObj = data !== null && typeof data === 'object'
@@ -429,12 +506,12 @@ function TablePreviewModal({ connectionId, dialect, table, onClose }: { connecti
   const [rows, setRows] = useState<Record<string, unknown>[]>([])
   const [cols, setCols] = useState<string[]>([])
   const [err, setErr] = useState<string | null>(null)
-  const q = dialect === 'mysql' || dialect === 'mariadb' ? '`' : '"'
+  const qc = dialect === 'mysql' || dialect === 'mariadb' ? '`' : '"'
   const ref = useRef(table)
   useEffect(() => {
     void (async () => {
       try {
-        const r = await window.rockury.query.run(connectionId, `SELECT * FROM ${q}${ref.current}${q} LIMIT 50`)
+        const r = await window.rockury.query.run(connectionId, `SELECT * FROM ${qc}${ref.current}${qc} LIMIT 50`)
         setRows(r.rows)
         setCols(r.columns)
       } catch (e) {
@@ -446,17 +523,13 @@ function TablePreviewModal({ connectionId, dialect, table, onClose }: { connecti
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>미리보기 · {table} (상위 50행)</DialogTitle>
-        </DialogHeader>
+        <DialogHeader><DialogTitle>미리보기 · {table} (상위 50행)</DialogTitle></DialogHeader>
         {err ? (
           <div className="rounded bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{err}</div>
         ) : (
           <div className="mt-2 max-h-[60vh] overflow-auto">
             <table className="w-full border-collapse text-[12px]">
-              <thead className="sticky top-0 bg-panel">
-                <tr>{cols.map((c) => <th key={c} className="border-b border-line px-2 py-1 text-left font-mono">{c}</th>)}</tr>
-              </thead>
+              <thead className="sticky top-0 bg-panel"><tr>{cols.map((c) => <th key={c} className="border-b border-line px-2 py-1 text-left font-mono">{c}</th>)}</tr></thead>
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i} className="hover:bg-panel/60">

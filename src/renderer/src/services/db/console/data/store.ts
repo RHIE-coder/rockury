@@ -254,6 +254,14 @@ export const useDataStore = create<DataState>()((set, get) => ({
     if (!tx) return
     try {
       await window.rockury.query.txCommit(tx.txId)
+      // 커밋된 편집을 History 에 기록(source=data). 실패해도 편집 흐름엔 영향 없음.
+      for (const st of get().buildStatements(dialect, tableDef)) {
+        try {
+          await window.rockury.query.historyAppend({ connectionId: envId, source: 'data', sql: st.sql, kind: 'dml', status: 'success' })
+        } catch {
+          // 무시
+        }
+      }
       set({ ...clearPending() })
       await get().load(envId, dialect, tableDef)
     } catch (e) {
