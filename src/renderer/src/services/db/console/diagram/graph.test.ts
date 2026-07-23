@@ -148,3 +148,47 @@ describe('buildErd', () => {
     expect(e.sourceColumnId).toBe('c:child.pa')
   })
 })
+
+describe('buildErd — 라벨 레인(labelOffset)', () => {
+  // 라벨 앵커는 소스 FK 컬럼 행 옆 → 컬럼이 다르면 자연 분리라 오프셋 불필요.
+  it('서로 다른 컬럼에서 나가는 관계선들은 전부 0 (허브 수렴·소스 발산 포함)', () => {
+    const users = table('users', [col('users', 'id')], [pk('users', ['id'])])
+    const posts = table('posts', [col('posts', 'user_id')], [fk('posts', 'fk_u', ['user_id'], 'users', ['id'])])
+    const comments = table('comments', [col('comments', 'user_id')], [fk('comments', 'fk_u', ['user_id'], 'users', ['id'])])
+    const junction = table(
+      'junction',
+      [col('junction', 'user_id'), col('junction', 'post_id')],
+      [
+        fk('junction', 'fk_u', ['user_id'], 'users', ['id']),
+        fk('junction', 'fk_p', ['post_id'], 'posts', ['id'])
+      ]
+    )
+    const offsets = buildErd([users, posts, comments, junction]).edges.map((e) => e.labelOffset)
+    expect(offsets).toEqual([0, 0, 0, 0])
+  })
+
+  // 유일하게 겹칠 수 있는 경우: 같은 컬럼이 복수 FK 에 참여(앵커가 동일 지점).
+  it('같은 컬럼에서 두 FK 가 나가면 -0.5, +0.5 로 세로 분산', () => {
+    const a = table('a', [col('a', 'id')], [pk('a', ['id'])])
+    const b = table('b', [col('b', 'id')], [pk('b', ['id'])])
+    const child = table(
+      'child',
+      [col('child', 'ref_id')],
+      [
+        fk('child', 'fk_a', ['ref_id'], 'a', ['id']),
+        fk('child', 'fk_b', ['ref_id'], 'b', ['id'])
+      ]
+    )
+    const offsets = buildErd([a, b, child]).edges.map((e) => e.labelOffset)
+    expect(offsets).toEqual([-0.5, 0.5])
+  })
+
+  it('자기참조는 레인 분산에서 제외(항상 0)', () => {
+    const emp = table(
+      'employees',
+      [col('employees', 'id'), col('employees', 'manager_id', true)],
+      [pk('employees', ['id']), fk('employees', 'fk_mgr', ['manager_id'], 'employees', ['id'])]
+    )
+    expect(buildErd([emp]).edges[0].labelOffset).toBe(0)
+  })
+})

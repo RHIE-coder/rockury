@@ -31,8 +31,14 @@
 - **CASE-console-042** Query 뷰 → `{{키워드}}` 입력 시 값 입력칸 노출, 실행.
 - **CASE-console-043** Collection 트리에서 저장 쿼리 클릭 → 에디터 로드.
 - **CASE-console-044** Definition 뷰 진입 → 사이드바에 실 DB 테이블 목록(users/user_roles), 테이블 선택 후 `SQL` 토글 시 `CREATE TABLE` DDL 렌더. (definition.table-list/sql)
+- **CASE-console-045** Definition 편집: `편집` → 테이블 추가·컬럼 추가 → 대기 변경 미리보기 → `적용` → 재역설계에 신규 테이블 반영. (definition.edit AC-1/2/4)
+- **CASE-console-046** Definition 편집(파괴적): 테이블 삭제 시 파괴적 경고 → `적용`(확인) → 재역설계에서 사라짐(DB 원복). (definition.edit AC-3/4)
+- **CASE-console-047** Diagram 편집: `편집` → 노드 선택 시 편집 패널(관계(FK)) → 캔버스 `테이블` 로 노드 증가+대기 변경 → `버리기` 로 읽기 복귀. (diagram AC-1/2/4)
 
 ## Scenario S6 — Definition (순수 로직)
 - **CASE-console-050** 테이블 검색 필터: 이름/컬럼명 부분일치(대소문자 무시), 빈 질의는 전체를 원래 순서로, 매칭 없으면 빈 배열. (definition.table-list AC-2) → `console/definition/select.test.ts`
 - **CASE-console-051** 활성 테이블 해석: id 로 찾되 없으면 첫 테이블 폴백, activeId=null 도 첫 테이블, 빈 목록은 undefined. (definition.table-list AC-3)
 - **CASE-console-052** DDL 구문 강조 토큰화: 키워드/식별자/문자열/타입/숫자/주석 분류 + 무손실 분해(토큰을 이어붙이면 원문과 일치). (definition.sql AC-1) → `workspaces/definition/sqlHighlight.test.ts`
+- **CASE-console-053** 편집 reducer(순수): 컬럼/제약/테이블 CRUD 가 draft 를 올바르게 변형(새 엔티티는 `new:` 접두 id). (definition.edit AC-1) → `console/schemaEdit/mutations.test.ts`
+- **CASE-console-054** 편집→DDL 통합: 신규 컬럼→`ADD COLUMN`, 기존 컬럼 변경→`MODIFY`(id 보존), 삭제→`DROP`(파괴적), 테이블 rename→`RENAME`. (definition.edit AC-2/3) → `console/schemaEdit/mutations.test.ts`
+- **CASE-console-055** Diagram FK 드래그(순수): `buildFkPatch` + addConstraint/updateConstraint → `ADD ... FOREIGN KEY (...) REFERENCES ...`. (diagram AC-3) → `console/schemaEdit/mutations.test.ts`

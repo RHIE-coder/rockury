@@ -26,6 +26,21 @@ describe('layoutErd', () => {
     expect(pos.b.x).toBeGreaterThan(pos.a.x)
   })
 
+  // 회귀: 자동 배치가 너무 붙으면 관계선 라벨(FK 이름 + 정책 배지)이 두 테이블 사이에 낄 자리가
+  // 없어진다 → 연결된 두 랭크 사이 가로 간격은 라벨 폭(≈150px) 이상을 유지해야 한다.
+  it('연결된 두 랭크 사이에 관계선 라벨이 들어갈 가로 간격을 둔다', () => {
+    const pos = layoutErd([n('a', 200, 100), n('b', 200, 100)], [{ source: 'a', target: 'b' }])
+    const gap = pos.b.x - (pos.a.x + 200)
+    expect(gap).toBeGreaterThanOrEqual(150)
+  })
+
+  // 회귀: 같은 랭크에 쌓인 테이블끼리도 세로로 붙지 않아야(자기참조 루프가 위 노드를 덮지 않게).
+  it('같은 랭크 노드끼리 세로 간격을 둔다', () => {
+    const pos = layoutErd([n('a', 200, 100), n('b', 200, 100)], [])
+    const gap = Math.abs(pos.b.y - pos.a.y) - 100
+    expect(gap).toBeGreaterThanOrEqual(80)
+  })
+
   it('자기참조 엣지가 있어도 예외 없이 좌표를 낸다', () => {
     const pos = layoutErd([n('a')], [{ source: 'a', target: 'a' }])
     expect(pos.a).toBeDefined()

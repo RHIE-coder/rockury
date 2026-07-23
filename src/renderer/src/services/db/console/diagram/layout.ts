@@ -64,8 +64,10 @@ export function layoutErd(
   const g = new dagre.graphlib.Graph()
   g.setGraph({
     rankdir: opts.direction ?? 'LR',
-    ranksep: opts.ranksep ?? 120,
-    nodesep: opts.nodesep ?? 60,
+    // 가로 계층 간격 — 관계선 라벨(예: "user_id → id / D:RESTRICT U:CASCADE")이 낄 여유를 둔다.
+    ranksep: opts.ranksep ?? 180,
+    // 세로 노드 간격 — 이웃 테이블끼리, 그리고 노드 위로 부푸는 자기참조 루프가 겹치지 않게 넉넉히.
+    nodesep: opts.nodesep ?? 100,
     marginx: 20,
     marginy: 20
   })

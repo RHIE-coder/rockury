@@ -34,6 +34,12 @@ export interface ErdEdge {
   onUpdate?: FkAction
   /** 자기참조(refTable === 자기 테이블). */
   selfRef: boolean
+  /**
+   * 라벨 세로 레인 오프셋(중앙 0 기준, ±). 라벨은 소스(FK 컬럼 행) 옆에 붙으므로
+   * 겹칠 수 있는 건 "같은 컬럼에서 나가는 복수 FK"뿐 — 그 그룹 안에서만 상하로 분산한다.
+   * 뷰가 이 값 × 라벨 높이만큼 라벨 Y 를 옮긴다. 자기참조는 별도 배치이므로 항상 0.
+   */
+  labelOffset: number
 }
 
 export interface Erd {
@@ -83,11 +89,36 @@ export function buildErd(tables: TableDef[]): Erd {
         isUnique: uniqueKeys.has(colKey(srcColIds)),
         onDelete: fk.onDelete,
         onUpdate: fk.onUpdate,
-        selfRef: fk.refTable === table.name
+        selfRef: fk.refTable === table.name,
+        labelOffset: 0
       })
     }
   }
+  assignLabelLanes(edges)
   return { nodes, edges }
+}
+
+/**
+ * 라벨 겹침 완화(순수) — 각 엣지에 세로 레인 오프셋을 부여한다.
+ * 라벨 앵커는 소스 FK 컬럼 행 옆(뷰가 배치)이라, 겹칠 수 있는 유일한 경우는
+ * **같은 컬럼에서 복수 FK 가 나갈 때**뿐 — 그 그룹만 중앙 정렬 오프셋(2개면 -0.5, +0.5)로
+ * 상하 분산한다. 자기참조는 별도 루프 배치라 제외. 엣지 생성 순서를 따르므로 결정적 → 테스트 의무.
+ */
+function assignLabelLanes(edges: ErdEdge[]): void {
+  const groups = new Map<string, ErdEdge[]>()
+  for (const e of edges) {
+    if (e.selfRef) continue
+    const key = `${e.source}|${e.sourceColumnId}`
+    const arr = groups.get(key) ?? []
+    arr.push(e)
+    groups.set(key, arr)
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    group.forEach((e, i) => {
+      e.labelOffset = i - (group.length - 1) / 2
+    })
+  }
 }
 
 /** 엣지 라벨(툴팁/목록용) — constraintsView 의 fkRefLabel 재사용 위임. */

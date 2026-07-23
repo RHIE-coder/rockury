@@ -9,8 +9,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  getNodesBounds,
-  getViewportForBounds
+  getNodesBounds
 } from '@xyflow/react'
 import type { Node, Edge, NodeMouseHandler, Viewport, Connection } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -25,7 +24,7 @@ import { useDefinitionStore, useDesignTables, useStudioReadOnly } from '../defin
 import { buildErd } from '../../console/diagram/graph'
 import { estimateNodeSize, layoutErd, type Positions } from '../../console/diagram/layout'
 import { matchTables } from '../../console/diagram/filter'
-import { exportFileName } from '../../console/diagram/export'
+import { exportFileName, exportViewport, contentBoundsForExport } from '../../console/diagram/export'
 import { TableErdNode } from '../../console/diagram/TableErdNode'
 import { RelationErdEdge } from '../../console/diagram/RelationErdEdge'
 import { buildFkPatch } from './fk'
@@ -53,7 +52,14 @@ function toFlow(tables: TableDef[], editable: boolean): { nodes: Node[]; edges: 
     sourceHandle: e.sourceColumnId || undefined,
     type: 'relationErd',
     label: e.label,
-    data: { nullable: e.nullable, isUnique: e.isUnique, onDelete: e.onDelete, onUpdate: e.onUpdate, selfRef: e.selfRef }
+    data: {
+      nullable: e.nullable,
+      isUnique: e.isUnique,
+      onDelete: e.onDelete,
+      onUpdate: e.onUpdate,
+      selfRef: e.selfRef,
+      labelOffset: e.labelOffset
+    }
   }))
   return { nodes, edges }
 }
@@ -175,13 +181,12 @@ function StudioCanvas({
       try {
         const ns = rf.getNodes()
         if (!ns.length) return
-        const bounds = getNodesBounds(ns)
-        const PAD = 48
-        const width = Math.ceil(bounds.width) + PAD * 2
-        const height = Math.ceil(bounds.height) + PAD * 2
-        const vp = getViewportForBounds(bounds, width, height, 0.2, 2, PAD)
         const el = document.querySelector('.react-flow__viewport') as HTMLElement | null
         if (!el) return
+        const PAD = 48
+        // 노드 사각형 + 노드 밖으로 부푸는 관계선(자기참조 루프)까지 감싸 잘림 방지.
+        const bounds = contentBoundsForExport(el, getNodesBounds(ns))
+        const { width, height, x, y, zoom } = exportViewport(bounds, PAD)
         const opts = {
           backgroundColor: '#ffffff',
           width,
@@ -189,7 +194,7 @@ function StudioCanvas({
           style: {
             width: `${width}px`,
             height: `${height}px`,
-            transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
+            transform: `translate(${x}px, ${y}px) scale(${zoom})`
           }
         }
         const dataUrl = format === 'png' ? await toPng(el, opts) : await toSvg(el, opts)

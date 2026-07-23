@@ -10,13 +10,12 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  getNodesBounds,
-  getViewportForBounds
+  getNodesBounds
 } from '@xyflow/react'
 import type { Node, Edge, NodeMouseHandler, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { toPng, toSvg } from 'html-to-image'
-import { Network, Loader2, RefreshCw, LayoutGrid, Search, X } from 'lucide-react'
+import { Network, Loader2, Pencil, RefreshCw, LayoutGrid, Search, X } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
@@ -26,9 +25,11 @@ import { useConsoleStore } from './store'
 import { buildErd } from './diagram/graph'
 import { estimateNodeSize, layoutErd, type Positions } from './diagram/layout'
 import { isolatedTableIds, matchTables } from './diagram/filter'
-import { exportFileName } from './diagram/export'
+import { exportFileName, exportViewport, contentBoundsForExport } from './diagram/export'
 import { TableErdNode } from './diagram/TableErdNode'
 import { RelationErdEdge } from './diagram/RelationErdEdge'
+import { useSchemaEditStore } from './schemaEdit/store'
+import { DiagramEdit } from './schemaEdit/DiagramEdit'
 
 const nodeTypes = { tableErd: TableErdNode }
 const edgeTypes = { relationErd: RelationErdEdge }
@@ -58,7 +59,8 @@ function toFlow(tables: TableDef[]): { nodes: Node[]; edges: Edge[] } {
       isUnique: e.isUnique,
       onDelete: e.onDelete,
       onUpdate: e.onUpdate,
-      selfRef: e.selfRef
+      selfRef: e.selfRef,
+      labelOffset: e.labelOffset
     }
   }))
   return { nodes, edges }
@@ -178,13 +180,12 @@ function DiagramCanvas({ tables, connectionId, connName, storedPositions, stored
       try {
         const ns = rf.getNodes()
         if (!ns.length) return
-        const bounds = getNodesBounds(ns)
-        const PAD = 48
-        const width = Math.ceil(bounds.width) + PAD * 2
-        const height = Math.ceil(bounds.height) + PAD * 2
-        const vp = getViewportForBounds(bounds, width, height, 0.2, 2, PAD)
         const el = document.querySelector('.react-flow__viewport') as HTMLElement | null
         if (!el) return
+        const PAD = 48
+        // 노드 사각형 + 노드 밖으로 부푸는 관계선(자기참조 루프)까지 감싸 잘림 방지.
+        const bounds = contentBoundsForExport(el, getNodesBounds(ns))
+        const { width, height, x, y, zoom } = exportViewport(bounds, PAD)
         const opts = {
           backgroundColor: '#ffffff',
           width,
@@ -192,7 +193,7 @@ function DiagramCanvas({ tables, connectionId, connName, storedPositions, stored
           style: {
             width: `${width}px`,
             height: `${height}px`,
-            transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`
+            transform: `translate(${x}px, ${y}px) scale(${zoom})`
           }
         }
         const dataUrl = format === 'png' ? await toPng(el, opts) : await toSvg(el, opts)
@@ -322,6 +323,10 @@ export function DiagramView() {
   const error = useConsoleStore((s) => (connId ? s.error[connId] : null))
   const load = useConsoleStore((s) => s.load)
 
+  const editing = useSchemaEditStore((s) => s.editing)
+  const editConnId = useSchemaEditStore((s) => s.connId)
+  const begin = useSchemaEditStore((s) => s.begin)
+
   const [storedPositions, setStoredPositions] = useState<Positions>({})
   const [storedViewport, setStoredViewport] = useState<Viewport | null>(null)
   const [layoutLoaded, setLayoutLoaded] = useState(false)
@@ -371,6 +376,7 @@ export function DiagramView() {
   }
 
   const ready = tables && tables.length > 0 && layoutLoaded
+  const isEditing = editing && editConnId === conn.id
 
   return (
     <div className="flex h-full flex-col">
@@ -380,24 +386,37 @@ export function DiagramView() {
             Diagram <span className="font-normal text-muted">· {conn.name}</span>
           </h2>
           <p className="text-[12px] text-muted">
-            {loading
-              ? '실 DB 역설계 중…'
-              : tables
-                ? `${tables.length}개 테이블 · 관계 ${edgeCount} · Reverse(introspection) ERD`
-                : '역설계 대기'}
+            {isEditing
+              ? '편집 중 — 관계는 컬럼 점을 끌어 연결, 변경은 아래에서 적용'
+              : loading
+                ? '실 DB 역설계 중…'
+                : tables
+                  ? `${tables.length}개 테이블 · 관계 ${edgeCount} · Reverse(introspection) ERD`
+                  : '역설계 대기'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" disabled={loading || !tables} onClick={() => void resetLayout()}>
-            <LayoutGrid /> 자동 배치
-          </Button>
-          <Button size="sm" variant="outline" disabled={loading} onClick={() => void load(conn.id, conn.id, true)}>
-            {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
-          </Button>
+          {isEditing ? (
+            <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent">편집 중</span>
+          ) : (
+            <>
+              <Button size="sm" variant="ghost" disabled={loading || !tables} onClick={() => void resetLayout()}>
+                <LayoutGrid /> 자동 배치
+              </Button>
+              <Button size="sm" variant="outline" disabled={loading} onClick={() => void load(conn.id, conn.id, true)}>
+                {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
+              </Button>
+              <Button size="sm" disabled={loading || !tables} onClick={() => begin(conn.id, tables ?? [])}>
+                <Pencil /> 편집
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {error ? (
+      {isEditing ? (
+        <DiagramEdit conn={conn} />
+      ) : error ? (
         <div className="m-5 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
           역설계 실패: {error}
         </div>

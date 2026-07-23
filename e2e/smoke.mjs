@@ -206,7 +206,23 @@ try {
   await page.waitForSelector('[data-export-status="ok"]', { timeout: 15_000 })
   check('Console › Diagram: PNG 내보내기(html-to-image 캡처 성공)', (await page.locator('[data-export-status="ok"]').count()) > 0)
 
-  // Console › Definition — 같은 introspection TableDef[] 를 Studio Definition 형태(목록 | 상세/DDL)로. 읽기 전용.
+  // Console › Diagram 편집 — 편집 진입 → 노드 선택 시 편집 패널 → 캔버스 + 로 테이블 추가(노드 증가·대기 변경) → 버리기.
+  // (적용 파이프라인은 Definition 에서 실 DB 왕복으로 검증됨 — 여기선 다이어그램 편집 UI 만 확인, DB 무변경.)
+  await click('button:text-is("편집")')
+  await page.waitForSelector('.react-flow__node', { timeout: 10_000 })
+  await page.waitForTimeout(300)
+  const editNodes0 = await page.locator('.react-flow__node').count()
+  await page.locator('.react-flow__node').first().click()
+  await page.waitForTimeout(300)
+  check('Console › Diagram 편집: 노드 선택 → 편집 패널(관계(FK))', (await body()).includes('관계(FK)'))
+  await page.locator('.react-flow__panel button:has-text("테이블")').first().click()
+  await page.waitForTimeout(400)
+  check('Console › Diagram 편집: 캔버스 + → 노드 증가 + 대기 변경', (await page.locator('.react-flow__node').count()) > editNodes0 && (await body()).includes('대기 변경'))
+  await click('button:has-text("버리기")')
+  await page.waitForSelector('button:text-is("편집")', { timeout: 10_000 })
+  check('Console › Diagram 편집: 버리기 → 읽기 모드 복귀', (await page.locator('button:text-is("편집")').count()) > 0)
+
+  // Console › Definition — 같은 introspection TableDef[] 를 Studio Definition 형태(목록 | 상세/DDL)로.
   await click('button:has-text("Definition")')
   await page.waitForSelector('text=user_roles', { timeout: 15_000 })
   const defBody = await body()
@@ -227,6 +243,38 @@ try {
   )
   await click('button:text-is("Table")') // Table 폼으로 복귀
   await page.waitForTimeout(150)
+
+  // Console › Definition 편집 — 라이브 스키마 편집: 대기 변경 → DDL 미리보기 → tx 게이트 적용 → 재역설계.
+  // 공유 테스트 DB 를 오염시키지 않도록 rky_probe 를 만들었다 되지운다(생성/삭제 왕복 = 클린).
+  await click('button:text-is("편집")')
+  await page.waitForTimeout(200)
+  await page.locator('button[aria-label="테이블 추가"]').first().click()
+  await page.waitForTimeout(200)
+  await page.locator('input[placeholder="테이블명"]').fill('rky_probe')
+  await page.locator('button:has-text("컬럼 추가")').first().click()
+  await page.waitForTimeout(150)
+  await page.locator('input[placeholder="컬럼명"]').last().fill('note')
+  await page.waitForTimeout(150)
+  check('Console › Definition 편집: 대기 변경 미리보기', (await body()).includes('대기 변경'))
+  await click('button:text-is("적용")')
+  await page.waitForSelector('button:text-is("편집")', { timeout: 15_000 }) // 편집 종료 = 적용 완료
+  await page.waitForTimeout(500)
+  check('Console › Definition 편집: 생성 적용 → 재역설계에 rky_probe 반영', (await body()).includes('rky_probe'))
+
+  // 파괴적 편집(테이블 삭제) — 경고 후 적용, DB 를 원상 복구(rky_probe 제거).
+  await click('button:text-is("편집")')
+  await page.waitForTimeout(200)
+  await page.locator('li button:has-text("rky_probe")').first().click()
+  await page.waitForTimeout(200)
+  await page.locator('button[aria-label="테이블 메뉴"]').first().click()
+  await page.waitForTimeout(150)
+  await click('[role="menuitem"]:has-text("테이블 삭제")')
+  await page.waitForTimeout(200)
+  check('Console › Definition 편집: 삭제는 파괴적 경고 표시', (await body()).includes('파괴적'))
+  await click('button:text-is("적용")') // window.confirm 은 acceptDialogs 로 자동 수락
+  await page.waitForSelector('button:text-is("편집")', { timeout: 15_000 })
+  await page.waitForTimeout(500)
+  check('Console › Definition 편집: 삭제 적용 → rky_probe 사라짐(DB 원복)', !(await body()).includes('rky_probe'))
 
   // Console › Query — 저장쿼리 객체 트리 + 편집기(재설계). 새 쿼리 생성 → SELECT 실행.
   await click('button:has-text("Query")')
