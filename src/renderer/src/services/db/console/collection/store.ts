@@ -1,13 +1,13 @@
 import { create } from 'zustand'
 import type { LibNode } from './tree'
 import type { QueryResult } from '../query/store'
-import { classifyStatement } from '../query/classify'
+import { allReadOnly, classifyStatement } from '../query/classify'
 
 /** 구조적 레코드 타입(main 과 동일 형태). */
 interface Folder { id: string; connectionId: string; parentId: string | null; name: string; sortOrder: number }
 interface SavedQuery { id: string; connectionId: string; folderId: string | null; name: string; description: string; sql: string; sortOrder: number }
 interface CollFolder { id: string; connectionId: string; parentId: string | null; name: string; sortOrder: number }
-interface Collection { id: string; connectionId: string; folderId: string | null; name: string; sortOrder: number }
+interface Collection { id: string; connectionId: string; folderId: string | null; name: string; description: string; sortOrder: number }
 interface Item { id: string; collectionId: string; savedQueryId: string | null; name: string; sql: string; sortOrder: number }
 
 export type ItemStatus = 'pending' | 'running' | 'ok' | 'error' | 'skipped'
@@ -28,10 +28,12 @@ interface CollectionState {
   running: boolean
   aborting: boolean
   itemStatus: Record<string, ItemStatus>
-  /** SELECT 아이템의 결과(모달용). 아이템 id → 결과. */
+  /** SELECT 아이템의 결과(인라인 펼침용). 아이템 id → 결과. */
   results: Record<string, QueryResult>
   tx: { txId: string; affected: number } | null
   error: string | null
+  /** 읽기 전용 실행처럼 커밋이 필요 없을 때 보여줄 안내(다음 실행/선택 시 사라짐). */
+  info: string | null
 
   load: (connectionId: string) => Promise<void>
   selectCollection: (id: string) => Promise<void>
@@ -44,6 +46,7 @@ interface CollectionState {
 
   addCollection: (name: string, folderId?: string | null) => Promise<void>
   renameCollection: (id: string, name: string) => Promise<void>
+  updateCollection: (id: string, patch: { name?: string; description?: string }) => Promise<void>
   removeCollection: (id: string) => Promise<void>
   addCollectionFolder: (name: string, parentId?: string | null) => Promise<void>
   renameCollectionFolder: (id: string, name: string) => Promise<void>
@@ -63,6 +66,49 @@ interface CollectionState {
   confirm: () => Promise<void>
   rollback: () => Promise<void>
   dismissError: () => void
+}
+
+/** 활성 컬렉션의 (id, 이름). 이름은 삭제·개명돼도 로그에 남게 실행 시점 값을 박아 둔다. */
+function activeCollId(collections: Collection[], activeId: string | null): { id: string | null; name: string | null } {
+  const c = collections.find((x) => x.id === activeId)
+  return { id: c?.id ?? activeId, name: c?.name ?? null }
+}
+
+/**
+ * 성공(ok)한 아이템을 History 에 적재(source=collection). 한 번의 실행 배치는 같은 runId 로 묶고,
+ * 각 행에 컬렉션 이름과 **컬렉션 내 순번(seq = 목록에서의 위치)** 을 박아 아코디언 그룹으로 볼 수 있게 한다.
+ */
+async function logCollectionHistory(
+  connectionId: string,
+  coll: { id: string | null; name: string | null },
+  runId: string,
+  items: Item[],
+  itemStatus: Record<string, ItemStatus>,
+  results: Record<string, QueryResult>
+): Promise<void> {
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]
+    if (itemStatus[it.id] !== 'ok') continue
+    const r = results[it.id]
+    try {
+      await window.rockury.query.historyAppend({
+        connectionId,
+        source: 'collection',
+        sql: it.sql,
+        kind: classifyStatement(it.sql).kind,
+        status: 'success',
+        rowCount: r?.rowCount,
+        affectedRows: r?.affectedRows ?? null,
+        execMs: r?.executionTimeMs ?? null,
+        collectionId: coll.id,
+        collectionName: coll.name,
+        runId,
+        seq: i + 1
+      })
+    } catch {
+      // 히스토리 실패는 실행에 영향 없음 — 무시.
+    }
+  }
 }
 
 /** 트리 소스(folders+queries) → LibNode[] (tree 유틸 입력). */
@@ -95,6 +141,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
   results: {},
   tx: null,
   error: null,
+  info: null,
 
   load: async (connectionId) => {
     try {
@@ -110,7 +157,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
   },
 
   selectCollection: async (id) => {
-    set({ activeCollectionId: id, tx: null, itemStatus: {}, results: {} })
+    set({ activeCollectionId: id, tx: null, itemStatus: {}, results: {}, info: null })
     const items = await window.rockury.collections.items(id)
     set({ items })
   },
@@ -183,6 +230,11 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
     const cid = get().connectionId
     if (cid) await get().load(cid)
   },
+  updateCollection: async (id, patch) => {
+    await window.rockury.collections.update(id, patch)
+    const cid = get().connectionId
+    if (cid) await get().load(cid)
+  },
   removeCollection: async (id) => {
     await window.rockury.collections.delete(id)
     const cid = get().connectionId
@@ -223,7 +275,9 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
   runAll: async () => {
     const { connectionId, items } = get()
     if (!connectionId || items.length === 0) return
-    set({ running: true, aborting: false, error: null, itemStatus: {}, results: {}, tx: null })
+    set({ running: true, aborting: false, error: null, itemStatus: {}, results: {}, tx: null, info: null })
+    // 전부 조회(read)면 커밋이 필요 없다 — 실행 후 트랜잭션을 조용히 닫고 결과만 보인다.
+    const readOnly = allReadOnly(items.map((i) => i.sql))
     try {
       const { txId } = await window.rockury.query.txBegin(connectionId)
       let affected = 0
@@ -260,7 +314,14 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
           return
         }
       }
-      set({ tx: { txId, affected }, running: false })
+      if (readOnly) {
+        // 읽기 전용 — 커밋 강요하지 않는다. 트랜잭션을 닫고(no-op) 실행을 즉시 히스토리에 적재.
+        try { await window.rockury.query.txCommit(txId) } catch { /* 읽기라 사실상 no-op */ }
+        await logCollectionHistory(connectionId, activeCollId(get().collections, get().activeCollectionId), crypto.randomUUID(), items, get().itemStatus, get().results)
+        set({ running: false, tx: null, info: `조회 완료 · ${items.length}개 쿼리 · 커밋 불필요 (읽기 전용)` })
+      } else {
+        set({ tx: { txId, affected }, running: false })
+      }
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), running: false, aborting: false, tx: null })
     }
@@ -271,7 +332,9 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
     if (!connectionId || running) return
     const item = items.find((i) => i.id === itemId)
     if (!item) return
-    set({ running: true, error: null })
+    set({ running: true, error: null, info: null })
+    // 열린 트랜잭션(쓰기 대기)이 없고 이 아이템이 조회면 커밋을 요구하지 않는다(단독 읽기).
+    const standaloneRead = !tx && classifyStatement(item.sql).kind === 'read'
     try {
       // 열린 트랜잭션이 있으면 그 위에 이어 붙이고, 없으면 새로 연다 → 하나씩 실행해도 한 덩어리.
       let txId = tx?.txId
@@ -284,7 +347,14 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
         if (classifyStatement(item.sql).kind === 'read' && r.columns.length > 0) {
           set((s) => ({ results: { ...s.results, [itemId]: r } }))
         }
-        set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'ok' }, tx: { txId: txId!, affected }, running: false }))
+        if (standaloneRead) {
+          try { await window.rockury.query.txCommit(txId) } catch { /* 읽기라 no-op */ }
+          // 전체 items 목록 + 이 아이템만 ok 인 상태 → seq 가 컬렉션 내 실제 순번으로 기록된다.
+          await logCollectionHistory(connectionId, activeCollId(get().collections, get().activeCollectionId), crypto.randomUUID(), items, { [itemId]: 'ok' }, get().results)
+          set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'ok' }, tx: null, running: false, info: '조회 완료 · 커밋 불필요 (읽기 전용)' }))
+        } else {
+          set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'ok' }, tx: { txId: txId!, affected }, running: false }))
+        }
       } catch (e) {
         // 실패 → main 이 세션 전체를 롤백/정리 → 이미 실행한 아이템도 무효(원자성). 열린 tx 폐기.
         set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'error' }, error: e instanceof Error ? e.message : String(e), tx: null, running: false }))
@@ -305,21 +375,12 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
   },
 
   confirm: async () => {
-    const { tx, connectionId, items, itemStatus } = get()
+    const { tx, connectionId, items, itemStatus, results } = get()
     if (!tx) return
     try {
       await window.rockury.query.txCommit(tx.txId)
-      // 커밋된(ok) 아이템을 History 에 기록(source=collection).
-      if (connectionId) {
-        for (const it of items) {
-          if (itemStatus[it.id] !== 'ok') continue
-          try {
-            await window.rockury.query.historyAppend({ connectionId, source: 'collection', sql: it.sql, kind: classifyStatement(it.sql).kind, status: 'success' })
-          } catch {
-            // 무시
-          }
-        }
-      }
+      // 커밋된(ok) 아이템을 History 에 기록(source=collection · 한 커밋 = 한 실행배치).
+      if (connectionId) await logCollectionHistory(connectionId, activeCollId(get().collections, get().activeCollectionId), crypto.randomUUID(), items, itemStatus, results)
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) })
     }
@@ -333,7 +394,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
     } catch {
       // 이미 정리됐을 수 있음
     }
-    set({ tx: null, itemStatus: {} })
+    set({ tx: null, itemStatus: {}, info: null })
   },
   dismissError: () => set({ error: null })
 }))

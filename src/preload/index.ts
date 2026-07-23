@@ -8,6 +8,7 @@ import type { QueryResult, TxBeginResult, ExplainResult } from '../main/services
 import type { AppendHistoryInput, QueryHistoryRecord } from '../main/store/queryHistory'
 import type { FolderRecord, SavedQueryRecord } from '../main/store/savedQueries'
 import type { CollectionRecord, CollectionItemRecord, CollectionFolderRecord } from '../main/store/collections'
+import type { DiagramLayoutRecord, SaveLayoutInput } from '../main/store/diagramLayouts'
 import type {
   CreateLogInput,
   CreateSnapshotInput,
@@ -177,6 +178,7 @@ const api = {
     create: (input: { connectionId: string; name: string; folderId?: string | null }): Promise<CollectionRecord> => unwrap(ipcRenderer.invoke('col:create', input)),
     createFolder: (input: { connectionId: string; parentId: string | null; name: string }): Promise<CollectionFolderRecord> => unwrap(ipcRenderer.invoke('col:createFolder', input)),
     rename: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('col:rename', id, name)),
+    update: (id: string, patch: { name?: string; description?: string }): Promise<void> => unwrap(ipcRenderer.invoke('col:update', id, patch)),
     renameFolder: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('col:renameFolder', id, name)),
     deleteFolder: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('col:deleteFolder', id)),
     reorderTree: (items: { id: string; kind: 'folder' | 'collection'; parentId: string | null; sortOrder: number }[]): Promise<void> => unwrap(ipcRenderer.invoke('col:reorderTree', items)),
@@ -199,6 +201,15 @@ const api = {
       unwrap(ipcRenderer.invoke('migration:appendLog', input)),
     listLogs: (envId: string): Promise<MigrationLogRecord[]> =>
       unwrap(ipcRenderer.invoke('migration:listLogs', envId))
+  },
+  // 운영부 — Console 실 ERD 레이아웃(연결별 노드 위치·뷰포트) 영속.
+  diagram: {
+    getLayout: (connectionId: string): Promise<DiagramLayoutRecord | null> =>
+      unwrap(ipcRenderer.invoke('diagram:getLayout', connectionId)),
+    saveLayout: (input: SaveLayoutInput): Promise<DiagramLayoutRecord> =>
+      unwrap(ipcRenderer.invoke('diagram:saveLayout', input)),
+    clearLayout: (connectionId: string): Promise<void> =>
+      unwrap(ipcRenderer.invoke('diagram:clearLayout', connectionId))
   }
 }
 

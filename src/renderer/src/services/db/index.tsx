@@ -32,12 +32,14 @@ import type { Service } from '@renderer/nav/types'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { DefinitionWorkspace } from './workspaces/definition/DefinitionWorkspace'
 import { DefinitionToolbar } from './workspaces/definition/DefinitionToolbar'
+import { StudioDiagramWorkspace } from './workspaces/diagram/StudioDiagramWorkspace'
 import { DesignDialogs } from './designs/DesignDialogs'
 import { useDesignsStore } from './designs/store'
 import { TimelineView } from './versions/TimelineView'
 import { VersionDiffView } from './versions/VersionDiffView'
 import { ConnectionsView } from './connections/ConnectionsView'
 import { ObjectView } from './console/ObjectView'
+import { DiagramView } from './console/DiagramView'
 import { QueryView } from './console/QueryView'
 import { DataView } from './console/DataView'
 import { CollectionView } from './console/CollectionView'
@@ -129,7 +131,7 @@ export const dbService: Service = {
       icon: PenTool,
       area: 'design',
       views: [
-        { id: 'diagram', label: 'Diagram', icon: GitBranch, workspace: view(GitBranch, 'depth 3 · Studio › Diagram', 'Diagram', '가상 ERD 를 설계한다') },
+        { id: 'diagram', label: 'Diagram', icon: GitBranch, workspace: StudioDiagramWorkspace },
         { id: 'definition', label: 'Definition', icon: TableProperties, workspace: DefinitionWorkspace, Toolbar: DefinitionToolbar },
         { id: 'seed', label: 'Seed', icon: Sprout, workspace: view(Sprout, 'depth 3 · Studio › Seed', 'Seed', '초기 시드 데이터를 정의한다') },
         { id: 'mocking', label: 'Mocking', icon: Shuffle, workspace: view(Shuffle, 'depth 3 · Studio › Mocking', 'Mocking', '목업 데이터 생성 규칙을 설정한다') },
@@ -162,7 +164,7 @@ export const dbService: Service = {
       icon: Monitor,
       area: 'ops',
       views: [
-        { id: 'diagram', label: 'Diagram', icon: Network, workspace: view(Network, 'depth 3 · Console › Diagram', 'Diagram', '실 DB 를 Reverse(introspection) 한 ERD') },
+        { id: 'diagram', label: 'Diagram', icon: Network, workspace: DiagramView },
         { id: 'data', label: 'Data', icon: Table2, workspace: DataView },
         { id: 'query', label: 'Query', icon: Terminal, workspace: QueryView },
         { id: 'collection', label: 'Collection', icon: Layers, workspace: CollectionView },

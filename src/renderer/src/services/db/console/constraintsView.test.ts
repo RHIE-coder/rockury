@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countByKind, filterByKind, fkRefLabel, flattenConstraints } from './constraintsView'
+import { countByKind, filterByKind, fkRefLabel, flattenConstraints, groupConstraintsByTable } from './constraintsView'
 import type { Constraint, TableDef } from '../workspaces/definition/types'
 
 function table(name: string, cols: string[], constraints: Constraint[]): TableDef {
@@ -60,5 +60,20 @@ describe('countByKind / filterByKind', () => {
     expect(filterByKind(list, 'ALL')).toHaveLength(5)
     expect(filterByKind(list, 'fk').every((c) => c.kind === 'fk')).toBe(true)
     expect(filterByKind(list, 'fk')).toHaveLength(1)
+  })
+})
+
+describe('groupConstraintsByTable', () => {
+  const list = flattenConstraints([apiKeys, users])
+  it('테이블별로 묶고 정렬 순서를 유지', () => {
+    const groups = groupConstraintsByTable(list)
+    expect(groups.map((g) => g.table)).toEqual(['api_keys', 'users'])
+    expect(groups[0].constraints).toHaveLength(4)
+    expect(groups[1].constraints).toHaveLength(1)
+    // 그룹 안의 제약은 모두 그 테이블 소속.
+    expect(groups[0].constraints.every((c) => c.table === 'api_keys')).toBe(true)
+  })
+  it('빈 목록은 빈 그룹', () => {
+    expect(groupConstraintsByTable([])).toEqual([])
   })
 })

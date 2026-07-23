@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { classifyScript, classifyStatement, splitSql, stripLeadingComments } from './classify'
+import { allReadOnly, classifyScript, classifyStatement, splitSql, stripLeadingComments } from './classify'
+
+describe('allReadOnly', () => {
+  it('전부 SELECT 면 true', () => {
+    expect(allReadOnly(['SELECT 1', 'SELECT * FROM t'])).toBe(true)
+  })
+  it('하나라도 DML/DDL 이면 false', () => {
+    expect(allReadOnly(['SELECT 1', 'UPDATE t SET a=1 WHERE id=1'])).toBe(false)
+    expect(allReadOnly(['SELECT 1', 'CREATE TABLE t (id int)'])).toBe(false)
+  })
+  it('빈 문/주석만 있는 문은 읽기로 간주(무시)', () => {
+    expect(allReadOnly(['SELECT 1', '-- comment', ''])).toBe(true)
+  })
+  it('빈 배열은 true', () => {
+    expect(allReadOnly([])).toBe(true)
+  })
+})
 
 describe('stripLeadingComments', () => {
   it('선행 라인/블록 주석과 공백을 제거', () => {

@@ -18,6 +18,7 @@ export interface CollectionRecord {
   connectionId: string
   folderId: string | null
   name: string
+  description: string
   sortOrder: number
 }
 export interface CollectionItemRecord {
@@ -44,6 +45,7 @@ interface CollRow {
   connection_id: string
   folder_id: string | null
   name: string
+  description: string | null
   sort_order: number
 }
 interface ItemRow {
@@ -57,7 +59,7 @@ interface ItemRow {
   ref_sql: string | null
 }
 
-const toColl = (r: CollRow): CollectionRecord => ({ id: r.id, connectionId: r.connection_id, folderId: r.folder_id, name: r.name, sortOrder: r.sort_order })
+const toColl = (r: CollRow): CollectionRecord => ({ id: r.id, connectionId: r.connection_id, folderId: r.folder_id, name: r.name, description: r.description ?? '', sortOrder: r.sort_order })
 const toCollFolder = (r: CollFolderRow): CollectionFolderRecord => ({ id: r.id, connectionId: r.connection_id, parentId: r.parent_id, name: r.name, sortOrder: r.sort_order })
 const toItem = (r: ItemRow): CollectionItemRecord => ({
   id: r.id,
@@ -102,6 +104,17 @@ export function createCollection(input: { connectionId: string; name: string; fo
 
 export function renameCollection(id: string, name: string): void {
   getDb().prepare('UPDATE collections SET name = ?, updated_at = ? WHERE id = ?').run(name, new Date().toISOString(), id)
+}
+
+/** 컬렉션 이름/설명 부분 갱신(상세화면 편집). 전달된 필드만 바꾼다. */
+export function updateCollection(id: string, patch: { name?: string; description?: string }): void {
+  const sets: string[] = []
+  const vals: (string | null)[] = []
+  if (patch.name !== undefined) { sets.push('name = ?'); vals.push(patch.name) }
+  if (patch.description !== undefined) { sets.push('description = ?'); vals.push(patch.description) }
+  if (sets.length === 0) return
+  sets.push('updated_at = ?'); vals.push(new Date().toISOString())
+  getDb().prepare(`UPDATE collections SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id)
 }
 
 // ── 컬렉션 폴더 트리(저장쿼리 트리와 동형) ──

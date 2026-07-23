@@ -39,9 +39,11 @@ import {
   countByKind,
   filterByKind,
   flattenConstraints,
+  groupConstraintsByTable,
   KIND_FILTERS,
   type KindFilter
 } from './constraintsView'
+import { useOutsideClose } from '@renderer/lib/useOutsideClose'
 import { toCsv, toJson, toSqlInsert } from './data/exportRows'
 import { PAGE_SIZES, rowKey, useDataStore } from './data/store'
 
@@ -113,6 +115,9 @@ export function DataView() {
   // 컬럼 폭(리사이즈). 이름→px. 없으면 기본폭.
   const [colW, setColW] = useState<Record<string, number>>({})
   const resizing = useRef<{ name: string; startX: number; startW: number } | null>(null)
+  // 툴바 드롭다운은 바깥 클릭/Esc 로 닫는다(안 닫히던 문제).
+  const tzRef = useOutsideClose<HTMLDivElement>(showTz, () => setShowTz(false))
+  const colsRef = useOutsideClose<HTMLDivElement>(showCols, () => setShowCols(false))
 
   useEffect(() => {
     if (connId) void loadIntro(connId, connId)
@@ -170,6 +175,7 @@ export function DataView() {
   const constraints = flattenConstraints(all)
   const counts = countByKind(constraints)
   const filteredConstraints = filterByKind(constraints, cfilter)
+  const constraintGroups = groupConstraintsByTable(filteredConstraints)
 
   const selected: TableDef | null = all.find((t) => t.name === d.table) ?? null
   const editable = selected ? canEdit(selected) : false
@@ -250,30 +256,38 @@ export function DataView() {
                 </button>
               ))}
             </div>
+            {/* 테이블별 그룹(Header) > 그 테이블 제약들 — 같은 테이블 제약을 한 묶음으로 본다. */}
             <div className="min-h-0 flex-1 overflow-auto">
-              {filteredConstraints.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => {
-                    const t = all.find((x) => x.name === c.table)
-                    if (t) pickTable(t)
-                  }}
-                  className={cn('flex w-full flex-col gap-0.5 border-b border-line/50 px-3 py-1.5 text-left outline-none hover:bg-panel', c.table === d.table && 'bg-accent-soft/40')}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <KindBadge kind={c.kind} />
-                    <span className="min-w-0 truncate font-mono text-[11.5px] text-fg">{c.name}</span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    {/* 테이블 라벨 — 스캔 편하게 색을 달리한 별도 칸 */}
-                    <span className="shrink-0 rounded bg-indigo-100 px-1 font-mono text-[10.5px] font-semibold text-indigo-700">{c.table}</span>
-                    <span className="min-w-0 truncate font-mono text-[10.5px] text-muted">{c.columns.join(', ')}</span>
-                  </span>
-                  {c.refLabel && <span className="truncate font-mono text-[10.5px] text-accent">{c.refLabel}</span>}
-                </button>
+              {constraintGroups.map((g) => (
+                <div key={g.table}>
+                  <button
+                    type="button"
+                    onClick={() => { const t = all.find((x) => x.name === g.table); if (t) pickTable(t) }}
+                    className={cn('sticky top-0 z-10 flex w-full items-center gap-1.5 border-b border-line bg-panel px-3 py-1.5 text-left outline-none hover:bg-panel-strong', g.table === d.table && 'text-accent')}
+                    title={`${g.table} 테이블 보기`}
+                  >
+                    <Table2 className="size-3.5 shrink-0 opacity-60" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-semibold">{g.table}</span>
+                    <span className="shrink-0 text-[10.5px] text-muted">{g.constraints.length}</span>
+                  </button>
+                  {g.constraints.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { const t = all.find((x) => x.name === c.table); if (t) pickTable(t) }}
+                      className={cn('flex w-full flex-col gap-0.5 border-b border-line/50 py-1.5 pl-6 pr-3 text-left outline-none hover:bg-panel', c.table === d.table && 'bg-accent-soft/30')}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <KindBadge kind={c.kind} />
+                        <span className="min-w-0 truncate font-mono text-[11.5px] text-fg">{c.name}</span>
+                      </span>
+                      <span className="min-w-0 truncate font-mono text-[10.5px] text-muted">{c.columns.join(', ')}</span>
+                      {c.refLabel && <span className="min-w-0 truncate font-mono text-[10.5px] text-accent">{c.refLabel}</span>}
+                    </button>
+                  ))}
+                </div>
               ))}
-              {filteredConstraints.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">제약 없음</div>}
+              {constraintGroups.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">제약 없음</div>}
             </div>
           </aside>
         )}
@@ -300,7 +314,7 @@ export function DataView() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   {/* 타임존 3-way */}
-                  <div className="relative">
+                  <div ref={tzRef} className="relative">
                     <Button size="sm" variant="ghost" title="날짜 표시(UTC/LOCAL/TIMESTAMP)" onClick={() => setShowTz((v) => !v)}>
                       <Clock /> {tzMode}
                     </Button>
@@ -319,7 +333,7 @@ export function DataView() {
                       </div>
                     )}
                   </div>
-                  <div className="relative">
+                  <div ref={colsRef} className="relative">
                     <Button size="sm" variant="ghost" title="컬럼 표시/숨김" onClick={() => setShowCols((v) => !v)}>
                       <Columns3 />
                     </Button>
@@ -420,18 +434,19 @@ export function DataView() {
                       <col key={c.id} style={{ width: colW[c.name] ?? DEFAULT_COL_W }} />
                     ))}
                   </colgroup>
-                  <thead className="sticky top-0 bg-panel">
+                  {/* sticky·배경·z 를 <th> 셀마다 건다 — thead 에만 걸면 border-collapse 에서 본문이 헤더 위로 비친다. */}
+                  <thead>
                     <tr>
-                      <th className="border-b border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
-                      {editable && <th className="border-b border-line px-1 py-1.5" />}
+                      <th className="sticky top-0 z-20 border-b border-line bg-panel px-2 py-1.5 text-right font-medium text-muted">#</th>
+                      {editable && <th className="sticky top-0 z-20 border-b border-line bg-panel px-1 py-1.5" />}
                       {shownColumns.map((c) => {
                         const sorted = d.orderBy?.column === c.name ? d.orderBy.direction : null
                         const badges = badgeLabels(keyKinds.get(c.id))
                         return (
-                          <th key={c.id} className="relative border-b border-line px-3 py-1.5 text-left align-top font-mono font-semibold text-fg">
-                            <button type="button" onClick={() => dialect && void d.toggleSort(connId!, dialect, selected, c.name)} className="flex items-center gap-1.5 overflow-hidden outline-none hover:text-accent" title="정렬">
-                              {badges.map((b) => <span key={b} className="rounded bg-accent-soft px-1 text-[9px] font-bold text-accent">{b}</span>)}
-                              <span className="truncate">{c.name}</span>
+                          <th key={c.id} className="sticky top-0 z-20 border-b border-line bg-panel px-3 py-1.5 text-left align-top font-mono font-semibold text-fg">
+                            <button type="button" onClick={() => dialect && void d.toggleSort(connId!, dialect, selected, c.name)} className="flex w-full items-center gap-1.5 overflow-hidden outline-none hover:text-accent" title="정렬">
+                              {badges.map((b) => <span key={b} className="shrink-0 rounded bg-accent-soft px-1 text-[9px] font-bold text-accent">{b}</span>)}
+                              <span className="min-w-0 flex-1 truncate text-left">{c.name}</span>
                               {sorted === 'ASC' && <ChevronUp className="size-3 shrink-0" />}
                               {sorted === 'DESC' && <ChevronDown className="size-3 shrink-0" />}
                             </button>

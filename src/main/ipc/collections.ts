@@ -24,6 +24,7 @@ import {
   renameCollectionFolder,
   reorderCollectionTree,
   reorderItems,
+  updateCollection,
   updateItem
 } from '../store/collections'
 import { envelope } from './envelope'
@@ -57,6 +58,7 @@ export function registerCollectionIpc(): void {
   ipcMain.handle('col:create', (_e, input: { connectionId: string; name: string; folderId?: string | null }) => envelope(() => createCollection(input)))
   ipcMain.handle('col:createFolder', (_e, input: { connectionId: string; parentId: string | null; name: string }) => envelope(() => createCollectionFolder(input)))
   ipcMain.handle('col:rename', (_e, id: string, name: string) => envelope(() => renameCollection(id, name)))
+  ipcMain.handle('col:update', (_e, id: string, patch: { name?: string; description?: string }) => envelope(() => updateCollection(id, patch)))
   ipcMain.handle('col:renameFolder', (_e, id: string, name: string) => envelope(() => renameCollectionFolder(id, name)))
   ipcMain.handle('col:deleteFolder', (_e, id: string) => envelope(() => deleteCollectionFolder(id)))
   ipcMain.handle('col:reorderTree', (_e, items: { id: string; kind: 'folder' | 'collection'; parentId: string | null; sortOrder: number }[]) => envelope(() => reorderCollectionTree(items)))

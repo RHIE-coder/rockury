@@ -23,6 +23,7 @@ import {
   reorderItems
 } from './collections'
 import { appendHistory, listHistory } from './queryHistory'
+import { clearLayout, getLayout, saveLayout } from './diagramLayouts'
 import { appendLog, latestSnapshot, listLogs, saveSnapshot } from './migration'
 import { createConnection, deleteConnection, getConnectionWithPassword, listConnections } from './connections'
 import { ensureBinding, getEnvironment, setAppliedVersion } from './environments'
@@ -106,21 +107,23 @@ describe('collections — 저장쿼리 참조(hybrid) + 삭제 가드', () => {
   })
 })
 
-describe('queryHistory (dedup)', () => {
-  it('연속 동일 쿼리는 1행으로 접고, 다른 쿼리는 새 행', () => {
+describe('queryHistory (매 실행 적재)', () => {
+  it('같은 SQL 을 여러 번 실행하면 실행 횟수만큼 행이 쌓인다(중복 접기 없음)', () => {
     const c = 'conn_hist'
+    // 같은 SELECT 를 3번 → 3행이 그대로 쌓여야 한다("3번 실행 = 3행").
     appendHistory({ connectionId: c, sql: 'SELECT 1', kind: 'read', status: 'success', rowCount: 1 })
-    appendHistory({ connectionId: c, sql: 'SELECT   1', kind: 'read', status: 'success', rowCount: 1 }) // 공백만 다름 → dedup
-    expect(listHistory(c)).toHaveLength(1)
+    appendHistory({ connectionId: c, sql: 'SELECT   1', kind: 'read', status: 'success', rowCount: 1 })
+    appendHistory({ connectionId: c, sql: 'SELECT 1', kind: 'read', status: 'success', rowCount: 1 })
+    expect(listHistory(c)).toHaveLength(3)
     appendHistory({ connectionId: c, sql: 'SELECT 2', kind: 'read', status: 'success', rowCount: 1 })
     const rows = listHistory(c)
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(4)
     expect(rows[0].sql).toBe('SELECT 2') // 최신순
   })
 })
 
 describe('queryHistory (다중 소스)', () => {
-  it('source 를 기록·구분하고, 다른 소스의 동일 SQL 은 dedup 하지 않는다', () => {
+  it('source 를 기록·구분하고, 같은 소스 동일 SQL 도 매 실행 적재한다', () => {
     const c = 'conn_src'
     appendHistory({ connectionId: c, source: 'query', sql: 'SELECT 1', kind: 'read', status: 'success', rowCount: 1 })
     appendHistory({ connectionId: c, source: 'data', sql: 'SELECT 1', kind: 'read', status: 'success', rowCount: 1 })
@@ -128,9 +131,9 @@ describe('queryHistory (다중 소스)', () => {
     expect(rows).toHaveLength(2)
     expect(rows.map((r) => r.source).sort()).toEqual(['data', 'query'])
 
-    // 같은 소스 연속 동일 SQL → dedup(접힘)
+    // 같은 소스 연속 동일 SQL → 접지 않고 새 행.
     appendHistory({ connectionId: c, source: 'data', sql: 'SELECT   1', kind: 'read', status: 'success', rowCount: 1 })
-    expect(listHistory(c)).toHaveLength(2)
+    expect(listHistory(c)).toHaveLength(3)
   })
 
   it('source 미지정 시 기본 query', () => {
@@ -177,5 +180,44 @@ describe('connections + environments 바인딩', () => {
     // 연결 삭제 → 바인딩 cascade
     deleteConnection(conn.id)
     expect(getEnvironment(b1.id)).toBeNull()
+  })
+})
+
+describe('diagramLayouts (Console 실 ERD 레이아웃 영속)', () => {
+  const CONN2 = 'conn_diagram'
+
+  it('미저장이면 null', () => {
+    expect(getLayout(CONN2)).toBeNull()
+  })
+
+  it('저장 → 위치/뷰포트 JSON 왕복', () => {
+    const rec = saveLayout({
+      connectionId: CONN2,
+      positions: { 't:users': { x: 10, y: 20 }, 't:orders': { x: 300, y: 40 } },
+      viewport: { x: -5, y: 12, zoom: 1.25 }
+    })
+    expect(rec.connectionId).toBe(CONN2)
+    const got = getLayout(CONN2)
+    expect(got?.positions['t:users']).toEqual({ x: 10, y: 20 })
+    expect(got?.positions['t:orders']).toEqual({ x: 300, y: 40 })
+    expect(got?.viewport).toEqual({ x: -5, y: 12, zoom: 1.25 })
+  })
+
+  it('재저장은 UPSERT — 행이 늘지 않고 덮어쓴다', () => {
+    saveLayout({ connectionId: CONN2, positions: { 't:users': { x: 99, y: 99 } } })
+    const got = getLayout(CONN2)
+    expect(got?.positions).toEqual({ 't:users': { x: 99, y: 99 } })
+    // viewport 미지정 → null 로 갱신
+    expect(got?.viewport).toBeNull()
+  })
+
+  it('연결별 격리 — 다른 연결 레이아웃에 영향 없음', () => {
+    saveLayout({ connectionId: 'conn_other', positions: { 't:x': { x: 1, y: 1 } } })
+    expect(getLayout(CONN2)?.positions).toEqual({ 't:users': { x: 99, y: 99 } })
+  })
+
+  it('clearLayout → null', () => {
+    clearLayout(CONN2)
+    expect(getLayout(CONN2)).toBeNull()
   })
 })

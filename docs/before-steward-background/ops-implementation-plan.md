@@ -1,7 +1,7 @@
 # 운영부(ops) 구현 플랜 & 세션 인수인계
 
 > 목적: 컨텍스트 clear 후 이 문서 + `docs/before-steward-background/db-service-ia.md` 만 읽고 바로 이어서 작업하기 위한 재개점.
-> 최종 갱신: 2026-07-21 (**Phase 0~3 + Connection 1급 분리 + Console 심화(rky 이식)** 완료. 남은 것: 2e Diagram 등)
+> 최종 갱신: 2026-07-23 (**Phase 0~3 + Connection 1급 분리 + Console 심화(rky 이식) + Diagram(Console 실 ERD·Studio 가상 편집 ERD)** 완료. 남은 것: Studio Seed/Mocking/Documenting/Validation·Overview·Reference 등 선택적 향상)
 > Console 심화: Query(CodeMirror+스키마 자동완성+포매터, EXPLAIN, 히스토리) · Data(필터/정렬/페이지크기, 타입별 셀 에디터+NULL+FK 룩업+JSON, Export) · **Collection**(저장쿼리 폴더 DnD 트리 + 컬렉션 Run-All=tx 게이트). rky 결함(문자열SQL/비트랜잭션/반쪽 히스토리)은 반복하지 않고 파라미터 바인드·tx·정상 히스토리로 이식.
 
 ---
@@ -58,7 +58,7 @@ DB 서비스의 **설계부(design)** 는 로컬 SQLite 저장소 위에 실제 
 - **preload**: `window.rockury.introspection.run(envId)`.
 - **렌더러(순수 정규화 + 소비자)**: `services/db/console/introspection.ts` — **순수 `normalizeSchema(IR, designId) → TableDef[]`**(id=이름 기반 결정적, +`introspection.test.ts`) + `columnKeyKinds`. `console/store.ts`(환경별 캐시) · `console/ObjectView.tsx`(테이블 펼침·컬럼/키 배지·FK 참조) → Console › Object 배선.
 - **검증**: 순수 8케이스(vitest). 어댑터 실 DB 통합 `introspection.integration.test.ts`(4벤더, **기본 skip** — `INTROSPECT_IT=1` 로 실행). e2e: 카드→active Env→Console › Object 역설계(users/user_roles) 확인.
-- **다음 토대**: 이 `TableDef[]` 가 2e Diagram(real)·3b Drift(`versions/diff.ts` 재사용)의 공통 입력.
+- **다음 토대**: 이 `TableDef[]` 가 Diagram(2e real·Studio 가상 편집)·3b Drift(`versions/diff.ts` 재사용)의 공통 입력. (Diagram 완료)
 
 ### 운영부 Phase 2c — Query (이번 세션 구현 완료)
 - **main**: `services/queryService.ts` — `run`(즉시 실행, 멀티문+타임아웃, open→close) + ⭐**트랜잭션 파괴 게이트**(`txBegin`→`txExec`(영향행수)→`txCommit`/`txRollback`; 세션을 txId 로 보관, open 시 stale 자동 롤백 스윕). `services/query/splitStatements.ts`(순수 — 문자열/주석/괄호 인지 분리, **rky 주석 결함 수정**, +test). `ipc/query.ts`(봉투) + `index.ts` 배선.
@@ -146,7 +146,7 @@ React 19.2 · Electron 43 · Vite 7 · electron-vite 5 · @vitejs/plugin-react 5
 - **2b. Data** ✅ 완료: pending 버퍼 + SQL 프리뷰 + PK 게이트 + **파라미터 바인드** + tx 게이트 재사용. (타입별 셀 에디터·타임존·필터/정렬·가상화는 향후)
 - **2c. Query** ✅ 완료: queryService(run+트랜잭션 게이트+타임아웃) + splitStatements/classify + QueryView. (EXPLAIN·히스토리·저장쿼리·CodeMirror·가상화·dedup 은 향후)
 - **2d. Object**: introspection 기반 객체 브라우저.
-- **2e. Diagram(real)**: @xyflow/react + dagre 실 ERD(여유 시).
+- **2e. Diagram(real)** ✅ 완료: `@xyflow/react` + dagre 로 `TableDef[]` → 실 ERD(읽기 전용). 노드 위치·뷰포트 연결별 영속(`diagram_layouts`), 검색·간략/관계만 필터, PNG/SVG 내보내기. 순수 로직(graph/layout/filter/export) 테스트 동반.
 
 ### Phase 3 — Migration (페이오프) ✅ 완료
 - **3a** post-apply 스냅샷 기준선(env_snapshots + checksum) · **3b** Drift[diff②] (`diffSnapshots` 재사용) · **3c** Plan[diff③] (`ddlDiff.generateMigration` — ALTER 생성) · **3d** Run (tx 게이트) · **3e** Logs.
@@ -161,10 +161,10 @@ React 19.2 · Electron 43 · Vite 7 · electron-vite 5 · @vitejs/plugin-react 5
 ## 6. 즉시 다음 단계
 Phase 0/1/2a/2b/2c/3 완료 — 운영부 전 모듈(Environments/Console/Migration)이 실 DB 위에서 동작.
 **남은 것은 선택적 향상들** (핵심 흐름은 모두 구현·검증됨):
-- **2e Diagram(real)**: `@xyflow/react` + dagre 로 introspection `TableDef[]` 를 실 ERD 로. (신규 의존성 필요, 순수 시각화)
+- **Diagram** ✅ 완료(Console 실 ERD + Studio 가상 편집 ERD): `@xyflow/react` + dagre. Console(2e)은 introspection `TableDef[]` 읽기 전용, Studio 는 설계 테이블 편집(테이블/컬럼/FK 생성·수정·삭제, 드래그로 관계 연결). 위치는 스코프별(`connection_id` / `design:<id>`) 영속. 검색·필터·PNG/SVG 내보내기 공용. 순수 로직 테스트 동반.
 - **Migration 심화**: 드리프트 Backward 자동 버전화(현재 기준선 갱신만), conflict 머지 UX(겹치는 드리프트), Validation(반영 후 일치 검증).
 - **Console 심화**: 2c EXPLAIN 패널(`explainSql` 유틸 이식)·쿼리 히스토리·저장 쿼리·CodeMirror·결과 가상화 / 2b 타입별 셀 에디터·타임존·필터·정렬.
-- **설계부 잔여**: Studio Seed/Mocking/Documenting/Validation/Diagram, Overview 대시보드, Reference — 아직 placeholder.
+- **설계부 잔여**: Studio Seed/Mocking/Documenting/Validation, Overview 대시보드, Reference — 아직 placeholder. (Diagram 은 완료)
 - **정리**: 2a CHECK 제약·인덱스 방향(pg/sqlite), pg/sqlite 쿼리·편집·반영 경로 e2e(현재 mysql 만).
 
 재개 시: `npm run db:up` → 위 중 택1 → 순수 로직 `*.test.ts` 동반 → typecheck·test·build·e2e.

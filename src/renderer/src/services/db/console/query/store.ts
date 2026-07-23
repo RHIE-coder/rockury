@@ -34,6 +34,10 @@ export interface HistoryRow {
   affectedRows: number | null
   execMs: number | null
   error: string
+  collectionId: string | null
+  collectionName: string | null
+  runId: string | null
+  seq: number | null
   createdAt: string
 }
 

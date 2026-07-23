@@ -24,6 +24,8 @@ export function ViewTabs() {
             <Tabs.Trigger
               key={v.id}
               value={v.id}
+              // surface-verify 자동 순회 훅(전 뷰 캡처) — 지우면 UI 게이트가 화면을 잃는다.
+              data-nav-view={v.id}
               className={cx(
                 'flex shrink-0 items-center gap-1.5 border-b-2 border-transparent py-2.5 text-[13px] font-medium transition-colors',
                 'text-muted hover:text-fg',

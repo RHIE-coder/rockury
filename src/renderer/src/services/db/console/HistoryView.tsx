@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, History as HistoryIcon, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { Fragment, useEffect, useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight, History as HistoryIcon, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useNav } from '@renderer/nav/useNav'
 import { useActiveConnection } from '../connections/store'
 import { useQueryStore, type HistoryRow } from './query/store'
+import { groupHistory } from './historyGroup'
 
 const PAGE_SIZES = [25, 50, 100] as const
 type SourceFilter = 'all' | 'query' | 'data' | 'collection'
@@ -35,6 +36,8 @@ export function HistoryView() {
   const [q, setQ] = useState('')
   const [pageSize, setPageSize] = useState<number>(25)
   const [page, setPage] = useState(0)
+  const [openRuns, setOpenRuns] = useState<Set<string>>(new Set())
+  const toggleRun = (runId: string): void => setOpenRuns((s) => { const n = new Set(s); if (n.has(runId)) n.delete(runId); else n.add(runId); return n })
 
   const load = async (): Promise<void> => {
     if (!conn) return
@@ -61,8 +64,10 @@ export function HistoryView() {
 
   const query = q.trim().toLowerCase()
   const filtered = rows.filter((r) => (src === 'all' || r.source === src) && (!query || r.sql.toLowerCase().includes(query)))
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const pageRows = filtered.slice(page * pageSize, page * pageSize + pageSize)
+  // 컬렉션 한 번 실행(runId)은 아코디언 그룹으로, 나머지는 단일 행으로.
+  const entries = groupHistory(filtered)
+  const pageCount = Math.max(1, Math.ceil(entries.length / pageSize))
+  const pageEntries = entries.slice(page * pageSize, page * pageSize + pageSize)
 
   const openInQuery = (sql: string): void => {
     useQueryStore.getState().setSql(sql)
@@ -111,30 +116,79 @@ export function HistoryView() {
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((r) => (
-              <tr key={r.id} className="cursor-pointer hover:bg-panel/60" onClick={() => openInQuery(r.sql)} title="클릭: SQL 을 Query 에디터로">
-                <td className="whitespace-nowrap border-b border-line/50 px-4 py-1.5 text-muted">{fmtTime(r.createdAt)}</td>
-                <td className="border-b border-line/50 px-3 py-1.5">
-                  <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold uppercase', SOURCE_BADGE[r.source] ?? 'bg-panel-strong text-muted')}>{r.source}</span>
-                </td>
-                <td className="max-w-[520px] truncate border-b border-line/50 px-3 py-1.5 font-mono" title={r.sql}>{r.sql}</td>
-                <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">{r.affectedRows != null ? r.affectedRows : r.rowCount}</td>
-                <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">{r.execMs != null ? `${r.execMs}ms` : '—'}</td>
-                <td className="border-b border-line/50 px-3 py-1.5">
-                  <span className="flex items-center gap-1.5">
-                    <span className={cn('size-1.5 rounded-full', r.status === 'success' ? 'bg-success' : 'bg-destructive')} />
-                    <span className={cn('font-mono text-[10px] uppercase', r.status === 'success' ? 'text-muted' : 'text-destructive')}>{r.kind || r.status}</span>
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {pageEntries.map((e) => {
+              if (e.kind === 'single') {
+                const r = e.row
+                return (
+                  <tr key={r.id} className="cursor-pointer hover:bg-panel/60" onClick={() => openInQuery(r.sql)} title="클릭: SQL 을 Query 에디터로">
+                    <td className="whitespace-nowrap border-b border-line/50 px-4 py-1.5 text-muted">{fmtTime(r.createdAt)}</td>
+                    <td className="border-b border-line/50 px-3 py-1.5">
+                      <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold uppercase', SOURCE_BADGE[r.source] ?? 'bg-panel-strong text-muted')}>{r.source}</span>
+                    </td>
+                    <td className="max-w-[520px] truncate border-b border-line/50 px-3 py-1.5 font-mono" title={r.sql}>{r.sql}</td>
+                    <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">{r.affectedRows != null ? r.affectedRows : r.rowCount}</td>
+                    <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">{r.execMs != null ? `${r.execMs}ms` : '—'}</td>
+                    <td className="border-b border-line/50 px-3 py-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <span className={cn('size-1.5 rounded-full', r.status === 'success' ? 'bg-success' : 'bg-destructive')} />
+                        <span className={cn('font-mono text-[10px] uppercase', r.status === 'success' ? 'text-muted' : 'text-destructive')}>{r.kind || r.status}</span>
+                      </span>
+                    </td>
+                  </tr>
+                )
+              }
+              // 컬렉션 실행 그룹(아코디언) — 헤더(컬렉션 이름·문 수·합계) + 펼치면 각 문(#seq).
+              const open = openRuns.has(e.runId)
+              return (
+                <Fragment key={e.runId}>
+                  <tr className="cursor-pointer bg-panel/40 hover:bg-panel/70" onClick={() => toggleRun(e.runId)} title="클릭: 펼치기/접기">
+                    <td className="whitespace-nowrap border-b border-line/50 px-4 py-1.5 text-muted">
+                      <span className="flex items-center gap-1">
+                        {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                        {fmtTime(e.createdAt)}
+                      </span>
+                    </td>
+                    <td className="border-b border-line/50 px-3 py-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold uppercase', SOURCE_BADGE[e.source] ?? 'bg-panel-strong text-muted')}>{e.source}</span>
+                        <span className="truncate font-semibold text-fg">{e.collectionName ?? '(컬렉션)'}</span>
+                      </span>
+                    </td>
+                    <td className="border-b border-line/50 px-3 py-1.5 text-muted">{e.rows.length}개 쿼리</td>
+                    <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">{e.totalRows}</td>
+                    <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">—</td>
+                    <td className="border-b border-line/50 px-3 py-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <span className={cn('size-1.5 rounded-full', e.ok ? 'bg-success' : 'bg-destructive')} />
+                        <span className={cn('font-mono text-[10px] uppercase', e.ok ? 'text-muted' : 'text-destructive')}>{e.ok ? 'OK' : 'ERROR'}</span>
+                      </span>
+                    </td>
+                  </tr>
+                  {open && e.rows.map((r) => (
+                    <tr key={r.id} className="cursor-pointer hover:bg-panel/60" onClick={() => openInQuery(r.sql)} title="클릭: SQL 을 Query 에디터로">
+                      <td className="whitespace-nowrap border-b border-line/50 py-1.5 pl-9 pr-4 text-right font-mono text-[11px] font-semibold text-accent">#{r.seq ?? '-'}</td>
+                      <td className="border-b border-line/50 px-3 py-1.5" />
+                      <td className="max-w-[520px] truncate border-b border-line/50 px-3 py-1.5 font-mono" title={r.sql}>{r.sql}</td>
+                      <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">{r.affectedRows != null ? r.affectedRows : r.rowCount}</td>
+                      <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">{r.execMs != null ? `${r.execMs}ms` : '—'}</td>
+                      <td className="border-b border-line/50 px-3 py-1.5">
+                        <span className="flex items-center gap-1.5">
+                          <span className={cn('size-1.5 rounded-full', r.status === 'success' ? 'bg-success' : 'bg-destructive')} />
+                          <span className={cn('font-mono text-[10px] uppercase', r.status === 'success' ? 'text-muted' : 'text-destructive')}>{r.kind || r.status}</span>
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
-        {filtered.length === 0 && <div className="py-10 text-center text-[13px] text-muted">이력이 없습니다</div>}
+        {entries.length === 0 && <div className="py-10 text-center text-[13px] text-muted">이력이 없습니다</div>}
       </div>
 
       <div className="flex shrink-0 items-center justify-between border-t border-line px-5 py-2 text-[12px] text-muted">
-        <span>{filtered.length} items</span>
+        <span>{entries.length} items</span>
         <div className="flex items-center gap-2">
           <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0) }} className="rounded border border-line bg-canvas px-1.5 py-0.5 text-[11px] outline-none">
             {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}/p</option>)}

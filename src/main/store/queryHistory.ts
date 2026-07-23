@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from './db'
-import { normalizeSqlKey } from '../services/query/historyKey'
 
 /**
- * 쿼리 히스토리 저장소(§ops 향상). rky 의 결함(연결/종류 미기록, dedup 없음)을 고쳐:
+ * 쿼리 히스토리 저장소(§ops 향상). rky 의 결함(연결/종류 미기록)을 고쳐:
  *  - connectionId·kind·행수·상태를 모두 기록,
- *  - **직전 동일 쿼리는 새 행 대신 시각/통계만 갱신**(연속 중복 접기),
+ *  - **매 실행을 별도 행으로 적재**(같은 SQL 을 여러 번 돌려도 실행 횟수만큼 쌓인다 —
+ *    사용자 기대: "3번 실행 = 3행". 이전의 연속-중복-접기는 실행이 안 쌓이는 것처럼 보여 제거),
  *  - 연결별 최근 200건만 유지.
  */
 /** 실행 소스 — Query 뷰 / Data 편집 / Collection 실행. */
@@ -22,6 +22,11 @@ export interface QueryHistoryRecord {
   affectedRows: number | null
   execMs: number | null
   error: string
+  /** 컬렉션 실행일 때: 어느 컬렉션 / 실행배치(run_id) / 그 안 몇 번째(seq). 아니면 null. */
+  collectionId: string | null
+  collectionName: string | null
+  runId: string | null
+  seq: number | null
   createdAt: string
 }
 
@@ -35,6 +40,10 @@ export interface AppendHistoryInput {
   affectedRows?: number | null
   execMs?: number | null
   error?: string
+  collectionId?: string | null
+  collectionName?: string | null
+  runId?: string | null
+  seq?: number | null
 }
 
 interface Row {
@@ -48,6 +57,10 @@ interface Row {
   affected_rows: number | null
   exec_ms: number | null
   error: string
+  collection_id: string | null
+  collection_name: string | null
+  run_id: string | null
+  seq: number | null
   created_at: string
 }
 
@@ -64,6 +77,10 @@ const toRecord = (r: Row): QueryHistoryRecord => ({
   affectedRows: r.affected_rows,
   execMs: r.exec_ms,
   error: r.error,
+  collectionId: r.collection_id ?? null,
+  collectionName: r.collection_name ?? null,
+  runId: r.run_id ?? null,
+  seq: r.seq ?? null,
   createdAt: r.created_at
 })
 
@@ -71,31 +88,12 @@ export function appendHistory(input: AppendHistoryInput): QueryHistoryRecord {
   const d = getDb()
   const now = new Date().toISOString()
   const source: HistorySource = input.source ?? 'query'
-  const latest = d
-    .prepare('SELECT * FROM query_history WHERE connection_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1')
-    .get(input.connectionId) as Row | undefined
 
-  // 직전 항목과 동일 소스·쿼리면 갱신(중복 접기).
-  if (latest && latest.source === source && normalizeSqlKey(latest.sql_text) === normalizeSqlKey(input.sql)) {
-    d.prepare(
-      'UPDATE query_history SET kind=?, status=?, row_count=?, affected_rows=?, exec_ms=?, error=?, created_at=? WHERE id=?'
-    ).run(
-      input.kind,
-      input.status,
-      input.rowCount ?? 0,
-      input.affectedRows ?? null,
-      input.execMs ?? null,
-      input.error ?? '',
-      now,
-      latest.id
-    )
-    return toRecord({ ...latest, kind: input.kind, status: input.status, row_count: input.rowCount ?? 0, affected_rows: input.affectedRows ?? null, exec_ms: input.execMs ?? null, error: input.error ?? '', created_at: now })
-  }
-
+  // 매 실행을 별도 행으로 적재한다(중복 접기 없음) — 실행 횟수가 그대로 보이도록.
   const id = `qh_${randomUUID()}`
   d.prepare(
-    `INSERT INTO query_history (id, connection_id, source, sql_text, kind, status, row_count, affected_rows, exec_ms, error, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO query_history (id, connection_id, source, sql_text, kind, status, row_count, affected_rows, exec_ms, error, collection_id, collection_name, run_id, seq, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.connectionId,
@@ -107,6 +105,10 @@ export function appendHistory(input: AppendHistoryInput): QueryHistoryRecord {
     input.affectedRows ?? null,
     input.execMs ?? null,
     input.error ?? '',
+    input.collectionId ?? null,
+    input.collectionName ?? null,
+    input.runId ?? null,
+    input.seq ?? null,
     now
   )
   // 오래된 항목 정리(연결별 최근 KEEP 건 유지).

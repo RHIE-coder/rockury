@@ -18,3 +18,11 @@ npm run build && npm run e2e
 ## 확장
 새 플로우는 `smoke.mjs` 패턴(launch → click(CSS) → assert → screenshot)을 복사해 추가.
 Electron 구동/드라이브를 프로젝트 스킬로 박제하려면 `/run-skill-generator` 사용 권장.
+
+## surface-verify (UI 품질 게이트) — `npm run surface-verify`
+`surface/verify.mjs` 가 셸 훅(`data-nav-service/module/view`)으로 **전 서비스×모듈×뷰를 자동 순회**하며
+화면마다 대비(WCAG)/잘림/넘침/겹침/렌더 에러를 검사한다(판정 로직은 `surface/checks.mjs`, vitest 커버).
+- **새 화면은 nav 등록만 하면 자동 커버** — 수동 등록 없음. 셸의 data-nav 훅을 지우면 안 된다
+  (leaf < MIN_LEAVES 면 검증불가(2)로 크게 실패하는 안전핀 내장).
+- 기존에 수용한 findings 는 `surface/baseline.json`(커밋되는 정본) — **새 회귀만 차단**한다.
+  의도한 시각 변경으로 새 finding 이 생기면 확인 후 `node e2e/surface/verify.mjs --update-baseline`.

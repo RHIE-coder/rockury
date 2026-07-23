@@ -8,6 +8,7 @@ import { registerIntrospectionIpc } from './ipc/introspection'
 import { registerQueryIpc } from './ipc/query'
 import { registerMigrationIpc } from './ipc/migration'
 import { registerCollectionIpc } from './ipc/collections'
+import { registerDiagramIpc } from './ipc/diagram'
 import { setDbPath } from './store/db'
 
 function createWindow(): void {
@@ -58,6 +59,7 @@ app.whenReady().then(() => {
   registerQueryIpc()
   registerMigrationIpc()
   registerCollectionIpc()
+  registerDiagramIpc()
   createWindow()
 
   app.on('activate', () => {

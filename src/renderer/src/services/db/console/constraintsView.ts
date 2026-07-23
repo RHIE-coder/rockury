@@ -60,3 +60,29 @@ export function countByKind(list: FlatConstraint[]): Record<KindFilter, number> 
 export function filterByKind(list: FlatConstraint[], f: KindFilter): FlatConstraint[] {
   return f === 'ALL' ? list : list.filter((c) => c.kind === f)
 }
+
+/** 테이블별로 묶은 제약 그룹. */
+export interface ConstraintGroup {
+  table: string
+  constraints: FlatConstraint[]
+}
+
+/**
+ * 제약을 **테이블별 그룹**으로 묶는다 — "테이블(Header) > 그 테이블 제약들" 형태로 보이기 위함.
+ * 입력은 이미 테이블→종류→이름 순 정렬(flattenConstraints)이라 그룹·그룹 내 순서가 그대로 유지된다.
+ * 순수 함수 → 테스트 의무.
+ */
+export function groupConstraintsByTable(list: FlatConstraint[]): ConstraintGroup[] {
+  const groups: ConstraintGroup[] = []
+  const byTable = new Map<string, ConstraintGroup>()
+  for (const c of list) {
+    let g = byTable.get(c.table)
+    if (!g) {
+      g = { table: c.table, constraints: [] }
+      byTable.set(c.table, g)
+      groups.push(g)
+    }
+    g.constraints.push(c)
+  }
+  return groups
+}

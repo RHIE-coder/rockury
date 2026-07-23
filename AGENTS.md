@@ -6,7 +6,7 @@
 
 Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 · **화이트 테마 고정**.
 현재 집중: **DB 서비스**. 설계부(Studio/Versions)·운영부(Environments/Console/Migration) 모두
-로컬 SQLite(`node:sqlite`) + 실 드라이버(mysql2/pg/node:sqlite) 위에 구현됨. 남은 것은 선택적 향상(2e Diagram 등).
+로컬 SQLite(`node:sqlite`) + 실 드라이버(mysql2/pg/node:sqlite) 위에 구현됨. Diagram(Console 실 ERD·Studio 가상 편집 ERD)까지 완료. 남은 것은 선택적 향상(Studio Seed/Mocking/Documenting/Validation·Overview·Reference 등).
 설계 근거·결정 → `docs/before-steward-background/db-service-ia.md` · 로드맵/진행·재개점 → `docs/before-steward-background/ops-implementation-plan.md`.
 살아있는 기획/테스트 정본(steward) → `docs/spec/` · `docs/qa/`.
 
@@ -39,6 +39,9 @@ Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 
    **`--no-verify` 우회는 사용자 승인 없이 쓰지 않는다.**
 3. **e2e 는 버리는 1회용이 아니라 누적 회귀 자산이다.** 새 실 앱 흐름은 `smoke.mjs` 에 체크를 더해 쌓고
    지우지 않는다. (steward `ui-preview` 능력도 검증 드라이브를 `smoke.mjs` 로 승격하도록 규정.)
+   **UI 품질 게이트(`e2e/surface/verify.mjs`)는 셸 훅(`data-nav-service/module/view`)으로 전 서비스×모듈×뷰를
+   자동 순회**하므로 새 화면은 nav 에 등록만 하면 커버리지에 자동으로 들어온다 — 이 data-nav 훅을 지우면
+   순회가 깨지고 안전핀(MIN_LEAVES)이 검증불가(2)로 실패한다. 훅을 지우지 말 것.
 
 ## 검증 인프라
 - 단위: `npm test`(vitest). watch: `npm run test:watch`.

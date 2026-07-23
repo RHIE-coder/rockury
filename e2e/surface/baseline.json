@@ -1,7 +1,7 @@
 [
   {
     "check": "contrast",
-    "formFactor": "default",
+    "formFactor": "boot",
     "role": "text",
     "text": "운영",
     "bounds": {
@@ -15,13 +15,1310 @@
   },
   {
     "check": "contrast",
-    "formFactor": "default",
+    "formFactor": "boot",
     "role": "text",
     "text": "depth 2 · DB › Overview",
     "bounds": {
       "x": 617.09375,
       "y": 467.4375,
       "w": 153.8046875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/canvas",
+    "role": "text",
+    "text": "depth 2 · UI/UX › Canvas",
+    "bounds": {
+      "x": 614.71875,
+      "y": 445.4375,
+      "w": 158.5546875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/components",
+    "role": "text",
+    "text": "depth 2 · UI/UX › Components",
+    "bounds": {
+      "x": 599.6484375,
+      "y": 445.4375,
+      "w": 188.703125,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "api/endpoints",
+    "role": "text",
+    "text": "depth 2 · API › Endpoints",
+    "bounds": {
+      "x": 613.71875,
+      "y": 445.4375,
+      "w": 160.5546875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "api/testing",
+    "role": "text",
+    "text": "depth 2 · API › Testing",
+    "bounds": {
+      "x": 621.203125,
+      "y": 445.4375,
+      "w": 145.5859375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/overview",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/overview",
+    "role": "text",
+    "text": "depth 2 · DB › Overview",
+    "bounds": {
+      "x": 617.09375,
+      "y": 467.4375,
+      "w": 153.8046875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "SELF",
+    "bounds": {
+      "x": 837.7410888671875,
+      "y": 636.892822265625,
+      "w": 137.004638671875,
+      "h": 16.1007080078125
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "parent_id → id",
+    "bounds": {
+      "x": 837.7410888671875,
+      "y": 652.9935302734375,
+      "w": 137.004638671875,
+      "h": 17.88958740234375
+    },
+    "detail": "대비 4.16 < 4.5 (fg 100,112,124 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "D:SET NULL",
+    "bounds": {
+      "x": 837.7410888671875,
+      "y": 670.8831176757812,
+      "w": 64.11376953125,
+      "h": 16.10064697265625
+    },
+    "detail": "대비 4.16 < 4.5 (fg 176,82,76 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "U:CASCADE",
+    "bounds": {
+      "x": 911.39599609375,
+      "y": 670.8831176757812,
+      "w": 63.3497314453125,
+      "h": 16.10064697265625
+    },
+    "detail": "대비 4.13 < 4.5 (fg 63,114,168 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "PK",
+    "bounds": {
+      "x": 363.6385192871094,
+      "y": 305.63690185546875,
+      "w": 25.324981689453125,
+      "h": 16.69696044921875
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "UK",
+    "bounds": {
+      "x": 363.6385192871094,
+      "y": 331.2786865234375,
+      "w": 26.256744384765625,
+      "h": 16.69696044921875
+    },
+    "detail": "대비 4.37 < 4.5 (fg 63,114,168 / bg 233,240,248)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "IDX",
+    "bounds": {
+      "x": 390.53814697265625,
+      "y": 356.9204406738281,
+      "w": 29.909210205078125,
+      "h": 16.696990966796875
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "IDX",
+    "bounds": {
+      "x": 363.6385192871094,
+      "y": 510.7710876464844,
+      "w": 29.9091796875,
+      "h": 16.696990966796875
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "PK",
+    "bounds": {
+      "x": 783.447998046875,
+      "y": 384.3511962890625,
+      "w": 25.32501220703125,
+      "h": 16.69696044921875
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "UK",
+    "bounds": {
+      "x": 783.447998046875,
+      "y": 409.99298095703125,
+      "w": 26.25677490234375,
+      "h": 16.69696044921875
+    },
+    "detail": "대비 4.37 < 4.5 (fg 63,114,168 / bg 233,240,248)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "IDX",
+    "bounds": {
+      "x": 783.447998046875,
+      "y": 461.2764892578125,
+      "w": 29.9091796875,
+      "h": 16.696990966796875
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "PK",
+    "bounds": {
+      "x": 363.6385192871094,
+      "y": 689.667236328125,
+      "w": 25.324981689453125,
+      "h": 16.6968994140625
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "UK",
+    "bounds": {
+      "x": 363.6385192871094,
+      "y": 715.3089599609375,
+      "w": 26.256744384765625,
+      "h": 16.697021484375
+    },
+    "detail": "대비 4.37 < 4.5 (fg 63,114,168 / bg 233,240,248)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "IDX",
+    "bounds": {
+      "x": 390.53814697265625,
+      "y": 792.2342529296875,
+      "w": 29.909210205078125,
+      "h": 16.697021484375
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "PK",
+    "bounds": {
+      "x": 783.447998046875,
+      "y": 715.9052734375,
+      "w": 25.32501220703125,
+      "h": 16.697021484375
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "text",
+    "text": "UK",
+    "bounds": {
+      "x": 783.447998046875,
+      "y": 741.5470581054688,
+      "w": 26.25677490234375,
+      "h": 16.69696044921875
+    },
+    "detail": "대비 4.37 < 4.5 (fg 63,114,168 / bg 233,240,248)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/diagram",
+    "role": "link",
+    "text": "React Flow",
+    "bounds": {
+      "x": 1264.359375,
+      "y": 824.5,
+      "w": 52.640625,
+      "h": 11.5
+    },
+    "detail": "대비 2.85 < 4.5 (fg 153,153,153 / bg 255,255,255)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "v0.3.14 · draft",
+    "bounds": {
+      "x": 1188.65625,
+      "y": 182.25,
+      "w": 115.34375,
+      "h": 20.5
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "PK",
+    "bounds": {
+      "x": 779.5703125,
+      "y": 340,
+      "w": 26.546875,
+      "h": 21
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "UK",
+    "bounds": {
+      "x": 779.5703125,
+      "y": 374,
+      "w": 26.546875,
+      "h": 21
+    },
+    "detail": "대비 4.37 < 4.5 (fg 63,114,168 / bg 233,240,248)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "IDX",
+    "bounds": {
+      "x": 826.1171875,
+      "y": 408,
+      "w": 49.359375,
+      "h": 21
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "·1",
+    "bounds": {
+      "x": 855.9296875,
+      "y": 411,
+      "w": 12.546875,
+      "h": 15
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "truncation",
+    "formFactor": "db/studio/definition",
+    "role": "button",
+    "text": "ENUM('pending','confirmed','shipped','delivered','cancelled')",
+    "bounds": {
+      "x": 585.4609375,
+      "y": 438.5,
+      "w": 186.109375,
+      "h": 28
+    },
+    "detail": "핵심 텍스트가 잘림(essential && truncated)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "CHK",
+    "bounds": {
+      "x": 779.5703125,
+      "y": 476,
+      "w": 32.8125,
+      "h": 21
+    },
+    "detail": "대비 3.27 < 4.5 (fg 63,146,119 / bg 230,242,237)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "v0.3.14",
+    "bounds": {
+      "x": 1061.953125,
+      "y": 579,
+      "w": 50.1484375,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "IDX",
+    "bounds": {
+      "x": 779.5703125,
+      "y": 612,
+      "w": 49.359375,
+      "h": 21
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "·2",
+    "bounds": {
+      "x": 809.3828125,
+      "y": 615,
+      "w": 12.546875,
+      "h": 15
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "truncation",
+    "formFactor": "db/studio/definition",
+    "role": "button",
+    "text": "CURRENT_TIMESTAMP",
+    "bounds": {
+      "x": 927.5703125,
+      "y": 608.5,
+      "w": 126.3828125,
+      "h": 28
+    },
+    "detail": "핵심 텍스트가 잘림(essential && truncated)",
+    "severity": "block"
+  },
+  {
+    "check": "truncation",
+    "formFactor": "db/studio/definition",
+    "role": "button",
+    "text": "CURRENT_TIMESTAMP",
+    "bounds": {
+      "x": 927.5703125,
+      "y": 642.5,
+      "w": 126.3828125,
+      "h": 28
+    },
+    "detail": "핵심 텍스트가 잘림(essential && truncated)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "PK",
+    "bounds": {
+      "x": 375.21875,
+      "y": 796.5,
+      "w": 30.546875,
+      "h": 21
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "UK",
+    "bounds": {
+      "x": 375.21875,
+      "y": 833.5,
+      "w": 30.546875,
+      "h": 21
+    },
+    "detail": "대비 4.37 < 4.5 (fg 63,114,168 / bg 233,240,248)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "DEL RESTRICT",
+    "bounds": {
+      "x": 810.6953125,
+      "y": 871.5,
+      "w": 84.25,
+      "h": 19
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "UPD CASCADE",
+    "bounds": {
+      "x": 900.9453125,
+      "y": 871.5,
+      "w": 78.234375,
+      "h": 19
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "CHECK",
+    "bounds": {
+      "x": 375.21875,
+      "y": 907.5,
+      "w": 49.359375,
+      "h": 21
+    },
+    "detail": "대비 3.27 < 4.5 (fg 63,146,119 / bg 230,242,237)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "IDX",
+    "bounds": {
+      "x": 375.21875,
+      "y": 944.5,
+      "w": 36.8125,
+      "h": 21
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "1",
+    "bounds": {
+      "x": 663.21875,
+      "y": 946.75,
+      "w": 6.625,
+      "h": 16.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/definition",
+    "role": "text",
+    "text": "2",
+    "bounds": {
+      "x": 738.203125,
+      "y": 946.75,
+      "w": 6.625,
+      "h": 16.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "overlap",
+    "formFactor": "db/studio/definition",
+    "role": "button",
+    "bounds": {
+      "x": 365.21875,
+      "y": 789,
+      "w": 933.78125,
+      "h": 36
+    },
+    "detail": "상호작용 요소 겹침(button ↔ button)",
+    "severity": "block"
+  },
+  {
+    "check": "overlap",
+    "formFactor": "db/studio/definition",
+    "role": "button",
+    "bounds": {
+      "x": 365.21875,
+      "y": 826,
+      "w": 933.78125,
+      "h": 36
+    },
+    "detail": "상호작용 요소 겹침(button ↔ button)",
+    "severity": "block"
+  },
+  {
+    "check": "overlap",
+    "formFactor": "db/studio/definition",
+    "role": "button",
+    "bounds": {
+      "x": 365.21875,
+      "y": 863,
+      "w": 933.78125,
+      "h": 36
+    },
+    "detail": "상호작용 요소 겹침(button ↔ button)",
+    "severity": "block"
+  },
+  {
+    "check": "overlap",
+    "formFactor": "db/studio/definition",
+    "role": "button",
+    "bounds": {
+      "x": 365.21875,
+      "y": 900,
+      "w": 933.78125,
+      "h": 36
+    },
+    "detail": "상호작용 요소 겹침(button ↔ button)",
+    "severity": "block"
+  },
+  {
+    "check": "overlap",
+    "formFactor": "db/studio/definition",
+    "role": "button",
+    "bounds": {
+      "x": 365.21875,
+      "y": 937,
+      "w": 933.78125,
+      "h": 36
+    },
+    "detail": "상호작용 요소 겹침(button ↔ button)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/seed",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/seed",
+    "role": "text",
+    "text": "depth 3 · Studio › Seed",
+    "bounds": {
+      "x": 618.8359375,
+      "y": 488.6875,
+      "w": 150.328125,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/mocking",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/mocking",
+    "role": "text",
+    "text": "depth 3 · Studio › Mocking",
+    "bounds": {
+      "x": 609.203125,
+      "y": 488.6875,
+      "w": 169.5859375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/documenting",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/documenting",
+    "role": "text",
+    "text": "depth 3 · Studio › Documenting",
+    "bounds": {
+      "x": 595.6875,
+      "y": 488.6875,
+      "w": 196.625,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/validation",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/studio/validation",
+    "role": "text",
+    "text": "depth 3 · Studio › Validation",
+    "bounds": {
+      "x": 605.0546875,
+      "y": 488.6875,
+      "w": 177.8828125,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/versions/timeline",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/versions/timeline",
+    "role": "text",
+    "text": "v0.3.14",
+    "bounds": {
+      "x": 291,
+      "y": 264,
+      "w": 66.578125,
+      "h": 22
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/versions/timeline",
+    "role": "text",
+    "text": "v0.3.13",
+    "bounds": {
+      "x": 291,
+      "y": 311,
+      "w": 66.578125,
+      "h": 22
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/versions/diff",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "truncation",
+    "formFactor": "db/versions/diff",
+    "role": "text",
+    "text": "v0.3.14 · STG 핫픽스 드리프트 흡수 (orders.memo)",
+    "bounds": {
+      "x": 637.59375,
+      "y": 245,
+      "w": 190,
+      "h": 18
+    },
+    "detail": "핵심 텍스트가 잘림(essential && truncated)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/versions/diff",
+    "role": "text",
+    "text": "테이블 ~ 1",
+    "bounds": {
+      "x": 274,
+      "y": 297,
+      "w": 65.0078125,
+      "h": 20.5
+    },
+    "detail": "대비 4.37 < 4.5 (fg 63,114,168 / bg 233,240,248)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/versions/diff",
+    "role": "text",
+    "text": "컬럼 + 1",
+    "bounds": {
+      "x": 345.0078125,
+      "y": 297,
+      "w": 54.890625,
+      "h": 20.5
+    },
+    "detail": "대비 3.27 < 4.5 (fg 63,146,119 / bg 230,242,237)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/versions/diff",
+    "role": "text",
+    "text": "변경",
+    "bounds": {
+      "x": 287,
+      "y": 338.75,
+      "w": 46.40625,
+      "h": 19
+    },
+    "detail": "대비 4.37 < 4.5 (fg 63,114,168 / bg 233,240,248)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/versions/diff",
+    "role": "text",
+    "text": "추가",
+    "bounds": {
+      "x": 287,
+      "y": 376,
+      "w": 46.40625,
+      "h": 19
+    },
+    "detail": "대비 3.27 < 4.5 (fg 63,146,119 / bg 230,242,237)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/connections",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/diagram",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/diagram",
+    "role": "text",
+    "text": "depth 3 · Console › Diagram",
+    "bounds": {
+      "x": 605.03125,
+      "y": 478.125,
+      "w": 177.9375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/data",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/data",
+    "role": "text",
+    "text": "depth 3 · Console › Data",
+    "bounds": {
+      "x": 615.3828125,
+      "y": 488.6875,
+      "w": 157.2265625,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/query",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/query",
+    "role": "text",
+    "text": "depth 3 · Console › Query",
+    "bounds": {
+      "x": 611.46875,
+      "y": 478.125,
+      "w": 165.0625,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/collection",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/collection",
+    "role": "text",
+    "text": "depth 3 · Console › Collection",
+    "bounds": {
+      "x": 599.984375,
+      "y": 488.6875,
+      "w": 188.03125,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/history",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/history",
+    "role": "text",
+    "text": "depth 3 · Console › History",
+    "bounds": {
+      "x": 608,
+      "y": 488.6875,
+      "w": 171.9921875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/object",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/console/object",
+    "role": "text",
+    "text": "depth 3 · Console › Object",
+    "bounds": {
+      "x": 609.765625,
+      "y": 478.125,
+      "w": 168.46875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/migration/drift",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/migration/drift",
+    "role": "text",
+    "text": "depth 3 · Migration",
+    "bounds": {
+      "x": 630.421875,
+      "y": 488.6875,
+      "w": 127.1484375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/migration/plan",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/migration/plan",
+    "role": "text",
+    "text": "depth 3 · Migration",
+    "bounds": {
+      "x": 630.421875,
+      "y": 488.6875,
+      "w": 127.1484375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/migration/run",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/migration/run",
+    "role": "text",
+    "text": "depth 3 · Migration",
+    "bounds": {
+      "x": 630.421875,
+      "y": 488.6875,
+      "w": 127.1484375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/migration/logs",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/migration/logs",
+    "role": "text",
+    "text": "depth 3 · Migration",
+    "bounds": {
+      "x": 630.421875,
+      "y": 488.6875,
+      "w": 127.1484375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/reference",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 449.953125,
+      "y": 94.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "db/reference",
+    "role": "text",
+    "text": "depth 2 · DB › Reference",
+    "bounds": {
+      "x": 614.765625,
+      "y": 467.4375,
+      "w": 158.46875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "infra/overview",
+    "role": "text",
+    "text": "depth 2 · Infra › Overview",
+    "bounds": {
+      "x": 612.09375,
+      "y": 445.4375,
+      "w": 163.8125,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "infra/containers",
+    "role": "text",
+    "text": "depth 2 · Infra › Containers",
+    "bounds": {
+      "x": 607.671875,
+      "y": 445.4375,
+      "w": 172.6484375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "infra/cloud",
+    "role": "text",
+    "text": "depth 2 · Infra › Cloud",
+    "bounds": {
+      "x": 621.8125,
+      "y": 445.4375,
+      "w": 144.375,
       "h": 20.5
     },
     "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",

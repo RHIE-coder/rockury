@@ -134,17 +134,22 @@ function migrate(d: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_migration_logs_env ON migration_logs(env_id);
 
     CREATE TABLE IF NOT EXISTS query_history (
-      id            TEXT PRIMARY KEY,
-      connection_id TEXT NOT NULL,
-      source        TEXT NOT NULL DEFAULT 'query',
-      sql_text      TEXT NOT NULL,
-      kind          TEXT NOT NULL DEFAULT '',
-      status        TEXT NOT NULL DEFAULT 'success',
-      row_count     INTEGER NOT NULL DEFAULT 0,
-      affected_rows INTEGER,
-      exec_ms       INTEGER,
-      error         TEXT NOT NULL DEFAULT '',
-      created_at    TEXT NOT NULL
+      id              TEXT PRIMARY KEY,
+      connection_id   TEXT NOT NULL,
+      source          TEXT NOT NULL DEFAULT 'query',
+      sql_text        TEXT NOT NULL,
+      kind            TEXT NOT NULL DEFAULT '',
+      status          TEXT NOT NULL DEFAULT 'success',
+      row_count       INTEGER NOT NULL DEFAULT 0,
+      affected_rows   INTEGER,
+      exec_ms         INTEGER,
+      error           TEXT NOT NULL DEFAULT '',
+      -- 컬렉션 실행 그룹핑: 어느 컬렉션(id/이름) · 실행 배치(run_id) · 그 안 몇 번째(seq).
+      collection_id   TEXT,
+      collection_name TEXT,
+      run_id          TEXT,
+      seq             INTEGER,
+      created_at      TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_query_history_conn ON query_history(connection_id);
 
@@ -206,6 +211,14 @@ function migrate(d: DatabaseSync): void {
       sort_order     INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_collection_items_coll ON collection_items(collection_id);
+
+    -- Console 실 ERD(2e) 레이아웃 — 연결별 노드 위치/뷰포트(JSON). 노드 키는 t:<테이블명>.
+    CREATE TABLE IF NOT EXISTS diagram_layouts (
+      connection_id TEXT PRIMARY KEY,
+      positions     TEXT NOT NULL DEFAULT '{}',
+      viewport      TEXT,
+      updated_at    TEXT NOT NULL
+    );
   `)
 
   // 추가 마이그레이션(구 스키마 호환): collection_items 가 저장쿼리를 "참조"할 수 있도록 컬럼 추가.
@@ -221,6 +234,19 @@ function migrate(d: DatabaseSync): void {
     .get() as unknown as { c: number }
   if (hasSource.c === 0) d.exec(`ALTER TABLE query_history ADD COLUMN source TEXT NOT NULL DEFAULT 'query'`)
 
+  // query_history 컬렉션 그룹핑 컬럼(어느 컬렉션·몇 번째·어느 실행배치). 구 스키마 호환 ALTER.
+  // name 은 하드코딩 리터럴이라 인터폴레이션 안전.
+  const addHistCol = (name: string, decl: string): void => {
+    const has = d
+      .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('query_history') WHERE name='${name}'`)
+      .get() as unknown as { c: number }
+    if (has.c === 0) d.exec(`ALTER TABLE query_history ADD COLUMN ${name} ${decl}`)
+  }
+  addHistCol('collection_id', 'TEXT')
+  addHistCol('collection_name', 'TEXT')
+  addHistCol('run_id', 'TEXT')
+  addHistCol('seq', 'INTEGER')
+
   // saved_queries.description — 저장쿼리 설명(Query 뷰 편집기). 구 스키마 호환 ALTER.
   const hasDesc = d
     .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('saved_queries') WHERE name='description'`)
@@ -232,6 +258,12 @@ function migrate(d: DatabaseSync): void {
     .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('collections') WHERE name='folder_id'`)
     .get() as unknown as { c: number }
   if (hasColFolder.c === 0) d.exec('ALTER TABLE collections ADD COLUMN folder_id TEXT')
+
+  // collections.description — 컬렉션 설명(상세화면 편집, Query 와 동일). 구 스키마 호환 ALTER.
+  const hasColDesc = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('collections') WHERE name='description'`)
+    .get() as unknown as { c: number }
+  if (hasColDesc.c === 0) d.exec(`ALTER TABLE collections ADD COLUMN description TEXT NOT NULL DEFAULT ''`)
 }
 
 /** 첫 실행 시드 — commerce-core (MySQL) 설계 + 예제 테이블. designs 가 비어 있을 때만. */

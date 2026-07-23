@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -15,9 +17,13 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  FileCode2,
   FilePlus2,
+  Folder,
+  FolderOpen,
   FolderPlus,
   Loader2,
+  Pencil,
   Play,
   Route,
   Search,
@@ -43,11 +49,29 @@ import { applyKeywords, extractKeywords } from './query/keywords'
 import { parseExplainTree } from './query/explainTree'
 import { toCsv, toJson } from './data/exportRows'
 import { useQueryStore } from './query/store'
-import { flattenTree, getProjection, removeChildrenOf, type FlatNode } from './collection/tree'
+import { flattenTree, getProjection, moveTargets, removeChildrenOf, type FlatNode } from './collection/tree'
 import { toLibNodes, useCollectionStore } from './collection/store'
+import { TreeContextMenu } from './collection/TreeMenu'
 
 const MAX_ROWS = 500
 const INDENT = 14
+const ROOT_ZONE = 'q-root-zone'
+
+/** 트리 하단 빈 영역 = 최상위(root) 드롭존. 놓일 자리를 고스트 행으로 미리보기. */
+function RootDropZone({ active, preview }: { active: boolean; preview: { name: string; isFolder: boolean } | null }) {
+  const { setNodeRef, isOver } = useDroppable({ id: ROOT_ZONE })
+  return (
+    <div ref={setNodeRef} className="min-h-[80px] w-full">
+      {active && isOver && preview && (
+        <div className="mx-1 mt-0.5 flex items-center gap-1.5 rounded border border-dashed border-accent bg-accent-soft/30 py-1 pl-2 pr-3 text-[12px] text-accent">
+          {preview.isFolder ? <FolderOpen className="size-3.5" /> : <FileCode2 className="size-3.5" />}
+          <span className="font-mono font-semibold">{preview.name}</span>
+          <span className="ml-auto text-[10.5px] opacity-70">최상위로</span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function cell(v: unknown): { text: string; muted?: boolean } {
   if (v === null || v === undefined) return { text: 'NULL', muted: true }
@@ -100,7 +124,12 @@ export function QueryView() {
   const [preview, setPreview] = useState<string | null>(null)
   const [ctx, setCtx] = useState<{ x: number; y: number; id: string; kind: 'folder' | 'query' } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [dragId, setDragId] = useState<string | null>(null)
+  const [dropParentId, setDropParentId] = useState<string | null>(null)
+  const toggleCollapse = (id: string): void => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  // 아이템을 폴더로 넣은 직후 그 폴더가 접혀 있으면 펼친다 — 안 그러면 넣은 게 숨어 "사라진 것처럼" 보인다.
+  const expandFolder = (id: string | null): void => { if (id) setCollapsed((c) => { if (!c.has(id)) return c; const n = new Set(c); n.delete(id); return n }) }
   const [offsetLeft, setOffsetLeft] = useState(0)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
@@ -136,10 +165,11 @@ export function QueryView() {
 
   const flat = flattenTree(toLibNodes(lib.folders, lib.queries))
   const q = treeFilter.trim().toLowerCase()
-  const visible = (dragId ? removeChildrenOf(flat, [dragId]) : flat).filter(
-    (n) => !q || n.name.toLowerCase().includes(q)
-  )
+  // 접힌 폴더의 자손은 숨긴다(검색 중엔 무시하고 매치를 다 보인다). 드래그 중 노드 자손도 제외.
+  const excluded = [dragId, ...(q ? [] : [...collapsed])].filter((x): x is string => !!x)
+  const visible = removeChildrenOf(flat, excluded).filter((n) => !q || n.name.toLowerCase().includes(q))
   const active = lib.queries.find((x) => x.id === activeId) ?? null
+  const dragNode = dragId ? flat.find((n) => n.id === dragId) ?? null : null
 
   const rows = result?.rows ?? []
   const shown = rows.slice(0, MAX_ROWS)
@@ -160,14 +190,26 @@ export function QueryView() {
     void window.rockury.savedQueries.updateQuery(activeId, patch).then(() => lib.load(conn.id))
   }
 
-  const onDragStart = (e: DragStartEvent): void => setDragId(String(e.active.id))
-  const onDragMove = (e: DragMoveEvent): void => setOffsetLeft(e.delta.x)
+  const onDragStart = (e: DragStartEvent): void => { setDragId(String(e.active.id)); setDropParentId(null) }
+  const onDragMove = (e: DragMoveEvent): void => {
+    setOffsetLeft(e.delta.x)
+    const a = String(e.active.id)
+    const over = e.over ? String(e.over.id) : null
+    // 아이템 밖(빈 배경/루트존)이면 최상위(null), 아니면 투영된 부모 폴더.
+    setDropParentId(over && over !== ROOT_ZONE ? getProjection(visible, a, over, Math.round(e.delta.x / INDENT)).parentId : null)
+  }
   const onDragEnd = (e: DragEndEvent): void => {
     const a = String(e.active.id)
     const over = e.over ? String(e.over.id) : null
     setDragId(null)
     setOffsetLeft(0)
-    if (!over) return
+    setDropParentId(null)
+    if (!over || over === ROOT_ZONE) {
+      // 빈 배경/루트존에 드롭 → 최상위(root) 맨 끝으로 이동
+      const activeNode = flat.find((n) => n.id === a)
+      if (activeNode) void lib.applyReorder([...flat.filter((n) => n.id !== a).map((n) => ({ id: n.id, kind: n.kind, parentId: n.parentId })), { id: a, kind: activeNode.kind, parentId: null }])
+      return
+    }
     const proj = getProjection(visible, a, over, Math.round(offsetLeft / INDENT))
     const ids = visible.map((n) => n.id)
     const from = ids.indexOf(a)
@@ -176,10 +218,12 @@ export function QueryView() {
     const reordered = [...visible]
     const [moved] = reordered.splice(from, 1)
     reordered.splice(to, 0, moved)
+    expandFolder(proj.parentId)
     void lib.applyReorder(reordered.map((n) => ({ id: n.id, kind: n.kind, parentId: n.id === a ? proj.parentId : n.parentId })))
   }
 
   const moveTo = (id: string, kind: 'folder' | 'query', parentId: string | null): void => {
+    expandFolder(parentId)
     void lib.applyReorder(flat.map((n) => ({ id: n.id, kind: n.kind, parentId: n.id === id ? parentId : n.parentId })))
     setCtx(null)
     void id
@@ -210,14 +254,28 @@ export function QueryView() {
                   node={n}
                   active={n.kind === 'query' && n.id === activeId}
                   editing={editingId === n.id}
+                  collapsed={collapsed.has(n.id)}
+                  dropTarget={dragId != null && n.id !== dragId && n.kind === 'folder' && n.id === dropParentId}
                   onSelect={() => n.kind === 'query' && selectQuery(n.id, n.sql ?? '')}
+                  onToggleCollapse={() => toggleCollapse(n.id)}
                   onEditStart={() => setEditingId(n.id)}
                   onEditEnd={() => setEditingId(null)}
                   onRename={(name) => renameNode(n.kind, n.id, name)}
                   onContext={(x, y) => setCtx({ x, y, id: n.id, kind: n.kind })}
+                  onDelete={() => void lib.remove(n.kind, n.id)}
                 />
               ))}
             </SortableContext>
+            <RootDropZone active={dragId != null} preview={dragNode ? { name: dragNode.name, isFolder: dragNode.kind === 'folder' } : null} />
+            {/* 드래그 미리보기 — 커서를 따라오는 또렷한 클론(놓일 깊이만큼 들여쓰기) */}
+            <DragOverlay dropAnimation={null}>
+              {dragNode && (
+                <div className="inline-flex items-center gap-1.5 rounded-md border border-accent/60 bg-canvas px-2 py-1 text-[12px] shadow-lg">
+                  {dragNode.kind === 'folder' ? <FolderOpen className="size-3.5 text-amber-500" /> : <FileCode2 className="size-3.5 opacity-60" />}
+                  <span className="font-mono font-semibold text-fg">{dragNode.name}</span>
+                </div>
+              )}
+            </DragOverlay>
           </DndContext>
           {flat.length === 0 && <div className="px-4 py-2 text-[11.5px] text-muted">저장된 쿼리가 없어요. + 로 새 쿼리를 만드세요.</div>}
         </div>
@@ -357,19 +415,15 @@ export function QueryView() {
 
       {/* 우클릭 컨텍스트 메뉴 */}
       {ctx && (
-        <div className="fixed z-50 w-52 rounded-md border border-line bg-canvas py-1 text-[12px] shadow-lg" style={{ left: ctx.x, top: ctx.y }} onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-panel" onClick={() => { setEditingId(ctx.id); setCtx(null) }}>이름 변경</button>
-          {ctx.kind === 'query' && lib.folders.length > 0 && (
-            <>
-              <div className="px-3 pt-1.5 text-[10.5px] uppercase text-muted">Move to</div>
-              <button type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-panel" onClick={() => moveTo(ctx.id, ctx.kind, null)}>(최상위)</button>
-              {lib.folders.map((f) => (
-                <button key={f.id} type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-panel" onClick={() => moveTo(ctx.id, ctx.kind, f.id)}>{f.name}</button>
-              ))}
-            </>
-          )}
-          <button type="button" className="flex w-full items-center gap-2 border-t border-line px-3 py-1.5 text-left text-destructive hover:bg-panel" onClick={() => { void lib.remove(ctx.kind, ctx.id); setCtx(null) }}><Trash2 className="size-3.5" /> 삭제</button>
-        </div>
+        <TreeContextMenu
+          x={ctx.x}
+          y={ctx.y}
+          targets={moveTargets(toLibNodes(lib.folders, lib.queries), ctx.id)}
+          onRename={() => setEditingId(ctx.id)}
+          onMove={(parentId) => moveTo(ctx.id, ctx.kind, parentId)}
+          onDelete={() => void lib.remove(ctx.kind, ctx.id)}
+          onClose={() => setCtx(null)}
+        />
       )}
 
       {preview && <TablePreviewModal connectionId={conn.id} dialect={conn.dbType} table={preview} onClose={() => setPreview(null)} />}
@@ -377,18 +431,20 @@ export function QueryView() {
   )
 }
 
-/** 트리 한 행 — 폴더/쿼리. 클릭 선택, 더블클릭/컨텍스트 이름변경, 우클릭 메뉴, DnD. */
-function QueryTreeRow({ node, active, editing, onSelect, onEditStart, onEditEnd, onRename, onContext }: { node: FlatNode; active: boolean; editing: boolean; onSelect: () => void; onEditStart: () => void; onEditEnd: () => void; onRename: (name: string) => void; onContext: (x: number, y: number) => void }) {
+/** 트리 한 행 — 폴더(펼침/닫힘 아이콘)/쿼리. 클릭 선택·폴더접기, 더블클릭 이름변경, 우클릭 메뉴, DnD. */
+function QueryTreeRow({ node, active, editing, collapsed, dropTarget, onSelect, onToggleCollapse, onEditStart, onEditEnd, onRename, onContext, onDelete }: { node: FlatNode; active: boolean; editing: boolean; collapsed: boolean; dropTarget: boolean; onSelect: () => void; onToggleCollapse: () => void; onEditStart: () => void; onEditEnd: () => void; onRename: (name: string) => void; onContext: (x: number, y: number) => void; onDelete: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: node.id })
+  const isFolder = node.kind === 'folder'
+  // 드래그 중인 원본 행은 숨기고(DragOverlay 클론이 미리보기), 대상 폴더 행은 강조한다.
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition, paddingLeft: node.depth * INDENT + 8 }}
       onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY) }}
-      className={cn('flex items-center gap-1.5 py-1 pr-2 text-[12px]', isDragging && 'opacity-50', active && 'bg-accent-soft/60')}
+      className={cn('group/row flex items-center gap-1.5 py-1 pr-2 text-[12px]', isDragging && 'opacity-30', active && 'bg-accent-soft/60', dropTarget && 'rounded bg-accent/20 ring-1 ring-accent')}
     >
-      <span {...attributes} {...listeners} className="cursor-grab text-muted">
-        {node.kind === 'folder' ? <ChevronDown className="size-3.5" /> : <span className="inline-block w-3.5" />}
+      <span {...attributes} {...listeners} onClick={isFolder ? onToggleCollapse : undefined} className="cursor-grab text-muted" title={isFolder ? '클릭: 펼치기/접기 · 드래그: 이동' : '드래그로 이동'}>
+        {isFolder ? (collapsed ? <Folder className="size-3.5 text-amber-500" /> : <FolderOpen className="size-3.5 text-amber-500" />) : <FileCode2 className="size-3.5 opacity-60" />}
       </span>
       {editing ? (
         <input
@@ -401,13 +457,19 @@ function QueryTreeRow({ node, active, editing, onSelect, onEditStart, onEditEnd,
       ) : (
         <button
           type="button"
-          onClick={onSelect}
+          onClick={isFolder ? onToggleCollapse : onSelect}
           onDoubleClick={onEditStart}
-          className={cn('min-w-0 flex-1 truncate text-left font-mono', node.kind === 'folder' ? 'font-semibold text-fg' : active ? 'font-semibold text-accent' : 'text-fg')}
+          className={cn('min-w-0 flex-1 truncate text-left font-mono', isFolder ? 'font-semibold text-fg' : active ? 'font-semibold text-accent' : 'text-fg')}
           title={node.kind === 'query' ? node.sql : node.name}
         >
           {node.name}
         </button>
+      )}
+      {!editing && (
+        <>
+          <button type="button" onClick={onEditStart} className="text-muted opacity-0 hover:text-accent group-hover/row:opacity-100" title="이름 변경"><Pencil className="size-3.5" /></button>
+          <button type="button" onClick={onDelete} className="text-muted opacity-0 hover:text-destructive group-hover/row:opacity-100" title="삭제"><Trash2 className="size-3.5" /></button>
+        </>
       )}
     </div>
   )

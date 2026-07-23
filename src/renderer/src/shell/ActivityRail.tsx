@@ -20,6 +20,8 @@ export function ActivityRail() {
           <button
             key={service.id}
             type="button"
+            // surface-verify 가 전 서비스를 자동 순회하는 안정 훅 — 지우면 UI 게이트가 화면을 잃는다.
+            data-nav-service={service.id}
             aria-current={active ? 'page' : undefined}
             onClick={() => selectService(service.id)}
             className={cx(

@@ -50,6 +50,8 @@ export function ModuleTabs() {
               )}
               <Tabs.Trigger
                 value={m.id}
+                // surface-verify 자동 순회 훅(전 모듈 캡처) — 지우면 UI 게이트가 화면을 잃는다.
+                data-nav-module={m.id}
                 className={cx(
                   'flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
                   'text-muted hover:bg-panel-strong hover:text-fg',

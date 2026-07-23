@@ -75,6 +75,54 @@ export interface Projection {
   parentId: string | null
 }
 
+/** folderId 의 모든 자손 폴더 id 집합(자기 자신 제외). 폴더를 자기 자손으로 옮기는 순환 방지에 쓴다. */
+export function folderDescendants(nodes: LibNode[], folderId: string): Set<string> {
+  const out = new Set<string>()
+  const stack = [folderId]
+  while (stack.length) {
+    const cur = stack.pop() as string
+    for (const n of nodes) {
+      if (n.parentId === cur && n.kind === 'folder' && !out.has(n.id)) {
+        out.add(n.id)
+        stack.push(n.id)
+      }
+    }
+  }
+  return out
+}
+
+export interface MoveTarget {
+  id: string | null
+  label: string
+  depth: number
+}
+
+/**
+ * "이동(Move to)" 대상 폴더 목록 — (최상위) + 모든 폴더(트리 DFS 순서, 중첩 경로 라벨 'A / 하위').
+ * 옮길 노드가 폴더면 자기 자신과 자손 폴더는 제외한다(자기 안으로 넣는 순환 방지).
+ */
+export function moveTargets(nodes: LibNode[], nodeId: string): MoveTarget[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const node = byId.get(nodeId)
+  const excluded = node?.kind === 'folder' ? folderDescendants(nodes, node.id) : new Set<string>()
+  if (node?.kind === 'folder') excluded.add(node.id)
+  const pathLabel = (id: string): string => {
+    const parts: string[] = []
+    let cur = byId.get(id)
+    while (cur) {
+      parts.unshift(cur.name)
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined
+    }
+    return parts.join(' / ')
+  }
+  const targets: MoveTarget[] = [{ id: null, label: '(최상위)', depth: 0 }]
+  for (const n of flattenTree(nodes)) {
+    if (n.kind !== 'folder' || excluded.has(n.id)) continue
+    targets.push({ id: n.id, label: pathLabel(n.id), depth: n.depth })
+  }
+  return targets
+}
+
 /**
  * 드래그 투영 — active 를 over 위치에 depth 오프셋만큼 옮길 때의 목표 depth/parent.
  * 쿼리는 자식을 못 가지므로 부모가 쿼리로 잡히면 그 부모의 부모로 보정.
@@ -90,12 +138,13 @@ export function getProjection(
   if (overIndex < 0 || !activeItem) return { depth: 0, parentId: null }
 
   const prev = items[overIndex - 1]
-  const next = items[overIndex + 1]
   const maxDepth = prev ? prev.depth + (prev.kind === 'folder' ? 1 : 0) : 0
-  const minDepth = next ? next.depth : 0
+  // depth 는 가로 드래그(activeItem.depth + delta)가 [0, maxDepth] 안에서 결정한다.
+  // next.depth 를 하한(minDepth)으로 쓰지 않는다 — 폴더의 첫 자식 위에 얹었을 때
+  // next(=자식)가 하한을 올려 버리면 왼쪽으로 아무리 끌어도 루트(depth 0)에 못 닿는다(폴더로만 잡힘).
   let depth = activeItem.depth + dragDepthDelta
   if (depth > maxDepth) depth = maxDepth
-  if (depth < minDepth) depth = minDepth
+  if (depth < 0) depth = 0
 
   let parentId = parentIdAtDepth(items, overIndex, depth, activeId)
   // 부모가 쿼리(리프)면 폴더가 아니므로 한 단계 위로.
