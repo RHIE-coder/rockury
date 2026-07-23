@@ -40,6 +40,7 @@ import { VersionDiffView } from './versions/VersionDiffView'
 import { ConnectionsView } from './connections/ConnectionsView'
 import { ObjectView } from './console/ObjectView'
 import { DiagramView } from './console/DiagramView'
+import { DefinitionView } from './console/DefinitionView'
 import { QueryView } from './console/QueryView'
 import { DataView } from './console/DataView'
 import { CollectionView } from './console/CollectionView'
@@ -165,6 +166,7 @@ export const dbService: Service = {
       area: 'ops',
       views: [
         { id: 'diagram', label: 'Diagram', icon: Network, workspace: DiagramView },
+        { id: 'definition', label: 'Definition', icon: TableProperties, workspace: DefinitionView },
         { id: 'data', label: 'Data', icon: Table2, workspace: DataView },
         { id: 'query', label: 'Query', icon: Terminal, workspace: QueryView },
         { id: 'collection', label: 'Collection', icon: Layers, workspace: CollectionView },

@@ -30,3 +30,9 @@
 - **CASE-console-041** Constraints 탭 전환 → 종류 필터 칩과 제약 목록 렌더.
 - **CASE-console-042** Query 뷰 → `{{키워드}}` 입력 시 값 입력칸 노출, 실행.
 - **CASE-console-043** Collection 트리에서 저장 쿼리 클릭 → 에디터 로드.
+- **CASE-console-044** Definition 뷰 진입 → 사이드바에 실 DB 테이블 목록(users/user_roles), 테이블 선택 후 `SQL` 토글 시 `CREATE TABLE` DDL 렌더. (definition.table-list/sql)
+
+## Scenario S6 — Definition (순수 로직)
+- **CASE-console-050** 테이블 검색 필터: 이름/컬럼명 부분일치(대소문자 무시), 빈 질의는 전체를 원래 순서로, 매칭 없으면 빈 배열. (definition.table-list AC-2) → `console/definition/select.test.ts`
+- **CASE-console-051** 활성 테이블 해석: id 로 찾되 없으면 첫 테이블 폴백, activeId=null 도 첫 테이블, 빈 목록은 undefined. (definition.table-list AC-3)
+- **CASE-console-052** DDL 구문 강조 토큰화: 키워드/식별자/문자열/타입/숫자/주석 분류 + 무손실 분해(토큰을 이어붙이면 원문과 일치). (definition.sql AC-1) → `workspaces/definition/sqlHighlight.test.ts`

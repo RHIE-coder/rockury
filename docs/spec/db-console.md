@@ -110,3 +110,28 @@
 - **AC-1** Query/Data/Collection 실행을 `source` 로 구분해 기록(`query_history.source`). 커밋된 것만 기록(tx 게이트 경로).
 - **AC-2** 독립 Console 뷰(Query 하위 아님 — 소스가 셋이라). Time/Source/SQL/Rows/Speed/Status + 소스필터 + SQL 검색 + 페이지네이션.
 - **AC-3** 행 클릭 시 SQL 을 Query 에디터로 보낸다. 이력 비우기.
+
+### Surface db-console.definition (신설) — 스키마 정의 브라우저 (읽기 전용)
+> 실 DB introspection 결과(`TableDef[]`)를 Studio 의 Definition 화면 형태로 브라우징한다.
+> Diagram·Object 와 **같은 introspection 소스**를 공유하는 "역설계-조회" 계열이며, nav 위치는 Diagram–Data 사이.
+> **읽기 전용** — 스키마 변경(DDL 실행)은 Console 이 아니라 Migration 이 담당한다(설계→운영 경계 유지).
+
+#### Section db-console.definition.table-list — 테이블/뷰 목록 사이드바
+- **AC-1** 활성 연결의 테이블·뷰를 이름순 목록으로 렌더하고, 각 행 우측에 컬럼 수를 표시한다. 뷰는 아이콘으로 구분(이모지 금지).
+- **AC-2** 이름 또는 컬럼명 부분일치 검색 필터(대소문자 무시).
+- **AC-3** 항목 클릭 시 활성 테이블을 전환한다(읽기 전용). 기본 활성은 첫 테이블. 재조회로 스키마가 바뀌어 활성 id 가 사라지면 첫 테이블로 폴백.
+
+#### Section db-console.definition.detail — 상세 (Table 뷰)
+- **AC-1** 컬럼 그리드: `#`/`Name`/`Type`/`Keys`/`Null`/`Default`/`Comment`. 키는 서비스 공통 불변식대로 `PK`/`FK`/`UK`/`IDX` 텍스트 배지(복합키는 위치 표기), CHECK 참여 컬럼은 `CHK` 마커.
+- **AC-2** 제약 목록: 종류 텍스트 배지 + 이름 + 참여 컬럼. FK 는 `→ ref테이블(컬럼)` + `ON DELETE 규칙`, CHECK 는 식(expression) 표기.
+- **AC-3** FK 의 참조 테이블을 클릭하면 그 테이블로 점프한다(활성 전환 + Table 뷰).
+- **AC-4** 편집 없음(읽기 전용).
+
+#### Section db-console.definition.sql — SQL(DDL) 뷰
+- **AC-1** `[Table|SQL]` 표현 토글. SQL 뷰는 활성 테이블을 **연결 방언**으로 생성한 `CREATE TABLE` DDL 을 구문 강조로 렌더한다(`generateDdl`, Studio Definition 과 동일 하이라이터 공유).
+- **AC-2** 연결 방언 배지를 표시한다(방언은 선택지가 아니라 연결의 고정 속성). `Copy` 로 DDL 을 클립보드에 복사.
+- **AC-3** 읽기 전용 — DDL 을 **생성·표시만** 하고 실행하지 않는다.
+
+#### 공통
+- **AC-1** 미접속 시 "연결을 선택하세요" 안내 화면(placeholder)을 보인다.
+- **AC-2** `새로고침` 으로 활성 연결을 재역설계한다(Diagram·Object 와 캐시 공유).

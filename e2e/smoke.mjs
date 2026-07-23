@@ -206,6 +206,28 @@ try {
   await page.waitForSelector('[data-export-status="ok"]', { timeout: 15_000 })
   check('Console › Diagram: PNG 내보내기(html-to-image 캡처 성공)', (await page.locator('[data-export-status="ok"]').count()) > 0)
 
+  // Console › Definition — 같은 introspection TableDef[] 를 Studio Definition 형태(목록 | 상세/DDL)로. 읽기 전용.
+  await click('button:has-text("Definition")')
+  await page.waitForSelector('text=user_roles', { timeout: 15_000 })
+  const defBody = await body()
+  check(
+    'Console › Definition: 사이드바 실 DB 테이블 목록(users/user_roles)',
+    defBody.includes('users') && defBody.includes('user_roles')
+  )
+  // 사이드바에서 테이블 선택 → SQL(DDL) 뷰 토글 → 실 introspection + generateDdl 로 CREATE 문 렌더.
+  // NOTE: 토글은 :text-is 로 정확 일치 — has-text 는 ContextBar 의 "MySQL" 버튼까지 잡는다.
+  await page.locator('li button:has-text("user_roles")').first().click()
+  await page.waitForTimeout(200)
+  await click('button:text-is("SQL")')
+  await page.waitForSelector('text=CREATE TABLE', { timeout: 10_000 })
+  const ddlBody = await body()
+  check(
+    'Console › Definition: SQL 뷰 DDL(CREATE TABLE user_roles) 렌더',
+    ddlBody.includes('CREATE TABLE') && ddlBody.includes('user_roles')
+  )
+  await click('button:text-is("Table")') // Table 폼으로 복귀
+  await page.waitForTimeout(150)
+
   // Console › Query — 저장쿼리 객체 트리 + 편집기(재설계). 새 쿼리 생성 → SELECT 실행.
   await click('button:has-text("Query")')
   await page.waitForSelector('.cm-content', { timeout: 15_000 })
