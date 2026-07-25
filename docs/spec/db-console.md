@@ -24,12 +24,22 @@
 - **AC-3** 헤더 클릭 정렬 3-state(ASC→DESC→해제), 정렬 방향을 화살표로 표시.
 - **AC-4** 편집된 셀/행은 변경 하이라이트, 삭제행 취소선, 신규행 `NEW` 배지+초록 하이라이트.
 - **AC-5** 긴 값(임계 초과)은 hover 시 전체값(상한 내) 툴팁을 보인다.
+- **AC-6** 컬럼 폭은 **내용에 맞춰 자동**으로 잡는다 — 헤더(컬럼명·타입 라벨·키 배지)와 실제 값 중 가장 긴 것 기준, 최소·**최대 폭 상한** 안에서(`data/colWidth`). 상한을 넘는 값은 계속 잘리고 셀 도구(툴팁·복사·JSON 뷰어)로 전체를 본다.
+- **AC-7** 사용자가 직접 끌어 조절한 컬럼은 그 폭이 자동 계산을 이긴다. 테이블을 바꾸면 조절값은 초기화된다.
 
 ### Section db-console.data.cell-helpers — 값 생성 도우미 (이미지 #1·#2)
 - **AC-1 (UUID)** uuid 종류 셀 편집 시 `UUID`(랜덤 식별값 생성)·`NULL` 칩 팝오버를 제공하고, `UUID` 클릭 시 유효한 UUID 를 채운다.
 - **AC-2 (시간값)** date 종류 셀 편집 시 `YYYY-MM-DD HH:mm:ss[.SSS]` 입력 + `NOW`(현재시각, ms 포함)·`OK`(확정)·`ESC`(취소) 를 제공한다.
 - **AC-3 (NULL)** 모든 편집 셀에서 NULL 토글이 가능하고 NULL 은 흐린 이탤릭으로 표시된다.
-- **AC-4** boolean=select, json=모달, fk=참조 룩업 모달은 현행 유지하되 FK 트리거는 텍스트 표기.
+- **AC-4** boolean=select, json=뷰어/편집 모달, fk=참조 룩업 모달. FK 트리거는 텍스트 표기.
+
+### Section db-console.data.json-cell — JSON 값 보기 (신설)
+> 정본 로직: `console/data/jsonCell.ts`. 셀 폭 안에서는 JSON 원문을 읽을 수 없다는 게 출발점.
+- **AC-1** JSON 셀은 원문 대신 **구조 요약 칩**(객체 `{} 키수`, 배열 `[] 항목수`, 깨진 값 `!`)과 공백을 정리한 한 줄 미리보기를 보인다.
+- **AC-2** 셀을 누르면 값 뷰어가 열린다. 열 때 **보기 좋게 정렬**해 보여주고, 제목에 사람 말 요약(`객체 · 키 5개`)을 쓴다.
+- **AC-3** 뷰어는 형식이 정상인지/어디가 깨졌는지를 항상 보인다. `정렬`·`한 줄로`·`복사` 를 제공한다.
+- **AC-4** 읽기 전용 테이블(뷰·PK 없는 테이블)에서도 뷰어가 열린다 — 이때는 입력이 막히고 적용 버튼이 없다.
+- **AC-5** 적용할 때 유효한 JSON 은 한 줄로 정리해 넣는다(우리가 보여주려고 넣은 들여쓰기가 저장 값에 섞이지 않게). 깨진 값은 사용자가 쓴 그대로 둔다.
 
 ### Section db-console.data.toolbar — 툴바 (필터·Export·컬럼가시성·타임존)
 - **AC-1** 필터 바: 컬럼/연산자/값 다중 조건(AND), 추가·삭제·초기화·적용. (현행 유지)
@@ -42,7 +52,7 @@
 ### Section db-console.data.constraints-tab — Constraint 탭 (읽기 전용, 이미지 #5)
 - **AC-1** 상단에 `Tables N` / `Constraints M` 탭. Constraints 탭 진입 시 활성 연결의 전 제약을 집계 목록으로 보인다.
 - **AC-2** 종류 필터 칩: `ALL`/`PK`/`FK`/`UK`/`IDX`/`CHECK`, 각 개수 표시.
-- **AC-3** 각 제약 항목: 종류 텍스트 배지 + 이름 + `테이블 · 컬럼` + FK 는 `→ ref테이블.컬럼 DEL:규칙`.
+- **AC-3** 각 제약 항목: 종류 텍스트 배지 + 이름 + `테이블 · 컬럼` + FK 는 짧은 참조 표기(`→ users (id)`). 하단 표의 Reference 열은 정책까지 붙인 표기를 쓴다. 표기는 Definition 의 FK 표기 규칙과 같은 정본에서 나온다.
 - **AC-4** 현재 선택 테이블의 제약을 하단 패널에 Type/Name/Columns/Reference 로 보인다.
 - **AC-5** 읽기 전용 — 추가/삭제/수정 DDL 없음(후속 범위).
 
@@ -113,7 +123,7 @@
 
 ### Surface db-console.definition (신설) — 스키마 정의 브라우저·편집기
 > 실 DB introspection 결과(`TableDef[]`)를 Studio 의 Definition 화면 형태로 브라우징하고, 라이브 스키마를 **편집**한다.
-> Diagram·Object 와 **같은 introspection 소스**를 공유하는 "역설계-조회/편집" 계열이며, nav 위치는 Diagram–Data 사이.
+> Diagram·Object 와 **같은 introspection 소스**를 공유하는 "역설계-조회/편집" 계열이며, nav 위치는 Console 의 **첫 뷰**(Definition → Diagram → Data 순).
 > 편집은 draft 에 쌓여 baseline↔draft diff 를 DDL 로 미리 보이고 tx 게이트로 적용한다(아래 edit 섹션).
 > (Migration 은 버전 기반 반영 파이프라인으로 계속 공존한다 — Console 직접 편집은 임의 DDL 을 이미 허용하는 Query 와 같은 성격.)
 
@@ -121,12 +131,21 @@
 - **AC-1** 활성 연결의 테이블·뷰를 이름순 목록으로 렌더하고, 각 행 우측에 컬럼 수를 표시한다. 뷰는 아이콘으로 구분(이모지 금지).
 - **AC-2** 이름 또는 컬럼명 부분일치 검색 필터(대소문자 무시).
 - **AC-3** 항목 클릭 시 활성 테이블을 전환한다. 기본 활성은 첫 테이블. 재조회로 스키마가 바뀌어 활성 id 가 사라지면 첫 테이블로 폴백. 편집 중이면 `+` 로 새 테이블을 추가한다.
+- **AC-4** 목록은 **테이블 묶음과 뷰 묶음을 갈라** 각각 개수와 함께 섹션으로 보인다(Data 사이드바와 같은 구성). 해당 묶음이 비면 그 섹션 머리는 그리지 않는다.
+- **AC-5** 이 목록은 화면마다 따로 그리지 않는다 — Definition(운영/설계)·Diagram 이 **같은 컴포넌트**(`db/TableListPanel`)와 같은 순수 로직(`db/tableList`)을 쓴다. 각 행에는 이름으로 집을 수 있는 `data-table-row` 훅이 있다(e2e 가 구조 대신 이 훅으로 행을 집는다 — 지우면 스모크가 깨진다).
 
 #### Section db-console.definition.detail — 상세 (Table 뷰)
 - **AC-1** 컬럼 그리드: `#`/`Name`/`Type`/`Keys`/`Null`/`Default`/`Comment`. 키는 서비스 공통 불변식대로 `PK`/`FK`/`UK`/`IDX` 텍스트 배지(복합키는 위치 표기), CHECK 참여 컬럼은 `CHK` 마커.
-- **AC-2** 제약 목록: 종류 텍스트 배지 + 이름 + 참여 컬럼. FK 는 `→ ref테이블(컬럼)` + `ON DELETE 규칙`, CHECK 는 식(expression) 표기.
+- **AC-2** 제약 목록: 종류 텍스트 배지 + 이름 + 참여 컬럼. FK 는 `→ ref테이블 (컬럼)` + **정책 칩 두 개**(아래 FK 표기 규칙), CHECK 는 식(expression) 표기.
 - **AC-3** (읽기) FK 의 참조 테이블을 클릭하면 그 테이블로 점프한다(활성 전환 + Table 뷰).
-- **AC-4** (편집) 인라인 편집 — 컬럼 추가/수정(이름·타입·NULL·기본값·코멘트)/삭제/이동, 키 토글(PK/UK/IDX), 제약 추가·수정·삭제(FK 참조·ON DELETE, CHECK 식), 테이블 이름·코멘트·삭제.
+- **AC-4** (편집) 인라인 편집 — 컬럼 추가/수정(이름·타입·NULL·기본값·코멘트)/삭제/이동, 키 토글(PK/UK/IDX), 제약 추가·수정·삭제(FK 참조·**ON DELETE 와 ON UPDATE 둘 다**, CHECK 식), 테이블 이름·코멘트·삭제.
+
+##### FK 표기 규칙 (설계부·운영부 공통 불변식)
+> 정본: `workspaces/definition/fkPolicy.ts` + `FkPolicyChips.tsx`. 새 화면에서 FK 를 그릴 때 직접 문자열을 만들지 않는다.
+- **AC-F1** 참조 대상은 `테이블 (컬럼[, 컬럼])` 한 형태로만 쓴다(`users.id` 식 축약 금지).
+- **AC-F2** `ON DELETE` 와 `ON UPDATE` 를 **항상 둘 다** 보인다. 한쪽만 그리면 "제약이 없다"는 오독을 부른다.
+- **AC-F3** 값이 없으면 DB 가 실제로 적용하는 `NO ACTION` 을 채워 보이되 흐리게 그리고, 마우스를 올리면 그 정책이 무슨 뜻인지 쉬운 말로 알려 준다. (설계부가 미지정을 `RESTRICT` 로 보이던 표기는 DDL 생성 결과와 어긋나 폐기 — `ddl.ts` 는 값이 없으면 절 자체를 안 쓴다.)
+- **AC-F4** 좁은 목록(Data 제약 목록 등)은 참조만 쓴 짧은 표기를, 폭이 있는 표는 정책까지 붙인 표기를 쓴다 — 둘 다 같은 정본 함수(`fkRefText`)에서 나온다.
 
 #### Section db-console.definition.sql — SQL(DDL) 뷰
 - **AC-1** `[Table|SQL]` 표현 토글(읽기 모드). SQL 뷰는 활성 테이블을 **연결 방언**으로 생성한 `CREATE TABLE` DDL 을 구문 강조로 렌더한다(`generateDdl`, Studio Definition 과 동일 하이라이터 공유).
@@ -142,6 +161,13 @@
 #### 공통
 - **AC-1** 미접속 시 "연결을 선택하세요" 안내 화면(placeholder)을 보인다.
 - **AC-2** `새로고침` 으로 활성 연결을 재역설계한다(Diagram·Object 와 캐시 공유).
+
+### Surface db-console.diagram.table-panel — ERD 좌측 테이블 목록 (신설)
+> Data 사이드바와 같은 구성의 목록을 ERD 왼쪽에 둔다 — 노드가 많으면 캔버스에서 테이블을 눈으로 찾기 어렵다.
+> 설계부(Studio › Diagram)·운영부(Console › Diagram 읽기/편집) 셋 다 **같은 컴포넌트**(`console/diagram/DiagramTablePanel`)를 쓴다.
+- **AC-1** 좌측 패널에 테이블/뷰를 갈라 목록으로 보인다(`db-console.definition.table-list` 와 같은 목록 컴포넌트·같은 규칙).
+- **AC-2** 항목을 누르면 그 노드를 선택하고 **캔버스를 그 노드로 옮긴다**(부드럽게 이동, 과확대 방지 상한). 선택 상태는 캔버스 클릭과 공유한다.
+- **AC-3** 필터(`관계만`)로 캔버스에서 빠진 테이블은 목록에서도 빠진다 — 눌러도 갈 곳이 없는 항목을 보이지 않기 위해 선택·필터 상태를 캔버스와 같은 곳에서 든다.
 
 ### Surface db-console.diagram (편집) — ERD 캔버스 편집 (신설)
 > Console › Diagram 을 편집 가능하게. Definition 과 **같은 연결 단위 편집 스토어·적용 파이프라인**(baseline↔draft diff → DDL 미리보기 → tx 게이트 → 재역설계)을 공유하며, 캔버스가 편집 표면이 된다. 시각 레이어(노드/엣지/배치)는 읽기 Diagram·Studio ERD 와 공유.

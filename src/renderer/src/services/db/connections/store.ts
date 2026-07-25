@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { useContextOptions } from '@renderer/nav/contextOptions'
 import { useNav } from '@renderer/nav/useNav'
 import { dialectInfo, type DialectId } from '../dialects'
+import { partitionAutoCheck } from './autoCheck'
 
 /**
  * Connection(원시 접속) 렌더러 스토어(§IA · 결정 B).
@@ -22,6 +23,17 @@ export interface ConnectionDef {
   user: string
   sslEnabled: boolean
   sslConfig?: Record<string, unknown>
+  autoCheckDisabled: boolean
+  groupId: string | null
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** Connection 그룹(접속 카드 분류 — 1단계, 중첩 없음). */
+export interface ConnGroupDef {
+  id: string
+  name: string
   sortOrder: number
   createdAt: string
   updatedAt: string
@@ -37,6 +49,7 @@ export interface ConnFormInput {
   password: string
   sslEnabled: boolean
   sslConfig?: Record<string, unknown>
+  autoCheckDisabled: boolean
 }
 
 export interface ConnStatus {
@@ -48,6 +61,7 @@ export interface ConnStatus {
 
 interface ConnectionsState {
   connections: ConnectionDef[]
+  groups: ConnGroupDef[]
   loaded: boolean
   statusMap: Record<string, ConnStatus>
   dialogOpen: boolean
@@ -58,22 +72,34 @@ interface ConnectionsState {
   update: (id: string, form: Partial<ConnFormInput>) => Promise<void>
   remove: (id: string) => Promise<void>
   testExisting: (id: string) => Promise<void>
+  testAll: () => Promise<void>
+  reveal: (id: string) => Promise<string>
   setStatus: (id: string, status: ConnStatus) => void
   openCreate: () => void
   openEdit: (conn: ConnectionDef) => void
   closeDialog: () => void
+
+  createGroup: (name: string) => Promise<ConnGroupDef>
+  renameGroup: (id: string, name: string) => Promise<void>
+  removeGroup: (id: string) => Promise<void>
+  reorderGroups: (orderedIds: string[]) => Promise<void>
+  move: (connId: string, groupId: string | null, orderedIds: string[]) => Promise<void>
 }
 
 export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
   connections: [],
+  groups: [],
   loaded: false,
   statusMap: {},
   dialogOpen: false,
   editing: null,
 
   init: async () => {
-    const rows = (await window.rockury.connections.list()) as ConnectionDef[]
-    set({ connections: rows, loaded: true })
+    const [rows, groups] = await Promise.all([
+      window.rockury.connections.list() as Promise<ConnectionDef[]>,
+      window.rockury.connectionGroups.list() as Promise<ConnGroupDef[]>
+    ])
+    set({ connections: rows, groups, loaded: true })
   },
 
   create: async (form) => {
@@ -83,8 +109,12 @@ export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
   },
 
   update: async (id, form) => {
+    const prev = get().connections.find((c) => c.id === id)
     const row = (await window.rockury.connections.update(id, form)) as ConnectionDef
     set((s) => ({ connections: s.connections.map((c) => (c.id === id ? row : c)) }))
+    // 방금 "자동 확인 제외"로 바꿨으면 이전 확인 결과를 즉시 '미확인'으로 — 잔존 실패가 남아 있으면
+    // 제외가 안 먹는 것처럼 보인다(사용자 실측 혼동).
+    if (prev && !prev.autoCheckDisabled && row.autoCheckDisabled) get().setStatus(id, { state: 'idle' })
   },
 
   remove: async (id) => {
@@ -111,10 +141,74 @@ export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
     }
   },
 
+  // 페이지 진입·새로고침의 전체 확인 — "자동 확인 무시" 연결은 건너뛴다. 각 확인은 병렬.
+  testAll: async () => {
+    const { targets, skipped } = partitionAutoCheck(get().connections)
+    // 건너뛴 연결의 옛 결과는 '미확인'으로 되돌린다 — 새로고침 후에도 이전 "실패"가 남아
+    // 자동 확인이 계속 도는 것처럼 읽히는 것을 막는다.
+    for (const c of skipped) get().setStatus(c.id, { state: 'idle' })
+    await Promise.all(targets.map((c) => get().testExisting(c.id)))
+  },
+
+  // 저장된 비밀번호 평문 조회(편집 화면 눈 아이콘 프리필). 실패 시 빈 문자열.
+  reveal: async (id) => {
+    try {
+      return await window.rockury.connections.revealPassword(id)
+    } catch {
+      return ''
+    }
+  },
+
   setStatus: (id, status) => set((s) => ({ statusMap: { ...s.statusMap, [id]: status } })),
   openCreate: () => set({ dialogOpen: true, editing: null }),
   openEdit: (conn) => set({ dialogOpen: true, editing: conn }),
-  closeDialog: () => set({ dialogOpen: false, editing: null })
+  closeDialog: () => set({ dialogOpen: false, editing: null }),
+
+  createGroup: async (name) => {
+    const g = (await window.rockury.connectionGroups.create(name)) as ConnGroupDef
+    set((s) => ({ groups: [...s.groups, g] }))
+    return g
+  },
+
+  renameGroup: async (id, name) => {
+    const g = (await window.rockury.connectionGroups.rename(id, name)) as ConnGroupDef
+    set((s) => ({ groups: s.groups.map((x) => (x.id === id ? g : x)) }))
+  },
+
+  // 그룹 순서 변경(DnD) — 낙관 반영 후 영속. 실패 시 저장소 기준 재로드.
+  reorderGroups: async (orderedIds) => {
+    const pos = new Map(orderedIds.map((id, i) => [id, i]))
+    set((s) => ({ groups: [...s.groups].sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0)) }))
+    try {
+      await window.rockury.connectionGroups.reorder(orderedIds)
+    } catch {
+      await get().init()
+    }
+  },
+
+  // 그룹 삭제 — 소속 연결은 지우지 않고 미분류로 되돌린다(메인과 동일 규약).
+  removeGroup: async (id) => {
+    await window.rockury.connectionGroups.delete(id)
+    set((s) => ({
+      groups: s.groups.filter((g) => g.id !== id),
+      connections: s.connections.map((c) => (c.groupId === id ? { ...c, groupId: null } : c))
+    }))
+  },
+
+  // DnD 드롭 — 낙관 반영 후 영속. 실패하면 저장소 기준으로 되돌린다(재로드).
+  move: async (connId, groupId, orderedIds) => {
+    const pos = new Map(orderedIds.map((id, i) => [id, i]))
+    set((s) => ({
+      connections: [...s.connections]
+        .map((c) => (c.id === connId ? { ...c, groupId } : c))
+        .sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0))
+    }))
+    try {
+      await window.rockury.connections.move(connId, groupId, orderedIds)
+    } catch {
+      await get().init()
+    }
+  }
 }))
 
 // 앱 시작 시 하이드레이션.

@@ -42,6 +42,11 @@ Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 
    **UI 품질 게이트(`e2e/surface/verify.mjs`)는 셸 훅(`data-nav-service/module/view`)으로 전 서비스×모듈×뷰를
    자동 순회**하므로 새 화면은 nav 에 등록만 하면 커버리지에 자동으로 들어온다 — 이 data-nav 훅을 지우면
    순회가 깨지고 안전핀(MIN_LEAVES)이 검증불가(2)로 실패한다. 훅을 지우지 말 것.
+4. **MCP 서버는 앱 능력과 함께 자란다(스테일 금지).** MCP(에이전트 연동) 서버는 메인 프로세스 내장
+   (`src/main/mcp/`, 명세 `docs/spec/mcp-server.md`). `src/main/ipc` 의 모든 채널은
+   `src/main/mcp/coverage.ts` 에 **노출(도구 대응) 또는 제외(사유)** 로 등재돼야 하며
+   `coverage.test.ts` 가 강제한다 — 새 IPC 채널을 미등재로 두거나, 지운 채널을 지도에 남기면
+   `npm test` 실패. 새 채널을 만들면 MCP 도구를 함께 갱신하거나 의식적으로 제외 사유를 적는다.
 
 ## 검증 인프라
 - 단위: `npm test`(vitest). watch: `npm run test:watch`.

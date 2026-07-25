@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Envelope } from '../main/ipc/envelope'
-import type { ConnectionRecord, DbType } from '../main/store/connections'
+import type { ConnectionGroupRecord, ConnectionRecord, DbType } from '../main/store/connections'
 import type { ConnectionFormData, TestConnectionResult } from '../main/services/connectionService'
 import type { EnvironmentRecord } from '../main/store/environments'
 import type { IntrospectedSchema } from '../main/services/introspection/types'
@@ -15,6 +15,8 @@ import type {
   MigrationLogRecord,
   SnapshotRecord
 } from '../main/store/migration'
+import type { McpStatusPayload } from '../main/ipc/mcp'
+import type { StoreChangedEvent } from '../main/mcp/tools'
 
 /** 봉투 IPC 언랩 — 성공 시 data, 실패 시 throw. 운영부(ops) 채널 규약. */
 async function unwrap<T>(p: Promise<Envelope<T>>): Promise<T> {
@@ -45,6 +47,18 @@ export interface TableRecord {
   comment: string
   columns: unknown[]
   constraints: unknown[]
+  /** 역설계로 들여온 뷰(view)면 true. */
+  isView?: boolean
+}
+
+/** 시드 세트 레코드 (main/store/seedSets 와 동일 형태). 컬럼은 이름으로 가리킨다. */
+export interface SeedSetRecord {
+  designId: string
+  tableName: string
+  naturalKey: string[]
+  ignoredColumns: string[]
+  strength: string
+  rows: unknown[]
 }
 
 /** 버전 스냅샷 레코드 (main/store/versions 와 동일 형태). */
@@ -64,7 +78,7 @@ export interface CreateVersionInput {
   snapshot: unknown
 }
 
-export type { ConnectionRecord, ConnectionFormData, TestConnectionResult, EnvironmentRecord, DbType }
+export type { ConnectionGroupRecord, ConnectionRecord, ConnectionFormData, TestConnectionResult, EnvironmentRecord, DbType }
 
 /**
  * 렌더러에 노출되는 안전한 API 표면.
@@ -90,14 +104,30 @@ const api = {
   },
   tables: {
     list: (): Promise<TableRecord[]> => ipcRenderer.invoke('tables:list'),
-    replaceAll: (records: TableRecord[]): Promise<void> =>
-      ipcRenderer.invoke('tables:replaceAll', records)
+    // 설계 스코프 저장 — 전량 교체(replaceAll)는 제거됨(에이전트·화면 동시 작업 경합 차단).
+    replaceForDesign: (designId: string, records: TableRecord[]): Promise<void> =>
+      ipcRenderer.invoke('tables:replaceForDesign', designId, records)
+  },
+  seedSets: {
+    list: (): Promise<SeedSetRecord[]> => ipcRenderer.invoke('seedSets:list'),
+    // tables 와 같은 설계 스코프 저장 — 설계 X 저장이 설계 Y 시드를 건드리지 않는다.
+    replaceForDesign: (designId: string, records: SeedSetRecord[]): Promise<void> =>
+      ipcRenderer.invoke('seedSets:replaceForDesign', designId, records)
+  },
+  // 메인발 저장소 변경 알림(MCP 에이전트 쓰기) — 구독 해제 함수를 반환한다.
+  store: {
+    onChanged: (cb: (e: StoreChangedEvent) => void): (() => void) => {
+      const listener = (_ev: Electron.IpcRendererEvent, e: StoreChangedEvent): void => cb(e)
+      ipcRenderer.on('store:changed', listener)
+      return () => ipcRenderer.removeListener('store:changed', listener)
+    }
   },
   versions: {
     list: (designId: string): Promise<VersionRecord[]> =>
       ipcRenderer.invoke('versions:list', designId),
     create: (input: CreateVersionInput): Promise<VersionRecord> =>
-      ipcRenderer.invoke('versions:create', input)
+      ipcRenderer.invoke('versions:create', input),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke('versions:delete', id)
   },
   // 운영부 — 원시 접속(1급). 설계 무관, Console 구동.
   connections: {
@@ -109,15 +139,34 @@ const api = {
     delete: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('connections:delete', id)),
     reorder: (orderedIds: string[]): Promise<void> =>
       unwrap(ipcRenderer.invoke('connections:reorder', orderedIds)),
+    move: (id: string, groupId: string | null, orderedIds: string[]): Promise<ConnectionRecord> =>
+      unwrap(ipcRenderer.invoke('connections:move', id, groupId, orderedIds)),
     test: (form: ConnectionFormData): Promise<TestConnectionResult> =>
       unwrap(ipcRenderer.invoke('connections:test', form)),
     testById: (id: string): Promise<TestConnectionResult> =>
-      unwrap(ipcRenderer.invoke('connections:testById', id))
+      unwrap(ipcRenderer.invoke('connections:testById', id)),
+    revealPassword: (id: string): Promise<string> =>
+      unwrap(ipcRenderer.invoke('connections:revealPassword', id))
+  },
+  // 운영부 — 접속 카드 그룹(분류). 삭제 시 소속 연결은 미분류로.
+  connectionGroups: {
+    list: (): Promise<ConnectionGroupRecord[]> => unwrap(ipcRenderer.invoke('connectionGroups:list')),
+    create: (name: string): Promise<ConnectionGroupRecord> =>
+      unwrap(ipcRenderer.invoke('connectionGroups:create', name)),
+    rename: (id: string, name: string): Promise<ConnectionGroupRecord> =>
+      unwrap(ipcRenderer.invoke('connectionGroups:rename', id, name)),
+    reorder: (orderedIds: string[]): Promise<void> =>
+      unwrap(ipcRenderer.invoke('connectionGroups:reorder', orderedIds)),
+    delete: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('connectionGroups:delete', id))
   },
   // 운영부 — (connection×design) 바인딩. Migration 전용.
   environments: {
     find: (connectionId: string, designId: string): Promise<EnvironmentRecord | null> =>
       unwrap(ipcRenderer.invoke('environments:find', connectionId, designId)),
+    listByConnection: (connectionId: string): Promise<EnvironmentRecord[]> =>
+      unwrap(ipcRenderer.invoke('environments:listByConnection', connectionId)),
+    delete: (id: string): Promise<void> =>
+      unwrap(ipcRenderer.invoke('environments:delete', id)),
     ensure: (connectionId: string, designId: string, targetVersion: string): Promise<EnvironmentRecord> =>
       unwrap(ipcRenderer.invoke('environments:ensure', connectionId, designId, targetVersion)),
     setTarget: (id: string, version: string): Promise<EnvironmentRecord> =>
@@ -201,6 +250,11 @@ const api = {
       unwrap(ipcRenderer.invoke('migration:appendLog', input)),
     listLogs: (envId: string): Promise<MigrationLogRecord[]> =>
       unwrap(ipcRenderer.invoke('migration:listLogs', envId))
+  },
+  // AI(에이전트 연동) — 게이트웨이 상태 + 접속 키 관리(등록 명령 복사 방식).
+  mcp: {
+    status: (): Promise<McpStatusPayload> => unwrap(ipcRenderer.invoke('mcp:status')),
+    rotateToken: (): Promise<McpStatusPayload> => unwrap(ipcRenderer.invoke('mcp:rotateToken'))
   },
   // 운영부 — Console 실 ERD 레이아웃(연결별 노드 위치·뷰포트) 영속.
   diagram: {

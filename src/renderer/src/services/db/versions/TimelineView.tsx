@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { GitCommitHorizontal, Layers, Lock, Milestone } from 'lucide-react'
+import { GitCommitHorizontal, Layers, Lock, Milestone, Sprout, Trash2 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { useActiveDesign } from '../designs/store'
 import { dialectInfo } from '../dialects'
 import { useDesignTables } from '../workspaces/definition/store'
+import { useDesignSeedSets } from '../workspaces/seed/store'
 import { CutVersionDialog } from './CutVersionDialog'
 import { latestVer } from './semver'
-import { useDesignVersions } from './store'
+import { useDesignVersions, useVersionsStore, type VersionDef } from './store'
 
 function fmt(iso: string): string {
   const d = new Date(iso)
@@ -15,11 +16,75 @@ function fmt(iso: string): string {
     : d.toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+/** 버전 한 줄 — 번호·메모·테이블수·시각 + 삭제(잘못 컷된 버전 회수). 잠긴 버전은 삭제 불가. */
+function VersionRow({ v, designId, latest }: { v: VersionDef; designId: string; latest: boolean }) {
+  const remove = useVersionsStore((s) => s.remove)
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <div
+      data-version-number={v.number}
+      className="group flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0"
+    >
+      <span className="flex items-center gap-1.5 rounded-full bg-accent-2-soft px-2 py-0.5 font-mono text-[12px] font-semibold text-accent-2">
+        {v.locked && <Lock className="size-3" />}
+        {v.number}
+      </span>
+      {latest && (
+        <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium text-accent">
+          최신
+        </span>
+      )}
+      <span className="min-w-0 flex-1 truncate text-[13px] text-fg">
+        {v.note || <span className="text-muted/60">메모 없음</span>}
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted">
+        <Layers className="size-3.5" />
+        {v.snapshot.tables.length}
+      </span>
+      {/* 시드 행 수 — 시드가 담긴 버전만 보인다(옛 스냅샷엔 시드가 없다). */}
+      {!!v.snapshot.seeds?.length && (
+        <span
+          data-version-seed-rows
+          className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted"
+          title="시드 행 수"
+        >
+          <Sprout className="size-3.5" />
+          {v.snapshot.seeds.reduce((n, s) => n + s.rows.length, 0)}
+        </span>
+      )}
+      <span className="shrink-0 text-[11px] tabular-nums text-muted">{fmt(v.createdAt)}</span>
+      {!v.locked &&
+        (confirming ? (
+          <span className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[11px]" onClick={() => setConfirming(false)}>
+              취소
+            </Button>
+            <Button variant="destructive" size="sm" className="h-6 px-1.5 text-[11px]" onClick={() => void remove(designId, v.id)}>
+              삭제
+            </Button>
+          </span>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+            title="버전 삭제"
+            onClick={() => setConfirming(true)}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        ))}
+    </div>
+  )
+}
+
 /** Versions › Timeline — 설계의 버전 컷 목록 + 새 컷. (diff 는 Version Diff 뷰에서) */
 export function TimelineView() {
   const design = useActiveDesign()
   const versions = useDesignVersions(design?.id ?? null)
   const tables = useDesignTables()
+  const seeds = useDesignSeedSets()
   const [cutOpen, setCutOpen] = useState(false)
 
   if (!design) {
@@ -66,28 +131,7 @@ export function TimelineView() {
           </div>
         ) : (
           versions.map((v, i) => (
-            <div
-              key={v.id}
-              className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0"
-            >
-              <span className="flex items-center gap-1.5 rounded-full bg-accent-2-soft px-2 py-0.5 font-mono text-[12px] font-semibold text-accent-2">
-                {v.locked && <Lock className="size-3" />}
-                {v.number}
-              </span>
-              {i === 0 && (
-                <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium text-accent">
-                  최신
-                </span>
-              )}
-              <span className="min-w-0 flex-1 truncate text-[13px] text-fg">
-                {v.note || <span className="text-muted/60">메모 없음</span>}
-              </span>
-              <span className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted">
-                <Layers className="size-3.5" />
-                {v.snapshot.tables.length}
-              </span>
-              <span className="shrink-0 text-[11px] tabular-nums text-muted">{fmt(v.createdAt)}</span>
-            </div>
+            <VersionRow key={v.id} v={v} designId={design.id} latest={i === 0} />
           ))
         )}
       </div>
@@ -98,7 +142,9 @@ export function TimelineView() {
         designId={design.id}
         latest={latest}
         tableCount={tables.length}
-        snapshot={{ tables }}
+        seedRowCount={seeds.reduce((n, s) => n + s.rows.length, 0)}
+        // 시드도 버전에 동봉한다 — 시드는 서비스 정책의 바탕이라 Diff 대상(spec db-studio.seed.version-diff).
+        snapshot={{ tables, seeds }}
       />
     </div>
   )

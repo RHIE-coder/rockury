@@ -9,13 +9,14 @@ import { useQueryStore, type HistoryRow } from './query/store'
 import { groupHistory } from './historyGroup'
 
 const PAGE_SIZES = [25, 50, 100] as const
-type SourceFilter = 'all' | 'query' | 'data' | 'collection'
-const SOURCES: SourceFilter[] = ['all', 'query', 'data', 'collection']
+type SourceFilter = 'all' | 'query' | 'data' | 'collection' | 'definition'
+const SOURCES: SourceFilter[] = ['all', 'definition', 'data', 'query', 'collection']
 
 const SOURCE_BADGE: Record<string, string> = {
   query: 'bg-sky-100 text-sky-700',
   data: 'bg-amber-100 text-amber-700',
-  collection: 'bg-violet-100 text-violet-700'
+  collection: 'bg-violet-100 text-violet-700',
+  definition: 'bg-emerald-100 text-emerald-700'
 }
 
 function fmtTime(iso: string): string {
@@ -25,8 +26,9 @@ function fmtTime(iso: string): string {
 }
 
 /**
- * Console › History — Query/Data/Collection 실행 이력(다중 소스). 독립 뷰(소스가 셋 다라 Query 하위가 아님).
+ * Console › History — Query/Data/Collection 실행·Definition(스키마 편집) 이력(다중 소스). 독립 뷰.
  * 소스 필터 + SQL 검색 + 페이지네이션. 행 클릭 시 SQL 을 Query 에디터로 보낸다.
+ * Collection 실행·Definition 적용은 runId 로 묶인 아코디언 그룹으로 표시된다.
  */
 export function HistoryView() {
   const conn = useActiveConnection()
@@ -151,10 +153,10 @@ export function HistoryView() {
                     <td className="border-b border-line/50 px-3 py-1.5">
                       <span className="flex items-center gap-1.5">
                         <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold uppercase', SOURCE_BADGE[e.source] ?? 'bg-panel-strong text-muted')}>{e.source}</span>
-                        <span className="truncate font-semibold text-fg">{e.collectionName ?? '(컬렉션)'}</span>
+                        <span className="truncate font-semibold text-fg">{e.collectionName ?? (e.source === 'definition' ? '스키마 변경' : '(컬렉션)')}</span>
                       </span>
                     </td>
-                    <td className="border-b border-line/50 px-3 py-1.5 text-muted">{e.rows.length}개 쿼리</td>
+                    <td className="border-b border-line/50 px-3 py-1.5 text-muted">{e.rows.length}개 {e.source === 'definition' ? 'DDL' : '쿼리'}</td>
                     <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">{e.totalRows}</td>
                     <td className="border-b border-line/50 px-3 py-1.5 text-right font-mono text-muted">—</td>
                     <td className="border-b border-line/50 px-3 py-1.5">

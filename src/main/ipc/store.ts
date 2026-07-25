@@ -6,8 +6,9 @@ import {
   updateDesign,
   type CreateDesignInput
 } from '../store/designs'
-import { listTables, replaceAllTables, type TableRecord } from '../store/tables'
-import { createVersion, listVersions, type CreateVersionInput } from '../store/versions'
+import { listTables, replaceTablesForDesign, type TableRecord } from '../store/tables'
+import { listSeedSets, replaceSeedSetsForDesign, type SeedSetRecord } from '../store/seedSets'
+import { createVersion, deleteVersion, listVersions, type CreateVersionInput } from '../store/versions'
 
 /**
  * 로컬 메타 저장소 IPC — 렌더러가 preload(window.rockury.*)를 통해 호출한다.
@@ -22,8 +23,18 @@ export function registerStoreIpc(): void {
   ipcMain.handle('designs:delete', (_event, id: string) => deleteDesign(id))
 
   ipcMain.handle('tables:list', () => listTables())
-  ipcMain.handle('tables:replaceAll', (_event, records: TableRecord[]) => replaceAllTables(records))
+  // 설계 스코프 저장 — 전량 교체(tables:replaceAll)는 제거됨(spec mcp-server 쓰기 경합 차단).
+  ipcMain.handle('tables:replaceForDesign', (_event, designId: string, records: TableRecord[]) =>
+    replaceTablesForDesign(designId, records)
+  )
+
+  // Studio › Seed — 시드 세트도 tables 와 같은 설계 스코프 규칙으로 저장한다.
+  ipcMain.handle('seedSets:list', () => listSeedSets())
+  ipcMain.handle('seedSets:replaceForDesign', (_event, designId: string, records: SeedSetRecord[]) =>
+    replaceSeedSetsForDesign(designId, records)
+  )
 
   ipcMain.handle('versions:list', (_event, designId: string) => listVersions(designId))
   ipcMain.handle('versions:create', (_event, input: CreateVersionInput) => createVersion(input))
+  ipcMain.handle('versions:delete', (_event, id: string) => deleteVersion(id))
 }

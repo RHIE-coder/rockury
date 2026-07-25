@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TableDef } from '../../workspaces/definition/types'
-import { filterTables, resolveActiveTable } from './select'
+import { resolveActiveTable } from './select'
 
 const col = (name: string) => ({
   id: `c:${name}`,
@@ -26,29 +26,7 @@ const tables: TableDef[] = [
   table('products', ['id', 'sku'])
 ]
 
-describe('filterTables', () => {
-  it('빈 질의는 전체를 원래 순서로', () => {
-    expect(filterTables(tables, '   ')).toEqual(tables)
-  })
-
-  it('테이블명으로 매칭', () => {
-    expect(filterTables(tables, 'ord').map((t) => t.name)).toEqual(['orders'])
-  })
-
-  it('컬럼명으로도 매칭(대소문자 무시)', () => {
-    // 'EMAIL' 은 users 컬럼에만 존재 → users 매칭
-    expect(filterTables(tables, 'EMAIL').map((t) => t.name)).toEqual(['users'])
-  })
-
-  it('테이블·컬럼 양쪽에 걸리면 중복 없이 각 테이블 한 번', () => {
-    // 'user' → users(이름) + orders(user_id 컬럼)
-    expect(filterTables(tables, 'user').map((t) => t.name)).toEqual(['users', 'orders'])
-  })
-
-  it('매칭 없으면 빈 배열', () => {
-    expect(filterTables(tables, 'zzz')).toEqual([])
-  })
-})
+// 목록 검색(filterTables)·테이블/뷰 가르기 테스트는 정본이 옮겨간 db/tableList.test.ts 에 있다.
 
 describe('resolveActiveTable', () => {
   it('id 로 찾는다', () => {

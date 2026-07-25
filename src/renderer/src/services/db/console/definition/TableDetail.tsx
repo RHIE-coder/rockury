@@ -1,8 +1,9 @@
-import { KeyRound, Table2, Eye } from 'lucide-react'
+import { Table2, Eye } from 'lucide-react'
 import { Badge } from '@renderer/ui/badge'
 import { dialectInfo, type DialectId } from '../../dialects'
 import type { ConstraintKind, TableDef } from '../../workspaces/definition/types'
 import { keyBadgesOf, checkColumnIds, resolveColumns } from '../../workspaces/definition/derive'
+import { FkPolicyChips } from '../../workspaces/definition/FkPolicyChips'
 
 // 읽기 전용 컬럼 그리드: # · Name · Type · Keys · Null · Default · Comment
 const GRID =
@@ -140,8 +141,8 @@ export function TableDetail({
                     <span className="font-mono text-muted">({cols.join(', ')})</span>
                   )}
                   {con.kind === 'fk' && con.refTable && (
-                    <span className="flex items-center gap-1 text-muted">
-                      <KeyRound className="size-3 text-accent" />→
+                    <span className="flex flex-wrap items-center gap-1.5 text-muted">
+                      <span className="text-accent-2">→</span>
                       <button
                         type="button"
                         onClick={() => onJump?.(con.refTable!)}
@@ -151,11 +152,7 @@ export function TableDetail({
                         {con.refTable}
                       </button>
                       <span className="font-mono">({(con.refColumns ?? []).join(', ')})</span>
-                      {con.onDelete && con.onDelete !== 'NO ACTION' && (
-                        <span className="rounded bg-panel-strong px-1 py-0.5 text-[10px]">
-                          ON DELETE {con.onDelete}
-                        </span>
-                      )}
+                      <FkPolicyChips con={con} />
                     </span>
                   )}
                   {con.kind === 'check' && con.expression && (

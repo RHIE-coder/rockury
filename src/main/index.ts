@@ -9,7 +9,11 @@ import { registerQueryIpc } from './ipc/query'
 import { registerMigrationIpc } from './ipc/migration'
 import { registerCollectionIpc } from './ipc/collections'
 import { registerDiagramIpc } from './ipc/diagram'
+import { registerMcpIpc } from './ipc/mcp'
 import { setDbPath } from './store/db'
+import { startMcp, stopMcp } from './mcp/http'
+import { setStoreChangeNotifier } from './mcp/tools'
+import { createKeychainTokenStore } from './mcp/tokenStore'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -48,6 +52,18 @@ function createWindow(): void {
 // 미패키징 실행에서도 userData 경로가 'Electron' 이 아닌 앱 이름으로 잡히도록 명시.
 app.setName('Rockury')
 
+// 단일 인스턴스 보장 — 로컬 DB·MCP 포트의 소유자를 하나로 유지(둘 뜨면 저장 경합).
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+}
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  }
+})
+
 app.whenReady().then(() => {
   // 로컬 저장소 DB 경로 주입(userData). getDb() 첫 호출 전에 설정한다.
   setDbPath(join(app.getPath('userData'), 'rockury.db'))
@@ -60,6 +76,16 @@ app.whenReady().then(() => {
   registerMigrationIpc()
   registerCollectionIpc()
   registerDiagramIpc()
+  registerMcpIpc()
+  // MCP 서버 — 메인 프로세스 내장(생명주기 한몸). 실패해도 앱 부팅은 계속(내부 재시도).
+  // 접속 키는 OS 키체인 암호화 저장 — 디스크에 접속 정보 파일을 남기지 않는다.
+  const userData = app.getPath('userData')
+  void startMcp({ dir: userData, appVersion: app.getVersion(), tokenStore: createKeychainTokenStore(userData) })
+  // 에이전트(MCP) 쓰기 성공 → 열린 모든 창에 알림 → 렌더러가 해당 스코프만 재조회
+  // (tools.ts 는 electron 미의존 테스트 seam 이라 전파를 여기서 주입한다).
+  setStoreChangeNotifier((e) => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('store:changed', e)
+  })
   createWindow()
 
   app.on('activate', () => {
@@ -69,4 +95,9 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+// 앱 종료 시 MCP 리스너도 함께 정리(발견 파일의 토큰은 남겨 재사용).
+app.on('will-quit', () => {
+  void stopMcp()
 })

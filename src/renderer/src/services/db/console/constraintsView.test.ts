@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countByKind, filterByKind, fkRefLabel, flattenConstraints, groupConstraintsByTable } from './constraintsView'
+import { countByKind, filterByKind, flattenConstraints, groupConstraintsByTable } from './constraintsView'
 import type { Constraint, TableDef } from '../workspaces/definition/types'
 
 function table(name: string, cols: string[], constraints: Constraint[]): TableDef {
@@ -35,13 +35,17 @@ describe('flattenConstraints', () => {
   })
 })
 
-describe('fkRefLabel', () => {
-  it('fk 참조를 → ref.col DEL:규칙 로', () => {
-    const fk = apiKeys.constraints.find((c) => c.kind === 'fk')!
-    expect(fkRefLabel(fk)).toBe('→ users.id DEL:CASCADE')
+describe('fk 참조 표기(Definition 과 같은 정본을 쓴다)', () => {
+  const list = flattenConstraints([apiKeys, users])
+  it('짧은 표기는 참조만, 상세 표기는 두 정책까지', () => {
+    const fk = list.find((c) => c.name === 'fk_api_keys_user')!
+    expect(fk.refLabel).toBe('→ users (id)')
+    expect(fk.refDetail).toBe('→ users (id) · ON DELETE CASCADE · ON UPDATE NO ACTION')
   })
-  it('fk 아니면 undefined', () => {
-    expect(fkRefLabel(users.constraints[0])).toBeUndefined()
+  it('fk 가 아니면 표기가 없다', () => {
+    const pk = list.find((c) => c.kind === 'pk')!
+    expect(pk.refLabel).toBeUndefined()
+    expect(pk.refDetail).toBeUndefined()
   })
 })
 

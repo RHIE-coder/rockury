@@ -33,6 +33,7 @@ import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { DefinitionWorkspace } from './workspaces/definition/DefinitionWorkspace'
 import { DefinitionToolbar } from './workspaces/definition/DefinitionToolbar'
 import { StudioDiagramWorkspace } from './workspaces/diagram/StudioDiagramWorkspace'
+import { SeedWorkspace } from './workspaces/seed/SeedWorkspace'
 import { DesignDialogs } from './designs/DesignDialogs'
 import { useDesignsStore } from './designs/store'
 import { TimelineView } from './versions/TimelineView'
@@ -46,6 +47,8 @@ import { DataView } from './console/DataView'
 import { CollectionView } from './console/CollectionView'
 import { HistoryView } from './console/HistoryView'
 import { DriftView, PlanView, RunView, LogsView } from './migration/views'
+import { CompareView } from './migration/CompareView'
+import './rehydration' // 에이전트(MCP) 쓰기 → store:changed → 스코프 재조회 구독(부수효과 모듈)
 
 /**
  * DB 서비스 IA (확정본).
@@ -132,9 +135,9 @@ export const dbService: Service = {
       icon: PenTool,
       area: 'design',
       views: [
-        { id: 'diagram', label: 'Diagram', icon: GitBranch, workspace: StudioDiagramWorkspace },
         { id: 'definition', label: 'Definition', icon: TableProperties, workspace: DefinitionWorkspace, Toolbar: DefinitionToolbar },
-        { id: 'seed', label: 'Seed', icon: Sprout, workspace: view(Sprout, 'depth 3 · Studio › Seed', 'Seed', '초기 시드 데이터를 정의한다') },
+        { id: 'diagram', label: 'Diagram', icon: GitBranch, workspace: StudioDiagramWorkspace },
+        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedWorkspace },
         { id: 'mocking', label: 'Mocking', icon: Shuffle, workspace: view(Shuffle, 'depth 3 · Studio › Mocking', 'Mocking', '목업 데이터 생성 규칙을 설정한다') },
         { id: 'documenting', label: 'Documenting', icon: FileText, workspace: view(FileText, 'depth 3 · Studio › Documenting', 'Documenting', '스키마 문서를 작성/생성한다') },
         { id: 'validation', label: 'Validation', icon: ShieldCheck, workspace: view(ShieldCheck, 'depth 3 · Studio › Validation', 'Validation', '설계 단계 제약/무결성 규칙을 검증한다') }
@@ -165,8 +168,8 @@ export const dbService: Service = {
       icon: Monitor,
       area: 'ops',
       views: [
-        { id: 'diagram', label: 'Diagram', icon: Network, workspace: DiagramView },
         { id: 'definition', label: 'Definition', icon: TableProperties, workspace: DefinitionView },
+        { id: 'diagram', label: 'Diagram', icon: Network, workspace: DiagramView },
         { id: 'data', label: 'Data', icon: Table2, workspace: DataView },
         { id: 'query', label: 'Query', icon: Terminal, workspace: QueryView },
         { id: 'collection', label: 'Collection', icon: Layers, workspace: CollectionView },
@@ -183,6 +186,8 @@ export const dbService: Service = {
         { id: 'drift', label: 'Drift', icon: Radar, workspace: DriftView },
         { id: 'plan', label: 'Plan', icon: FileDiff, workspace: PlanView },
         { id: 'run', label: 'Run', icon: Play, workspace: RunView },
+        // 실DB↔실DB 비교(DEV·STG·PROD) — 설계 무관, 연결 2개만 필요.
+        { id: 'compare', label: 'Compare', icon: GitCompare, workspace: CompareView },
         { id: 'logs', label: 'Logs', icon: ScrollText, workspace: LogsView }
       ]
     },

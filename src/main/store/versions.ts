@@ -41,13 +41,22 @@ const toRecord = (r: VersionRow): VersionRecord => ({
   createdAt: r.created_at
 })
 
+// created_at 은 ms 해상도라 연속 컷이 같은 값이 될 수 있다 — rowid(삽입 순) DESC 를 tiebreak 로
+// 두어 "가장 최근 컷"이 결정적으로 정해지게 한다(latestVersion·자동 patch 기준의 비결정성 제거).
+const VERSION_ORDER = 'ORDER BY created_at DESC, rowid DESC'
+
 export function listVersions(designId: string): VersionRecord[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, design_id, number, note, snapshot, locked, created_at FROM versions WHERE design_id = ? ORDER BY created_at DESC'
+      `SELECT id, design_id, number, note, snapshot, locked, created_at FROM versions WHERE design_id = ? ${VERSION_ORDER}`
     )
     .all(designId) as unknown as VersionRow[]
   return rows.map(toRecord)
+}
+
+/** 버전 삭제 — 잘못 컷된 버전 회수용. 스냅샷 JSON 이 버전 행에 담겨 있어 행 삭제로 완결. */
+export function deleteVersion(id: string): void {
+  getDb().prepare('DELETE FROM versions WHERE id = ?').run(id)
 }
 
 export function createVersion(input: CreateVersionInput): VersionRecord {

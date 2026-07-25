@@ -4,12 +4,19 @@ import { closePgConnection, createPgConnection } from '../infra/db/pgClient'
 import { closeSqliteConnection, createSqliteConnection } from '../infra/db/sqliteClient'
 import {
   createConnection,
+  createConnectionGroup,
   deleteConnection,
+  deleteConnectionGroup,
   getConnection,
   getConnectionWithPassword,
+  listConnectionGroups,
   listConnections,
+  moveConnection,
+  renameConnectionGroup,
+  reorderConnectionGroups,
   reorderConnections,
   updateConnection,
+  type ConnectionGroupRecord,
   type ConnectionRecord,
   type DbType
 } from '../store/connections'
@@ -28,6 +35,7 @@ export interface ConnectionFormData {
   password: string
   sslEnabled: boolean
   sslConfig?: Record<string, unknown>
+  autoCheckDisabled?: boolean
 }
 
 export interface TestConnectionResult {
@@ -52,7 +60,8 @@ export const connectionService = {
       user: form.user,
       encryptedPassword: form.password ? encrypt(form.password) : '',
       sslEnabled: form.sslEnabled,
-      sslConfig: form.sslConfig
+      sslConfig: form.sslConfig,
+      autoCheckDisabled: form.autoCheckDisabled
     })
   },
 
@@ -67,8 +76,20 @@ export const connectionService = {
       user: form.user,
       encryptedPassword: form.password ? encrypt(form.password) : undefined,
       sslEnabled: form.sslEnabled,
-      sslConfig: form.sslConfig
+      sslConfig: form.sslConfig,
+      autoCheckDisabled: form.autoCheckDisabled
     })
+  },
+
+  /**
+   * 저장된 비밀번호 평문 반환 — 편집 화면에서 눈 아이콘으로 확인하려는 사용자 요청.
+   * 로컬 전용 도구라 허용하되, 복호화 평문이 렌더러로 넘어가는 유일한 경로이므로
+   * MCP(원격) 노출은 금지(coverage 제외 등재). 없으면 빈 문자열.
+   */
+  revealPassword(id: string): string {
+    const row = getConnectionWithPassword(id)
+    if (!row) throw new Error(`연결을 찾을 수 없습니다: ${id}`)
+    return row.encryptedPassword ? decrypt(row.encryptedPassword) : ''
   },
 
   delete(id: string): void {
@@ -77,6 +98,35 @@ export const connectionService = {
 
   reorder(orderedIds: string[]): void {
     reorderConnections(orderedIds)
+  },
+
+  /** 그룹 이동(그룹/미분류) + 전역 순서 반영 — DnD 드롭 한 번 = 트랜잭션 한 번. */
+  move(id: string, groupId: string | null, orderedIds: string[]): ConnectionRecord {
+    return moveConnection(id, groupId, orderedIds)
+  },
+
+  listGroups(): ConnectionGroupRecord[] {
+    return listConnectionGroups()
+  },
+
+  createGroup(name: string): ConnectionGroupRecord {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('그룹 이름을 입력하세요.')
+    return createConnectionGroup(trimmed)
+  },
+
+  renameGroup(id: string, name: string): ConnectionGroupRecord {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('그룹 이름을 입력하세요.')
+    return renameConnectionGroup(id, trimmed)
+  },
+
+  reorderGroups(orderedIds: string[]): void {
+    reorderConnectionGroups(orderedIds)
+  },
+
+  deleteGroup(id: string): void {
+    deleteConnectionGroup(id)
   },
 
   async testConnection(form: ConnectionFormData): Promise<TestConnectionResult> {

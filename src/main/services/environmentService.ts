@@ -1,7 +1,9 @@
 import {
+  deleteBinding,
   ensureBinding,
   findBinding,
   getEnvironment,
+  listBindingsByConnection,
   setAppliedVersion,
   setTargetVersion,
   type EnvironmentRecord
@@ -19,6 +21,17 @@ export const environmentService = {
 
   find(connectionId: string, designId: string): EnvironmentRecord | null {
     return findBinding(connectionId, designId)
+  },
+
+  /** 한 연결에 물린 바인딩 전부(관리 UI). */
+  listByConnection(connectionId: string): EnvironmentRecord[] {
+    return listBindingsByConnection(connectionId)
+  },
+
+  /** 바인딩 해제. 없으면 조용히 통과(멱등). */
+  remove(id: string): void {
+    if (!getEnvironment(id)) return
+    deleteBinding(id)
   },
 
   /** (connection, design) 바인딩 확보(없으면 생성). 타깃 버전을 함께 지정 가능. */

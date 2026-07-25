@@ -29,6 +29,8 @@ import { cn } from '@renderer/lib/utils'
 import { useActiveTable, useDefinitionStore, useDesignTables } from './store'
 import { RefTableCard } from './FkRef'
 import { checkColumns, resolveColumns } from './derive'
+import { fkTargetLabel, IMPLIED_FK_ACTION } from './fkPolicy'
+import { FkPolicyChips } from './FkPolicyChips'
 import type { Constraint, ConstraintKind, FkAction, TableDef } from './types'
 
 const CONSTRAINT_KINDS: ConstraintKind[] = ['pk', 'uk', 'fk', 'check', 'idx']
@@ -70,15 +72,8 @@ function ConstraintSummary({ table, con }: { table: TableDef; con: Constraint })
       {con.kind === 'fk' && (
         <>
           <span className="shrink-0 text-[12px] text-accent-2">→</span>
-          <span className="shrink-0 font-mono text-[11px] text-accent">
-            {con.refTable || '?'} ({(con.refColumns ?? []).join(', ') || '?'})
-          </span>
-          <span className="shrink-0 rounded bg-panel-strong px-1.5 py-0.5 font-mono text-[10px] text-muted">
-            DEL {con.onDelete ?? 'RESTRICT'}
-          </span>
-          <span className="shrink-0 rounded bg-panel-strong px-1.5 py-0.5 font-mono text-[10px] text-muted">
-            UPD {con.onUpdate ?? 'RESTRICT'}
-          </span>
+          <span className="shrink-0 font-mono text-[11px] text-accent">{fkTargetLabel(con)}</span>
+          <FkPolicyChips con={con} />
         </>
       )}
     </span>
@@ -277,7 +272,7 @@ function ConstraintEditor({ table, con }: { table: TableDef; con: Constraint }) 
             <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
               ON DELETE
               <Select
-                value={con.onDelete ?? 'RESTRICT'}
+                value={con.onDelete ?? IMPLIED_FK_ACTION}
                 onValueChange={(v) => updateConstraint(con.id, { onDelete: v as FkAction })}
               >
                 <SelectTrigger size="sm" className="w-36 font-mono text-[12px]">
@@ -295,7 +290,7 @@ function ConstraintEditor({ table, con }: { table: TableDef; con: Constraint }) 
             <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
               ON UPDATE
               <Select
-                value={con.onUpdate ?? 'RESTRICT'}
+                value={con.onUpdate ?? IMPLIED_FK_ACTION}
                 onValueChange={(v) => updateConstraint(con.id, { onUpdate: v as FkAction })}
               >
                 <SelectTrigger size="sm" className="w-36 font-mono text-[12px]">

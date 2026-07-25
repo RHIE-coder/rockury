@@ -5,7 +5,9 @@
  * 설계 화면·DDL 은 이 방언의 네이티브 구문 그대로 저술/출력되고,
  * 벤더 이동은 명시적 "포팅"(새 Design 생성)으로만 이뤄진다.
  */
-export type DialectId = 'postgresql' | 'mysql' | 'mariadb' | 'sqlite'
+import type { DialectId } from '@shared/dialects'
+
+export type { DialectId }
 
 export interface DialectInfo {
   id: DialectId

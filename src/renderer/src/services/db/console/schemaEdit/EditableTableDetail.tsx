@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2, KeyRound, Table2, Eye } from 'lucide-react'
+import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2, Table2, Eye } from 'lucide-react'
 import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
@@ -15,6 +15,7 @@ import {
 import { dialectInfo, type DialectId } from '../../dialects'
 import type { ConstraintKind, FkAction, TableDef } from '../../workspaces/definition/types'
 import { keyBadgesOf, resolveColumns } from '../../workspaces/definition/derive'
+import { IMPLIED_FK_ACTION, type FkPolicyKind } from '../../workspaces/definition/fkPolicy'
 import { useSchemaEditStore } from './store'
 
 const GRID =
@@ -27,6 +28,37 @@ const KIND_VARIANT: Record<ConstraintKind, 'pk' | 'uk' | 'fk' | 'idx' | 'check'>
   fk: 'fk',
   idx: 'idx',
   check: 'check'
+}
+
+/**
+ * FK 정책 선택 — 어느 정책인지 라벨을 앞에 붙인다(`DEL:`/`UPD:` 축약은 Definition 표기와 어긋나 폐기).
+ * 값이 없으면 DB 가 실제로 적용하는 NO ACTION 을 골라 둔 것으로 보인다.
+ */
+function FkActionSelect({
+  kind,
+  value,
+  onChange
+}: {
+  kind: FkPolicyKind
+  value?: FkAction
+  onChange: (v: FkAction) => void
+}) {
+  return (
+    <label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+      {kind}
+      <select
+        value={value ?? IMPLIED_FK_ACTION}
+        onChange={(e) => onChange(e.target.value as FkAction)}
+        className="h-7 rounded-md border border-line bg-canvas px-1.5 font-mono text-[11px] normal-case text-fg outline-none focus:border-accent"
+      >
+        {FK_ACTIONS.map((a) => (
+          <option key={a} value={a}>
+            {a}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
 }
 
 /** 편집 가능한 컬럼 행 ⋯ 메뉴 — 이동·키 토글·삭제. */
@@ -216,7 +248,7 @@ export function EditableTableDetail({ table, dialect, allTables }: { table: Tabl
                   {cols.length > 0 && <span className="font-mono text-muted">({cols.join(', ')})</span>}
                   {con.kind === 'fk' && (
                     <span className="flex flex-wrap items-center gap-1.5">
-                      <KeyRound className="size-3 text-accent" />→
+                      <span className="text-accent-2">→</span>
                       <select
                         value={con.refTable ?? ''}
                         onChange={(e) => s.updateConstraint(con.id, { refTable: e.target.value })}
@@ -239,18 +271,18 @@ export function EditableTableDetail({ table, dialect, allTables }: { table: Tabl
                         placeholder="참조 컬럼(쉼표)"
                         className="h-7 w-40 font-mono text-[12px]"
                       />
-                      <select
-                        value={con.onDelete ?? 'RESTRICT'}
-                        onChange={(e) => s.updateConstraint(con.id, { onDelete: e.target.value as FkAction })}
-                        className="h-7 rounded-md border border-line bg-canvas px-1.5 text-[11px] text-fg outline-none focus:border-accent"
-                        title="ON DELETE"
-                      >
-                        {FK_ACTIONS.map((a) => (
-                          <option key={a} value={a}>
-                            DEL:{a}
-                          </option>
-                        ))}
-                      </select>
+                      {/* 정책은 ON DELETE·ON UPDATE 둘 다 편집한다 — 한쪽만 두면 나머지가 DB 기본값으로
+                          조용히 남아 Definition 표기(FkPolicyChips)와 어긋난다. */}
+                      <FkActionSelect
+                        kind="ON DELETE"
+                        value={con.onDelete}
+                        onChange={(v) => s.updateConstraint(con.id, { onDelete: v })}
+                      />
+                      <FkActionSelect
+                        kind="ON UPDATE"
+                        value={con.onUpdate}
+                        onChange={(v) => s.updateConstraint(con.id, { onUpdate: v })}
+                      />
                     </span>
                   )}
                   {con.kind === 'check' && (

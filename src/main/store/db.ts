@@ -64,7 +64,8 @@ function migrate(d: DatabaseSync): void {
       comment     TEXT NOT NULL DEFAULT '',
       position    INTEGER NOT NULL DEFAULT 0,
       columns     TEXT NOT NULL DEFAULT '[]',
-      constraints TEXT NOT NULL DEFAULT '[]'
+      constraints TEXT NOT NULL DEFAULT '[]',
+      is_view     INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_tables_design ON tables(design_id);
 
@@ -80,6 +81,15 @@ function migrate(d: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_versions_design ON versions(design_id);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_versions_design_number ON versions(design_id, number);
 
+    -- Connection 그룹: 접속 카드 분류(1단계, 중첩 없음). 삭제 시 소속 연결은 미분류로.
+    CREATE TABLE IF NOT EXISTS connection_groups (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     -- Connection: 원시 접속(엔드포인트/자격증명), 설계 무관. Console 을 구동.
     CREATE TABLE IF NOT EXISTS connections (
       id                 TEXT PRIMARY KEY,
@@ -92,6 +102,8 @@ function migrate(d: DatabaseSync): void {
       encrypted_password TEXT NOT NULL DEFAULT '',
       ssl_enabled        INTEGER NOT NULL DEFAULT 0,
       ssl_config         TEXT,
+      auto_check_disabled INTEGER NOT NULL DEFAULT 0,
+      group_id           TEXT,
       sort_order         INTEGER NOT NULL DEFAULT 0,
       created_at         TEXT NOT NULL,
       updated_at         TEXT NOT NULL
@@ -212,6 +224,21 @@ function migrate(d: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_collection_items_coll ON collection_items(collection_id);
 
+    -- Studio › Seed: 시드 세트(설계가 정의하는 기준 데이터). 테이블당 하나 → (design_id, table_name) PK.
+    -- 컬럼을 이름으로 가리킨다(실 DB 에선 이름이 정체성) → 스키마 컬럼 id 와 조인하지 않는다.
+    CREATE TABLE IF NOT EXISTS seed_sets (
+      design_id       TEXT NOT NULL,
+      table_name      TEXT NOT NULL,
+      position        INTEGER NOT NULL DEFAULT 0,
+      natural_key     TEXT NOT NULL DEFAULT '[]',
+      ignored_columns TEXT NOT NULL DEFAULT '[]',
+      strength        TEXT NOT NULL DEFAULT 'ensure',
+      -- rows_json: ROWS 는 SQL 키워드(윈도우 프레임)라 컬럼명 충돌을 피해 이름을 바꿨다.
+      rows_json       TEXT NOT NULL DEFAULT '[]',
+      PRIMARY KEY (design_id, table_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_seed_sets_design ON seed_sets(design_id);
+
     -- Console 실 ERD(2e) 레이아웃 — 연결별 노드 위치/뷰포트(JSON). 노드 키는 t:<테이블명>.
     CREATE TABLE IF NOT EXISTS diagram_layouts (
       connection_id TEXT PRIMARY KEY,
@@ -219,6 +246,9 @@ function migrate(d: DatabaseSync): void {
       viewport      TEXT,
       updated_at    TEXT NOT NULL
     );
+
+    -- (정리) mcp_projects: 프로젝트별 .mcp.json 셋업 방식 제거(2026-07-24)로 폐기된 테이블.
+    DROP TABLE IF EXISTS mcp_projects;
   `)
 
   // 추가 마이그레이션(구 스키마 호환): collection_items 가 저장쿼리를 "참조"할 수 있도록 컬럼 추가.
@@ -264,6 +294,25 @@ function migrate(d: DatabaseSync): void {
     .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('collections') WHERE name='description'`)
     .get() as unknown as { c: number }
   if (hasColDesc.c === 0) d.exec(`ALTER TABLE collections ADD COLUMN description TEXT NOT NULL DEFAULT ''`)
+
+  // connections.auto_check_disabled — 연결 페이지 진입 시 전체 자동 확인에서 제외할지. 구 스키마 호환 ALTER.
+  const hasAutoCheck = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('connections') WHERE name='auto_check_disabled'`)
+    .get() as unknown as { c: number }
+  if (hasAutoCheck.c === 0) d.exec('ALTER TABLE connections ADD COLUMN auto_check_disabled INTEGER NOT NULL DEFAULT 0')
+
+  // connections.group_id — 접속 카드 그룹 분류. 구 스키마 호환 ALTER.
+  const hasGroup = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('connections') WHERE name='group_id'`)
+    .get() as unknown as { c: number }
+  if (hasGroup.c === 0) d.exec('ALTER TABLE connections ADD COLUMN group_id TEXT')
+
+  // tables.is_view — 역설계로 가져온 뷰(view)인지. 설계부 목록이 테이블과 뷰를 갈라 보여주려면
+  // 이 표식이 저장까지 살아남아야 한다(예전엔 IPC 경계에서 유실됐다). 구 스키마 호환 ALTER.
+  const hasIsView = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('tables') WHERE name='is_view'`)
+    .get() as unknown as { c: number }
+  if (hasIsView.c === 0) d.exec('ALTER TABLE tables ADD COLUMN is_view INTEGER NOT NULL DEFAULT 0')
 }
 
 /** 첫 실행 시드 — commerce-core (MySQL) 설계 + 예제 테이블. designs 가 비어 있을 때만. */

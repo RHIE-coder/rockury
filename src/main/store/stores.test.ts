@@ -23,10 +23,34 @@ import {
   reorderItems
 } from './collections'
 import { appendHistory, listHistory } from './queryHistory'
+import { listTables, replaceTablesForDesign, type TableRecord } from './tables'
+import { listSeedSets, replaceSeedSetsForDesign, type SeedSetRecord } from './seedSets'
+import { createDesign, deleteDesign } from './designs'
 import { clearLayout, getLayout, saveLayout } from './diagramLayouts'
 import { appendLog, latestSnapshot, listLogs, saveSnapshot } from './migration'
-import { createConnection, deleteConnection, getConnectionWithPassword, listConnections } from './connections'
-import { ensureBinding, getEnvironment, setAppliedVersion } from './environments'
+import { createVersion, deleteVersion, listVersions } from './versions'
+import {
+  createConnection,
+  createConnectionGroup,
+  deleteConnection,
+  deleteConnectionGroup,
+  getConnection,
+  getConnectionGroup,
+  getConnectionWithPassword,
+  listConnectionGroups,
+  listConnections,
+  moveConnection,
+  renameConnectionGroup,
+  reorderConnectionGroups,
+  updateConnection
+} from './connections'
+import {
+  deleteBinding,
+  ensureBinding,
+  getEnvironment,
+  listBindingsByConnection,
+  setAppliedVersion
+} from './environments'
 
 /**
  * 로컬 저장소 통합 테스트 — 임시 SQLite(setDbPath) 위에서 실제 SQL 로직을 검증한다.
@@ -168,6 +192,16 @@ describe('connections + environments 바인딩', () => {
     })
     expect(listConnections().find((c) => c.id === conn.id)?.name).toBe('c1')
     expect(getConnectionWithPassword(conn.id)?.encryptedPassword).toBe('enc')
+    expect(conn.autoCheckDisabled).toBe(false) // 기본값 — 자동확인 대상
+
+    // 자동확인 무시 플래그 왕복(생성 시 지정 + 갱신)
+    const skipped = createConnection({
+      name: 'c-skip', dbType: 'mysql', host: 'h', port: 3306, database: 'd', user: 'u',
+      encryptedPassword: 'enc', sslEnabled: false, autoCheckDisabled: true
+    })
+    expect(getConnection(skipped.id)?.autoCheckDisabled).toBe(true)
+    updateConnection(skipped.id, { autoCheckDisabled: false })
+    expect(getConnection(skipped.id)?.autoCheckDisabled).toBe(false)
 
     // 바인딩 멱등: 같은 (conn, design) → 같은 id
     const b1 = ensureBinding(conn.id, 'design1', 'v1')
@@ -180,6 +214,213 @@ describe('connections + environments 바인딩', () => {
     // 연결 삭제 → 바인딩 cascade
     deleteConnection(conn.id)
     expect(getEnvironment(b1.id)).toBeNull()
+  })
+
+  it('그룹 CRUD·이동: 생성 순 정렬, 이름변경, 이동(그룹↔미분류)+전역 순서, 삭제 시 소속 해제', () => {
+    const mk = (name: string) =>
+      createConnection({
+        name, dbType: 'mysql', host: 'h', port: 3306, database: 'd', user: 'u',
+        encryptedPassword: 'enc', sslEnabled: false
+      })
+    const a = mk('g-a')
+    const b = mk('g-b')
+    const c = mk('g-c')
+
+    const g1 = createConnectionGroup('운영')
+    const g2 = createConnectionGroup('개발')
+    expect(listConnectionGroups().map((g) => g.name)).toEqual(['운영', '개발']) // 생성 순
+    expect(a.groupId).toBeNull() // 기본값 — 미분류
+
+    renameConnectionGroup(g1.id, '스테이징')
+    expect(getConnectionGroup(g1.id)?.name).toBe('스테이징')
+
+    // 순서 변경: g2 를 앞으로
+    reorderConnectionGroups([g2.id, g1.id])
+    expect(listConnectionGroups().map((g) => g.id)).toEqual([g2.id, g1.id])
+    reorderConnectionGroups([g1.id, g2.id]) // 원복(이후 단정 유지)
+
+    // 이동: b 를 g1 로 + 전역 순서 [b, a, c]
+    const moved = moveConnection(b.id, g1.id, [b.id, a.id, c.id])
+    expect(moved.groupId).toBe(g1.id)
+    const names = () => listConnections().filter((x) => [a.id, b.id, c.id].includes(x.id)).map((x) => x.name)
+    expect(names()).toEqual(['g-b', 'g-a', 'g-c'])
+
+    // 미분류로 빼기 + 순서 복귀
+    expect(moveConnection(b.id, null, [a.id, b.id, c.id]).groupId).toBeNull()
+    expect(names()).toEqual(['g-a', 'g-b', 'g-c'])
+
+    // 없는 그룹/연결 이동은 거부
+    expect(() => moveConnection(b.id, 'cgrp_없음', [a.id, b.id, c.id])).toThrow()
+    expect(() => moveConnection('conn_없음', null, [])).toThrow()
+
+    // 그룹 삭제 → 소속 연결은 살아남고 미분류로
+    moveConnection(c.id, g2.id, [a.id, b.id, c.id])
+    deleteConnectionGroup(g2.id)
+    expect(getConnectionGroup(g2.id)).toBeNull()
+    expect(getConnection(c.id)?.groupId).toBeNull()
+
+    deleteConnection(a.id)
+    deleteConnection(b.id)
+    deleteConnection(c.id)
+    deleteConnectionGroup(g1.id)
+  })
+
+  it('listByConnection: 한 연결의 바인딩 전부를 오래된 순으로, 다른 연결과 격리', () => {
+    const conn = createConnection({
+      name: 'c-list', dbType: 'mysql', host: 'h', port: 3306, database: 'd', user: 'u',
+      encryptedPassword: 'enc', sslEnabled: false
+    })
+    const other = createConnection({
+      name: 'c-other', dbType: 'mysql', host: 'h', port: 3306, database: 'd', user: 'u',
+      encryptedPassword: 'enc', sslEnabled: false
+    })
+    const e1 = ensureBinding(conn.id, 'design_a', 'v1')
+    const e2 = ensureBinding(conn.id, 'design_b', 'v2')
+    ensureBinding(other.id, 'design_a', 'v1')
+
+    const list = listBindingsByConnection(conn.id)
+    expect(list.map((b) => b.id)).toEqual([e1.id, e2.id]) // 생성 순(오래된 순)
+    expect(list.every((b) => b.connectionId === conn.id)).toBe(true)
+    expect(listBindingsByConnection(other.id)).toHaveLength(1) // 격리
+  })
+
+  it('deleteBinding: 바인딩 + 딸린 스냅샷·로그를 함께 정리(멱등)', () => {
+    const conn = createConnection({
+      name: 'c-del', dbType: 'mysql', host: 'h', port: 3306, database: 'd', user: 'u',
+      encryptedPassword: 'enc', sslEnabled: false
+    })
+    const env = ensureBinding(conn.id, 'design_x', 'v1')
+    saveSnapshot({ envId: env.id, version: 'v1', snapshot: { tables: [] } })
+    appendLog({ envId: env.id, kind: 'baseline', toVersion: 'v1', summary: '가져오기' })
+    expect(latestSnapshot(env.id)).not.toBeNull()
+    expect(listLogs(env.id)).toHaveLength(1)
+
+    deleteBinding(env.id)
+    expect(getEnvironment(env.id)).toBeNull()
+    expect(latestSnapshot(env.id)).toBeNull() // 스냅샷 연쇄 정리
+    expect(listLogs(env.id)).toEqual([]) // 로그 연쇄 정리
+
+    // 없는 id 재삭제해도 안전(멱등) — throw 하지 않는다.
+    expect(() => deleteBinding(env.id)).not.toThrow()
+  })
+})
+
+describe('tables — 설계 스코프 교체 (replaceTablesForDesign)', () => {
+  const tbl = (designId: string, id: string, name: string): TableRecord => ({
+    id,
+    designId,
+    name,
+    comment: '',
+    columns: [{ id: `${id}-c1`, name: 'id', type: 'int', nullable: false, defaultValue: null, comment: '' }],
+    constraints: [{ id: `${id}-k1`, kind: 'pk', name: '', columns: [{ columnId: `${id}-c1` }] }]
+  })
+
+  it('CASE-mcp-030/033: 대상 설계만 교체 — 다른 설계 행 불변 + 순서(position)·JSON 왕복 유지', () => {
+    replaceTablesForDesign('scope_x', [tbl('scope_x', 'x1', 'alpha'), tbl('scope_x', 'x2', 'beta')])
+    replaceTablesForDesign('scope_y', [tbl('scope_y', 'y1', 'gamma')])
+    const yBefore = listTables().filter((t) => t.designId === 'scope_y')
+
+    // X 재교체 — 순서 변경 + 내용 변경. Y 는 바이트 단위로 그대로여야 한다.
+    replaceTablesForDesign('scope_x', [tbl('scope_x', 'x3', 'delta'), tbl('scope_x', 'x1', 'alpha2')])
+    const xs = listTables().filter((t) => t.designId === 'scope_x')
+    expect(xs.map((t) => t.name)).toEqual(['delta', 'alpha2']) // 저장 순서 유지
+    expect(xs[0].columns).toEqual(tbl('scope_x', 'x3', 'delta').columns) // JSON 왕복 정합
+    expect(xs[0].constraints).toEqual(tbl('scope_x', 'x3', 'delta').constraints)
+    expect(listTables().filter((t) => t.designId === 'scope_y')).toEqual(yBefore) // 격리
+  })
+
+  it('CASE-mcp-031: 빈 목록 → 설계 비우기, 다른 설계 불변', () => {
+    replaceTablesForDesign('scope_x', [])
+    expect(listTables().filter((t) => t.designId === 'scope_x')).toEqual([])
+    expect(listTables().filter((t) => t.designId === 'scope_y')).toHaveLength(1)
+  })
+
+  it('뷰 표식(isView)이 저장 왕복에서 살아남는다 — 설계 목록의 테이블/뷰 구분 근거', () => {
+    const view = { ...tbl('scope_v', 'v1', 'v_active_products'), isView: true }
+    replaceTablesForDesign('scope_v', [view, tbl('scope_v', 'v2', 'products')])
+    const got = listTables().filter((t) => t.designId === 'scope_v')
+    expect(got.map((t) => [t.name, t.isView])).toEqual([
+      ['v_active_products', true],
+      // 표식 없이 저장한 테이블은 뷰가 아니다(undefined 가 아니라 false 로 정규화).
+      ['products', false]
+    ])
+  })
+
+  it('CASE-mcp-032: 다른 설계 레코드가 섞인 배치는 전체 롤백 — 부분 반영 0', () => {
+    replaceTablesForDesign('scope_x', [tbl('scope_x', 'x9', 'nine')])
+    expect(() =>
+      replaceTablesForDesign('scope_x', [tbl('scope_x', 'x10', 'ten'), tbl('scope_y', 'oops', 'bad')])
+    ).toThrow(/설계/)
+    // 롤백: 새 배치의 x10 도 없고, 기존 x9 는 살아 있다.
+    expect(listTables().filter((t) => t.designId === 'scope_x').map((t) => t.id)).toEqual(['x9'])
+    expect(listTables().filter((t) => t.designId === 'scope_y')).toHaveLength(1)
+  })
+})
+
+describe('seedSets — 시드 세트 설계 스코프 저장', () => {
+  const seedSet = (designId: string, tableName: string, rows: unknown[] = []): SeedSetRecord => ({
+    designId,
+    tableName,
+    naturalKey: ['code'],
+    ignoredColumns: ['id', 'created_at'],
+    strength: 'authoritative',
+    rows
+  })
+
+  it('CASE-studio-030: 선언(자연키·무시 컬럼·관리 강도)과 행이 왕복에서 보존된다', () => {
+    const rows = [
+      { id: 'r1', values: { code: 'admin', name: '관리자', pw: '{{ADMIN_PASSWORD_HASH}}', memo: null } },
+      { id: 'r2', values: { code: 'viewer', name: '조회자' } }
+    ]
+    replaceSeedSetsForDesign('seed_x', [seedSet('seed_x', 'roles', rows)])
+    const got = listSeedSets().filter((s) => s.designId === 'seed_x')
+    expect(got).toHaveLength(1)
+    expect(got[0]).toEqual(seedSet('seed_x', 'roles', rows))
+  })
+
+  it('CASE-studio-031: 대상 설계만 교체 — 다른 설계 시드 불변 + 저장 순서 유지', () => {
+    replaceSeedSetsForDesign('seed_x', [seedSet('seed_x', 'roles'), seedSet('seed_x', 'permissions')])
+    replaceSeedSetsForDesign('seed_y', [seedSet('seed_y', 'codes')])
+    const yBefore = listSeedSets().filter((s) => s.designId === 'seed_y')
+
+    replaceSeedSetsForDesign('seed_x', [seedSet('seed_x', 'permissions')])
+    expect(listSeedSets().filter((s) => s.designId === 'seed_x').map((s) => s.tableName)).toEqual([
+      'permissions'
+    ])
+    expect(listSeedSets().filter((s) => s.designId === 'seed_y')).toEqual(yBefore)
+  })
+
+  it('다른 설계 시드가 섞인 배치는 전체 롤백 — 부분 반영 0', () => {
+    replaceSeedSetsForDesign('seed_x', [seedSet('seed_x', 'roles')])
+    expect(() =>
+      replaceSeedSetsForDesign('seed_x', [seedSet('seed_x', 'perms'), seedSet('seed_y', 'oops')])
+    ).toThrow(/설계/)
+    expect(listSeedSets().filter((s) => s.designId === 'seed_x').map((s) => s.tableName)).toEqual(['roles'])
+  })
+
+  it('설계를 지우면 그 설계 시드도 함께 사라진다(유령 시드 방지)', () => {
+    const d = createDesign({ name: 'Seed 정리 대상', dialect: 'mysql' })
+    replaceSeedSetsForDesign(d.id, [seedSet(d.id, 'roles')])
+    expect(listSeedSets().filter((s) => s.designId === d.id)).toHaveLength(1)
+    deleteDesign(d.id)
+    expect(listSeedSets().filter((s) => s.designId === d.id)).toEqual([])
+  })
+})
+
+describe('versions (컷 · 조회 · 삭제)', () => {
+  it('생성→목록(최신순)→삭제(잘못 컷된 버전 회수)', () => {
+    const d = 'design_ver'
+    createVersion({ designId: d, number: 'v0.1.0', note: '첫', snapshot: { tables: [] } })
+    const bad = createVersion({ designId: d, number: 'v0.0.1', note: '잘못 컷', snapshot: { tables: [{ id: 't:x' }] } })
+    expect(listVersions(d).map((v) => v.number)).toContain('v0.0.1')
+
+    deleteVersion(bad.id)
+    const after = listVersions(d)
+    expect(after.map((v) => v.number)).not.toContain('v0.0.1')
+    expect(after.map((v) => v.number)).toContain('v0.1.0') // 다른 버전은 보존
+
+    // 없는 id 삭제해도 안전(멱등).
+    expect(() => deleteVersion(bad.id)).not.toThrow()
   })
 })
 

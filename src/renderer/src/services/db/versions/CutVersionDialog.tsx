@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { GitCommitHorizontal, Layers } from 'lucide-react'
+import { GitCommitHorizontal, Layers, Sprout } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import {
@@ -30,6 +30,7 @@ export function CutVersionDialog({
   designId,
   latest,
   tableCount,
+  seedRowCount = 0,
   snapshot
 }: {
   open: boolean
@@ -37,6 +38,8 @@ export function CutVersionDialog({
   designId: string
   latest: string | null
   tableCount: number
+  /** 이 스냅샷에 함께 담기는 시드 행 수(0이면 표시하지 않는다). */
+  seedRowCount?: number
   snapshot: VersionSnapshot
 }) {
   const cut = useVersionsStore((s) => s.cut)
@@ -87,6 +90,13 @@ export function CutVersionDialog({
             <span className="flex items-center gap-1.5 text-muted">
               <Layers className="size-3.5" />
               테이블 {tableCount}개
+              {/* 시드도 이 스냅샷에 담긴다는 것을 컷 직전에 보인다(시드 0이면 표시하지 않음). */}
+              {seedRowCount > 0 && (
+                <>
+                  <Sprout className="ml-1 size-3.5" />
+                  시드 {seedRowCount}행
+                </>
+              )}
             </span>
           </div>
 

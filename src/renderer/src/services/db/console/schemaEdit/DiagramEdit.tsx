@@ -20,9 +20,11 @@ import type { DialectId } from '../../dialects'
 import type { TableDef } from '../../workspaces/definition/types'
 import { buildErd } from '../diagram/graph'
 import { estimateNodeSize, layoutErd, type Positions } from '../diagram/layout'
+import { seedNodes } from '../diagram/seed'
 import { matchTables } from '../diagram/filter'
 import { TableErdNode } from '../diagram/TableErdNode'
 import { RelationErdEdge } from '../diagram/RelationErdEdge'
+import { DiagramTablePanel } from '../diagram/DiagramTablePanel'
 import { buildFkPatch } from '../../workspaces/diagram/fk'
 import { useSchemaEditStore } from './store'
 import { PreviewBar } from './PreviewBar'
@@ -190,6 +192,8 @@ function EditCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState(base.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(base.edges)
   const seededRef = useRef(false)
+  // 직전 effect 실행 시점의 노드 id 집합 — grew(새 테이블 등장) 판정을 updater 밖에서 하기 위함.
+  const prevIdsRef = useRef<Set<string>>(new Set())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const neighbors = useMemo(() => {
@@ -210,18 +214,16 @@ function EditCanvas({
       .catch(() => {})
   }, [rf, connId])
 
+  // seed 판정·fitView 는 반드시 updater 밖에서: updater 안에서 ref 를 바꾸면 StrictMode(dev)가
+  // updater 를 두 번 불러 첫 seed 분기가 무효화되고, 저장 위치 대신 dagre 배치가 적용·영속된다.
   useEffect(() => {
-    setNodes((prev) => {
-      const prevMap = new Map(prev.map((n) => [n.id, n]))
-      const first = !seededRef.current
-      seededRef.current = true
-      const overlay: Positions = first ? storedPositions : Object.fromEntries(prev.map((n) => [n.id, n.position]))
-      const grew = base.nodes.some((n) => !prevMap.has(n.id))
-      const next = base.nodes.map((n) => ({ ...n, position: overlay[n.id] ?? n.position, measured: prevMap.get(n.id)?.measured }))
-      if (grew && !first) setTimeout(() => rf.fitView({ padding: 0.15, duration: 300 }), 50)
-      return next
-    })
+    const first = !seededRef.current
+    seededRef.current = true
+    const grew = !first && base.nodes.some((n) => !prevIdsRef.current.has(n.id))
+    prevIdsRef.current = new Set(base.nodes.map((n) => n.id))
+    setNodes((prev) => seedNodes(base.nodes, prev, first, storedPositions))
     setEdges(base.edges)
+    if (grew) setTimeout(() => rf.fitView({ padding: 0.15, duration: 300 }), 50)
   }, [base, storedPositions, setNodes, setEdges, rf])
 
   useEffect(() => {
@@ -344,26 +346,30 @@ export function DiagramEdit({ conn }: { conn: ConnectionDef }) {
 
   const selected = draft.find((t) => t.id === activeId) ?? null
 
+  const setActiveTable = useSchemaEditStore((s) => s.setActiveTable)
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="relative flex-1">
-          {!layoutLoaded ? (
-            <div className="flex h-full items-center justify-center text-[13px] text-muted">배치 불러오는 중…</div>
-          ) : draft.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-[13px] text-muted">
-              편집할 테이블이 없습니다.
-              <Button size="sm" variant="outline" onClick={() => addTable(conn.dbType)}>
-                <Plus /> 첫 테이블 추가
-              </Button>
-            </div>
-          ) : (
-            <ReactFlowProvider key={conn.id}>
+        {!layoutLoaded ? (
+          <div className="flex flex-1 items-center justify-center text-[13px] text-muted">배치 불러오는 중…</div>
+        ) : draft.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-muted">
+            편집할 테이블이 없습니다.
+            <Button size="sm" variant="outline" onClick={() => addTable(conn.dbType)}>
+              <Plus /> 첫 테이블 추가
+            </Button>
+          </div>
+        ) : (
+          <ReactFlowProvider key={conn.id}>
+            {/* 읽기 Diagram 과 같은 좌측 목록 — 편집 중에도 테이블을 찾아 옮겨 다닐 수 있어야 한다. */}
+            <DiagramTablePanel tables={draft} selectedId={activeId} onSelect={setActiveTable} />
+            <div className="relative min-w-0 flex-1">
               <EditCanvas tables={draft} connId={conn.id} dialect={conn.dbType} storedPositions={storedPositions} />
-            </ReactFlowProvider>
-          )}
-        </div>
-        {selected && <EditPanel table={selected} />}
+            </div>
+            {selected && <EditPanel table={selected} />}
+          </ReactFlowProvider>
+        )}
       </div>
       <PreviewBar dialect={conn.dbType} />
     </div>

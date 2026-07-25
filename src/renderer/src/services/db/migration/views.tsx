@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Camera,
   CheckCircle2,
+  DownloadCloud,
   Loader2,
   Play,
   Radar,
@@ -29,6 +30,7 @@ import { useDesignVersions } from '../versions/store'
 import type { SchemaDiff } from '../versions/diff'
 import { isEmptyDiff } from '../versions/diff'
 import { useMigrationStore } from './store'
+import { useImportStore } from './importStore'
 
 interface Ctx {
   design: DesignDef
@@ -114,19 +116,53 @@ function Header({ title, ctx, children }: { title: string; ctx: Ctx; children?: 
 
 // ─────────────────────────── Drift [diff②] ───────────────────────────
 export function DriftView(): ReactElement {
-  const { ctx, fallback } = useCtx()
+  const design = useActiveDesign()
+  const connection = useActiveConnection()
+  const openImport = useImportStore((s) => s.openImport)
   const st = useMigrationStore()
-  const cid = ctx?.connection.id
-  const did = ctx?.design.id
+  const cid = connection?.id
+  const did = design?.id
   useEffect(() => {
     if (cid && did) void st.loadDrift(cid, did)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cid, did])
-  if (!ctx) return fallback!
 
+  if (!connection)
+    return <Guard title="연결을 선택하세요" sub="Connection 셀렉터에서 대상 실 DB 를 고르세요." />
+
+  // 연결은 있으나 물린 설계가 없음 → 운영 DB 를 새 설계로 가져오는 부트스트랩 진입.
+  if (!design) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
+          <div className="flex flex-col">
+            <h2 className="text-[14px] font-bold text-fg">Drift <span className="font-normal text-muted">· {connection.name}</span></h2>
+            <p className="text-[12px] text-muted">이 연결에 물린 설계가 없습니다</p>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-5">
+          <div className="flex max-w-xl flex-col items-start gap-3 rounded-lg border border-line bg-panel/50 p-4">
+            <div className="flex items-center gap-2 text-[13px] font-semibold text-fg"><DownloadCloud className="size-4" /> 아직 설계가 없습니다</div>
+            <p className="text-[12px] leading-relaxed text-muted">
+              드리프트는 설계 버전이 있어야 대조할 수 있습니다. 실 DB 를 역설계해 <b>새 설계로 가져오면</b> 첫 버전이 만들어지고,
+              이 연결↔설계 결속(Environment)이 세워집니다. 이후부터 드리프트·마이그레이션을 쓸 수 있어요.
+            </p>
+            <Button size="sm" onClick={() => openImport(connection, null)}>
+              <DownloadCloud /> 운영 DB 를 새 설계로 가져오기
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const ctx: Ctx = { design, connection }
   return (
     <div className="flex h-full flex-col">
       <Header title="Drift" ctx={ctx}>
+        <Button size="sm" onClick={() => openImport(connection, design)}>
+          <DownloadCloud /> 설계로 가져오기
+        </Button>
         <Button size="sm" variant="outline" disabled={st.loading} onClick={() => void st.loadDrift(ctx.connection.id, ctx.design.id)}>
           {st.loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 다시 검사
         </Button>

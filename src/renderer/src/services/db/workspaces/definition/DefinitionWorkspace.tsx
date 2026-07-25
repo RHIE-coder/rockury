@@ -1,67 +1,27 @@
-import { useState } from 'react'
-import { ArrowLeft, Layers, Lock, Plus, Search, TableProperties, X } from 'lucide-react'
+import { ArrowLeft, Layers, Lock, Plus, TableProperties, X } from 'lucide-react'
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { Button } from '@renderer/ui/button'
-import { Input } from '@renderer/ui/input'
-import { cx } from '@renderer/lib/cx'
 import { useNav } from '@renderer/nav/useNav'
+import { TableListPanel } from '../../TableListPanel'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { useDefinitionStore, useDesignTables, useStudioReadOnly } from './store'
 import { TableForm } from './TableForm'
 import { SqlForm } from './SqlForm'
 
-/** 좌측 서브사이드바 — 활성 설계의 테이블 목록 + 검색. 클릭 시 active 테이블 전환. */
+/** 좌측 서브사이드바 — 활성 설계의 테이블/뷰 목록 + 검색. 클릭 시 active 테이블 전환. */
 function TablesSidebar() {
   const tables = useDesignTables()
   const activeId = useDefinitionStore((s) => s.activeTableId)
   const setActive = useDefinitionStore((s) => s.setActiveTable)
-  const [q, setQ] = useState('')
-
-  const shown = tables.filter((t) => t.name.toLowerCase().includes(q.toLowerCase()))
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="relative px-2.5 pb-1.5 pt-2.5">
-        <Search size={13} className="absolute left-[18px] top-1/2 -translate-y-[3px] text-muted" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="테이블 검색…"
-          className="h-7 pl-7 text-[12px]"
-        />
-      </div>
-      <ul className="min-h-0 flex-1 overflow-auto px-1.5 pb-3">
-        {shown.length === 0 && (
-          <li className="px-2 py-4 text-center text-[11.5px] italic text-muted">
-            {tables.length === 0 ? '아직 테이블이 없어요' : '검색 결과가 없어요'}
-          </li>
-        )}
-        {shown.map((t) => (
-          <li key={t.id}>
-            <button
-              type="button"
-              onClick={() => setActive(t.id)}
-              className={cx(
-                'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors',
-                t.id === activeId
-                  ? 'bg-accent-soft font-semibold text-accent'
-                  : 'text-fg hover:bg-panel-strong'
-              )}
-            >
-              <span className="truncate">{t.name}</span>
-              <span
-                className={cx(
-                  'text-[10.5px] tabular-nums',
-                  t.id === activeId ? 'text-accent/70' : 'text-muted'
-                )}
-              >
-                {t.columns.length}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <TableListPanel
+      tables={tables}
+      activeId={activeId}
+      onPick={(t) => setActive(t.id)}
+      searchPlaceholder="테이블/컬럼 검색…"
+      emptyText="아직 테이블이 없어요"
+    />
   )
 }
 

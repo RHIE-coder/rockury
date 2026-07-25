@@ -20,10 +20,30 @@ export function registerConnectionIpc(): void {
   ipcMain.handle('connections:reorder', (_e, orderedIds: string[]) =>
     envelope(() => connectionService.reorder(orderedIds))
   )
+  ipcMain.handle('connections:move', (_e, id: string, groupId: string | null, orderedIds: string[]) =>
+    envelope(() => connectionService.move(id, groupId, orderedIds))
+  )
+  // 그룹(접속 카드 분류) CRUD — 삭제 시 소속 연결은 미분류로.
+  ipcMain.handle('connectionGroups:list', () => envelope(() => connectionService.listGroups()))
+  ipcMain.handle('connectionGroups:create', (_e, name: string) =>
+    envelope(() => connectionService.createGroup(name))
+  )
+  ipcMain.handle('connectionGroups:rename', (_e, id: string, name: string) =>
+    envelope(() => connectionService.renameGroup(id, name))
+  )
+  ipcMain.handle('connectionGroups:reorder', (_e, orderedIds: string[]) =>
+    envelope(() => connectionService.reorderGroups(orderedIds))
+  )
+  ipcMain.handle('connectionGroups:delete', (_e, id: string) =>
+    envelope(() => connectionService.deleteGroup(id))
+  )
   ipcMain.handle('connections:test', (_e, form: ConnectionFormData) =>
     envelope(() => connectionService.testConnection(form))
   )
   ipcMain.handle('connections:testById', (_e, id: string) =>
     envelope(() => connectionService.testConnectionById(id))
+  )
+  ipcMain.handle('connections:revealPassword', (_e, id: string) =>
+    envelope(() => connectionService.revealPassword(id))
   )
 }

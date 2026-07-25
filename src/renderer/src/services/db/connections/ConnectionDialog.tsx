@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Loader2, XCircle } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2, XCircle } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { Checkbox } from '@renderer/ui/checkbox'
@@ -33,6 +33,7 @@ export function ConnectionDialog() {
   const closeDialog = useConnectionsStore((s) => s.closeDialog)
   const createConn = useConnectionsStore((s) => s.create)
   const updateConn = useConnectionsStore((s) => s.update)
+  const reveal = useConnectionsStore((s) => s.reveal)
 
   const [name, setName] = useState('')
   const [dbType, setDbType] = useState<ConnDbType>('mysql')
@@ -41,7 +42,9 @@ export function ConnectionDialog() {
   const [database, setDatabase] = useState('')
   const [user, setUser] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [sslEnabled, setSslEnabled] = useState(false)
+  const [autoCheckDisabled, setAutoCheckDisabled] = useState(false)
   const [test, setTest] = useState<TestState>({ state: 'idle' })
 
   const fileBased = isFileBased(dbType)
@@ -49,6 +52,7 @@ export function ConnectionDialog() {
   useEffect(() => {
     if (!open) return
     setTest({ state: 'idle' })
+    setShowPassword(false) // 열 때마다 가림 상태로 초기화 — 드러난 채 다음 편집에 새지 않게
     if (editing) {
       setName(editing.name)
       setDbType(editing.dbType)
@@ -58,6 +62,15 @@ export function ConnectionDialog() {
       setUser(editing.user)
       setPassword('')
       setSslEnabled(editing.sslEnabled)
+      setAutoCheckDisabled(editing.autoCheckDisabled)
+      // 저장된 비번을 복호화해 프리필 — 눈 아이콘으로 확인 가능하게. 비우면 유지 규약은 유지됨(빈 값=변경 안 함).
+      let cancelled = false
+      void reveal(editing.id).then((pw) => {
+        if (!cancelled) setPassword(pw)
+      })
+      return () => {
+        cancelled = true
+      }
     } else {
       setName('')
       setDbType('mysql')
@@ -67,8 +80,10 @@ export function ConnectionDialog() {
       setUser('')
       setPassword('')
       setSslEnabled(false)
+      setAutoCheckDisabled(false)
     }
-  }, [open, editing])
+    return undefined
+  }, [open, editing, reveal])
 
   // dbType 변경 시 기본 포트 자동 반영(비어있거나 다른 벤더 기본값일 때).
   const pickDbType = (t: ConnDbType): void => {
@@ -92,7 +107,8 @@ export function ConnectionDialog() {
     database: database.trim(),
     user: fileBased ? '' : user.trim(),
     password,
-    sslEnabled: fileBased ? false : sslEnabled
+    sslEnabled: fileBased ? false : sslEnabled,
+    autoCheckDisabled
   })
 
   const runTest = async () => {
@@ -189,7 +205,19 @@ export function ConnectionDialog() {
               </div>
               <label className="flex flex-col gap-1.5 text-[12px] font-semibold text-fg">
                 비밀번호 {editing && <span className="font-normal text-muted">(비우면 유지)</span>}
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={editing ? '••••••• (변경하려면 입력)' : ''} className="h-8 text-[13px] font-normal" />
+                <div className="relative">
+                  <Input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={editing ? '••••••• (변경하려면 입력)' : ''} className="h-8 pr-9 text-[13px] font-normal" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    tabIndex={-1}
+                    aria-label={showPassword ? '비밀번호 가리기' : '비밀번호 보기'}
+                    title={showPassword ? '가리기' : '보기'}
+                    className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted outline-none hover:text-fg"
+                  >
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
               </label>
               <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-fg">
                 <Checkbox checked={sslEnabled} onCheckedChange={(c) => setSslEnabled(c === true)} />
@@ -197,6 +225,14 @@ export function ConnectionDialog() {
               </label>
             </>
           )}
+
+          <label className="flex cursor-pointer items-start gap-2 text-[12px] font-medium text-fg">
+            <Checkbox className="mt-0.5" checked={autoCheckDisabled} onCheckedChange={(c) => setAutoCheckDisabled(c === true)} />
+            <span className="flex flex-col">
+              자동 확인에서 제외
+              <span className="font-normal text-muted">Connections 페이지 진입·새로고침 시 이 연결은 확인하지 않습니다 (SSH 터널 등 상시연결 아닌 경우)</span>
+            </span>
+          </label>
 
           {test.state !== 'idle' && (
             <div

@@ -48,6 +48,29 @@ export function findBinding(connectionId: string, designId: string): Environment
   return row ? toRecord(row) : null
 }
 
+/** 한 연결에 물린 바인딩 전부(오래된 순). Environment 관리 UI 가 읽는다. */
+export function listBindingsByConnection(connectionId: string): EnvironmentRecord[] {
+  const rows = getDb()
+    .prepare('SELECT * FROM environments WHERE connection_id = ? ORDER BY created_at ASC')
+    .all(connectionId) as unknown as EnvRow[]
+  return rows.map(toRecord)
+}
+
+/** 바인딩 해제 — 딸린 스냅샷·로그도 함께 정리(원자적). */
+export function deleteBinding(id: string): void {
+  const d = getDb()
+  d.exec('BEGIN')
+  try {
+    d.prepare('DELETE FROM env_snapshots WHERE env_id = ?').run(id)
+    d.prepare('DELETE FROM migration_logs WHERE env_id = ?').run(id)
+    d.prepare('DELETE FROM environments WHERE id = ?').run(id)
+    d.exec('COMMIT')
+  } catch (e) {
+    d.exec('ROLLBACK')
+    throw e
+  }
+}
+
 /** (connection, design) 바인딩을 찾거나 만든다. 마이그레이션 진입 시 호출. */
 export function ensureBinding(
   connectionId: string,

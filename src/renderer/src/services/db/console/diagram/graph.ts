@@ -1,5 +1,4 @@
 import type { FkAction, TableDef } from '../../workspaces/definition/types'
-import { fkRefLabel } from '../constraintsView'
 
 /**
  * Console › Diagram(real, §ops-plan 2e)의 순수 그래프 변환.
@@ -120,6 +119,3 @@ function assignLabelLanes(edges: ErdEdge[]): void {
     })
   }
 }
-
-/** 엣지 라벨(툴팁/목록용) — constraintsView 의 fkRefLabel 재사용 위임. */
-export { fkRefLabel }

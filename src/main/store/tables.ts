@@ -12,6 +12,8 @@ export interface TableRecord {
   comment: string
   columns: unknown[]
   constraints: unknown[]
+  /** 역설계로 들여온 뷰(view)면 true — 목록에서 테이블과 갈라 보이기 위해 저장까지 보존한다. */
+  isView?: boolean
 }
 
 interface TableRow {
@@ -21,12 +23,13 @@ interface TableRow {
   comment: string
   columns: string
   constraints: string
+  is_view: number
 }
 
 export function listTables(): TableRecord[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, design_id, name, comment, columns, constraints FROM tables ORDER BY design_id, position'
+      'SELECT id, design_id, name, comment, columns, constraints, is_view FROM tables ORDER BY design_id, position'
     )
     .all() as unknown as TableRow[]
   return rows.map((r) => ({
@@ -35,33 +38,40 @@ export function listTables(): TableRecord[] {
     name: r.name,
     comment: r.comment,
     columns: JSON.parse(r.columns),
-    constraints: JSON.parse(r.constraints)
+    constraints: JSON.parse(r.constraints),
+    isView: r.is_view === 1
   }))
 }
 
 /**
- * 전체 테이블을 통째로 교체(wipe + rewrite) — 렌더러의 작업 스토어가
- * 변경 시 디바운스로 현재 전량을 보낸다. 데이터가 작아 단순·정확한 방식.
+ * 설계 스코프 교체 — 대상 설계의 행만 지우고 다시 쓴다(tx, wipe + rewrite).
+ * 전량 교체(구 replaceAllTables)를 대체: 에이전트(MCP)와 렌더러가 서로 다른 설계를
+ * 동시에 저장해도 낡은 사본이 상대 설계를 되덮지 못하게 저장 단위를 설계로 좁혔다
+ * (spec mcp-server tools.write AC-4).
  */
-export function replaceAllTables(records: TableRecord[]): void {
+export function replaceTablesForDesign(designId: string, records: TableRecord[]): void {
   const d = getDb()
   const insert = d.prepare(
-    'INSERT INTO tables (id, design_id, name, comment, position, columns, constraints) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO tables (id, design_id, name, comment, position, columns, constraints, is_view) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   )
   d.exec('BEGIN')
   try {
-    d.exec('DELETE FROM tables')
-    records.forEach((t, i) =>
+    d.prepare('DELETE FROM tables WHERE design_id = ?').run(designId)
+    records.forEach((t, i) => {
+      // 스코프 밖 레코드 혼입은 격리 위반 — tx 전체 롤백으로 부분 반영을 막는다.
+      if (t.designId !== designId)
+        throw new Error(`설계 "${designId}" 교체 배치에 다른 설계("${t.designId}") 레코드가 섞였습니다.`)
       insert.run(
         t.id,
-        t.designId,
+        designId,
         t.name,
         t.comment ?? '',
         i,
         JSON.stringify(t.columns ?? []),
-        JSON.stringify(t.constraints ?? [])
+        JSON.stringify(t.constraints ?? []),
+        t.isView ? 1 : 0
       )
-    )
+    })
     d.exec('COMMIT')
   } catch (e) {
     d.exec('ROLLBACK')

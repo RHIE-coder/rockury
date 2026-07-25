@@ -35,6 +35,8 @@ export interface SqlEditorProps {
   language?: 'sql' | 'json'
   placeholder?: string
   className?: string
+  /** 열람 전용 — 커서·선택·복사는 되고 입력만 막는다(값 뷰어용). */
+  readOnly?: boolean
 }
 
 const SQL_DIALECT: Record<DialectId, SQLDialect> = {
@@ -53,10 +55,16 @@ function langExtension(props: SqlEditorProps) {
   })
 }
 
+/** 열람 전용 확장 — 문서 변경을 막되(readOnly) 선택·복사는 남긴다(editable=false 로 캐럿만 감춤). */
+function readOnlyExtension(readOnly?: boolean) {
+  return readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []
+}
+
 export function SqlEditor(props: SqlEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const langComp = useRef(new Compartment())
+  const roComp = useRef(new Compartment())
   // 최신 콜백을 ref 로 참조 — 에디터 재생성 없이 항상 최신 핸들러 호출.
   const onChangeRef = useRef(props.onChange)
   const onRunRef = useRef(props.onRun)
@@ -81,6 +89,7 @@ export function SqlEditor(props: SqlEditorProps) {
         EditorView.lineWrapping,
         props.placeholder ? cmPlaceholder(props.placeholder) : [],
         langComp.current.of(langExtension(props)),
+        roComp.current.of(readOnlyExtension(props.readOnly)),
         Prec.highest(
           keymap.of([
             {
@@ -132,6 +141,12 @@ export function SqlEditor(props: SqlEditorProps) {
     view.dispatch({ effects: langComp.current.reconfigure(langExtension(props)) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.dialect, props.language, props.schema])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({ effects: roComp.current.reconfigure(readOnlyExtension(props.readOnly)) })
+  }, [props.readOnly])
 
   return <div ref={hostRef} className={props.className} />
 }

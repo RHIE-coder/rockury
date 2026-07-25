@@ -24,10 +24,12 @@ import { useActiveConnection } from '../connections/store'
 import { useConsoleStore } from './store'
 import { buildErd } from './diagram/graph'
 import { estimateNodeSize, layoutErd, type Positions } from './diagram/layout'
+import { seedNodes } from './diagram/seed'
 import { isolatedTableIds, matchTables } from './diagram/filter'
 import { exportFileName, exportViewport, contentBoundsForExport } from './diagram/export'
 import { TableErdNode } from './diagram/TableErdNode'
 import { RelationErdEdge } from './diagram/RelationErdEdge'
+import { DiagramTablePanel } from './diagram/DiagramTablePanel'
 import { useSchemaEditStore } from './schemaEdit/store'
 import { DiagramEdit } from './schemaEdit/DiagramEdit'
 
@@ -67,33 +69,43 @@ function toFlow(tables: TableDef[]): { nodes: Node[]; edges: Edge[] } {
 }
 
 interface CanvasProps {
+  /** 이미 필터가 적용된, 캔버스에 그릴 테이블들. */
   tables: TableDef[]
   connectionId: string
   connName: string
   storedPositions: Positions
   storedViewport: Viewport | null
+  /** 선택 상태는 좌측 목록 패널과 공유하므로 부모가 든다. */
+  selected: string | null
+  onSelect: (id: string | null) => void
+  hideIsolated: boolean
+  onToggleIsolated: () => void
 }
 
-function DiagramCanvas({ tables, connectionId, connName, storedPositions, storedViewport }: CanvasProps) {
+function DiagramCanvas({
+  tables: visibleTables,
+  connectionId,
+  connName,
+  storedPositions,
+  storedViewport,
+  selected,
+  onSelect,
+  hideIsolated,
+  onToggleIsolated
+}: CanvasProps) {
   const rf = useReactFlow()
   const [query, setQuery] = useState('')
   const [compact, setCompact] = useState(false)
-  const [hideIsolated, setHideIsolated] = useState(false)
   const [exportStatus, setExportStatus] = useState<'idle' | 'ok' | 'err'>('idle')
 
-  // 관계 없는 고립 테이블 집합(원본 전체 기준) — "관계만" 토글이 이걸 숨긴다.
-  const isolated = useMemo(() => isolatedTableIds(buildErd(tables)), [tables])
-  const visibleTables = useMemo(
-    () => (hideIsolated ? tables.filter((t) => !isolated.has(t.id)) : tables),
-    [tables, hideIsolated, isolated]
-  )
   const base = useMemo(() => toFlow(visibleTables), [visibleTables])
   const matched = useMemo(() => matchTables(visibleTables, query), [visibleTables, query])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(base.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(base.edges)
-  const [selected, setSelected] = useState<string | null>(null)
   const seededRef = useRef(false)
+  // 직전 effect 실행 시점의 노드 id 집합 — grew(새 테이블 등장) 판정을 updater 밖에서 하기 위함.
+  const prevIdsRef = useRef<Set<string>>(new Set())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 선택 테이블과 직접 연결된 이웃(강조).
@@ -118,24 +130,16 @@ function DiagramCanvas({ tables, connectionId, connName, storedPositions, stored
 
   // 스키마/필터 변경 시 재배치. 첫 seed 는 저장된 위치를, 이후엔 현재 화면 위치를 덮어써
   // 사용자가 옮긴 배치를 보존하고 새 테이블만 dagre 자리로 채운다.
+  // seed 판정·fitView 는 반드시 updater 밖에서: updater 안에서 ref 를 바꾸면 StrictMode(dev)가
+  // updater 를 두 번 불러 첫 seed 분기가 무효화되고, 저장 위치 대신 dagre 배치가 적용·영속된다.
   useEffect(() => {
-    setNodes((prev) => {
-      const prevMap = new Map(prev.map((n) => [n.id, n]))
-      const first = !seededRef.current
-      seededRef.current = true
-      const overlay: Positions = first
-        ? storedPositions
-        : Object.fromEntries(prev.map((n) => [n.id, n.position]))
-      const grew = base.nodes.some((n) => !prevMap.has(n.id))
-      const next = base.nodes.map((n) => ({
-        ...n,
-        position: overlay[n.id] ?? n.position,
-        measured: prevMap.get(n.id)?.measured
-      }))
-      if (grew && !first) setTimeout(() => rf.fitView({ padding: 0.15, duration: 300 }), 50)
-      return next
-    })
+    const first = !seededRef.current
+    seededRef.current = true
+    const grew = !first && base.nodes.some((n) => !prevIdsRef.current.has(n.id))
+    prevIdsRef.current = new Set(base.nodes.map((n) => n.id))
+    setNodes((prev) => seedNodes(base.nodes, prev, first, storedPositions))
     setEdges(base.edges)
+    if (grew) setTimeout(() => rf.fitView({ padding: 0.15, duration: 300 }), 50)
   }, [base, storedPositions, setNodes, setEdges, rf])
 
   // 선택/검색/간략 상태 → 노드 data 데코(선택·이웃강조·검색매칭·흐림·간략).
@@ -166,8 +170,8 @@ function DiagramCanvas({ tables, connectionId, connName, storedPositions, stored
     }
   }, [])
 
-  const onNodeClick: NodeMouseHandler = useCallback((_, node) => setSelected(node.id), [])
-  const onPaneClick = useCallback(() => setSelected(null), [])
+  const onNodeClick: NodeMouseHandler = useCallback((_, node) => onSelect(node.id), [onSelect])
+  const onPaneClick = useCallback(() => onSelect(null), [onSelect])
   const onNodeDragStop = useCallback(() => persist(), [persist])
   const onMoveEnd = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -263,7 +267,7 @@ function DiagramCanvas({ tables, connectionId, connName, storedPositions, stored
           <ToggleChip active={compact} onClick={() => setCompact((v) => !v)} title="컬럼을 접고 테이블만">
             간략
           </ToggleChip>
-          <ToggleChip active={hideIsolated} onClick={() => setHideIsolated((v) => !v)} title="관계 없는 테이블 숨김">
+          <ToggleChip active={hideIsolated} onClick={onToggleIsolated} title="관계 없는 테이블 숨김">
             관계만
           </ToggleChip>
           <span className="mx-0.5 h-5 w-px bg-line" />
@@ -331,6 +335,10 @@ export function DiagramView() {
   const [storedViewport, setStoredViewport] = useState<Viewport | null>(null)
   const [layoutLoaded, setLayoutLoaded] = useState(false)
   const [nonce, setNonce] = useState(0)
+  // 선택·"관계만" 필터는 좌측 목록 패널과 캔버스가 같은 값을 봐야 해 여기서 든다
+  // (패널에 캔버스에 없는 테이블이 뜨면 눌러도 이동할 곳이 없다).
+  const [selected, setSelected] = useState<string | null>(null)
+  const [hideIsolated, setHideIsolated] = useState(false)
 
   useEffect(() => {
     if (connId) void load(connId, connId)
@@ -355,6 +363,13 @@ export function DiagramView() {
   }, [connId, nonce])
 
   const edgeCount = useMemo(() => (tables ? buildErd(tables).edges.length : 0), [tables])
+
+  // 관계 없는 고립 테이블 — "관계만" 토글이 목록·캔버스에서 함께 숨긴다.
+  const isolated = useMemo(() => (tables ? isolatedTableIds(buildErd(tables)) : new Set<string>()), [tables])
+  const visibleTables = useMemo(
+    () => (hideIsolated ? (tables ?? []).filter((t) => !isolated.has(t.id)) : (tables ?? [])),
+    [tables, hideIsolated, isolated]
+  )
 
   const resetLayout = useCallback(async () => {
     if (!connId) return
@@ -425,17 +440,24 @@ export function DiagramView() {
           <Loader2 className="mr-2 size-4 animate-spin" /> 실 DB 스키마를 읽는 중…
         </div>
       ) : ready ? (
-        <div className="relative flex-1">
-          <ReactFlowProvider key={`${conn.id}:${nonce}`}>
-            <DiagramCanvas
-              tables={tables}
-              connectionId={conn.id}
-              connName={conn.name}
-              storedPositions={storedPositions}
-              storedViewport={storedViewport}
-            />
-          </ReactFlowProvider>
-        </div>
+        <ReactFlowProvider key={`${conn.id}:${nonce}`}>
+          <div className="flex min-h-0 flex-1">
+            <DiagramTablePanel tables={visibleTables} selectedId={selected} onSelect={setSelected} />
+            <div className="relative min-w-0 flex-1">
+              <DiagramCanvas
+                tables={visibleTables}
+                connectionId={conn.id}
+                connName={conn.name}
+                storedPositions={storedPositions}
+                storedViewport={storedViewport}
+                selected={selected}
+                onSelect={setSelected}
+                hideIsolated={hideIsolated}
+                onToggleIsolated={() => setHideIsolated((v) => !v)}
+              />
+            </div>
+          </div>
+        </ReactFlowProvider>
       ) : (
         <div className="flex flex-1 items-center justify-center text-[13px] text-muted">테이블이 없습니다</div>
       )}

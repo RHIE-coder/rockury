@@ -116,7 +116,8 @@ function TableErdNodeComponent({ data }: NodeProps) {
         <div className="divide-y divide-line/60">
           {table.columns.map((column) => (
             <div key={column.id} className="relative flex items-center gap-1.5 px-2.5 py-0.5 text-[11px]">
-              <span className="inline-flex w-10 shrink-0 justify-start">
+              {/* 배지 gutter: 이름 정렬용 최소 40px, 배지가 2개 이상이면(FK+IDX 등) 내용만큼 늘어나 이름을 침범하지 않는다(고정 w-10 은 넘쳐 겹쳤음). */}
+              <span className="inline-flex min-w-10 shrink-0 justify-start">
                 <KindBadges kinds={kinds.get(column.id) ?? new Set()} />
               </span>
               <span

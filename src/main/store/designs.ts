@@ -50,6 +50,8 @@ export function deleteDesign(id: string): void {
   d.exec('BEGIN')
   try {
     d.prepare('DELETE FROM tables WHERE design_id = ?').run(id)
+    // 시드 세트도 설계 소유물 — 남기면 같은 이름의 새 설계에 유령 시드가 붙는다.
+    d.prepare('DELETE FROM seed_sets WHERE design_id = ?').run(id)
     d.prepare('DELETE FROM designs WHERE id = ?').run(id)
     d.exec('COMMIT')
   } catch (e) {

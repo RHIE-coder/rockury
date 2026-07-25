@@ -1,83 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Code2, Copy, Eye, Loader2, Pencil, Plus, RefreshCw, Search, Table2, TableProperties } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Code2, Copy, Loader2, Pencil, Plus, RefreshCw, TableProperties } from 'lucide-react'
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { Button } from '@renderer/ui/button'
-import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { dialectInfo } from '../dialects'
+import { TableListPanel } from '../TableListPanel'
 import { generateDdl } from '../workspaces/definition/ddl'
 import { HighlightedSqlLine } from '../workspaces/definition/HighlightedSql'
 import type { TableDef } from '../workspaces/definition/types'
 import { useActiveConnection } from '../connections/store'
 import { useConsoleStore } from './store'
-import { filterTables, resolveActiveTable } from './definition/select'
+import { resolveActiveTable } from './definition/select'
 import { TableDetail } from './definition/TableDetail'
 import { useSchemaEditStore } from './schemaEdit/store'
 import { EditableTableDetail } from './schemaEdit/EditableTableDetail'
 import { PreviewBar } from './schemaEdit/PreviewBar'
-
-/** 좌측 서브사이드바 — 라이브 테이블 목록 + 검색. 클릭 시 active 테이블 전환(읽기 전용). */
-function TablesSidebar({
-  tables,
-  activeId,
-  onSelect
-}: {
-  tables: TableDef[]
-  activeId: string | null
-  onSelect: (id: string) => void
-}) {
-  const [q, setQ] = useState('')
-  const shown = useMemo(() => filterTables(tables, q), [tables, q])
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="relative px-2.5 pb-1.5 pt-2.5">
-        <Search size={13} className="absolute left-[18px] top-1/2 -translate-y-[3px] text-muted" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="테이블/컬럼 검색…"
-          className="h-7 pl-7 text-[12px]"
-        />
-      </div>
-      <ul className="min-h-0 flex-1 overflow-auto px-1.5 pb-3">
-        {shown.length === 0 && (
-          <li className="px-2 py-4 text-center text-[11.5px] italic text-muted">
-            {tables.length === 0 ? '테이블이 없어요' : '검색 결과가 없어요'}
-          </li>
-        )}
-        {shown.map((t) => (
-          <li key={t.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(t.id)}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors',
-                t.id === activeId ? 'bg-accent-soft font-semibold text-accent' : 'text-fg hover:bg-panel-strong'
-              )}
-            >
-              {t.isView ? (
-                <Eye className="size-3.5 shrink-0 opacity-70" />
-              ) : (
-                <Table2 className="size-3.5 shrink-0 opacity-70" />
-              )}
-              <span className="truncate">{t.name}</span>
-              <span
-                className={cn(
-                  'ml-auto text-[10.5px] tabular-nums',
-                  t.id === activeId ? 'text-accent/70' : 'text-muted'
-                )}
-              >
-                {t.columns.length}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
 
 /** [Table|SQL] 표현 토글. */
 function FormToggle({ form, onChange }: { form: 'table' | 'sql'; onChange: (f: 'table' | 'sql') => void }) {
@@ -284,9 +222,19 @@ export function DefinitionView() {
               }
               sidebar={
                 isEditing ? (
-                  <TablesSidebar tables={draft} activeId={editActive?.id ?? null} onSelect={setEditActive} />
+                  <TableListPanel
+                    tables={draft}
+                    activeId={editActive?.id ?? null}
+                    onPick={(t) => setEditActive(t.id)}
+                    searchPlaceholder="테이블/컬럼 검색…"
+                  />
                 ) : (
-                  <TablesSidebar tables={list} activeId={active?.id ?? null} onSelect={setActiveId} />
+                  <TableListPanel
+                    tables={list}
+                    activeId={active?.id ?? null}
+                    onPick={(t) => setActiveId(t.id)}
+                    searchPlaceholder="테이블/컬럼 검색…"
+                  />
                 )
               }
             >

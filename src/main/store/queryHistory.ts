@@ -8,8 +8,8 @@ import { getDb } from './db'
  *    사용자 기대: "3번 실행 = 3행". 이전의 연속-중복-접기는 실행이 안 쌓이는 것처럼 보여 제거),
  *  - 연결별 최근 200건만 유지.
  */
-/** 실행 소스 — Query 뷰 / Data 편집 / Collection 실행. */
-export type HistorySource = 'query' | 'data' | 'collection'
+/** 실행 소스 — Query 뷰 / Data 편집 / Collection 실행 / Definition·Diagram 스키마 편집. */
+export type HistorySource = 'query' | 'data' | 'collection' | 'definition'
 
 export interface QueryHistoryRecord {
   id: string

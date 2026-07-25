@@ -10,9 +10,15 @@ const esc = (s: string) => s.replace(/'/g, "''")
 const AUTO_TOKENS = new Set(['AUTO_INCREMENT', 'IDENTITY', 'AUTOINCREMENT'])
 const isAutoDefault = (v: string | null): boolean => !!v && AUTO_TOKENS.has(v.trim().toUpperCase())
 
-/** 식별자 인용 — MySQL/MariaDB 백틱, PostgreSQL/SQLite 큰따옴표. */
+/**
+ * 식별자 인용 — MySQL/MariaDB 백틱, PostgreSQL/SQLite 큰따옴표.
+ * 인용부호를 이중화해 이스케이프한다(SQL 표준 식별자 인용) — 이름에 인용부호가 섞여도
+ * 인용을 탈출하지 못하게. MCP set_schema 가 식별자를 원격 작성자(에이전트)에게 열어,
+ * 이스케이프 없이는 조작된 이름이 실 DB DDL 로 주입될 수 있었다(보안 감사 HIGH).
+ * 정상 식별자엔 인용부호가 없어 출력 불변 — 조작 입력만 무해화된다.
+ */
 export function quoteId(d: DialectId, name: string): string {
-  return isMy(d) ? `\`${name}\`` : `"${name}"`
+  return isMy(d) ? `\`${name.replace(/`/g, '``')}\`` : `"${name.replace(/"/g, '""')}"`
 }
 const q = quoteId
 

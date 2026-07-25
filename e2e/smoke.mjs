@@ -35,7 +35,13 @@ const check = (label, cond) => {
 }
 
 const launch = () =>
-  electron.launch({ executablePath: electronBin, args: [MAIN, `--user-data-dir=${USER_DATA}`], timeout: 30_000 })
+  electron.launch({
+    executablePath: electronBin,
+    args: [MAIN, `--user-data-dir=${USER_DATA}`],
+    // MCP 포트 0 = OS 배정 — 개발 앱(기본 41729)과 충돌 없이 격리 구동. 실제 주소는 상태 IPC 로 확인.
+    env: { ...process.env, ROCKURY_MCP_PORT: '0' },
+    timeout: 30_000
+  })
 let app = await launch()
 let page = await app.firstWindow()
 // 미저장 변경 가드 등 window.confirm 은 자동 수락(사용자가 "예"를 누른 것으로).
@@ -58,6 +64,91 @@ try {
   await page.reload()
   await page.waitForSelector('text=Studio', { timeout: 15_000 })
   check('앱 부팅 + DB 서비스 셸 렌더', (await body()).includes('Studio'))
+
+  // ── MCP 서버(메인 프로세스 내장) — 상태 IPC → initialize → tools/list → tools/call + 인증 거부 ──
+  {
+    // 접속 정보 파일을 디스크에 만들지 않는다 — 주소·키는 앱 상태 IPC 로만 얻는다.
+    check('MCP: 접속 정보 파일(mcp.json) 미생성', !fs.existsSync(path.join(USER_DATA, 'mcp.json')))
+    const mcpStatus = await page.evaluate(() => window.rockury.mcp.status())
+    const mcp = { url: mcpStatus.url, token: mcpStatus.token }
+    check('MCP: 상태 IPC — 실행 중 + 키 제공', mcpStatus.running === true && !!mcp.token)
+    const mcpHeaders = {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${mcp.token}`
+    }
+    const mcpPost = (bodyObj, sid) =>
+      fetch(mcp.url, {
+        method: 'POST',
+        headers: { ...mcpHeaders, ...(sid ? { 'mcp-session-id': sid } : {}) },
+        body: JSON.stringify(bodyObj)
+      })
+    const initRes = await mcpPost({
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } }
+    })
+    const sid = initRes.headers.get('mcp-session-id')
+    const init = await initRes.json()
+    check('MCP: initialize(serverInfo=rockury) + 세션 발급', init?.result?.serverInfo?.name === 'rockury' && !!sid)
+    await mcpPost({ jsonrpc: '2.0', method: 'notifications/initialized' }, sid)
+    const toolNames = (await (await mcpPost({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, sid)).json())
+      .result.tools.map((t) => t.name)
+    check('MCP: tools/list 읽기 도구 노출', ['list_designs', 'get_schema', 'list_versions', 'get_version'].every((n) => toolNames.includes(n)))
+    const ld = await (await mcpPost({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'list_designs', arguments: {} } }, sid)).json()
+    check('MCP: list_designs → 시드 설계(commerce-core)', ld?.result?.content?.[0]?.text?.includes('commerce-core') === true)
+    const noAuth = await fetch(mcp.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: mcpHeaders.accept },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/list' })
+    })
+    check('MCP: 무토큰 요청 거부(401)', noAuth.status === 401)
+  }
+
+  // ── AI › Agents 화면 — 게이트웨이 상태(초록불) + 접속 키 마스킹/재발급 실 흐름 ──
+  {
+    await click('[data-nav-service="mcp"]')
+    await page.waitForSelector('text=에이전트 게이트웨이', { timeout: 5_000 })
+    check('AI 화면: 게이트웨이 열림 표시', (await body()).includes('에이전트 게이트웨이 열림'))
+    const st1 = await page.evaluate(() => window.rockury.mcp.status())
+    check('AI 화면: 등록 명령 생성(Claude/Codex, url 포함)',
+      st1.claudeCommand?.includes(st1.url) === true && st1.codexCommand?.includes(st1.url) === true)
+    // 접속 키는 기본 마스킹 — 전체 값이 화면 텍스트에 노출되지 않는다
+    check('AI 화면: 접속 키 기본 마스킹', !(await body()).includes(st1.token) && (await body()).includes(st1.token.slice(-4)))
+    // 재발급 실 흐름 — 확인 단계 → 진행 → 구 키 즉시 401, 새 키 발급
+    await click('button:has-text("재발급")')
+    await page.waitForSelector('text=다시 등록해야 해요', { timeout: 3_000 })
+    await click('button:has-text("재발급 진행")')
+    await page.waitForTimeout(500)
+    const st2 = await page.evaluate(() => window.rockury.mcp.status())
+    check('재발급: 키 교체됨', !!st2.token && st2.token !== st1.token)
+    const oldKeyRes = await fetch(st2.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${st1.token}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 21, method: 'tools/list' })
+    })
+    check('재발급: 구 키 즉시 무효(401)', oldKeyRes.status === 401)
+    const newKeyInit = await fetch(st2.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${st2.token}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 22, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke-rotate', version: '0' } } })
+    })
+    check('재발급: 새 키로 접속 성공', (await newKeyInit.json())?.result?.serverInfo?.name === 'rockury')
+
+    // 재등록 안내(접속 키가 바뀐 뒤) — 재발급 직후 화면에 재등록 명령이 뜨고, 명령이 새 키를 담는다.
+    const afterBody = await body()
+    check('재등록: 재발급 직후 안내 노출(다시 등록하세요 + 재등록 복사 버튼)',
+      afterBody.includes('다시 등록') && afterBody.includes('재등록 복사'))
+    check('재등록: "접속 키를 바꾼 뒤" 상시 안내 노출', afterBody.includes('접속 키를 바꾼 뒤'))
+    check('재등록: claude 명령이 remove→add + 새 키를 담는다',
+      st2.claudeReregisterCommand?.includes('claude mcp remove rockury') === true &&
+      st2.claudeReregisterCommand?.includes(`Bearer ${st2.token}`) === true)
+    check('재등록: codex 명령이 remove + 새 키(env)를 담는다',
+      st2.codexReregisterCommand?.includes('codex mcp remove rockury') === true &&
+      st2.codexReregisterCommand?.includes(`ROCKURY_MCP_TOKEN=${st2.token}`) === true)
+
+    await click('[data-nav-service="db"]') // 후속 DB 흐름을 위해 복귀
+    await page.waitForTimeout(300)
+  }
 
   // 설계 선택
   await click('button:has-text("Design")')
@@ -99,7 +190,94 @@ try {
       return l && l.positions ? Object.keys(l.positions).length : 0
     })
     check('Studio › Diagram: 드래그 → 설계 레이아웃 저장', saved > 0)
+    // 뷰 왕복 → 저장 위치 복원(회귀: seed 판정이 setNodes updater 안에 있으면
+    // StrictMode(dev)에서 dagre 로 리셋되고 드래그 한 번에 저장 배치가 덮어써졌다)
+    const dragId = await nd.getAttribute('data-id')
+    const draggedTf = await nd.evaluate((el) => el.style.transform)
+    await click('button:has-text("Definition")')
+    await page.waitForTimeout(300)
+    await click('button:has-text("Diagram")')
+    await page.waitForSelector(`.react-flow__node[data-id="${dragId}"]`, { timeout: 10_000 })
+    await page.waitForTimeout(500)
+    const restoredTf = await page
+      .locator(`.react-flow__node[data-id="${dragId}"]`)
+      .first()
+      .evaluate((el) => el.style.transform)
+    check('Studio › Diagram: 뷰 왕복 후 드래그 위치 복원', restoredTf === draggedTf)
   }
+  // ── Studio › Seed — 시드 세트 저작(선언 → 행 → 변수). CASE-studio-040~044 (docs/qa/db-studio.md) ──
+  {
+    await click('button:has-text("Seed")')
+    await page.waitForSelector('text=아직 시드 세트가 없어요', { timeout: 8_000 })
+    check('Studio › Seed: 세트 없을 때 빈 상태 CTA', (await body()).includes('테이블에서 시드 세트 만들기'))
+
+    // 테이블 고르기 — orders 의 PK 는 AUTO_INCREMENT 라 자연키 기본값이 비어야 한다(사람이 고름).
+    await click('button:has-text("테이블에서 시드 세트 만들기")')
+    await page.waitForSelector('[data-seed-candidate]', { timeout: 8_000 })
+    check('Studio › Seed: 등록 후보에 뷰가 없다', (await page.locator('[data-seed-candidate="v_active_products"]').count()) === 0)
+    await click('[data-seed-candidate="orders"]')
+    await page.waitForSelector('[data-seed-set-row="orders"]', { timeout: 8_000 })
+    check('Studio › Seed: 세트 등록(orders)', (await page.locator('[data-seed-set-row="orders"]').count()) === 1)
+    check('Studio › Seed: 자동증가 PK → 자연키 경고', (await page.locator('[data-seed-needs-key]').count()) === 1)
+
+    // 자연키 지정 → 경고 해제
+    await click('[data-seed-key-toggle="order_number"]')
+    await page.waitForTimeout(300)
+    check('Studio › Seed: 자연키 지정 → 경고 해제', (await page.locator('[data-seed-needs-key]').count()) === 0)
+
+    // 무시 컬럼 지정(비교 소음 제거)
+    await click('[data-seed-ignore-toggle="ordered_at"]')
+    await page.waitForTimeout(200)
+    check('Studio › Seed: 무시 컬럼 지정 표시', (await body()).includes('무시'))
+
+    // 행 추가 + 셀 입력
+    const fill = async (rowIdx, column, value) => {
+      const cell = page.locator('[data-seed-row]').nth(rowIdx).locator(`[data-seed-cell="${column}"]`)
+      await cell.click()
+      await page.waitForTimeout(150)
+      await page.keyboard.type(value)
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(200)
+    }
+    await click('button:has-text("행 추가")')
+    await page.waitForSelector('[data-seed-row]', { timeout: 5_000 })
+    await fill(0, 'order_number', 'SEED-0001')
+    check('Studio › Seed: 셀 입력 반영', (await body()).includes('SEED-0001'))
+
+    // 중복 자연키 → 두 행 모두 오류 표시
+    await click('button:has-text("행 추가")')
+    await page.waitForTimeout(200)
+    await fill(1, 'order_number', 'SEED-0001')
+    check('Studio › Seed: 중복 자연키 → 두 행 오류 표시',
+      (await page.locator('[data-seed-row-issue="duplicate-key"]').count()) === 2)
+
+    // 값을 바꿔 중복 해소 → 오류 사라짐
+    await fill(1, 'order_number', 'SEED-0002')
+    check('Studio › Seed: 중복 해소 → 오류 없음', (await page.locator('[data-seed-row-issue]').count()) === 0)
+
+    // 변수 자리표시자 — 환경마다 다른 값은 값 대신 변수로
+    await fill(0, 'memo', '{{ADMIN_PASSWORD_HASH}}')
+    check('Studio › Seed: 변수 셀 표식', (await page.locator('[data-seed-variable-cell]').count()) === 1)
+    check('Studio › Seed: 세트가 요구하는 변수 목록',
+      (await page.locator('[data-seed-variable="ADMIN_PASSWORD_HASH"]').count()) === 1)
+
+    // 관리 강도 전권 → 경고 문구
+    await click('[data-seed-strength="authoritative"]')
+    await page.waitForTimeout(200)
+    check('Studio › Seed: 전권 선택 시 삭제 후보 경고', (await body()).includes('삭제 후보'))
+
+    // 저장(설계 스코프) — 디바운스 후 저장소에 남는다
+    await page.waitForTimeout(600)
+    const saved = await page.evaluate(async () => {
+      const list = await window.rockury.seedSets.list()
+      const s = list.find((x) => x.designId === 'commerce-core' && x.tableName === 'orders')
+      return s ? { key: s.naturalKey, ignored: s.ignoredColumns, strength: s.strength, rows: s.rows.length } : null
+    })
+    check('Studio › Seed: 선언·행이 설계 스코프로 저장',
+      saved?.key?.[0] === 'order_number' && saved?.ignored?.[0] === 'ordered_at' &&
+      saved?.strength === 'authoritative' && saved?.rows === 2)
+  }
+
   // Definition 으로 복귀(이후 흐름 원복)
   await click('button:has-text("Definition")')
   await page.waitForTimeout(200)
@@ -118,6 +296,78 @@ try {
   await click('button[type="submit"]')
   await page.waitForTimeout(500)
   check('버전 컷 후 v0.3.15 등장', (await body()).includes('v0.3.15'))
+  check('버전 컷: 시드 행 수 표시(스냅샷에 시드 동봉)', (await page.locator('[data-version-seed-rows]').count()) >= 1)
+
+  // ⭐ Version Diff 에 시드 섹션 — 시드 없던 옛 버전(v0.3.14)↔시드 담긴 새 버전(v0.3.15).
+  //    CASE-studio-045: 옛 스냅샷 폴백이 깨지지 않고 시드 델타가 보인다.
+  await click('button:has-text("Version Diff")')
+  await page.waitForSelector('text=버전 비교', { timeout: 8_000 })
+  await page.waitForTimeout(400)
+  check('Version Diff: 시드 섹션 렌더', (await page.locator('[data-seed-diff]').count()) === 1)
+  check('Version Diff: 시드 세트(orders) 델타 표시', (await page.locator('[data-seed-diff-set="orders"]').count()) === 1)
+  await click('button:has-text("Timeline")')
+  await page.waitForTimeout(300)
+
+  // ── MCP 쓰기 도구(2단계) — 에이전트 쓰기가 열린 화면에 즉시 반영(리하이드레이션) ──
+  // CASE-mcp-072/073 (docs/qa/mcp-server.md). 토큰은 위 재발급 이후 값을 새로 조회.
+  {
+    const st = await page.evaluate(() => window.rockury.mcp.status())
+    const wHdrs = {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${st.token}`
+    }
+    const wPost = (bodyObj, sid) =>
+      fetch(st.url, {
+        method: 'POST',
+        headers: { ...wHdrs, ...(sid ? { 'mcp-session-id': sid } : {}) },
+        body: JSON.stringify(bodyObj)
+      })
+    const wInit = await wPost({
+      jsonrpc: '2.0', id: 41, method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke-write', version: '0' } }
+    })
+    const wSid = wInit.headers.get('mcp-session-id')
+    await wPost({ jsonrpc: '2.0', method: 'notifications/initialized' }, wSid)
+    const callTool = async (name, args, id) =>
+      (await (await wPost({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } }, wSid)).json())
+        .result
+
+    const wNames = (await (await wPost({ jsonrpc: '2.0', id: 42, method: 'tools/list' }, wSid)).json())
+      .result.tools.map((t) => t.name)
+    check('MCP 쓰기: tools/list 쓰기 4종 노출', ['create_design', 'update_design', 'set_schema', 'create_version'].every((n) => wNames.includes(n)))
+    check('MCP 쓰기: 삭제류 도구 부재', wNames.every((n) => !/delete|remove|drop/.test(n)))
+
+    // create_version(번호 생략 → 최신 v0.3.15 에서 patch 증가) — Versions 타임라인이 열린 채 호출.
+    const cut = await callTool('create_version', { designId: 'commerce-core', note: '에이전트 컷' }, 43)
+    check('MCP 쓰기: create_version 성공(v0.3.16)', cut?.isError !== true && cut?.content?.[0]?.text?.includes('v0.3.16') === true)
+    await page.waitForSelector('text=v0.3.16', { timeout: 5_000 })
+    check('MCP 쓰기: 타임라인 즉시 반영(v0.3.16 — 수동 재조회 없음)', (await body()).includes('v0.3.16'))
+
+    // set_schema — Studio Definition 이 열린 채 get_schema 왕복으로 테이블 추가 → 즉시 반영.
+    await click('button:has-text("Studio")')
+    await click('button:has-text("Definition")')
+    await page.waitForSelector('text=orders', { timeout: 5_000 })
+    const gs = JSON.parse((await callTool('get_schema', { designId: 'commerce-core' }, 44)).content[0].text)
+    const setRes = await callTool(
+      'set_schema',
+      {
+        designId: 'commerce-core',
+        tables: [
+          ...gs.tables,
+          { name: 'mcp_probe', comment: '에이전트 추가', columns: [{ name: 'id', type: 'int', nullable: false }] }
+        ]
+      },
+      45
+    )
+    check('MCP 쓰기: set_schema 성공', setRes?.isError !== true)
+    await page.waitForSelector('text=mcp_probe', { timeout: 5_000 })
+    check('MCP 쓰기: Studio Definition 즉시 반영(mcp_probe)', (await body()).includes('mcp_probe'))
+
+    // 쓰기 오류 규율 — 미상 설계는 프로토콜 오류가 아닌 isError + 해결 안내.
+    const bad = await callTool('set_schema', { designId: 'no-such', tables: [] }, 46)
+    check('MCP 쓰기: 미상 설계 isError + list_designs 안내', bad?.isError === true && bad?.content?.[0]?.text?.includes('list_designs') === true)
+  }
 
   // ── 운영부: Connection(1급) 생성 + mysql test-db 연결 테스트 (설계 불필요) ──
   await click('button:has-text("Connections")')
@@ -135,6 +385,97 @@ try {
   await click('button[type="submit"]:has-text("연결 만들기")')
   await page.waitForSelector('text=E2E-mysql', { timeout: 5_000 })
   check('연결 카드(E2E-mysql) 생성', (await body()).includes('E2E-mysql'))
+
+  // ── Connection 그룹: 생성(인라인 이름) → 카드 DnD 로 그룹 넣기/빼기 → 그룹 삭제 ──
+  {
+    await click('button:has-text("새 그룹")')
+    await page.waitForSelector('input[data-group-rename]', { timeout: 5_000 })
+    await page.locator('input[data-group-rename]').fill('E2E-그룹')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('text=E2E-그룹', { timeout: 5_000 })
+    check('Connections: 그룹 생성 + 인라인 이름 변경(E2E-그룹)', (await body()).includes('E2E-그룹'))
+
+    // 카드를 그룹 영역으로 드래그 → group_id 영속 (포인터 DnD: 고스트·플레이스홀더 경로)
+    const dragCardTo = async (zoneSel) => {
+      const cbox = await page.locator('[data-conn-id]').first().boundingBox()
+      const zbox = await page.locator(zoneSel).first().boundingBox()
+      await page.mouse.move(cbox.x + cbox.width / 2, cbox.y + 12)
+      await page.mouse.down()
+      await page.mouse.move(zbox.x + zbox.width / 2, zbox.y + zbox.height / 2, { steps: 12 })
+      await page.mouse.up()
+      await page.waitForTimeout(500) // move IPC 영속 대기
+    }
+    await dragCardTo('section[data-conn-group]:not([data-conn-group=""])')
+    const groupedId = await page.evaluate(async () => (await window.rockury.connections.list())[0].groupId)
+    check('Connections: 카드 드래그 → 그룹 소속 저장(groupId)', !!groupedId)
+
+    // 그룹에서 미분류 영역으로 드래그 아웃 → group_id 해제
+    await dragCardTo('section[data-conn-group=""]')
+    const ungroupedId = await page.evaluate(async () => (await window.rockury.connections.list())[0].groupId)
+    check('Connections: 카드 드래그 아웃 → 미분류 복귀(groupId null)', ungroupedId === null)
+
+    // 두 번째 그룹을 만들고 그립 핸들 드래그로 순서 뒤집기 → 영속
+    await click('button:has-text("새 그룹")')
+    await page.waitForSelector('input[data-group-rename]', { timeout: 5_000 })
+    await page.locator('input[data-group-rename]').fill('E2E-그룹2')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+    const orderBefore = await page.evaluate(async () =>
+      (await window.rockury.connectionGroups.list()).map((g) => g.name)
+    )
+    // 두 번째 그룹 핸들을 첫 그룹 위로 끌어올린다
+    {
+      const handles = page.locator('button[data-group-handle]')
+      const h2 = await handles.nth(1).boundingBox()
+      const s1 = await page.locator('section[data-conn-group]:not([data-conn-group=""])').first().boundingBox()
+      await page.mouse.move(h2.x + h2.width / 2, h2.y + h2.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(s1.x + s1.width / 2, s1.y + 4, { steps: 12 })
+      await page.mouse.up()
+      await page.waitForTimeout(500)
+    }
+    const orderAfter = await page.evaluate(async () =>
+      (await window.rockury.connectionGroups.list()).map((g) => g.name)
+    )
+    check(
+      'Connections: 그룹 핸들 드래그로 순서 변경(영속·역순)',
+      orderBefore.length === 2 && orderAfter[0] === orderBefore[1] && orderAfter[1] === orderBefore[0]
+    )
+    // 만든 두 번째 그룹 정리
+    await click('section[data-conn-group] button[title^="그룹 삭제"]')
+    await click('button:has-text("그룹 삭제")')
+    await page.waitForTimeout(400)
+
+    // 그룹 삭제(연결은 남아야 함)
+    await click('section[data-conn-group] button[title^="그룹 삭제"]')
+    await click('button:has-text("그룹 삭제")')
+    await page.waitForTimeout(400)
+    const afterDelete = await page.evaluate(async () => ({
+      groups: (await window.rockury.connectionGroups.list()).length,
+      conns: (await window.rockury.connections.list()).length
+    }))
+    check('Connections: 그룹 삭제 → 그룹 0 개, 연결은 보존', afterDelete.groups === 0 && afterDelete.conns === 1)
+  }
+
+  // ── 자동확인 제외: 제외로 바꾸면 잔존 상태가 '미확인'으로 돌아오고, 새로고침이 다시 확인하지 않는다 ──
+  //   (회귀: 제외 후에도 옛 '실패/연결됨'이 남아 "계속 확인되는 것처럼" 보이던 문제)
+  {
+    await click('button[title="편집"]')
+    await page.waitForSelector('text=자동 확인에서 제외', { timeout: 5_000 })
+    await click('text=자동 확인에서 제외')
+    await click('button[type="submit"]:has-text("저장")')
+    await page.waitForSelector('text=자동확인 제외', { timeout: 5_000 })
+    check('Connections: 자동확인 제외 배지 표시', (await body()).includes('자동확인 제외'))
+    await click('button:has-text("새로고침")')
+    await page.waitForTimeout(800)
+    check('Connections: 제외 연결은 새로고침 후 미확인(재확인 안 함)', (await body()).includes('미확인'))
+    // 원복 — 이후 흐름은 자동확인 대상 상태를 전제
+    await click('button[title="편집"]')
+    await page.waitForSelector('text=자동 확인에서 제외', { timeout: 5_000 })
+    await click('text=자동 확인에서 제외')
+    await click('button[type="submit"]:has-text("저장")')
+    await page.waitForTimeout(300)
+  }
 
   // 카드 클릭 → active Connection → Console › Object 로 실 DB 역설계(Phase 2a)
   await click('div[role="button"]:has-text("E2E-mysql")')
@@ -200,6 +541,18 @@ try {
   await click('button:has-text("간략")') // 원복
   await page.waitForTimeout(150)
 
+  // 좌측 테이블 목록 패널 — Data 사이드바와 같은 구성. 항목을 누르면 그 테이블로 캔버스가 이동한다.
+  {
+    const panel = page.locator('[data-diagram-table-panel]')
+    check('Console › Diagram: 좌측 테이블 목록 패널 존재', (await panel.count()) > 0)
+    const viewport = page.locator('.react-flow__viewport').first()
+    const before = await viewport.getAttribute('style')
+    await panel.locator('[data-table-row="user_roles"]').first().click()
+    await page.waitForTimeout(900) // fitView 애니메이션(400ms) 여유
+    const after = await viewport.getAttribute('style')
+    check('Console › Diagram: 목록 클릭 → 해당 테이블로 캔버스 이동(포커싱)', before !== after)
+  }
+
   // 내보내기 — PNG 클릭 → html-to-image 캡처 성공(toolbar data-export-status=ok).
   // (Electron 에선 data-URL 다운로드 이벤트가 Playwright 로 안 잡혀, 캡처 성공 여부를 상태로 검증.)
   await page.locator('.react-flow__panel button:has-text("PNG")').first().click()
@@ -230,10 +583,25 @@ try {
     'Console › Definition: 사이드바 실 DB 테이블 목록(users/user_roles)',
     defBody.includes('users') && defBody.includes('user_roles')
   )
+  // 목록은 테이블과 뷰(view)를 갈라 보인다 — 테스트 DB 의 v_user_summary 가 뷰 묶음에 들어간다.
+  check(
+    'Console › Definition: 목록이 테이블/뷰를 가른다(v_user_summary 는 뷰)',
+    (await page.locator('[data-table-row="v_user_summary"]').count()) > 0 && defBody.includes('뷰')
+  )
+
   // 사이드바에서 테이블 선택 → SQL(DDL) 뷰 토글 → 실 introspection + generateDdl 로 CREATE 문 렌더.
   // NOTE: 토글은 :text-is 로 정확 일치 — has-text 는 ContextBar 의 "MySQL" 버튼까지 잡는다.
-  await page.locator('li button:has-text("user_roles")').first().click()
+  await page.locator('[data-table-row="user_roles"]').first().click()
   await page.waitForTimeout(200)
+
+  // FK 정책은 ON DELETE·ON UPDATE 를 **둘 다** 보인다(실 DB 는 두 값을 다 주는데 전엔 삭제 쪽만 그렸다).
+  {
+    const fkBody = await body()
+    check(
+      'Console › Definition: FK 정책 ON DELETE·ON UPDATE 동시 표기',
+      fkBody.includes('ON DELETE CASCADE') && fkBody.includes('ON UPDATE CASCADE')
+    )
+  }
   await click('button:text-is("SQL")')
   await page.waitForSelector('text=CREATE TABLE', { timeout: 10_000 })
   const ddlBody = await body()
@@ -264,7 +632,7 @@ try {
   // 파괴적 편집(테이블 삭제) — 경고 후 적용, DB 를 원상 복구(rky_probe 제거).
   await click('button:text-is("편집")')
   await page.waitForTimeout(200)
-  await page.locator('li button:has-text("rky_probe")').first().click()
+  await page.locator('[data-table-row="rky_probe"]').first().click()
   await page.waitForTimeout(200)
   await page.locator('button[aria-label="테이블 메뉴"]').first().click()
   await page.waitForTimeout(150)
@@ -356,6 +724,22 @@ try {
   check('Console › Data: Constraints 탭 제약 목록(PRIMARY)', (await body()).includes('PRIMARY'))
   await click('button:has-text("Tables")')
   await page.waitForTimeout(200)
+
+  // JSON 값 — 셀은 구조 요약 칩(`{} n`)으로 보이고, 눌러 열면 정렬된 뷰어가 형식 정상 여부까지 알려 준다.
+  await click('aside button:has-text("user_profiles")')
+  await page.waitForSelector('tbody tr', { timeout: 15_000 })
+  await page.waitForTimeout(300)
+  {
+    const jsonCell = page.locator('tbody button[title*="눌러서 전체 보기"]').first()
+    check('Console › Data: JSON 셀이 구조 요약으로 보임', (await jsonCell.count()) > 0)
+    await jsonCell.click()
+    await page.waitForSelector('text=형식 정상', { timeout: 8_000 })
+    const viewer = await body()
+    check('Console › Data: JSON 뷰어 열림(형식 정상 표시)', viewer.includes('형식 정상'))
+    check('Console › Data: JSON 뷰어가 보기 좋게 정렬해 보여줌', viewer.includes('한 줄로'))
+    await click('button:text-is("취소")')
+    await page.waitForTimeout(200)
+  }
 
   // FK 참조 선택 모달 — FK 셀의 FK 버튼 클릭 → 모달(검색·페이지·Set NULL/Cancel/Apply) (사용자 보고 회귀 방지)
   await click('aside button:has-text("user_roles")')
@@ -549,10 +933,86 @@ try {
   await page.waitForSelector('text=드리프트 없음', { timeout: 15_000 })
   check('Migration › Drift: 기준선 캡처 후 드리프트 없음', (await body()).includes('드리프트 없음'))
 
+  // ⭐ 운영→설계: 실 DB 를 설계 새 버전으로 가져오기(version-up) — 드리프트 뷰 진입점(운영→설계 관문).
+  const countVersions = () => page.evaluate(async () => {
+    const ds = await window.rockury.designs.list()
+    let n = 0
+    for (const d of ds) n += (await window.rockury.versions.list(d.id)).length
+    return n
+  })
+  const vBefore = await countVersions()
+  await click('button:has-text("설계로 가져오기")')
+  await page.waitForSelector('text=실 DB 에서', { timeout: 15_000 })
+  check('운영→설계: 가져오기 다이얼로그 역설계 미리보기', (await body()).includes('실 DB 에서'))
+  await click('button:has-text("새 버전으로 가져오기")')
+  await page.waitForTimeout(1500)
+  check('운영→설계: 운영 DB 가져와 설계 새 버전 컷', (await countVersions()) === vBefore + 1)
+
+  // ⭐ 운영→설계(새 설계 부트스트랩): 대상 토글 "새 설계로" → 설계+Draft+버전 생성 + 활성 전환.
+  //    (사용자 회귀: 설계가 이미 선택돼 있으면 "새 설계로" 갈 길이 없어 늘 버전업으로 샜다.)
+  await click('button:has-text("설계로 가져오기")')
+  await page.waitForSelector('text=실 DB 에서', { timeout: 15_000 })
+  await click('button:has-text("새 설계 만들기")')
+  await page.waitForTimeout(200)
+  await page.locator('input[placeholder="예: commerce-core"]').fill('e2e-imported')
+  await click('button:has-text("설계 만들고 가져오기")')
+  await page.waitForTimeout(1800)
+  const nd = await page.evaluate(async () => {
+    const d = (await window.rockury.designs.list()).find((x) => x.name === 'e2e-imported')
+    if (!d) return { ok: false, tables: 0, versions: 0 }
+    const tables = (await window.rockury.tables.list()).filter((t) => t.designId === d.id).length
+    const versions = (await window.rockury.versions.list(d.id)).length
+    return { ok: true, tables, versions }
+  })
+  check('운영→설계: 새 설계 부트스트랩(설계 생성)', nd.ok)
+  check('운영→설계: 새 설계 Draft 채워짐(Studio 에서 보임)', nd.tables > 0)
+  check('운영→설계: 새 설계 첫 버전 컷', nd.versions === 1)
+  check('운영→설계: 새 설계가 활성으로 전환됨(드롭다운·헤더 반영)', (await body()).includes('e2e-imported'))
+
   // Migration › Logs — 기준선 로그 기록(Phase 3e)
   await click('button:has-text("Logs")')
   await page.waitForSelector('text=기준선', { timeout: 8_000 })
   check('Migration › Logs: 기준선 로그 체인', (await body()).includes('기준선'))
+
+  // ⭐ Environment 관리 UI — 연결 카드에서 설계 바인딩 열람(운영↔설계 결속이 화면에 드러남).
+  await click('button:has-text("Connections")')
+  await page.waitForSelector('text=E2E-mysql', { timeout: 8_000 })
+  await page.locator('button[title="설계 바인딩 관리"]').first().click()
+  await page.waitForSelector('text=설계 바인딩 ·', { timeout: 8_000 })
+  await page.waitForSelector('text=commerce-core', { timeout: 8_000 }) // 바인딩 행 비동기 로드 대기
+  check('Environment 관리: 연결의 설계 바인딩 다이얼로그(commerce-core 표시)', (await body()).includes('commerce-core'))
+  await page.locator('button:has-text("닫기")').first().click()
+  await page.waitForTimeout(300)
+
+  // ⭐ 운영↔운영 비교(Compare) — 같은 DB 를 가리키는 두 번째 연결과 비교 → 스키마 동일.
+  //    IPC 로 만든 연결은 렌더러 스토어(부팅 시 1회 하이드레이션)에 안 잡힘 → reload 로 반영.
+  await page.evaluate(() =>
+    window.rockury.connections.create({
+      name: 'E2E-mysql2', dbType: 'mysql', host: 'localhost', port: 13306,
+      database: 'testdb', user: 'test', password: 'test', sslEnabled: false
+    })
+  )
+  await page.reload()
+  await page.waitForSelector('text=Studio', { timeout: 15_000 })
+  await click('button:has-text("Migration")')
+  await click('button:has-text("Compare")')
+  await page.waitForSelector('text=실 DB 간 스키마 비교', { timeout: 8_000 })
+  await page.locator('[data-slot="select-trigger"]').last().click() // 상대 연결 셀렉터
+  await page.locator('[data-slot="select-item"]:has-text("E2E-mysql2")').first().click()
+  await click('button:has-text("비교")')
+  await page.waitForSelector('text=두 DB 의 스키마가 동일해요', { timeout: 15_000 })
+  check('Migration › Compare: 같은 DB 두 연결 → 스키마 동일', (await body()).includes('두 DB 의 스키마가 동일해요'))
+
+  // ⭐ 버전 삭제(잘못 들어간 버전 회수) — Timeline 에서 삭제 → 목록에서 사라짐.
+  await click('button:has-text("Versions")')
+  await page.waitForSelector('text=버전 타임라인', { timeout: 8_000 })
+  await page.waitForTimeout(300)
+  const vBeforeDel = await page.locator('[data-version-number]').count()
+  const firstRow = page.locator('[data-version-number]').first()
+  await firstRow.locator('button[title="버전 삭제"]').click({ force: true })
+  await firstRow.locator('button:has-text("삭제")').click()
+  await page.waitForTimeout(500)
+  check('버전 삭제: Timeline 에서 버전 제거', (await page.locator('[data-version-number]').count()) === vBeforeDel - 1)
 
   // ⭐ 콜드 재시작(프로세스 종료→재기동, 같은 userData) 후 연결 잔존 — 진짜 영속 검증.
   //    (renderer reload 가 아니라 실제 앱을 껐다 켠다. 사용자가 겪은 시나리오.)
@@ -564,6 +1024,27 @@ try {
   await click('button:has-text("Connections")')
   await page.waitForSelector('text=E2E-mysql', { timeout: 8_000 })
   check('콜드 재시작 후 연결 잔존(SQLite 영속)', (await body()).includes('E2E-mysql'))
+
+  // 시드 세트도 콜드 재시작을 넘긴다 — CASE-studio-044(선언·행 잔존).
+  await click('button:has-text("Design")')
+  await click('[role="menuitem"]:has-text("commerce-core")')
+  await page.waitForTimeout(300)
+  await click('button:has-text("Studio")')
+  await click('button:has-text("Seed")')
+  await page.waitForSelector('[data-seed-set-row="orders"]', { timeout: 8_000 })
+  const seedAfterRestart = await body()
+  check('콜드 재시작 후 시드 세트·행 잔존',
+    seedAfterRestart.includes('SEED-0001') && seedAfterRestart.includes('SEED-0002'))
+  check('콜드 재시작 후 변수 셀 잔존', (await page.locator('[data-seed-variable="ADMIN_PASSWORD_HASH"]').count()) === 1)
+
+  // 회귀: 재시작 직후(세트를 클릭하지 않은 상태)에도 편집이 먹어야 한다 — activeKey 가 비어 있어
+  //   스토어가 대상 세트를 못 찾고 조용히 no-op 되던 문제.
+  {
+    const before = await page.locator('[data-seed-row]').count()
+    await click('button:has-text("행 추가")')
+    await page.waitForTimeout(300)
+    check('재시작 직후 편집 반영(행 추가 no-op 회귀)', (await page.locator('[data-seed-row]').count()) === before + 1)
+  }
 
   console.log(pass ? '\nALL PASS' : '\nSOME FAILED')
 } catch (e) {

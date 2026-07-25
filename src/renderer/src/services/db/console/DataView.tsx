@@ -31,6 +31,8 @@ import { useConsoleStore } from './store'
 import { columnKeyKinds, splitTablesAndViews } from './introspection'
 import { canEdit, pkColumns, type Filter } from './data/sqlBuilder'
 import { columnKind } from './data/cellKind'
+import { autoColumnWidths, COL_WIDTH_DEFAULTS } from './data/colWidth'
+import { compactJson, jsonError, prettyJson, summarizeJson } from './data/jsonCell'
 import { badgeLabels, typeLabel } from './data/columnMeta'
 import { genUuid } from './data/genValue'
 import { normalizeDateTime, nowDateTime } from './data/timeValue'
@@ -111,6 +113,8 @@ export function DataView() {
   const [showTz, setShowTz] = useState(false)
   const [cfilter, setCfilter] = useState<KindFilter>('ALL')
   const [jsonEdit, setJsonEdit] = useState<{ key: string; col: string; text: string } | null>(null)
+  // 읽기 전용 JSON 열람(편집 불가 테이블) — 편집 모달과 같은 뷰어를 쓰되 적용 버튼이 없다.
+  const [jsonView, setJsonView] = useState<{ col: string; text: string } | null>(null)
   const [fkEdit, setFkEdit] = useState<{ key: string; col: string; ref: { table: string; column: string }; insert?: string } | null>(null)
   // 컬럼 폭(리사이즈). 이름→px. 없으면 기본폭.
   const [colW, setColW] = useState<Record<string, number>>({})
@@ -156,15 +160,8 @@ export function DataView() {
     setColW({})
   }, [d.table])
 
-  const DEFAULT_COL_W = 160
   const NUM_COL_W = 56
   const ACT_COL_W = 32
-  const startResize = (name: string, e: React.MouseEvent): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    resizing.current = { name, startX: e.clientX, startW: colW[name] ?? DEFAULT_COL_W }
-    document.body.style.cursor = 'col-resize'
-  }
 
   if (!conn) {
     return <PlaceholderView icon={Table2} depth="depth 3 · Console › Data" title="연결을 선택하세요" subtitle="Connection 셀렉터에서 대상을 고르면 실 DB 테이블을 조회/편집할 수 있습니다." />
@@ -185,6 +182,33 @@ export function DataView() {
   const pendingCount = d.pendingCount()
   const statements = selected && dialect ? d.buildStatements(dialect, selected) : []
   const shownColumns = selected ? selected.columns.filter((c) => !hidden.has(c.name)) : []
+
+  // 컬럼 폭은 내용에 맞춰 자동으로 잡는다(상한까지). 사용자가 직접 끌어 조절한 컬럼(colW)은 그 값이 이긴다.
+  // 셀 오른쪽 도우미(NULL·FK 버튼)와 JSON 요약 칩은 값이 쓸 수 있는 폭을 줄이므로 폭에 얹는다.
+  const NULL_BTN_W = 36
+  const FK_BTN_W = 22
+  const JSON_CHIP_W = 34
+  const autoW = autoColumnWidths(
+    shownColumns.map((c) => {
+      const kind = columnKind(c.type)
+      const trailingPx =
+        (editable ? NULL_BTN_W : 0) + (editable && fks[c.name] ? FK_BTN_W : 0) + (kind === 'json' ? JSON_CHIP_W : 0)
+      return {
+        name: c.name,
+        typeLabel: typeLabel(c.type),
+        badges: badgeLabels(keyKinds.get(c.id)).length,
+        trailingPx
+      }
+    }),
+    d.rows
+  )
+  const widthOf = (name: string): number => colW[name] ?? autoW[name] ?? COL_WIDTH_DEFAULTS.min
+  const startResize = (name: string, e: React.MouseEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    resizing.current = { name, startX: e.clientX, startW: widthOf(name) }
+    document.body.style.cursor = 'col-resize'
+  }
 
   /** 테이블 전환 — 미저장 변경/커밋 대기 트랜잭션이 있으면 확인(가드). selectTable 이 열린 tx 를 롤백한다. */
   const pickTable = (t: TableDef): void => {
@@ -425,13 +449,13 @@ export function DataView() {
               <div className="min-h-0 flex-1 overflow-auto">
                 <table
                   className="table-fixed border-collapse text-[12px]"
-                  style={{ width: NUM_COL_W + (editable ? ACT_COL_W : 0) + shownColumns.reduce((s, c) => s + (colW[c.name] ?? DEFAULT_COL_W), 0) }}
+                  style={{ width: NUM_COL_W + (editable ? ACT_COL_W : 0) + shownColumns.reduce((s, c) => s + widthOf(c.name), 0) }}
                 >
                   <colgroup>
                     <col style={{ width: NUM_COL_W }} />
                     {editable && <col style={{ width: ACT_COL_W }} />}
                     {shownColumns.map((c) => (
-                      <col key={c.id} style={{ width: colW[c.name] ?? DEFAULT_COL_W }} />
+                      <col key={c.id} style={{ width: widthOf(c.name) }} />
                     ))}
                   </colgroup>
                   {/* sticky·배경·z 를 <th> 셀마다 건다 — thead 에만 걸면 border-collapse 에서 본문이 헤더 위로 비친다. */}
@@ -484,6 +508,17 @@ export function DataView() {
                             const val = edited && c.name in edited ? edited[c.name] : row[c.name]
                             const kind = columnKind(c.type)
                             if (!editable) {
+                              // 읽기 전용(뷰·PK 없는 테이블)에서도 JSON 은 뷰어로 열 수 있어야 한다 — 셀 폭 안에서는 못 읽는다.
+                              if (kind === 'json' && row[c.name] != null) {
+                                return (
+                                  <td key={c.id} className="overflow-hidden border-b border-line/50 p-0">
+                                    <JsonCellButton
+                                      text={display(row[c.name])}
+                                      onOpen={() => setJsonView({ col: c.name, text: display(row[c.name]) })}
+                                    />
+                                  </td>
+                                )
+                              }
                               const shownVal = row[c.name] == null ? 'NULL' : kind === 'date' ? formatDateCell(row[c.name], tzMode, tz) : display(row[c.name])
                               return (
                                 <td key={c.id} className="group/cell relative overflow-hidden border-b border-line/50 px-3 py-1 font-mono">
@@ -564,22 +599,21 @@ export function DataView() {
         </div>
       </div>
 
-      <Dialog open={!!jsonEdit} onOpenChange={(o) => !o && setJsonEdit(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>JSON 편집 · {jsonEdit?.col}</DialogTitle>
-          </DialogHeader>
-          {jsonEdit && (
-            <div className="mt-2 h-72 overflow-auto rounded border border-line px-2 py-1">
-              <SqlEditor value={jsonEdit.text} onChange={(t) => setJsonEdit((v) => (v ? { ...v, text: t } : v))} language="json" />
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="ghost" size="sm" onClick={() => setJsonEdit(null)}>취소</Button>
-            <Button size="sm" onClick={() => { if (jsonEdit) { d.editCell(jsonEdit.key, jsonEdit.col, jsonEdit.text); setJsonEdit(null) } }}>적용</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {jsonEdit && (
+        <JsonValueDialog
+          col={jsonEdit.col}
+          text={jsonEdit.text}
+          onClose={() => setJsonEdit(null)}
+          onApply={(t) => {
+            d.editCell(jsonEdit.key, jsonEdit.col, t)
+            setJsonEdit(null)
+          }}
+        />
+      )}
+
+      {jsonView && (
+        <JsonValueDialog col={jsonView.col} text={jsonView.text} onClose={() => setJsonView(null)} />
+      )}
 
       {fkEdit && dialect && (
         <FkLookup
@@ -655,7 +689,7 @@ function TableConstraintsPanel({ table }: { table: TableDef }) {
                   <td className="px-2 py-1"><KindBadge kind={c.kind} /></td>
                   <td className="px-2 py-1 font-mono">{c.name}</td>
                   <td className="px-2 py-1 font-mono text-muted">{c.columns.join(', ')}</td>
-                  <td className="px-2 py-1 font-mono text-accent">{c.refLabel ?? '—'}</td>
+                  <td className="px-2 py-1 font-mono text-accent">{c.refDetail ?? '—'}</td>
                 </tr>
               ))}
               {list.length === 0 && (
@@ -666,6 +700,143 @@ function TableConstraintsPanel({ table }: { table: TableDef }) {
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * JSON 값 뷰어/편집기 — 열 때 보기 좋게 정렬해 보여주고, 형식이 깨졌으면 그 자리에서 알려 준다.
+ * `onApply` 가 없으면 열람 전용(읽기 전용 테이블·뷰).
+ * 적용할 때는 유효한 JSON 을 한 줄로 정리해 넣는다 — 저장 값에 우리가 넣은 들여쓰기가 섞이지 않게.
+ */
+function JsonValueDialog({
+  col,
+  text,
+  onClose,
+  onApply
+}: {
+  col: string
+  text: string
+  onClose: () => void
+  onApply?: (text: string) => void
+}) {
+  const [draft, setDraft] = useState(() => prettyJson(text))
+  const [copied, setCopied] = useState(false)
+  const summary = summarizeJson(draft)
+  const error = jsonError(draft)
+  const readOnly = !onApply
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>
+            <span className="font-mono">{col}</span>
+            <span className="ml-2 text-[12px] font-normal text-muted">
+              {summary.label}
+              {readOnly && ' · 열람 전용'}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {!readOnly && (
+            <>
+              <Button size="sm" variant="outline" onClick={() => setDraft((t) => prettyJson(t))}>
+                정렬
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setDraft((t) => compactJson(t))}>
+                한 줄로
+              </Button>
+            </>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              copy(draft)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            }}
+          >
+            <Copy /> {copied ? '복사됨 ✓' : '복사'}
+          </Button>
+          <span className="ml-auto text-[11.5px]">
+            {error ? (
+              <span className="text-destructive">형식 오류 · {error}</span>
+            ) : (
+              <span className="text-success">형식 정상</span>
+            )}
+          </span>
+        </div>
+
+        <div
+          className={cn(
+            'mt-2 h-80 overflow-auto rounded border px-2 py-1',
+            error ? 'border-destructive/50' : 'border-line'
+          )}
+        >
+          <SqlEditor value={draft} onChange={setDraft} language="json" readOnly={readOnly} />
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            {readOnly ? '닫기' : '취소'}
+          </Button>
+          {onApply && (
+            <Button
+              size="sm"
+              title="유효한 JSON 은 한 줄로 정리해 넣습니다"
+              onClick={() => onApply(error ? draft : compactJson(draft))}
+            >
+              적용
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * JSON 셀 버튼 — 원본을 그대로 흘리는 대신 **구조 요약 칩**(`{} 5` / `[] 12`)과
+ * 한 줄 미리보기를 보인다. 눌러 뷰어에서 정렬된 전체를 본다.
+ * (원본 그대로면 `{"a":1,"b":[...` 처럼 잘려 무엇이 들었는지 못 읽는 게 문제였다.)
+ */
+function JsonCellButton({
+  text,
+  disabled,
+  changed,
+  onOpen
+}: {
+  text: string
+  disabled?: boolean
+  changed?: boolean
+  onOpen: () => void
+}) {
+  const s = summarizeJson(text)
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onOpen}
+      title={`${s.label} — 눌러서 전체 보기`}
+      className={cn(
+        'flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left font-mono text-[12px] outline-none hover:bg-panel/60',
+        changed ? 'text-accent-2' : 'text-fg'
+      )}
+    >
+      <span
+        className={cn(
+          'shrink-0 rounded px-1 text-[9px] font-bold',
+          s.shape === 'invalid' ? 'bg-destructive/10 text-destructive' : 'bg-accent-soft text-accent'
+        )}
+      >
+        {s.chip}
+      </span>
+      <span className={cn('min-w-0 flex-1 truncate text-[11.5px]', s.shape === 'empty' && 'italic text-muted')}>
+        {s.preview || '빈 값'}
+      </span>
+    </button>
   )
 }
 
@@ -740,7 +911,7 @@ function EditableCell({
   if (kind === 'json') {
     return (
       <div className="flex items-center">
-        <button type="button" disabled={disabled} onClick={onJson} className={cn(base, 'truncate text-left underline decoration-dotted')} title={text}>{text || '{ }'}</button>
+        <JsonCellButton text={text} disabled={disabled} changed={changed} onOpen={onJson} />
         {nullBtn}
       </div>
     )

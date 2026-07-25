@@ -3,6 +3,7 @@ import type { DialectId } from '../../dialects'
 import type { Column, Constraint, ConstraintKind, TableDef } from '../../workspaces/definition/types'
 import { generateMigration, type MigrationPlan } from '../../migration/ddlDiff'
 import { useConsoleStore } from '../store'
+import { schemaEditHistory } from './history'
 import * as m from './mutations'
 
 /**
@@ -147,6 +148,16 @@ export const useSchemaEditStore = create<SchemaEditState>()((set, get) => {
         await window.rockury.query.txRollback(txId).catch(() => {})
         set({ applying: false, error: errMsg(e) })
         return false
+      }
+      // 적용 성공 → 이번 스키마 변경을 History 에 남긴다(한 번의 적용 = runId 로 묶인 그룹 1건).
+      // 히스토리 기록 실패는 적용 자체에 영향 주지 않는다 — try/catch 로 격리.
+      try {
+        const runId = crypto.randomUUID()
+        for (const entry of schemaEditHistory(plan, connId, runId)) {
+          await window.rockury.query.historyAppend(entry)
+        }
+      } catch {
+        // 무시.
       }
       // 성공 → 재역설계 후 편집 종료.
       await useConsoleStore.getState().load(connId, connId, true).catch(() => {})

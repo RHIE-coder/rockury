@@ -3,6 +3,7 @@ import { useNav } from '@renderer/nav/useNav'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { autoIncrementToken } from '../../typeCatalog'
 import { useVersionsStore } from '../../versions/store'
+import { changedDesignIds, mergeDesignTables, reconcileActiveTable, toTableDef } from './designScope'
 import type { Column, Constraint, ConstraintKind, TableDef } from './types'
 // 순환 참조 주의: definition → {designs, versions} 방향만 존재(역방향 import 없음).
 
@@ -82,16 +83,7 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
   setForm: (form) => set({ form }),
   init: async () => {
     const recs = await window.rockury.tables.list()
-    const tables = recs.map(
-      (r): TableDef => ({
-        id: r.id,
-        designId: r.designId,
-        name: r.name,
-        comment: r.comment,
-        columns: r.columns as Column[],
-        constraints: r.constraints as Constraint[]
-      })
-    )
+    const tables = recs.map(toTableDef)
     // 앱 생성 id(-N 접미) 재사용 충돌 방지 — 로드된 최대 번호 위로 seq 를 올린다.
     let max = 0
     const scan = (id: string): void => {
@@ -394,23 +386,60 @@ export function useActiveTable(): TableDef | undefined {
 // 시작 시 SQLite 에서 하이드레이션.
 void useDefinitionStore.getState().init()
 
-// tables 변경 시 저장소로 write-through(디바운스). 로드 전/무관 변경은 건너뛴다.
+// 리하이드레이션(에이전트발 갱신 반영) 중 write-through 억제 — 방금 저장소에서 읽어온
+// 값을 다시 저장소로 되쏘면 에이전트 쓰기와 저장이 꼬리를 물기 때문(spec tools.rehydration AC-3).
+let rehydrating = false
+
+/**
+ * MCP 에이전트가 바꾼 설계의 테이블을 화면 상태에 반영한다 — 대상 설계 슬라이스만
+ * 갈아끼우고(다른 설계의 편집 중 상태 보존) write-through 를 되쏘지 않는다.
+ */
+export function rehydrateDesignTables(designId: string, incoming: TableDef[]): void {
+  const cur = useDefinitionStore.getState()
+  if (!cur.loaded) return // 초기 하이드레이션 전이면 init 이 곧 전체를 읽는다
+  const tables = mergeDesignTables(cur.tables, designId, incoming)
+  // 활성 테이블이 사라졌으면(patchActive 가 조용히 no-op 되는 것 방지) 그 설계 첫 테이블로 되돌린다.
+  const active = reconcileActiveTable(cur.activeTableId, tables, incoming)
+  const patch = active.changed
+    ? { tables, activeTableId: active.activeTableId, editing: null, openConstraintId: null }
+    : { tables }
+  rehydrating = true
+  try {
+    useDefinitionStore.setState(patch)
+  } finally {
+    rehydrating = false
+  }
+}
+
+// tables 변경 시 저장소로 write-through(디바운스) — 바뀐 설계만 스코프 저장.
+// 전량 교체는 제거됨: 설계 X 편집이 설계 Y 행을 건드리지 않는다(spec tools.write AC-4).
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+const pendingDesignIds = new Set<string>()
 useDefinitionStore.subscribe((s, prev) => {
-  if (!s.loaded || s.tables === prev.tables) return
+  if (!s.loaded || s.tables === prev.tables || rehydrating) return
+  for (const id of changedDesignIds(prev.tables, s.tables)) pendingDesignIds.add(id)
+  if (pendingDesignIds.size === 0) return
   clearTimeout(saveTimer)
-  const snapshot = s.tables
   saveTimer = setTimeout(() => {
-    void window.rockury.tables.replaceAll(
-      snapshot.map((t) => ({
-        id: t.id,
-        designId: t.designId,
-        name: t.name,
-        comment: t.comment,
-        columns: t.columns,
-        constraints: t.constraints
-      }))
-    )
+    const snapshot = useDefinitionStore.getState().tables
+    const ids = [...pendingDesignIds]
+    pendingDesignIds.clear()
+    for (const designId of ids) {
+      void window.rockury.tables.replaceForDesign(
+        designId,
+        snapshot
+          .filter((t) => t.designId === designId)
+          .map((t) => ({
+            id: t.id,
+            designId: t.designId,
+            name: t.name,
+            comment: t.comment,
+            columns: t.columns,
+            constraints: t.constraints,
+            isView: t.isView ?? false
+          }))
+      )
+    }
   }, 250)
 })
 

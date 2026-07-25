@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Column, TableDef } from './types'
-import { generateDdl } from './ddl'
+import { generateDdl, quoteId } from './ddl'
 
 const col = (id: string, name: string, type: string, extra: Partial<Column> = {}): Column => ({
   id,
@@ -52,5 +52,39 @@ describe('generateDdl — 방언별 매핑', () => {
     expect(ddl).not.toContain('AUTO_INCREMENT')
     expect(ddl).toContain('CHECK')
     expect(ddl).toMatch(/payload"?\s+TEXT/i)
+  })
+})
+
+// 보안 회귀(감사 HIGH): MCP set_schema 가 식별자를 원격 작성자에게 열었다 —
+// 이름에 인용부호가 섞이면 인용을 탈출해 실 DB DDL 로 주입될 수 있었다.
+describe('quoteId — 식별자 인용부호 이스케이프(주입 차단)', () => {
+  it('정상 식별자는 출력 불변', () => {
+    expect(quoteId('mysql', 'orders')).toBe('`orders`')
+    expect(quoteId('postgresql', 'orders')).toBe('"orders"')
+  })
+
+  it('mysql: 백틱을 이중화해 인용 탈출을 막는다', () => {
+    // `id` INTEGER); DROP TABLE users;--  → 백틱이 이중화되어 한 식별자 안에 갇힌다
+    const evil = 'id` INTEGER); DROP TABLE users;-- '
+    const q = quoteId('mysql', evil)
+    expect(q).toBe('`id`` INTEGER); DROP TABLE users;-- `')
+    // 열고 닫는 백틱을 벗기면 내부에 홀수 개(미이중화) 백틱이 남지 않는다
+    expect(q.slice(1, -1)).toBe('id`` INTEGER); DROP TABLE users;-- ')
+  })
+
+  it('postgresql/sqlite: 큰따옴표를 이중화한다', () => {
+    expect(quoteId('postgresql', 'a" ; DROP TABLE t; --')).toBe('"a"" ; DROP TABLE t; --"')
+    expect(quoteId('sqlite', 'x"y')).toBe('"x""y"')
+  })
+
+  it('조작 식별자로 만든 DDL 에 주입 구문이 살아있는 백틱으로 남지 않는다', () => {
+    const t: TableDef = {
+      id: 't', designId: 'd', name: 'orders', comment: '',
+      columns: [col('c1', 'id` ); DROP TABLE users; -- ', 'INT')],
+      constraints: []
+    }
+    const ddl = generateDdl(t, 'mysql')
+    // 컬럼 정의 줄: 조작 이름이 하나의 이중화된 식별자로만 나타난다
+    expect(ddl).toContain('`id`` ); DROP TABLE users; -- `')
   })
 })

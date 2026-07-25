@@ -10,6 +10,12 @@ export function registerEnvironmentIpc(): void {
   ipcMain.handle('environments:find', (_e, connectionId: string, designId: string) =>
     envelope(() => environmentService.find(connectionId, designId))
   )
+  ipcMain.handle('environments:listByConnection', (_e, connectionId: string) =>
+    envelope(() => environmentService.listByConnection(connectionId))
+  )
+  ipcMain.handle('environments:delete', (_e, id: string) =>
+    envelope(() => environmentService.remove(id))
+  )
   ipcMain.handle('environments:ensure', (_e, connectionId: string, designId: string, targetVersion: string) =>
     envelope(() => environmentService.ensure(connectionId, designId, targetVersion))
   )

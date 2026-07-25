@@ -15,6 +15,7 @@
     "types": ["node", "electron-vite/node"]
   },
   "include": [
+    "src/shared/**/*",
     "src/main/**/*",
     "src/preload/**/*",
     "electron.vite.config.ts"

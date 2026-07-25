@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowRight, GitCompare, Minus, PenLine, Plus } from 'lucide-react'
+import { ArrowRight, GitCompare } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -7,50 +7,14 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/ui/select'
-import { cn } from '@renderer/lib/utils'
 import { useActiveDesign } from '../designs/store'
 import { useDesignVersions, type VersionDef } from './store'
-import { diffSnapshots, isEmptyDiff, type ChangeStatus, type FieldChange } from './diff'
+import { diffSnapshots } from './diff'
+import { diffSeeds, isEmptySeedDiff } from './seedDiff'
+import { SchemaDiffPanel } from './SchemaDiffPanel'
+import { SeedDiffPanel } from './SeedDiffPanel'
 
-const STATUS_STYLE: Record<ChangeStatus, { chip: string; icon: typeof Plus; label: string }> = {
-  added: { chip: 'bg-success-soft text-success', icon: Plus, label: '추가' },
-  removed: { chip: 'bg-danger/10 text-danger', icon: Minus, label: '삭제' },
-  modified: { chip: 'bg-info-soft text-info', icon: PenLine, label: '변경' }
-}
-
-function StatusTag({ status }: { status: ChangeStatus }) {
-  const s = STATUS_STYLE[status]
-  const Icon = s.icon
-  return (
-    <span className={cn('flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold', s.chip)}>
-      <Icon className="size-3" />
-      {s.label}
-    </span>
-  )
-}
-
-/** field: before → after 한 줄. */
-function ChangeLine({ c }: { c: FieldChange }) {
-  return (
-    <div className="flex items-center gap-1.5 text-[11.5px]">
-      <span className="w-20 shrink-0 text-muted">{c.field}</span>
-      <span className="font-mono text-danger/80 line-through">{c.before}</span>
-      <ArrowRight className="size-3 shrink-0 text-muted" />
-      <span className="font-mono text-success">{c.after}</span>
-    </div>
-  )
-}
-
-function SummaryChip({ n, label, tone }: { n: number; label: string; tone: string }) {
-  if (n === 0) return null
-  return (
-    <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', tone)}>
-      {label} {n}
-    </span>
-  )
-}
-
-/** Versions › Version Diff (diff ①) — 두 버전 스냅샷의 스키마 델타. */
+/** Versions › Version Diff (diff ①) — 두 버전 스냅샷의 스키마 델타. 같은 계보라 id 매칭(rename 추적). */
 export function VersionDiffView() {
   const design = useActiveDesign()
   const versions = useDesignVersions(design?.id ?? null)
@@ -63,6 +27,11 @@ export function VersionDiffView() {
 
   const diff = useMemo(
     () => (base && target ? diffSnapshots(base.snapshot, target.snapshot) : null),
+    [base, target]
+  )
+  // 시드는 스키마와 따로 계산한다 — 실 DB 비교(Drift·Plan)에는 시드가 없어 한 함수로 묶으면 거짓 델타가 난다.
+  const seedDiff = useMemo(
+    () => (base && target ? diffSeeds(base.snapshot.seeds, target.snapshot.seeds) : null),
     [base, target]
   )
 
@@ -117,89 +86,17 @@ export function VersionDiffView() {
       </div>
 
       {diff && (
-        <>
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {isEmptyDiff(diff) ? (
-              <span className="rounded-full bg-panel-strong px-2 py-0.5 text-[11px] text-muted">
-                두 버전의 스키마가 동일해요
-              </span>
-            ) : (
-              <>
-                <SummaryChip n={diff.summary.tablesAdded} label="테이블 +" tone="bg-success-soft text-success" />
-                <SummaryChip n={diff.summary.tablesModified} label="테이블 ~" tone="bg-info-soft text-info" />
-                <SummaryChip n={diff.summary.tablesRemoved} label="테이블 −" tone="bg-danger/10 text-danger" />
-                <SummaryChip n={diff.summary.columnsAdded} label="컬럼 +" tone="bg-success-soft text-success" />
-                <SummaryChip n={diff.summary.columnsModified} label="컬럼 ~" tone="bg-info-soft text-info" />
-                <SummaryChip n={diff.summary.columnsRemoved} label="컬럼 −" tone="bg-danger/10 text-danger" />
-                <SummaryChip n={diff.summary.constraintsAdded} label="제약 +" tone="bg-success-soft text-success" />
-                <SummaryChip n={diff.summary.constraintsModified} label="제약 ~" tone="bg-info-soft text-info" />
-                <SummaryChip n={diff.summary.constraintsRemoved} label="제약 −" tone="bg-danger/10 text-danger" />
-              </>
-            )}
-          </div>
-
-          {!isEmptyDiff(diff) && (
-            <div className="flex flex-col gap-2">
-              {diff.tables.map((t) => (
-                <div key={t.id} className="overflow-hidden rounded-[10px] border border-line">
-                  <div className="flex items-center gap-2 bg-panel px-3 py-2">
-                    <StatusTag status={t.status} />
-                    <span className="font-mono text-[13px] font-semibold text-fg">{t.name}</span>
-                  </div>
-
-                  {t.status === 'modified' && (
-                    <div className="flex flex-col gap-2 px-3 py-2.5">
-                      {t.tableChanges.length > 0 && (
-                        <div className="flex flex-col gap-1">
-                          {t.tableChanges.map((c) => (
-                            <ChangeLine key={c.field} c={c} />
-                          ))}
-                        </div>
-                      )}
-
-                      {t.columns.map((col) => (
-                        <div key={col.id} className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <StatusTag status={col.status} />
-                            <span className="font-mono text-[12px] text-fg">{col.name}</span>
-                            <span className="text-[10.5px] text-muted">컬럼</span>
-                          </div>
-                          {col.changes.length > 0 && (
-                            <div className="flex flex-col gap-0.5 pl-3">
-                              {col.changes.map((c) => (
-                                <ChangeLine key={c.field} c={c} />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-
-                      {t.constraints.map((con) => (
-                        <div key={con.id} className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <StatusTag status={con.status} />
-                            <span className="font-mono text-[12px] text-fg">{con.name}</span>
-                            <span className="rounded bg-panel-strong px-1 py-0.5 font-mono text-[9px] text-muted">
-                              {con.kind.toUpperCase()}
-                            </span>
-                          </div>
-                          {con.changes.length > 0 && (
-                            <div className="flex flex-col gap-0.5 pl-3">
-                              {con.changes.map((c) => (
-                                <ChangeLine key={c.field} c={c} />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+        <SchemaDiffPanel
+          diff={diff}
+          // 시드에 변화가 있으면 "스키마는 동일"이라고만 말한다 — 화면 전체가 '변경 없음'으로 읽히지 않게.
+          emptyText={
+            seedDiff && !isEmptySeedDiff(seedDiff)
+              ? '스키마는 동일하고, 아래 시드만 바뀌었어요'
+              : '두 버전의 스키마·시드가 동일해요'
+          }
+        />
       )}
+      {seedDiff && <SeedDiffPanel diff={seedDiff} />}
     </div>
   )
 }

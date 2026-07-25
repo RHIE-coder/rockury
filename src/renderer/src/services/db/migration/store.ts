@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { DialectId } from '../dialects'
+import { alignSnapshotToActual } from '../versions/align'
 import { diffSnapshots, type SchemaDiff } from '../versions/diff'
 import { useVersionsStore, type VersionSnapshot } from '../versions/store'
 import { normalizeSchema } from '../console/introspection'
@@ -106,7 +107,10 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
       set({
         hasBaseline: !!base,
         baselineVersion: base?.version ?? '',
-        driftDiff: base ? diffSnapshots(base.snapshot as VersionSnapshot, actual) : null,
+        // 기준선이 설계 저작 스냅샷(순번 id)일 수 있어 이름 정렬 후 비교(§경계 정렬).
+        driftDiff: base
+          ? diffSnapshots(alignSnapshotToActual(base.snapshot as VersionSnapshot, actual), actual)
+          : null,
         loading: false
       })
     } catch (e) {
@@ -143,9 +147,11 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
       if (!target) throw new Error(`버전 스냅샷을 찾을 수 없습니다: ${version}`)
       await get().resolveBinding(connectionId, designId, version)
       const actual = await get().introspectActual(connectionId, designId)
+      // 설계 저작 버전(순번 id)↔실DB(이름 id) 비교 — 이름 정렬 없이는 "전부 DROP+CREATE"로 오판(§경계 정렬).
+      const alignedTarget = alignSnapshotToActual(target, actual)
       set({
-        planDiff: diffSnapshots(actual, target),
-        plan: generateMigration(actual, target, dialect),
+        planDiff: diffSnapshots(actual, alignedTarget),
+        plan: generateMigration(actual, alignedTarget, dialect),
         destructiveAck: false,
         loading: false
       })

@@ -23,10 +23,12 @@ import { useActiveDesign } from '../../designs/store'
 import { useDefinitionStore, useDesignTables, useStudioReadOnly } from '../definition/store'
 import { buildErd } from '../../console/diagram/graph'
 import { estimateNodeSize, layoutErd, type Positions } from '../../console/diagram/layout'
+import { seedNodes } from '../../console/diagram/seed'
 import { matchTables } from '../../console/diagram/filter'
 import { exportFileName, exportViewport, contentBoundsForExport } from '../../console/diagram/export'
 import { TableErdNode } from '../../console/diagram/TableErdNode'
 import { RelationErdEdge } from '../../console/diagram/RelationErdEdge'
+import { DiagramTablePanel } from '../../console/diagram/DiagramTablePanel'
 import { buildFkPatch } from './fk'
 
 const nodeTypes = { tableErd: TableErdNode }
@@ -98,6 +100,8 @@ function StudioCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState(base.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(base.edges)
   const seededRef = useRef(false)
+  // 직전 effect 실행 시점의 노드 id 집합 — grew(새 테이블 등장) 판정을 updater 밖에서 하기 위함.
+  const prevIdsRef = useRef<Set<string>>(new Set())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const neighbors = useMemo(() => {
@@ -120,24 +124,16 @@ function StudioCanvas({
   }, [rf, scopeKey, editable])
 
   // 스키마/편집 변경 시 재배치 — 첫 seed 는 저장 위치, 이후엔 현재 화면 위치 보존(새 테이블만 dagre).
+  // seed 판정·fitView 는 반드시 updater 밖에서: updater 안에서 ref 를 바꾸면 StrictMode(dev)가
+  // updater 를 두 번 불러 첫 seed 분기가 무효화되고, 저장 위치 대신 dagre 배치가 적용·영속된다.
   useEffect(() => {
-    setNodes((prev) => {
-      const prevMap = new Map(prev.map((n) => [n.id, n]))
-      const first = !seededRef.current
-      seededRef.current = true
-      const overlay: Positions = first
-        ? storedPositions
-        : Object.fromEntries(prev.map((n) => [n.id, n.position]))
-      const grew = base.nodes.some((n) => !prevMap.has(n.id))
-      const next = base.nodes.map((n) => ({
-        ...n,
-        position: overlay[n.id] ?? n.position,
-        measured: prevMap.get(n.id)?.measured
-      }))
-      if (grew && !first) setTimeout(() => rf.fitView({ padding: 0.15, duration: 300 }), 50)
-      return next
-    })
+    const first = !seededRef.current
+    seededRef.current = true
+    const grew = !first && base.nodes.some((n) => !prevIdsRef.current.has(n.id))
+    prevIdsRef.current = new Set(base.nodes.map((n) => n.id))
+    setNodes((prev) => seedNodes(base.nodes, prev, first, storedPositions))
     setEdges(base.edges)
+    if (grew) setTimeout(() => rf.fitView({ padding: 0.15, duration: 300 }), 50)
   }, [base, storedPositions, setNodes, setEdges, rf])
 
   // 선택/검색/간략 → 노드 data 데코.
@@ -527,9 +523,10 @@ export function StudioDiagramWorkspace() {
           )}
         </div>
       ) : (
-        <div className="flex flex-1 overflow-hidden">
-          <div className="relative flex-1">
-            <ReactFlowProvider key={`${design.id}:${nonce}`}>
+        <ReactFlowProvider key={`${design.id}:${nonce}`}>
+          <div className="flex flex-1 overflow-hidden">
+            <DiagramTablePanel tables={tables} selectedId={selectedId} onSelect={handleSelect} />
+            <div className="relative min-w-0 flex-1">
               <StudioCanvas
                 tables={tables}
                 scopeKey={scopeKey}
@@ -541,10 +538,10 @@ export function StudioDiagramWorkspace() {
                 onSelect={handleSelect}
                 onConnectFk={handleConnectFk}
               />
-            </ReactFlowProvider>
+            </div>
+            {!readOnly && selected && <EditPanel table={selected} allTables={tables} />}
           </div>
-          {!readOnly && selected && <EditPanel table={selected} allTables={tables} />}
-        </div>
+        </ReactFlowProvider>
       )}
     </div>
   )
