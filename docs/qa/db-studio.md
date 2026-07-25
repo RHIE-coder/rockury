@@ -20,13 +20,13 @@
 - **CASE-studio-021** 행 단위 차이: 행 추가·삭제·값 변경(어느 컬럼이 무엇에서 무엇으로)을 잡는다. (version-diff AC-3)
 - **CASE-studio-022** 무시 컬럼 제외: 무시 컬럼 값만 다른 행은 차이가 아니다. (version-diff AC-3)
 - **CASE-studio-023** 변수 이름 비교: 같은 변수 이름끼리는 차이가 아니고, 변수 이름이 바뀌면 차이다. (variables AC-3)
-- **CASE-studio-024** 선언 변경: 자연키·무시 컬럼·관리 강도 변경을 차이로 잡는다. (version-diff AC-4)
+- **CASE-studio-024** 선언 변경: 자연키·무시 컬럼·`설계에 없는 행` 처리 변경을 차이로 잡는다(차이 라벨도 화면과 같은 말: `설계에 없는 행  그대로 둠 → 삭제 후보`). (version-diff AC-4)
 - **CASE-studio-025** 옛 스냅샷 폴백: `seeds` 없는 스냅샷을 빈 목록으로 읽어 비교가 깨지지 않는다. 한쪽만 시드가 있으면 전부 추가/삭제로 잡힌다. (version-diff AC-2)
 - **CASE-studio-026** 자연키 없는(또는 양쪽 선언이 다른) 세트: 행을 짝짓지 않고 `비교 불가`로 표시한다. 행 개수/값이 실제로 다르면 **침묵하지 않고** 그 세트를 변경으로 올린다(행 delta 는 비우고). 내용이 완전히 같으면 조용하다. 행 로컬 id 차이는 차이가 아니다. (declaration AC-2 / version-diff AC-3b)
 - **CASE-studio-027** 요약 집계: 스키마 변경이 0 이고 시드 변경만 있을 때 "변경 없음"이 되지 않는다. (version-diff AC-5)
 
 ## Scenario S4 — 저장 계층 (임시 SQLite) → `src/main/store/stores.test.ts`
-- **CASE-studio-030** 시드 세트 라운드트립: 선언(자연키·무시 컬럼·관리 강도)과 행이 저장→조회에서 보존된다. (persistence AC-1/AC-2)
+- **CASE-studio-030** 시드 세트 라운드트립: 선언(자연키·무시 컬럼·`설계에 없는 행` 처리)과 행이 저장→조회에서 보존된다. (persistence AC-1/AC-2)
 - **CASE-studio-031** 설계 스코프 교체: 설계 X 의 세트를 저장해도 설계 Y 의 세트가 남는다. (persistence AC-1)
 - **CASE-studio-032** MCP 커버리지: 새 IPC 채널이 노출 또는 제외 사유로 등재돼 `coverage.test.ts` 가 통과한다. (persistence AC-3) → `src/main/mcp/coverage.test.ts`
 
@@ -36,5 +36,5 @@
 - **CASE-studio-042** 중복 자연키 입력 → 두 행 모두 오류 표시, 값을 바꿔 해소하면 오류 사라짐. (grid AC-3)
 - **CASE-studio-043** 셀에 `{{ADMIN_PASSWORD_HASH}}` 입력 → 변수 표식 + 세트 머리의 변수 목록에 등장. (variables AC-1/AC-2)
 - **CASE-studio-044** 저장소(`seedSets.list`)에 선언·행 반영 + **콜드 재시작**(앱 종료→재기동) 후 세트·행·변수 잔존. (persistence AC-1/AC-2)
-- **CASE-studio-044b** 관리 강도 `전권` 선택 시 삭제 후보 경고 노출. (declaration AC-4)
+- **CASE-studio-044b** `설계에 없는 행` 을 `삭제 후보` 로 고르면 그 뜻을 경고로 보인다. (declaration AC-4)
 - **CASE-studio-045** 시드를 담아 버전 컷 → 타임라인에 시드 행 수 표시 + Versions › Version Diff 에 시드 섹션(시드 없던 옛 버전과 비교 → 세트/행 추가) 표시. (version-diff AC-1/AC-2/AC-3/AC-5) — 행 값 변경 케이스는 단위테스트 CASE-studio-021 이 덮는다.

@@ -367,7 +367,7 @@ describe('seedSets — 시드 세트 설계 스코프 저장', () => {
     rows
   })
 
-  it('CASE-studio-030: 선언(자연키·무시 컬럼·관리 강도)과 행이 왕복에서 보존된다', () => {
+  it('CASE-studio-030: 선언(자연키·무시 컬럼·설계에 없는 행 처리)과 행이 왕복에서 보존된다', () => {
     const rows = [
       { id: 'r1', values: { code: 'admin', name: '관리자', pw: '{{ADMIN_PASSWORD_HASH}}', memo: null } },
       { id: 'r2', values: { code: 'viewer', name: '조회자' } }

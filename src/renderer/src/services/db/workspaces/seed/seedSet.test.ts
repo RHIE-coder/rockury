@@ -142,7 +142,7 @@ describe('CASE-studio-004 세트 등록 후보', () => {
 })
 
 describe('createSeedSet', () => {
-  it('설계 소속·기본 자연키·안전한 관리 강도로 만든다', () => {
+  it('설계 소속·기본 자연키·안전한 기본값(그대로 둠)으로 만든다', () => {
     const t = table('roles', [col('c1', 'code')], ['c1'])
     expect(createSeedSet(t)).toEqual({
       designId: 'd1',

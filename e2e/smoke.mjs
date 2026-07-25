@@ -261,10 +261,10 @@ try {
     check('Studio › Seed: 세트가 요구하는 변수 목록',
       (await page.locator('[data-seed-variable="ADMIN_PASSWORD_HASH"]').count()) === 1)
 
-    // 관리 강도 전권 → 경고 문구
+    // '설계에 없는 행 = 삭제 후보' 선택 → 경고 문구
     await click('[data-seed-strength="authoritative"]')
     await page.waitForTimeout(200)
-    check('Studio › Seed: 전권 선택 시 삭제 후보 경고', (await body()).includes('삭제 후보'))
+    check('Studio › Seed: 삭제 후보 선택 시 경고 문구', (await body()).includes('삭제 후보'))
 
     // 저장(설계 스코프) — 디바운스 후 저장소에 남는다
     await page.waitForTimeout(600)

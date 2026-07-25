@@ -1,23 +1,30 @@
 /**
  * Studio › Seed 도메인 타입 — **시드 세트**(= 시드 관리의 단위: 대상 테이블 · 자연키 ·
- * 무시 컬럼 · 관리 강도). 정본 명세 `docs/spec/db-studio.md` Surface `db-studio.seed`.
+ * 무시 컬럼 · "설계에 없는 행" 처리). 정본 명세 `docs/spec/db-studio.md` Surface `db-studio.seed`.
  *
  * 왜 컬럼을 id 가 아니라 **이름**으로 가리키나: 시드 행은 결국 실 DB 에 심어지고, 실 DB 에는
  * 설계의 순번 id 가 존재하지 않는다(이름이 곧 정체성). 스키마쪽 `versions/align.ts` 가 경계
  * 비교에서 이름 기반 id 로 맞추는 것과 같은 이유다.
  */
 
-/** 관리 강도 — 시드가 실 DB 를 어디까지 통제하는가. */
+/**
+ * 반영할 때 **설계에 없는 행**을 어떻게 할지 — 화면에는 추상적인 이름 대신 효과를 그대로 보인다
+ * (`그대로 둠` / `삭제 후보`). 내부 값 이름은 뜻을 그대로 남긴다.
+ */
 export type SeedStrength = 'ensure' | 'authoritative'
 
+/** 이 선택이 무엇에 대한 것인지 — 화면의 묶음 라벨. */
+export const STRENGTH_GROUP_LABEL = '설계에 없는 행'
+
 export const STRENGTH_LABEL: Record<SeedStrength, string> = {
-  ensure: '보장만',
-  authoritative: '전권'
+  ensure: '그대로 둠',
+  authoritative: '삭제 후보'
 }
 
 export const STRENGTH_HINT: Record<SeedStrength, string> = {
-  ensure: '설계에 적힌 행만 맞추고, 실 DB 의 나머지 행은 건드리지 않아요.',
-  authoritative: '설계에 없는 행은 삭제 후보가 돼요 — 실제 삭제는 반영 단계에서 확인을 받습니다.'
+  ensure: '설계에 적힌 행만 넣고 맞춰요. 실 DB 에 그 밖의 행이 더 있어도 건드리지 않아요.',
+  authoritative:
+    '설계에 없는 행은 삭제 후보가 돼요 — 목록 전체를 설계가 결정하는 표(역할·권한 등)에 씁니다. 실제 삭제는 반영 단계에서 확인을 받습니다.'
 }
 
 export interface SeedRow {

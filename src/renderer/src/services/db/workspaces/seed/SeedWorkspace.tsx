@@ -13,7 +13,14 @@ import { isVariableCell, seedVariables, validateSeedRows, type SeedRowIssue } fr
 import { seedSetStatus } from './seedSet'
 import { SeedSetDialog } from './SeedSetDialog'
 import { setKey, useActiveSeedSet, useDesignSeedSets, useSeedStore } from './store'
-import { STRENGTH_HINT, STRENGTH_LABEL, type SeedRow, type SeedSet, type SeedStrength } from './types'
+import {
+  STRENGTH_GROUP_LABEL,
+  STRENGTH_HINT,
+  STRENGTH_LABEL,
+  type SeedRow,
+  type SeedSet,
+  type SeedStrength
+} from './types'
 
 /**
  * Studio › Seed — 기준 데이터(시드) 저작 화면. 정본: `docs/spec/db-studio.md` Surface `db-studio.seed`.
@@ -164,7 +171,7 @@ function CellValue({ v }: { v: string | null | undefined }) {
   return <span className="truncate font-mono text-[12px] text-fg">{v}</span>
 }
 
-/** 선언 바 — 관리 강도 · 변수 목록 · 자연키 경고. 컬럼 단위 선언(KEY/무시)은 그리드 헤더에 있다. */
+/** 선언 바 — '설계에 없는 행' 처리 · 변수 목록 · 자연키 경고. 컬럼 단위 선언(KEY/무시)은 그리드 헤더에 있다. */
 function DeclarationBar({ set, readOnly }: { set: SeedSet; readOnly: boolean }) {
   const setStrength = useSeedStore((s) => s.setStrength)
   const variables = useMemo(() => seedVariables(set.rows), [set.rows])
@@ -184,7 +191,7 @@ function DeclarationBar({ set, readOnly }: { set: SeedSet; readOnly: boolean }) 
         )}
 
         <div className="ml-auto flex items-center gap-1" title={STRENGTH_HINT[set.strength]}>
-          <span className="text-[11px] text-muted">관리 강도</span>
+          <span className="text-[11px] text-muted">{STRENGTH_GROUP_LABEL}</span>
           {(['ensure', 'authoritative'] as SeedStrength[]).map((v) => (
             <button
               key={v}

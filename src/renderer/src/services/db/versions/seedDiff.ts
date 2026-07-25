@@ -1,5 +1,5 @@
 import { matchSeedRows, naturalKeyLabel, variableNameOf } from '../workspaces/seed/seedRows'
-import { STRENGTH_LABEL, type SeedRow, type SeedSet } from '../workspaces/seed/types'
+import { STRENGTH_GROUP_LABEL, STRENGTH_LABEL, type SeedRow, type SeedSet } from '../workspaces/seed/types'
 import type { ChangeStatus, FieldChange } from './diff'
 
 /**
@@ -23,7 +23,7 @@ export interface SeedRowDiff {
 export interface SeedSetDiff {
   tableName: string
   status: ChangeStatus
-  /** 선언(자연키·무시 컬럼·관리 강도) 변경. */
+  /** 선언(자연키·무시 컬럼·'설계에 없는 행' 처리) 변경. */
   declarationChanges: FieldChange[]
   rows: SeedRowDiff[]
   /** false = 자연키가 없거나 양쪽 자연키 선언이 달라 **행 단위 비교를 하지 않았다**. */
@@ -72,7 +72,7 @@ function declarationChanges(base: SeedSet, target: SeedSet): FieldChange[] {
   if (base.ignoredColumns.join(',') !== target.ignoredColumns.join(','))
     out.push({ field: '무시 컬럼', before: listLabel(base.ignoredColumns), after: listLabel(target.ignoredColumns) })
   if (base.strength !== target.strength)
-    out.push({ field: '관리 강도', before: STRENGTH_LABEL[base.strength], after: STRENGTH_LABEL[target.strength] })
+    out.push({ field: STRENGTH_GROUP_LABEL, before: STRENGTH_LABEL[base.strength], after: STRENGTH_LABEL[target.strength] })
   return out
 }
 

@@ -12,7 +12,7 @@ export interface SeedSetRecord {
   tableName: string
   naturalKey: string[]
   ignoredColumns: string[]
-  /** 'ensure'(보장만) | 'authoritative'(전권). */
+  /** 설계에 없는 행 처리 — 'ensure'(그대로 둠) | 'authoritative'(삭제 후보). */
   strength: string
   rows: unknown[]
 }

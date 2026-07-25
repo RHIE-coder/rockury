@@ -52,7 +52,7 @@ export function seedSetCandidates(tables: TableDef[], sets: Pick<SeedSet, 'table
   return tables.filter((t) => !t.isView && !taken.has(t.name))
 }
 
-/** 테이블에서 세트 하나를 만든다(자연키는 기본값 규칙, 관리 강도는 안전한 쪽 `보장만`). */
+/** 테이블에서 세트 하나를 만든다(자연키는 기본값 규칙, 설계에 없는 행은 안전한 쪽 `그대로 둠`). */
 export function createSeedSet(t: TableDef): SeedSet {
   return {
     designId: t.designId,
