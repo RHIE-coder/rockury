@@ -9,6 +9,7 @@
 - **CASE-studio-003** 세트 완전성 판정: 자연키 없는 세트는 `비교 불가`로, 있는 세트는 정상으로 분류한다. (set-list AC-5 / declaration AC-2)
 - **CASE-studio-004** 세트 등록 후보: 이미 세트가 있는 테이블과 뷰(`isView`)를 후보에서 제외한다. 후보가 없으면 빈 목록. (set-list AC-2)
 
+- **CASE-studio-008** 자연키 UNIQUE 뒷받침 판정: 자연키와 **정확히 같은 구성**의 PK/UK 가 있으면 뒷받침됨(컬럼 순서 무시). 부분집합·상위집합·IDX(유일하지 않은 인덱스)는 인정하지 않는다. 제약이 없거나 자연키 미선언이면 뒷받침 아님. (declaration AC-6)
 - **CASE-studio-005** 시드가 채워야 하는 컬럼 판정: NOT NULL + 기본값 없음 + 자동증가 아님 → `필수`. NULL 허용·기본값 있음·자동증가는 제외. 공백만인 기본값은 "없음"으로 본다. (grid AC-8)
 - **CASE-studio-006** 컬럼 머리 배지: PK/FK/UK/IDX 를 텍스트로, 복합 제약은 위치 번호(`UK1`·`UK2`), CHECK 참여 컬럼은 `CHK`, 타입 라벨은 소문자 정리, 컬럼 순서 유지. (grid AC-7)
 - **CASE-studio-007** 컬럼 상세(툴팁): 타입·NULL 여부·기본값(또는 자동증가)·필수 여부·FK 참조 대상과 정책·CHECK 식·설명을 담는다. (grid AC-7) → `services/db/workspaces/seed/columnHint.test.ts`
@@ -40,6 +41,7 @@
 - **CASE-studio-041** 테이블에서 세트 등록(후보에 뷰 없음) → **자동증가 PK 라 자연키 경고** → 자연키 지정으로 경고 해제 → 무시 컬럼 지정 → 행 추가·값 입력 → 목록에 행 수 반영. (set-list AC-1/AC-2/AC-5, declaration AC-1/AC-2/AC-3, grid AC-2)
 - **CASE-studio-042** 중복 자연키 입력 → 두 행 모두 오류 표시, 값을 바꿔 해소하면 오류 사라짐. (grid AC-3)
 - **CASE-studio-042b** 컬럼 머리에 제약이 보인다(`PK` 배지 · `필수` 배지) + 필수인데 빈 셀이 있는 행이 표시되고, 값을 채우면 표시가 풀린다. (grid AC-7/AC-8)
+- **CASE-studio-041b** 자연키가 UNIQUE 로 뒷받침되면 안내가 없고, UNIQUE 없는 구성으로 바꾸면 UPSERT 불가 안내가 뜬다. (declaration AC-6)
 - **CASE-studio-043** 셀에 `{{ADMIN_PASSWORD_HASH}}` 입력 → 변수 표식 + 세트 머리의 변수 목록에 등장. (variables AC-1/AC-2)
 - **CASE-studio-044** 저장소(`seedSets.list`)에 선언·행 반영 + **콜드 재시작**(앱 종료→재기동) 후 세트·행·변수 잔존. (persistence AC-1/AC-2)
 - **CASE-studio-044b** `설계에 없는 행` 을 `삭제 후보` 로 고르면 그 뜻을 경고로 보인다. (declaration AC-4)

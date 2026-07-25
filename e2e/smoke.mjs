@@ -225,6 +225,21 @@ try {
     await page.waitForTimeout(300)
     check('Studio › Seed: 자연키 지정 → 경고 해제', (await page.locator('[data-seed-needs-key]').count()) === 0)
 
+    // 자연키를 UNIQUE 가 뒷받침하는지 안내 — order_number 엔 UK 가 있어 조용하고,
+    // UNIQUE 없는 구성(order_number+status)으로 바꾸면 반영 단계 함의를 알린다.
+    check(
+      'Studio › Seed: UNIQUE 가 뒷받침하는 자연키엔 안내 없음',
+      (await page.locator('[data-seed-key-unbacked]').count()) === 0
+    )
+    await click('[data-seed-key-toggle="status"]')
+    await page.waitForTimeout(250)
+    check(
+      'Studio › Seed: UNIQUE 없는 자연키 구성 → UPSERT 불가 안내',
+      (await page.locator('[data-seed-key-unbacked]').count()) === 1
+    )
+    await click('[data-seed-key-toggle="status"]') // 원복
+    await page.waitForTimeout(250)
+
     // 무시 컬럼 지정(비교 소음 제거)
     await click('[data-seed-ignore-toggle="ordered_at"]')
     await page.waitForTimeout(200)

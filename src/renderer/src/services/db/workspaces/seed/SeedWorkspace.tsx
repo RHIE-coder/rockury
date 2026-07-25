@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Braces, Layers, Plus, Sprout, Trash2 } from 'lucide-react'
+import { AlertTriangle, Braces, Info, Layers, Plus, Sprout, Trash2 } from 'lucide-react'
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
@@ -11,7 +11,7 @@ import { useDesignTables, useStudioReadOnly } from '../definition/store'
 import type { Column, TableDef } from '../definition/types'
 import { missingRequiredCells, isVariableCell, seedVariables, validateSeedRows, type SeedRowIssue } from './seedRows'
 import { seedColumnHints } from './columnHint'
-import { seedSetStatus } from './seedSet'
+import { naturalKeyBacking, seedSetStatus } from './seedSet'
 import { SeedSetDialog } from './SeedSetDialog'
 import { setKey, useActiveSeedSet, useDesignSeedSets, useSeedStore } from './store'
 import {
@@ -173,10 +173,23 @@ function CellValue({ v }: { v: string | null | undefined }) {
 }
 
 /** 선언 바 — '설계에 없는 행' 처리 · 변수 목록 · 자연키 경고. 컬럼 단위 선언(KEY/무시)은 그리드 헤더에 있다. */
-function DeclarationBar({ set, readOnly }: { set: SeedSet; readOnly: boolean }) {
+function DeclarationBar({
+  set,
+  table,
+  readOnly
+}: {
+  set: SeedSet
+  table: TableDef | undefined
+  readOnly: boolean
+}) {
   const setStrength = useSeedStore((s) => s.setStrength)
   const variables = useMemo(() => seedVariables(set.rows), [set.rows])
   const needsKey = seedSetStatus(set) === 'no-natural-key'
+  // 자연키를 UNIQUE 가 뒷받침하지 않으면 반영 단계에서 UPSERT 를 못 쓴다 — 그 사실을 지금 알린다.
+  const backing = useMemo(
+    () => (table ? naturalKeyBacking(table, set.naturalKey) : { backed: false }),
+    [table, set.naturalKey]
+  )
 
   return (
     <div className="flex flex-col gap-2 border-b border-line px-4 py-2.5">
@@ -224,6 +237,22 @@ function DeclarationBar({ set, readOnly }: { set: SeedSet; readOnly: boolean }) 
         <div className="flex items-center gap-1.5 rounded-md bg-panel-strong px-2 py-1 text-[11.5px] text-muted">
           <AlertTriangle className="size-3.5 shrink-0 text-warning" />
           {STRENGTH_HINT.authoritative}
+        </div>
+      )}
+
+      {/* 자연키는 있지만 그걸 보장하는 UNIQUE 가 설계에 없을 때 — 오류가 아니라 안내(반영 단계 함의). */}
+      {!needsKey && !backing.backed && (
+        <div
+          data-seed-key-unbacked
+          className="flex items-start gap-1.5 rounded-md bg-panel-strong px-2 py-1 text-[11.5px] text-muted"
+        >
+          <Info className="mt-[1px] size-3.5 shrink-0" />
+          <span>
+            자연키 <span className="font-mono text-fg">{set.naturalKey.join(', ')}</span> 에 UNIQUE 제약이
+            없어요. 지금 저작·비교는 문제없지만, 실 DB 에 반영할 때 UPSERT(있으면 고치고 없으면 넣기)를 쓸 수
+            없어 "찾아서 넣기"로 내려가고 동시에 실행되면 같은 행이 두 번 들어갈 수 있어요. Definition 에서 이
+            컬럼 구성에 UNIQUE 를 추가하는 걸 권해요.
+          </span>
         </div>
       )}
 
@@ -595,7 +624,7 @@ export function SeedWorkspace() {
           <NoSeedSetState onCreate={() => setPickOpen(true)} hasTables={tables.length > 0} />
         ) : (
           <>
-            <DeclarationBar set={active} readOnly={readOnly} />
+            <DeclarationBar set={active} table={activeTable} readOnly={readOnly} />
             {!readOnly && (
               <div className="flex items-center gap-2 border-b border-line px-4 py-1.5">
                 <Button variant="soft" size="sm" onClick={addRow} disabled={!activeTable}>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { TableDef } from '../definition/types'
 import {
   createSeedSet,
+  naturalKeyBacking,
   defaultNaturalKey,
   isAutoIncrement,
   pkColumnNames,
@@ -152,5 +153,46 @@ describe('createSeedSet', () => {
       strength: 'ensure',
       rows: []
     })
+  })
+})
+
+describe('CASE-studio-008 자연키를 UNIQUE 가 뒷받침하는가', () => {
+  const uk = (id: string, name: string, cols: string[]): TableDef['constraints'][number] => ({
+    id,
+    kind: 'uk',
+    name,
+    columns: cols.map((c) => ({ columnId: c }))
+  })
+
+  it('PK 구성과 같으면 뒷받침됨', () => {
+    const t = table('roles', [col('c1', 'code')], ['c1'])
+    expect(naturalKeyBacking(t, ['code'])).toEqual({ backed: true, by: { kind: 'pk', name: 'PRIMARY' } })
+  })
+
+  it('UK 구성과 같으면 뒷받침됨 — 컬럼 순서는 상관없다', () => {
+    const t = table('m', [col('c1', 'org'), col('c2', 'code')])
+    t.constraints = [uk('k', 'uq_org_code', ['c2', 'c1'])]
+    expect(naturalKeyBacking(t, ['org', 'code']).backed).toBe(true)
+  })
+
+  it('구성이 다르면 뒷받침 안 됨 — 부분집합도 인정하지 않는다(UPSERT 충돌 대상이 어긋난다)', () => {
+    const t = table('m', [col('c1', 'org'), col('c2', 'code')])
+    t.constraints = [uk('k', 'uq_org', ['c1'])]
+    expect(naturalKeyBacking(t, ['org', 'code']).backed).toBe(false)
+    expect(naturalKeyBacking(t, ['code']).backed).toBe(false)
+  })
+
+  it('제약이 아예 없으면 뒷받침 안 됨', () => {
+    expect(naturalKeyBacking(table('m', [col('c1', 'code')]), ['code']).backed).toBe(false)
+  })
+
+  it('자연키 미선언이면 판정할 것이 없다', () => {
+    expect(naturalKeyBacking(table('m', [col('c1', 'code')], ['c1']), [])).toEqual({ backed: false })
+  })
+
+  it('IDX(유일하지 않은 인덱스)는 뒷받침으로 치지 않는다', () => {
+    const t = table('m', [col('c1', 'code')])
+    t.constraints = [{ id: 'k', kind: 'idx', name: 'ix_code', columns: [{ columnId: 'c1' }] }]
+    expect(naturalKeyBacking(t, ['code']).backed).toBe(false)
   })
 })
