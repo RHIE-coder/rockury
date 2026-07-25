@@ -255,6 +255,19 @@ try {
     await fill(1, 'order_number', 'SEED-0002')
     check('Studio › Seed: 중복 해소 → 오류 없음', (await page.locator('[data-seed-row-issue]').count()) === 0)
 
+    // 컬럼 머리에 제약이 보인다 — Definition 화면과 왕복하지 않게(grid AC-7)
+    check('Studio › Seed: 컬럼 머리 PK 배지', (await page.locator('[data-seed-col-badge="PK"]').count()) === 1)
+    check('Studio › Seed: 필수 컬럼 배지', (await page.locator('[data-seed-col-required]').count()) >= 1)
+
+    // 필수인데 빈 셀 → 행 표시, 채우면 해제(grid AC-8). orders 는 user_id 가 NOT NULL·기본값 없음.
+    const missingBefore = await page.locator('[data-seed-row-missing]').count()
+    check('Studio › Seed: 필수 값 빈 행 표시', missingBefore === 2)
+    await fill(0, 'user_id', '1001')
+    check(
+      'Studio › Seed: 필수 값 채우면 표시 해제',
+      (await page.locator('[data-seed-row-missing]').count()) === missingBefore - 1
+    )
+
     // 변수 자리표시자 — 환경마다 다른 값은 값 대신 변수로
     await fill(0, 'memo', '{{ADMIN_PASSWORD_HASH}}')
     check('Studio › Seed: 변수 셀 표식', (await page.locator('[data-seed-variable-cell]').count()) === 1)

@@ -9,7 +9,8 @@ import { autoColumnWidths } from '../../console/data/colWidth'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { useDesignTables, useStudioReadOnly } from '../definition/store'
 import type { Column, TableDef } from '../definition/types'
-import { isVariableCell, seedVariables, validateSeedRows, type SeedRowIssue } from './seedRows'
+import { missingRequiredCells, isVariableCell, seedVariables, validateSeedRows, type SeedRowIssue } from './seedRows'
+import { seedColumnHints } from './columnHint'
 import { seedSetStatus } from './seedSet'
 import { SeedSetDialog } from './SeedSetDialog'
 import { setKey, useActiveSeedSet, useDesignSeedSets, useSeedStore } from './store'
@@ -258,21 +259,30 @@ function SeedGrid({ set, table, readOnly }: { set: SeedSet; table: TableDef | un
 
   const columns: Column[] = table?.columns ?? []
   const issues = useMemo(() => validateSeedRows(set.rows, set.naturalKey), [set.rows, set.naturalKey])
+  // 컬럼 제약(PK/FK/UK/IDX/CHK · 필수 여부 · 상세)을 그리드 머리에서 바로 보인다 — Definition 화면과
+  // 왕복하지 않게. 파생은 Definition 정본 로직 재사용(columnHint).
+  const hints = useMemo(() => (table ? seedColumnHints(table) : []), [table])
+  const hintOf = useMemo(() => new Map(hints.map((h) => [h.name, h])), [hints])
+  const required = useMemo(() => hints.filter((h) => h.required).map((h) => h.name), [hints])
+  const missing = useMemo(() => missingRequiredCells(set.rows, required), [set.rows, required])
   const widths = useMemo(
     () =>
       autoColumnWidths(
-        columns.map((c) => ({
-          name: c.name,
-          // 긴 타입 하나가 컬럼 폭을 독차지하면 정작 값이 안 보인다 — 라벨을 잘라 계산·표시하고
-          // 전체는 툴팁으로 본다(표시와 계산이 같은 상한을 쓴다).
-          typeLabel: c.type.slice(0, TYPE_LABEL_MAX),
-          // KEY·무시 토글 두 개가 헤더 둘째 줄을 차지한다 — 값 자리를 먹지 않게 가산.
-          badges: 2,
-          trailingPx: 8
-        })),
+        columns.map((c) => {
+          const h = hintOf.get(c.name)
+          return {
+            name: c.name,
+            // 긴 타입 하나가 컬럼 폭을 독차지하면 정작 값이 안 보인다 — 라벨을 잘라 계산·표시하고
+            // 전체는 툴팁으로 본다(표시와 계산이 같은 상한을 쓴다).
+            typeLabel: c.type.slice(0, TYPE_LABEL_MAX),
+            // 헤더가 차지하는 자리: 제약 배지 + CHK + 필수 + KEY·무시 토글 2개.
+            badges: 2 + (h?.badges.length ?? 0) + (h?.hasCheck ? 1 : 0) + (h?.required ? 1 : 0),
+            trailingPx: 8
+          }
+        }),
         set.rows.map((r) => r.values)
       ),
-    [columns, set.naturalKey, set.rows]
+    [columns, hintOf, set.rows]
   )
 
   if (!table) {
@@ -300,6 +310,7 @@ function SeedGrid({ set, table, readOnly }: { set: SeedSet; table: TableDef | un
             {columns.map((c) => {
               const isKey = set.naturalKey.includes(c.name)
               const isIgnored = set.ignoredColumns.includes(c.name)
+              const hint = hintOf.get(c.name)
               return (
                 <th
                   key={c.id}
@@ -307,8 +318,32 @@ function SeedGrid({ set, table, readOnly }: { set: SeedSet; table: TableDef | un
                   style={{ width: widths[c.name], minWidth: widths[c.name] }}
                   className={cn('border-b border-r border-line px-2 py-1', isIgnored && 'opacity-55')}
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1" title={hint?.detail}>
                     <span className="min-w-0 truncate font-mono text-[12px] font-semibold text-fg">{c.name}</span>
+                    {/* 제약 배지 — 서비스 공통 불변식대로 텍스트만(복합키는 위치 번호). */}
+                    {hint?.badges.map((b) => (
+                      <span
+                        key={b}
+                        data-seed-col-badge={b}
+                        className="shrink-0 rounded bg-panel-strong px-1 text-[9.5px] font-bold text-fg/70"
+                      >
+                        {b}
+                      </span>
+                    ))}
+                    {hint?.hasCheck && (
+                      <span className="shrink-0 rounded bg-panel-strong px-1 text-[9.5px] font-bold text-fg/70">
+                        CHK
+                      </span>
+                    )}
+                    {/* 필수 = NOT NULL·기본값 없음 → 비우면 반영 단계에서 INSERT 가 실패한다. */}
+                    {hint?.required && (
+                      <span
+                        data-seed-col-required
+                        className="shrink-0 rounded bg-warning-soft px-1 text-[9.5px] font-bold text-warning"
+                      >
+                        필수
+                      </span>
+                    )}
                     {/* 읽기 전용에선 토글이 없으니 상태를 배지로 보인다(편집 중엔 토글 자체가 배지 역할). */}
                     {readOnly && isKey && (
                       <span className="shrink-0 rounded bg-accent-soft px-1 text-[9.5px] font-bold text-accent">
@@ -371,6 +406,7 @@ function SeedGrid({ set, table, readOnly }: { set: SeedSet; table: TableDef | un
               columns={columns}
               widths={widths}
               issue={issues[r.id]}
+              missing={missing[r.id]}
               ignored={set.ignoredColumns}
               readOnly={readOnly}
               editing={editing}
@@ -401,6 +437,7 @@ function SeedGridRow({
   columns,
   widths,
   issue,
+  missing,
   ignored,
   readOnly,
   editing,
@@ -413,6 +450,8 @@ function SeedGridRow({
   columns: Column[]
   widths: Record<string, number>
   issue: SeedRowIssue | undefined
+  /** 필수인데 비어 있는 컬럼 이름들. */
+  missing: string[] | undefined
   ignored: string[]
   readOnly: boolean
   editing: string | null
@@ -420,17 +459,24 @@ function SeedGridRow({
   onCommit: (column: string, v: string | null) => void
   onDelete: () => void
 }) {
+  const missingSet = new Set(missing ?? [])
+  // 행 경고 문구 — 자연키 문제와 필수 빈 칸을 한 줄로 합쳐 보인다(둘 다면 둘 다 알려야 한다).
+  const rowMessage = [issue?.message, missingSet.size ? `필수 값이 비었어요: ${[...missingSet].join(', ')}` : null]
+    .filter(Boolean)
+    .join(' / ')
+
   return (
     <tr
       data-seed-row={row.id}
       data-seed-row-issue={issue?.kind}
-      className={cn('group', issue && 'bg-danger/5')}
+      data-seed-row-missing={missingSet.size ? [...missingSet].join(',') : undefined}
+      className={cn('group', (issue || missingSet.size) && 'bg-danger/5')}
     >
       <td className="border-b border-r border-line px-2 py-1 text-[11px] tabular-nums text-muted">
         <span className="flex items-center gap-1">
           {index + 1}
-          {issue && (
-            <span title={issue.message}>
+          {rowMessage && (
+            <span title={rowMessage}>
               <AlertTriangle className="size-3 text-danger" />
             </span>
           )}
@@ -448,6 +494,8 @@ function SeedGridRow({
             className={cn(
               'border-b border-r border-line px-2 py-1 align-middle',
               ignored.includes(c.name) && 'opacity-55',
+              // 필수인데 빈 셀 — 반영 단계에서 터지기 전에 그 자리에서 보인다.
+              missingSet.has(c.name) && 'bg-danger/10 ring-1 ring-inset ring-danger/40',
               !readOnly && 'cursor-text'
             )}
           >

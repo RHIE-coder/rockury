@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isVariableCell,
   matchSeedRows,
+  missingRequiredCells,
   naturalKeyLabel,
   naturalKeyOf,
   seedVariables,
@@ -133,5 +134,27 @@ describe('CASE-studio-013 행 짝짓기', () => {
 
   it('빈 목록끼리는 빈 결과', () => {
     expect(matchSeedRows([], [], ['code'])).toEqual([])
+  })
+})
+
+describe('CASE-studio-014 필수 컬럼 빈 셀', () => {
+  it('NOT NULL·기본값 없는 컬럼이 비면 그 행·컬럼을 지목한다', () => {
+    const rows = [
+      row('r1', { email: 'a@b.c', code: 'X' }),
+      row('r2', { email: null, code: '' }),
+      row('r3', { email: '   ', code: 'Y' })
+    ]
+    expect(missingRequiredCells(rows, ['email', 'code'])).toEqual({
+      r2: ['email', 'code'],
+      r3: ['email']
+    })
+  })
+
+  it('변수 자리표시자는 채운 것으로 본다 — 값은 반영할 때 들어온다', () => {
+    expect(missingRequiredCells([row('r1', { pw: '{{ADMIN_PASSWORD_HASH}}' })], ['pw'])).toEqual({})
+  })
+
+  it('필수 컬럼이 없으면 아무것도 지목하지 않는다', () => {
+    expect(missingRequiredCells([row('r1', {})], [])).toEqual({})
   })
 })

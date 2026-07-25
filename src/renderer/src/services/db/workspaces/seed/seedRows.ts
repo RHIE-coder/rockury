@@ -67,6 +67,24 @@ export function validateSeedRows(rows: SeedRow[], naturalKey: string[]): Record<
   return out
 }
 
+/** 셀 값이 비었는가 — NULL·빈 문자열·공백만. */
+const isBlank = (v: string | null | undefined): boolean => v == null || v.trim() === ''
+
+/**
+ * 필수 컬럼(NOT NULL·기본값 없음)이 비어 있는 셀 — 행 id → 컬럼 이름들.
+ * 이걸 안 보이면 반영 단계에서야 INSERT 가 실패한다(그때는 원인이 어느 행인지도 흐려진다).
+ * 변수 자리표시자(`{{X}}`)는 값이 들어올 자리이므로 **채운 것으로 본다**.
+ */
+export function missingRequiredCells(rows: SeedRow[], required: string[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  if (required.length === 0) return out
+  for (const r of rows) {
+    const missing = required.filter((c) => isBlank(r.values[c]))
+    if (missing.length) out[r.id] = missing
+  }
+  return out
+}
+
 /** 셀 값이 통째로 변수 하나면 그 이름, 아니면 null. */
 export function variableNameOf(v: string | null): string | null {
   if (typeof v !== 'string') return null
