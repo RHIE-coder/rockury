@@ -36,7 +36,7 @@ IPC 채널 접두어, 폴더·파일 이름, 브랜치 이름에 전부 그대�
 
 **`ai` 와 `mcp` 를 헷갈리지 말 것.** `ai` 는 **서비스**(AI 기능 전체가 자랄 자리)이고,
 MCP(에이전트 연동)는 그 서비스가 지금 가진 **기능 하나**다. 그래서
-`src/main/mcp/**`(MCP 프로토콜 서버 구현)과 `docs/spec/mcp-server.md` 는 `mcp` 가 맞고,
+`src/main/ai/**`(MCP 프로토콜 서버 구현)과 `docs/spec/ai-server.md` 는 `mcp` 가 맞고,
 서비스를 가리키는 자리(폴더·채널 접두어·브랜치)는 전부 `ai` 다 —
 MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접두어를 쓴다.
 
@@ -46,7 +46,7 @@ MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접�
 | 화면 | `src/renderer/src/services/<svc>/**` |
 | 메인 IPC 채널 | `src/main/ipc/<svc>/**` |
 | 로컬 DB 스키마 | `src/main/store/migrations/<svc>.ts` |
-| MCP 노출 지도 | `src/main/mcp/coverage/<svc>.ts` |
+| MCP 노출 지도 | `src/main/ai/coverage/<svc>.ts` |
 | 렌더러 창구(preload) | `src/preload/services/<svc>.ts` |
 | 앱 구동 e2e 흐름 | `e2e/flows/<svc>.mjs` |
 | 화면 품질 기준선 | `e2e/surface/baseline/<svc>.json` (생성물 — 손으로 고치지 않는다) |
@@ -103,8 +103,8 @@ MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접�
    자동 순회**하므로 새 화면은 nav 에 등록만 하면 커버리지에 자동으로 들어온다 — 이 data-nav 훅을 지우면
    순회가 깨지고 안전핀(MIN_LEAVES)이 검증불가(2)로 실패한다. 훅을 지우지 말 것.
 4. **MCP 서버는 앱 능력과 함께 자란다(스테일 금지).** MCP(에이전트 연동) 서버는 메인 프로세스 내장
-   (`src/main/mcp/`, 명세 `docs/spec/mcp-server.md`). `src/main/ipc/**` 의 모든 채널은
-   **`src/main/mcp/coverage/<서비스>.ts`** 에 **노출(도구 대응) 또는 제외(사유)** 로 등재돼야 하며
+   (`src/main/ai/`, 명세 `docs/spec/ai-server.md`). `src/main/ipc/**` 의 모든 채널은
+   **`src/main/ai/coverage/<서비스>.ts`** 에 **노출(도구 대응) 또는 제외(사유)** 로 등재돼야 하며
    `coverage.test.ts` 가 하위 폴더까지 재귀로 스캔해 강제한다 — 새 IPC 채널을 미등재로 두거나,
    지운 채널을 지도에 남기면 `npm test` 실패. 새 채널을 만들면 MCP 도구를 함께 갱신하거나
    의식적으로 제외 사유를 적는다. 두 서비스가 같은 채널을 등재해도 실패한다(조용한 덮어쓰기 방지).

@@ -106,7 +106,7 @@ Studio 의 뷰는 `Definition → Diagram → Seed → Mocking → Documenting �
 ### Section db-studio.seed.persistence — 저장
 - **AC-1** 시드 세트는 **설계 스코프**로 저장된다 — 설계 X 저장이 설계 Y 의 세트를 건드리지 않는다(`tables` 와 같은 방식).
 - **AC-2** 앱을 다시 켜도 세트 선언과 행이 그대로 남는다.
-- **AC-3** 새로 만든 IPC 채널은 MCP 커버리지 지도(`src/main/mcp/coverage/<서비스>.ts`)에 **노출 또는 제외 사유**로 등재된다(프로젝트 불변식 4).
+- **AC-3** 새로 만든 IPC 채널은 MCP 커버리지 지도(`src/main/ai/coverage/<서비스>.ts`)에 **노출 또는 제외 사유**로 등재된다(프로젝트 불변식 4).
 - **AC-4** 설계를 지우면 그 설계의 시드도 함께 사라진다 — 시드는 설계 소유물이다. 남기면 같은 이름의 새 설계에 유령 시드가 붙는다.
 
 ### Section db-studio.seed.apply-contract — 반영·되먹임 계약

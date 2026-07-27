@@ -1,4 +1,4 @@
-# Service: mcp-server (MCP 서버 — 에이전트 연동)
+# Service: ai-server (MCP 서버 — 에이전트 연동)
 
 > AI 에이전트(Claude Code·Codex 등)가 Rockury 를 도구로 조작할 수 있게 하는
 > MCP(Model Context Protocol) 서버. **Electron 메인 프로세스 안**에서 돈다 — 별도 프로세스 없음.
@@ -42,25 +42,25 @@
 
 ---
 
-## Surface: mcp-server.http (HTTP 리스너)
+## Surface: ai-server.http (HTTP 리스너)
 
-### Section mcp-server.http.lifecycle — 시작/정지/발견
+### Section ai-server.http.lifecycle — 시작/정지/발견
 - **AC-1** `app.whenReady` 에서 시작, `will-quit` 에서 정지. 시작 실패는 앱 부팅을 막지 않고 30초 뒤 재시도.
 - **AC-2** 접속 정보 파일을 만들지 않는다 — 레거시 `mcp.json` 은 시작 시 제거. 주소는 AI 화면·`/health` 로 확인.
 - **AC-3** 토큰은 키체인 저장소에 유효 토큰이 있으면 재사용 — 재시작에도 클라이언트 설정이 깨지지 않는다.
 - **AC-4** 포트: env `ROCKURY_MCP_PORT` → 기본 41729, 점유 시 +1~+9 폴백, `0`이면 OS 배정(e2e 격리).
 - **AC-5** 단일 인스턴스(`requestSingleInstanceLock`) — DB·포트 소유자는 항상 하나.
 
-### Section mcp-server.http.gate — 요청 관문
+### Section ai-server.http.gate — 요청 관문
 - **AC-1** 토큰 불일치/누락 → 401. 비로컬 Host → 403. 비로컬/불량 Origin → 403(토큰이 맞아도).
 - **AC-2** Origin 없는 요청(CLI/에이전트)은 토큰·Host 만으로 통과.
 - **AC-3** `GET /health` 는 무인증(이름·버전만 — pid 등 프로세스 정보 노출 금지).
 - **AC-4** 거부 응답은 일반화(`unauthorized`/`forbidden`) — 어느 방어에 걸렸는지는 로그로만(오라클 금지).
 - **AC-5** 자원 상한: 요청 본문 4MB, 세션 64개(초과 시 LRU 축출 — 최근 사용 세션은 보호).
 
-## Surface: mcp-server.tools (도구 표면 — 읽기 4종 + 쓰기 5종)
+## Surface: ai-server.tools (도구 표면 — 읽기 4종 + 쓰기 5종)
 
-### Section mcp-server.tools.read — 설계 열람 도구 4종
+### Section ai-server.tools.read — 설계 열람 도구 4종
 - **AC-1** `list_designs` — 설계 목록 + 방언 + 테이블 수 + 최신 버전 번호.
 - **AC-2** `get_schema` — 설계의 draft 스키마(테이블·컬럼·제약). `tables`(이름 배열)로 필요한
   테이블만 추려 읽을 수 있고(생략 시 전체), 목록에 없는 이름이 섞이면 조용한 빈 결과 대신
@@ -69,7 +69,7 @@
 - **AC-4** `get_version` — 특정 버전 스냅샷 전체.
 - **AC-5** 미상 id/번호는 프로토콜 오류가 아닌 `isError` 결과 + 해결 안내(어느 도구로 확인할지)를 준다.
 
-### Section mcp-server.tools.write — 설계 쓰기 도구 5종
+### Section ai-server.tools.write — 설계 쓰기 도구 5종
 > **2026-07-26 결정 — 이전 결정 뒤집음.** "쓰기는 4종이 전부, 세밀 조작 도구 분화 없음"
 > (2026-07-25)은 폐기했다. 통째 반영만 있으면 주석 한 줄을 고치려도 스키마 전체를 다시 만들어
 > 보내야 하고(수십~수백 KB 왕복), 그 과정에서 새 오타가 섞인다 — 실제로 33개 테이블 설계에서
@@ -114,7 +114,7 @@
   (`assertTablesConsistent`: 이름 유일성·id 유일성·제약의 컬럼 참조 실재성)을 통과한다. 진입 경로가
   둘로 갈렸다고 안전선이 갈라지면 안 된다.
 
-### Section mcp-server.tools.rehydration — 쓰기 반영(렌더러 리하이드레이션)
+### Section ai-server.tools.rehydration — 쓰기 반영(렌더러 리하이드레이션)
 - **AC-1** MCP 쓰기 도구가 **성공했을 때만** 메인이 열린 모든 창에 `store:changed`
   (`{domain: 'designs'|'tables'|'versions', designId}`)를 보낸다 — `isError` 결과는 이벤트 없음.
 - **AC-2** 이벤트를 받은 렌더러 스토어(designs/definition/versions)는 해당 domain·designId
@@ -122,17 +122,17 @@
 - **AC-3** 자기 메아리 금지: 렌더러발 저장(IPC)은 `store:changed` 를 유발하지 않고,
   리하이드레이션으로 갱신된 tables 는 write-through 를 되쏘지 않는다 — 쓰기 1회당 저장 1회(루프 0).
 
-## Surface: mcp-server.agents (AI › Agents 화면 — 좌측 레일 맨 아래 서비스, 내부 id 는 `mcp`)
+## Surface: ai-server.agents (AI › Agents 화면 — 좌측 레일 맨 아래 서비스, 내부 id 는 `mcp`)
 
 > 연동 방식은 **등록 명령 복사(전역, 1회)** 하나다. 프로젝트별 `.mcp.json` 셋업 방식은
 > 2026-07-24 사용자 결정으로 제거 — 앱은 사용자 프로젝트 파일을 건드리지 않는다.
 
-### Section mcp-server.agents.gateway — 게이트웨이 상태 밴드
+### Section ai-server.agents.gateway — 게이트웨이 상태 밴드
 - **AC-1** 서버가 뜨면 ink 밴드에 **초록 라이브 점이 깜빡이며**(모션 축소 설정 존중) "에이전트 게이트웨이
   열림" + 접속 URL(mono)을 보인다. 꺼져 있으면 회색 점 + "준비 중" + 자동 복구 안내.
 - **AC-2** Claude Code / Codex 전역 등록 명령을 클립보드로 복사(토큰 포함 — 화면 표시는 마스킹뿐).
 
-### Section mcp-server.agents.token — 접속 키(Bearer) 관리
+### Section ai-server.agents.token — 접속 키(Bearer) 관리
 - **AC-1** 기본 마스킹 표시(끝 4자만) + 보기 토글 + 복사. 화면 재진입 시 다시 마스킹.
 - **AC-2** **재발급**: 인라인 확인("기존 등록 에이전트 연결이 끊긴다") 후 실행 — 즉시 적용되어
   구 키는 401, 새 키가 키체인에 영속되고 등록 명령이 재생성된다.
@@ -140,10 +140,10 @@
   명령을 화면이 제공한다 — 재발급 직후 그 자리 + "연결 방법 › 접속 키를 바꾼 뒤" 상시. 재등록 명령은
   `remove → add`(claude/codex 모두 중복 이름 add 를 CLI 가 거부할 수 있어 remove 를 앞세움)이며
   새 키를 담는다. Codex 는 토큰을 환경변수로 참조해 사실상 새 키만 반영하면 됨을 함께 안내.
-  명령 문자열 생성은 순수 모듈 `src/main/mcp/registration.ts`(테스트 대상).
+  명령 문자열 생성은 순수 모듈 `src/main/ai/registration.ts`(테스트 대상).
 
 ## 검증
-- 단위/통합: `src/main/mcp/*.test.ts` — 관문 판정·도구 핸들러(읽기·쓰기 — 정상/미상 id/불량 입력
+- 단위/통합: `src/main/ai/*.test.ts` — 관문 판정·도구 핸들러(읽기·쓰기 — 정상/미상 id/불량 입력
   `isError`)·프로토콜 흐름(실 리스너)·커버리지 핀·재발급(구 키 401·영속)·접속 정보 파일 미생성·
   레거시 정리. `textGuard.test.ts` — 깨진 글자 판정(치환문자·짝 잃은 서로게이트·제어문자·BOM)과
   정상 본문(한글·이모지·개행) 오탐 없음. `patch.test.ts` — 연산 적용·참조 추적(개명 따라가기,

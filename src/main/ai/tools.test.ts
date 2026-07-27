@@ -19,7 +19,7 @@ const tool = (name: string) => {
 }
 
 beforeAll(() => {
-  setDbPath(join(mkdtempSync(join(tmpdir(), 'rockury-mcp-')), 'test.db'))
+  setDbPath(join(mkdtempSync(join(tmpdir(), 'rockury-ai-')), 'test.db'))
 })
 
 describe('MCP 도구 핸들러', () => {
@@ -103,7 +103,7 @@ describe('MCP 쓰기 도구 핸들러 (2단계) + 리하이드레이션 알림',
       }>
     }
 
-  it('CASE-mcp-040/050: create_design — 슬러그 id 생성 + list_designs 등장 + designs 이벤트', () => {
+  it('CASE-ai-040/050: create_design — 슬러그 id 생성 + list_designs 등장 + designs 이벤트', () => {
     const rec = tool('create_design').handler({ name: 'Wms Core', dialect: 'postgresql', description: '창고' }) as {
       id: string
       dialect: string
@@ -114,13 +114,13 @@ describe('MCP 쓰기 도구 핸들러 (2단계) + 리하이드레이션 알림',
     expect(events).toEqual([{ domain: 'designs', designId: 'wms-core' }])
   })
 
-  it('CASE-mcp-041/051: create_design 이름 누락 → 안내 throw + 이벤트 없음', () => {
+  it('CASE-ai-041/051: create_design 이름 누락 → 안내 throw + 이벤트 없음', () => {
     expect(() => tool('create_design').handler({ dialect: 'mysql' })).toThrowError(/create_design 입력/)
     expect(events).toEqual([]) // 실패한 쓰기는 화면 재조회를 유발하지 않는다
   })
 
-  // CASE-mcp-080 — 방언은 생성 후 못 바꾸는 값이라 에이전트가 지어내면 안 된다.
-  it('CASE-mcp-080: create_design 방언 누락 → "사용자에게 물어보라" + 선택지 4종, 생성 안 함', () => {
+  // CASE-ai-080 — 방언은 생성 후 못 바꾸는 값이라 에이전트가 지어내면 안 된다.
+  it('CASE-ai-080: create_design 방언 누락 → "사용자에게 물어보라" + 선택지 4종, 생성 안 함', () => {
     const before = listIds()
     expect(() => tool('create_design').handler({ name: 'Guess Me' })).toThrowError(
       /임의로 고르지 마세요.*사용자에게.*postgresql.*mysql.*mariadb.*sqlite/s
@@ -129,19 +129,19 @@ describe('MCP 쓰기 도구 핸들러 (2단계) + 리하이드레이션 알림',
     expect(events).toEqual([])
   })
 
-  it('CASE-mcp-081: create_design 미지원 방언(oracle) → 같은 선택 안내(그럴듯한 값으로 재시도 유도 금지)', () => {
+  it('CASE-ai-081: create_design 미지원 방언(oracle) → 같은 선택 안내(그럴듯한 값으로 재시도 유도 금지)', () => {
     expect(() => tool('create_design').handler({ name: 'x', dialect: 'oracle' })).toThrowError(
       /지원하지 않는 방언.*임의로 고르지 마세요/s
     )
     expect(events).toEqual([])
   })
 
-  it('CASE-mcp-082: 방언 표기 흔들림(대문자·공백)은 받아 준다 — 물어볼 일이 아니다', () => {
+  it('CASE-ai-082: 방언 표기 흔들림(대문자·공백)은 받아 준다 — 물어볼 일이 아니다', () => {
     const rec = tool('create_design').handler({ name: 'Case Test', dialect: '  MySQL  ' }) as { dialect: string }
     expect(rec.dialect).toBe('mysql')
   })
 
-  it('CASE-mcp-042: update_design — 부분 수정(생략 필드 유지) + 미상 designId 안내', () => {
+  it('CASE-ai-042: update_design — 부분 수정(생략 필드 유지) + 미상 designId 안내', () => {
     tool('update_design').handler({ designId: 'wms-core', description: '창고 관리 코어' })
     const rows = tool('list_designs').handler({}) as Array<{ id: string; name: string; description: string }>
     const d = rows.find((r) => r.id === 'wms-core')!
@@ -151,7 +151,7 @@ describe('MCP 쓰기 도구 핸들러 (2단계) + 리하이드레이션 알림',
     expect(() => tool('update_design').handler({ designId: 'no-such', name: 'x' })).toThrowError(/list_designs/)
   })
 
-  it('CASE-mcp-043/050: set_schema — 왕복 정합(get_schema 일치) + tables 이벤트', () => {
+  it('CASE-ai-043/050: set_schema — 왕복 정합(get_schema 일치) + tables 이벤트', () => {
     const tables = [
       {
         name: 'stock',
@@ -191,7 +191,7 @@ describe('MCP 쓰기 도구 핸들러 (2단계) + 리하이드레이션 알림',
     expect(view.viewSql).toBe('SELECT id FROM stock WHERE qty < 10')
   })
 
-  it('CASE-mcp-044: set_schema 미상 designId → 안내 throw', () => {
+  it('CASE-ai-044: set_schema 미상 designId → 안내 throw', () => {
     expect(() => tool('set_schema').handler({ designId: 'no-such', tables: [] })).toThrowError(/list_designs/)
   })
 
@@ -246,7 +246,7 @@ describe('MCP 쓰기 도구 핸들러 (2단계) + 리하이드레이션 알림',
     ).toThrowError(/중복 컬럼 이름/)
   })
 
-  it('CASE-mcp-045/051: set_schema 구조 위반 → 안내 throw + 기존 스키마 원상 + 이벤트 없음', () => {
+  it('CASE-ai-045/051: set_schema 구조 위반 → 안내 throw + 기존 스키마 원상 + 이벤트 없음', () => {
     const before = schemaOf('wms-core')
     expect(() =>
       tool('set_schema').handler({
@@ -258,14 +258,14 @@ describe('MCP 쓰기 도구 핸들러 (2단계) + 리하이드레이션 알림',
     expect(events).toEqual([])
   })
 
-  it('CASE-mcp-046: set_schema 설계 격리 — 다른 설계(commerce-core)의 스키마 불변', () => {
+  it('CASE-ai-046: set_schema 설계 격리 — 다른 설계(commerce-core)의 스키마 불변', () => {
     const ccBefore = schemaOf('commerce-core')
     tool('set_schema').handler({ designId: 'wms-core', tables: [] }) // wms 비우기
     expect(schemaOf('commerce-core')).toEqual(ccBefore)
     expect(schemaOf('wms-core').tables).toEqual([])
   })
 
-  it('CASE-mcp-047/050: create_version — 스냅샷=컷 시점 draft, number 생략 시 patch 증가, versions 이벤트', () => {
+  it('CASE-ai-047/050: create_version — 스냅샷=컷 시점 draft, number 생략 시 patch 증가, versions 이벤트', () => {
     replaceTablesForDesign('wms-core', [
       { id: 'w1', designId: 'wms-core', name: 'stock', comment: '', columns: [], constraints: [] }
     ])
@@ -285,20 +285,20 @@ describe('MCP 쓰기 도구 핸들러 (2단계) + 리하이드레이션 알림',
     expect(v2.number).toBe('v0.1.1') // 생략 시 최신에서 patch 증가
   })
 
-  it('CASE-mcp-048: create_version 번호 중복 → 안내 throw(프로토콜 오류로 안 샘)', () => {
+  it('CASE-ai-048: create_version 번호 중복 → 안내 throw(프로토콜 오류로 안 샘)', () => {
     expect(() => tool('create_version').handler({ designId: 'wms-core', number: 'v0.1.0' })).toThrowError(
       /list_versions/
     )
     expect(events).toEqual([])
   })
 
-  it('CASE-mcp-049: create_version 형식 위반 → 안내 throw + 미기록', () => {
+  it('CASE-ai-049: create_version 형식 위반 → 안내 throw + 미기록', () => {
     expect(() => tool('create_version').handler({ designId: 'wms-core', number: 'draft-1' })).toThrowError(/형식/)
     const rows = tool('list_versions').handler({ designId: 'wms-core' }) as Array<{ number: string }>
     expect(rows.map((r) => r.number)).toEqual(['v0.1.1', 'v0.1.0'])
   })
 
-  it('CASE-mcp-052: 렌더러발 저장(store 직접 호출)은 store:changed 를 유발하지 않는다', () => {
+  it('CASE-ai-052: 렌더러발 저장(store 직접 호출)은 store:changed 를 유발하지 않는다', () => {
     replaceTablesForDesign('wms-core', [])
     expect(events).toEqual([]) // 알림은 MCP 도구 성공 경로에서만
   })
@@ -349,8 +349,8 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
   const colOf = (designId: string, table: string, column: string) =>
     schemaOf(designId).tables.find((t) => t.name === table)!.columns.find((c) => c.name === column)!
 
-  // CASE-mcp-083 — 사고 재현: 33개 테이블 반영 응답이 127KB 라 호출자 문맥을 잡아먹었다.
-  it('CASE-mcp-083: set_schema 응답은 요약 — 스키마 본문을 되돌려주지 않는다', () => {
+  // CASE-ai-083 — 사고 재현: 33개 테이블 반영 응답이 127KB 라 호출자 문맥을 잡아먹었다.
+  it('CASE-ai-083: set_schema 응답은 요약 — 스키마 본문을 되돌려주지 않는다', () => {
     const out = tool('set_schema').handler({
       designId: 'patch-lab',
       tables: [{ name: 't', columns: [{ name: 'a', type: 'INT' }] }]
@@ -361,17 +361,17 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
     expect(JSON.stringify(out).length).toBeLessThan(400)
   })
 
-  it('CASE-mcp-084: get_schema tables 필터 — 필요한 테이블만 읽는다', () => {
+  it('CASE-ai-084: get_schema tables 필터 — 필요한 테이블만 읽는다', () => {
     expect(schemaOf('patch-lab').tables).toHaveLength(2)
     expect(schemaOf('patch-lab', ['orders']).tables.map((t) => t.name)).toEqual(['orders'])
   })
 
-  it('CASE-mcp-085: get_schema 필터에 없는 이름 → 조용한 빈 결과 대신 안내 throw', () => {
+  it('CASE-ai-085: get_schema 필터에 없는 이름 → 조용한 빈 결과 대신 안내 throw', () => {
     expect(() => schemaOf('patch-lab', ['order'])).toThrowError(/없는 테이블: order.*users, orders/s)
   })
 
   // ── 위생 검사(저장 전 깨진 글자 차단) ──
-  it('CASE-mcp-086: set_schema 에 깨진 글자 → 위치와 함께 거부, 저장소 불변', () => {
+  it('CASE-ai-086: set_schema 에 깨진 글자 → 위치와 함께 거부, 저장소 불변', () => {
     const before = schemaOf('patch-lab')
     expect(() =>
       tool('set_schema').handler({
@@ -383,7 +383,7 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
     expect(events).toEqual([])
   })
 
-  it('CASE-mcp-087: patch_schema·create_design·create_version 도 같은 위생 검사를 지난다', () => {
+  it('CASE-ai-087: patch_schema·create_design·create_version 도 같은 위생 검사를 지난다', () => {
     expect(() =>
       tool('patch_schema').handler({
         designId: 'patch-lab',
@@ -400,7 +400,7 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
   })
 
   // ── 부분 수정 ──
-  it('CASE-mcp-088: patch_schema — 주석 한 줄만 고쳐도 나머지 스키마가 그대로 남는다', () => {
+  it('CASE-ai-088: patch_schema — 주석 한 줄만 고쳐도 나머지 스키마가 그대로 남는다', () => {
     const before = schemaOf('patch-lab')
     const out = tool('patch_schema').handler({
       designId: 'patch-lab',
@@ -418,7 +418,7 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
     expect(events).toEqual([{ domain: 'tables', designId: 'patch-lab' }])
   })
 
-  it('CASE-mcp-089: patch_schema — 여러 연산을 한 번에, 응답은 바뀐 것 목록만', () => {
+  it('CASE-ai-089: patch_schema — 여러 연산을 한 번에, 응답은 바뀐 것 목록만', () => {
     const out = tool('patch_schema').handler({
       designId: 'patch-lab',
       operations: [
@@ -435,7 +435,7 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
     expect(users.constraints.map((k) => k.name)).toEqual(['pk_users', 'uq_users_email'])
   })
 
-  it('CASE-mcp-090: patch_schema — 컬럼 개명 시 남의 FK 참조도 따라 바뀐다', () => {
+  it('CASE-ai-090: patch_schema — 컬럼 개명 시 남의 FK 참조도 따라 바뀐다', () => {
     tool('patch_schema').handler({
       designId: 'patch-lab',
       operations: [{ op: 'update_column', table: 'users', column: 'id', set: { name: 'user_no' } }]
@@ -444,7 +444,7 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
     expect(fk.refColumns).toEqual(['user_no'])
   })
 
-  it('CASE-mcp-091: patch_schema — 연산 하나가 실패하면 앞선 연산도 반영 0', () => {
+  it('CASE-ai-091: patch_schema — 연산 하나가 실패하면 앞선 연산도 반영 0', () => {
     const before = schemaOf('patch-lab')
     expect(() =>
       tool('patch_schema').handler({
@@ -459,7 +459,7 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
     expect(events).toEqual([])
   })
 
-  it('CASE-mcp-092: patch_schema — 미상 designId·빈 연산 목록·미지의 op 는 안내 throw', () => {
+  it('CASE-ai-092: patch_schema — 미상 designId·빈 연산 목록·미지의 op 는 안내 throw', () => {
     expect(() => tool('patch_schema').handler({ designId: 'no-such', operations: [] })).toThrowError(/list_designs/)
     expect(() => tool('patch_schema').handler({ designId: 'patch-lab', operations: [] })).toThrowError(/최소 1개/)
     expect(() =>
@@ -468,7 +468,7 @@ describe('MCP 부분 수정·위생 검사·응답 요약 (3단계)', () => {
     expect(events).toEqual([])
   })
 
-  it('CASE-mcp-093: patch_schema 설계 격리 — 다른 설계는 불변', () => {
+  it('CASE-ai-093: patch_schema 설계 격리 — 다른 설계는 불변', () => {
     const ccBefore = schemaOf('commerce-core')
     tool('patch_schema').handler({
       designId: 'patch-lab',

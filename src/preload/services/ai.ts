@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { unwrap } from '../envelope'
-import type { McpStatusPayload } from '../../main/ipc/ai'
+import type { AiStatusPayload } from '../../main/ipc/ai'
 
 /**
  * AI 서비스가 렌더러에 여는 창구.
@@ -11,7 +11,7 @@ import type { McpStatusPayload } from '../../main/ipc/ai'
 export const aiApi = {
   // AI(에이전트 연동) — 게이트웨이 상태 + 접속 키 관리(등록 명령 복사 방식).
   ai: {
-    status: (): Promise<McpStatusPayload> => unwrap(ipcRenderer.invoke('ai:mcpStatus')),
-    rotateToken: (): Promise<McpStatusPayload> => unwrap(ipcRenderer.invoke('ai:mcpRotateToken'))
+    status: (): Promise<AiStatusPayload> => unwrap(ipcRenderer.invoke('ai:status')),
+    rotateToken: (): Promise<AiStatusPayload> => unwrap(ipcRenderer.invoke('ai:rotateToken'))
   }
 }

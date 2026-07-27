@@ -5,7 +5,7 @@ import { create } from 'zustand'
  * 연동은 "등록 명령 복사" 방식(프로젝트별 파일 셋업 방식은 제거됨 — 앱이 프로젝트 파일을 안 건드린다).
  */
 
-export interface McpStatus {
+export interface AiStatus {
   running: boolean
   url: string | null
   port: number | null
@@ -18,8 +18,8 @@ export interface McpStatus {
   codexReregisterCommand: string | null
 }
 
-interface McpState {
-  status: McpStatus | null
+interface AiServerState {
+  status: AiStatus | null
   loaded: boolean
   error: string | null
   /** 접속 키 노출 여부 — 기본 마스킹. 화면을 떠나면 다시 가려진다(마운트 시 리셋). */
@@ -31,7 +31,7 @@ interface McpState {
   rotate: () => Promise<void>
 }
 
-export const useMcpStore = create<McpState>()((set) => ({
+export const useAiStore = create<AiServerState>()((set) => ({
   status: null,
   loaded: false,
   error: null,

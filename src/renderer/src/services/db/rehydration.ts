@@ -5,7 +5,7 @@ import { rehydrateDesignTables } from './workspaces/definition/store'
 
 /**
  * 에이전트(MCP) 쓰기 리하이드레이션 — 메인이 보내는 store:changed 를 받아 해당 스코프만
- * 다시 읽는다(spec mcp-server tools.rehydration AC-2). 렌더러발 저장은 이 이벤트를 만들지
+ * 다시 읽는다(spec ai-server tools.rehydration AC-2). 렌더러발 저장은 이 이벤트를 만들지
  * 않으므로(AC-3) 여기 도착한 변경은 전부 "화면 밖에서 온 것"이다.
  */
 window.rockury.store.onChanged((e) => {

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setDbPath } from '../store/db'
-import { rotateMcpToken, startMcp, stopMcp, type McpInfo } from './http'
+import { rotateAiToken, startAiServer, stopAiServer, type AiServerInfo } from './http'
 
 /**
  * MCP HTTP 서버 통합 테스트 — Electron 없이 실제 리스너를 띄워(포트 0·임시 DB·임시 dir)
@@ -12,7 +12,7 @@ import { rotateMcpToken, startMcp, stopMcp, type McpInfo } from './http'
  */
 
 let tmp: string
-let info: McpInfo
+let info: AiServerInfo
 
 const accept = 'application/json, text/event-stream'
 const post = (body: unknown, sid?: string | null): Promise<Response> =>
@@ -44,15 +44,15 @@ async function initSession(): Promise<string> {
 }
 
 beforeAll(async () => {
-  tmp = mkdtempSync(join(tmpdir(), 'rockury-mcp-http-'))
+  tmp = mkdtempSync(join(tmpdir(), 'rockury-ai-http-'))
   setDbPath(join(tmp, 'test.db'))
-  const started = await startMcp({ dir: tmp, appVersion: '0.0.0-test', port: 0 })
+  const started = await startAiServer({ dir: tmp, appVersion: '0.0.0-test', port: 0 })
   expect(started).not.toBeNull()
   info = started!
 })
 
 afterAll(async () => {
-  await stopMcp()
+  await stopAiServer()
 })
 
 describe('MCP HTTP 서버', () => {
@@ -66,7 +66,7 @@ describe('MCP HTTP 서버', () => {
     expect(health.version).toBe('0.0.0-test')
   })
 
-  it('initialize → tools/list — 읽기 4종 + 쓰기 5종 노출, 삭제류 부재 (CASE-mcp-011)', async () => {
+  it('initialize → tools/list — 읽기 4종 + 쓰기 5종 노출, 삭제류 부재 (CASE-ai-011)', async () => {
     const sid = await initSession()
     const json = (await (await post({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, sid)).json()) as {
       result: { tools: Array<{ name: string }> }
@@ -158,7 +158,7 @@ describe('MCP HTTP 서버', () => {
 
   it('접속 키 재발급 — 즉시 적용(구 키 401), 저장소 영속', async () => {
     const oldToken = info.token
-    const rotated = rotateMcpToken()
+    const rotated = rotateAiToken()
     expect(rotated.token).not.toBe(oldToken)
     // 구 키 → 즉시 401
     const oldRes = await fetch(info.url, {
@@ -176,18 +176,18 @@ describe('MCP HTTP 서버', () => {
   })
 
   it('재시작해도 토큰이 유지된다(클라이언트 설정 안정) · 레거시 mcp.json 정리 · 정지 후 접속 불가', async () => {
-    await stopMcp()
+    await stopAiServer()
     // 과거 버전이 남긴 발견 파일(평문 토큰 포함 가능) — 시작 시 정리돼야 한다
     writeFileSync(join(tmp, 'mcp.json'), '{"token":"legacy-secret"}')
-    const again = await startMcp({ dir: tmp, appVersion: '0.0.0-test', port: 0 })
+    const again = await startAiServer({ dir: tmp, appVersion: '0.0.0-test', port: 0 })
     expect(again!.token).toBe(info.token)
     expect(existsSync(join(tmp, 'mcp.json'))).toBe(false)
-    await stopMcp()
+    await stopAiServer()
     const alive = await fetch(`http://127.0.0.1:${again!.port}/health`).then(
       () => true,
       () => false
     )
     expect(alive).toBe(false)
-    // 후속 테스트 없음 — afterAll 의 stopMcp 는 no-op
+    // 후속 테스트 없음 — afterAll 의 stopAiServer 는 no-op
   })
 })

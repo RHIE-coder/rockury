@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { envelope } from '../envelope'
-import { getMcpInfo, rotateMcpToken, type McpInfo } from '../../mcp/http'
-import { buildAgentCommands } from '../../mcp/registration'
+import { getAiServerInfo, rotateAiToken, type AiServerInfo } from '../../ai/http'
+import { buildAgentCommands } from '../../ai/registration'
 
 /**
  * AI 화면(에이전트 연동) IPC — 게이트웨이 상태 + 접속 키 관리.
@@ -13,7 +13,7 @@ import { buildAgentCommands } from '../../mcp/registration'
  * 게이트웨이 상태 + 접속 키 + 등록/재등록 명령. token/명령은 복사·마스킹 표시용(렌더러는 신뢰 경계 안).
  * 재등록 명령은 접속 키를 재발급(rotate)해 기존 등록이 끊긴 뒤 다시 잇는 용도(remove→add).
  */
-export interface McpStatusPayload {
+export interface AiStatusPayload {
   running: boolean
   url: string | null
   port: number | null
@@ -24,19 +24,19 @@ export interface McpStatusPayload {
   codexReregisterCommand: string | null
 }
 
-const OFFLINE: McpStatusPayload = {
+const OFFLINE: AiStatusPayload = {
   running: false, url: null, port: null, token: null,
   claudeCommand: null, codexCommand: null, claudeReregisterCommand: null, codexReregisterCommand: null
 }
 
-function toStatus(info: McpInfo | null): McpStatusPayload {
+function toStatus(info: AiServerInfo | null): AiStatusPayload {
   if (!info) return OFFLINE
   return { running: true, url: info.url, port: info.port, token: info.token, ...buildAgentCommands(info.url, info.token) }
 }
 
 export function registerAiIpc(): void {
-  ipcMain.handle('ai:mcpStatus', () => envelope(() => toStatus(getMcpInfo())))
+  ipcMain.handle('ai:status', () => envelope(() => toStatus(getAiServerInfo())))
 
   // 접속 키 재발급 — 즉시 적용(구 키 401). 기존 등록 에이전트는 재등록 필요(UI 가 확인 후 호출).
-  ipcMain.handle('ai:mcpRotateToken', () => envelope(() => toStatus(rotateMcpToken())))
+  ipcMain.handle('ai:rotateToken', () => envelope(() => toStatus(rotateAiToken())))
 }

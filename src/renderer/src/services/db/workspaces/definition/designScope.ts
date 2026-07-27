@@ -32,7 +32,7 @@ export function toTableDef(r: TableRecordLike): TableDef {
 /**
  * 설계 스코프 저장/리하이드레이션의 순수 로직 — store.ts 의 구독 글루에서 분리해 테스트한다.
  * (저장 단위가 설계로 좁혀진 이유: 에이전트(MCP)와 화면이 서로 다른 설계를 동시에 만져도
- *  낡은 사본이 상대를 되덮지 않게 — spec mcp-server tools.write AC-4.)
+ *  낡은 사본이 상대를 되덮지 않게 — spec ai-server tools.write AC-4.)
  */
 
 /**

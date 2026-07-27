@@ -3,9 +3,9 @@ import { join } from 'path'
 import { registerAllIpc } from './ipc/registry'
 import { setDbPath } from './store/db'
 import { defaultWindowBounds } from './windowSize'
-import { startMcp, stopMcp } from './mcp/http'
-import { setStoreChangeNotifier } from './mcp/tools'
-import { createKeychainTokenStore } from './mcp/tokenStore'
+import { startAiServer, stopAiServer } from './ai/http'
+import { setStoreChangeNotifier } from './ai/tools'
+import { createKeychainTokenStore } from './ai/tokenStore'
 
 function createWindow(): void {
   // 커서가 있는 화면에 띄운다 — 사용자가 지금 보고 있는 모니터. 위치를 직접 정해야
@@ -70,7 +70,7 @@ app.whenReady().then(() => {
   // MCP 서버 — 메인 프로세스 내장(생명주기 한몸). 실패해도 앱 부팅은 계속(내부 재시도).
   // 접속 키는 OS 키체인 암호화 저장 — 디스크에 접속 정보 파일을 남기지 않는다.
   const userData = app.getPath('userData')
-  void startMcp({ dir: userData, appVersion: app.getVersion(), tokenStore: createKeychainTokenStore(userData) })
+  void startAiServer({ dir: userData, appVersion: app.getVersion(), tokenStore: createKeychainTokenStore(userData) })
   // 에이전트(MCP) 쓰기 성공 → 열린 모든 창에 알림 → 렌더러가 해당 스코프만 재조회
   // (tools.ts 는 electron 미의존 테스트 seam 이라 전파를 여기서 주입한다).
   setStoreChangeNotifier((e) => {
@@ -89,5 +89,5 @@ app.on('window-all-closed', () => {
 
 // 앱 종료 시 MCP 리스너도 함께 정리(발견 파일의 토큰은 남겨 재사용).
 app.on('will-quit', () => {
-  void stopMcp()
+  void stopAiServer()
 })

@@ -42,7 +42,7 @@
 ## Scenario S4 — 저장 계층 (임시 SQLite) → `src/main/store/stores.test.ts`
 - **CASE-studio-030** 시드 세트 라운드트립: 선언(짝짓기 기준·무시 컬럼·`설계에 없는 행` 처리)과 행이 저장→조회에서 보존된다. (persistence AC-1/AC-2)
 - **CASE-studio-031** 설계 스코프 교체: 설계 X 의 세트를 저장해도 설계 Y 의 세트가 남는다. (persistence AC-1)
-- **CASE-studio-032** MCP 커버리지: 새 IPC 채널이 노출 또는 제외 사유로 등재돼 `coverage.test.ts` 가 통과한다. (persistence AC-3) → `src/main/mcp/coverage.test.ts`
+- **CASE-studio-032** MCP 커버리지: 새 IPC 채널이 노출 또는 제외 사유로 등재돼 `coverage.test.ts` 가 통과한다. (persistence AC-3) → `src/main/ai/coverage.test.ts`
 
 ## Scenario S5 — 앱 구동 흐름 (e2e/flows/db.mjs, CSS/text 로케이터만)
 - **CASE-studio-040** Studio › Seed 진입 → 시드 세트 없을 때 빈 상태 CTA 표시. (set-list AC-4)

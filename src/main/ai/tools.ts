@@ -397,7 +397,7 @@ export const TOOL_DEFS: ToolDef[] = [
 export const TOOL_NAMES = TOOL_DEFS.map((t) => t.name)
 
 /** 세션당 1개 — SDK 규약상 서버 인스턴스는 전송(transport) 하나에만 연결된다. */
-export function createMcpServer(appVersion: string): McpServer {
+export function createAiServer(appVersion: string): McpServer {
   const server = new McpServer({ name: 'rockury', version: appVersion })
   for (const t of TOOL_DEFS) {
     server.registerTool(

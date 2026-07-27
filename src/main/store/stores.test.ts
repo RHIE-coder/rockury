@@ -315,7 +315,7 @@ describe('tables — 설계 스코프 교체 (replaceTablesForDesign)', () => {
     constraints: [{ id: `${id}-k1`, kind: 'pk', name: '', columns: [{ columnId: `${id}-c1` }] }]
   })
 
-  it('CASE-mcp-030/033: 대상 설계만 교체 — 다른 설계 행 불변 + 순서(position)·JSON 왕복 유지', () => {
+  it('CASE-ai-030/033: 대상 설계만 교체 — 다른 설계 행 불변 + 순서(position)·JSON 왕복 유지', () => {
     replaceTablesForDesign('scope_x', [tbl('scope_x', 'x1', 'alpha'), tbl('scope_x', 'x2', 'beta')])
     replaceTablesForDesign('scope_y', [tbl('scope_y', 'y1', 'gamma')])
     const yBefore = listTables().filter((t) => t.designId === 'scope_y')
@@ -329,7 +329,7 @@ describe('tables — 설계 스코프 교체 (replaceTablesForDesign)', () => {
     expect(listTables().filter((t) => t.designId === 'scope_y')).toEqual(yBefore) // 격리
   })
 
-  it('CASE-mcp-031: 빈 목록 → 설계 비우기, 다른 설계 불변', () => {
+  it('CASE-ai-031: 빈 목록 → 설계 비우기, 다른 설계 불변', () => {
     replaceTablesForDesign('scope_x', [])
     expect(listTables().filter((t) => t.designId === 'scope_x')).toEqual([])
     expect(listTables().filter((t) => t.designId === 'scope_y')).toHaveLength(1)
@@ -360,7 +360,7 @@ describe('tables — 설계 스코프 교체 (replaceTablesForDesign)', () => {
     ])
   })
 
-  it('CASE-mcp-032: 다른 설계 레코드가 섞인 배치는 전체 롤백 — 부분 반영 0', () => {
+  it('CASE-ai-032: 다른 설계 레코드가 섞인 배치는 전체 롤백 — 부분 반영 0', () => {
     replaceTablesForDesign('scope_x', [tbl('scope_x', 'x9', 'nine')])
     expect(() =>
       replaceTablesForDesign('scope_x', [tbl('scope_x', 'x10', 'ten'), tbl('scope_y', 'oops', 'bad')])

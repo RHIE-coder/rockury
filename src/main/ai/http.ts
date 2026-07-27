@@ -4,7 +4,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
-import { createMcpServer } from './tools'
+import { createAiServer } from './tools'
 import { gateRequest } from './security'
 
 /**
@@ -22,7 +22,7 @@ import { gateRequest } from './security'
 
 const DEFAULT_PORT = 41729
 const PORT_TRIES = 10
-const MCP_PATH = '/mcp'
+const AI_SERVER_PATH = '/mcp'
 const RETRY_MS = 30_000
 const MAX_SESSIONS = 64
 
@@ -32,7 +32,7 @@ export interface TokenStore {
   save(token: string): void
 }
 
-export interface StartMcpOptions {
+export interface StartAiServerOptions {
   /** 기본 토큰 저장소(평문 파일)를 둘 디렉터리 — 앱에선 userData(키체인 저장소 주입 시 레거시 정리에만 사용). */
   dir: string
   appVersion: string
@@ -42,7 +42,7 @@ export interface StartMcpOptions {
   tokenStore?: TokenStore
 }
 
-export interface McpInfo {
+export interface AiServerInfo {
   port: number
   url: string
   token: string
@@ -50,7 +50,7 @@ export interface McpInfo {
 
 interface Runtime {
   server: Server
-  info: McpInfo
+  info: AiServerInfo
   transports: Map<string, StreamableHTTPServerTransport>
 }
 
@@ -171,7 +171,7 @@ async function handleRequest(
     return
   }
 
-  if (url !== MCP_PATH) {
+  if (url !== AI_SERVER_PATH) {
     sendJson(res, 404, { error: 'not found' })
     return
   }
@@ -222,7 +222,7 @@ async function handleRequest(
       transport.onclose = () => {
         if (transport.sessionId) rt.transports.delete(transport.sessionId)
       }
-      await createMcpServer(appVersion).connect(transport)
+      await createAiServer(appVersion).connect(transport)
       await transport.handleRequest(req, res, body)
       return
     }
@@ -251,7 +251,7 @@ async function handleRequest(
  * MCP 서버 시작. 실패해도 앱 부팅을 막지 않는다 — 로그 후 RETRY_MS 뒤 재시도 예약
  * ("부모는 사는데 MCP 만 죽는" 상태가 지속되지 않게).
  */
-export async function startMcp(opts: StartMcpOptions): Promise<McpInfo | null> {
+export async function startAiServer(opts: StartAiServerOptions): Promise<AiServerInfo | null> {
   if (runtime) return runtime.info
 
   try {
@@ -277,7 +277,7 @@ export async function startMcp(opts: StartMcpOptions): Promise<McpInfo | null> {
 
     const port = await listenWithFallback(rt.server, basePort)
     rt.info.port = port
-    rt.info.url = `http://127.0.0.1:${port}${MCP_PATH}`
+    rt.info.url = `http://127.0.0.1:${port}${AI_SERVER_PATH}`
     runtime = rt
 
     // 레거시 정리 — 과거 버전이 남긴 발견 파일(mcp.json, 평문 토큰 포함 가능성)을 제거한다.
@@ -290,14 +290,14 @@ export async function startMcp(opts: StartMcpOptions): Promise<McpInfo | null> {
     console.error('[mcp] 시작 실패 — 30초 뒤 재시도:', e)
     retryTimer = setTimeout(() => {
       retryTimer = null
-      void startMcp(opts)
+      void startAiServer(opts)
     }, RETRY_MS)
     return null
   }
 }
 
 /** 현재 리스닝 중인 MCP 접속 정보 — AI 화면(ipc/ai)이 조회. 꺼져 있으면 null. */
-export function getMcpInfo(): McpInfo | null {
+export function getAiServerInfo(): AiServerInfo | null {
   return runtime?.info ?? null
 }
 
@@ -305,7 +305,7 @@ export function getMcpInfo(): McpInfo | null {
  * 접속 키(Bearer) 재발급 — 즉시 적용. 관문이 요청마다 runtime.info.token 을 읽으므로
  * 구 토큰은 이 호출 직후부터 401 이 된다(기존 등록 에이전트는 재등록 필요).
  */
-export function rotateMcpToken(): McpInfo {
+export function rotateAiToken(): AiServerInfo {
   if (!runtime || !activeTokenStore) throw new Error('MCP 서버가 꺼져 있습니다 — 재발급은 켜진 상태에서만 가능합니다.')
   const next = randomBytes(32).toString('hex')
   activeTokenStore.save(next)
@@ -314,7 +314,7 @@ export function rotateMcpToken(): McpInfo {
 }
 
 /** MCP 서버 정지 — 앱 종료(will-quit) 시 호출. 발견 파일은 남긴다(토큰 재사용). */
-export async function stopMcp(): Promise<void> {
+export async function stopAiServer(): Promise<void> {
   if (retryTimer) {
     clearTimeout(retryTimer)
     retryTimer = null

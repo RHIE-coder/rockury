@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, Copy, Eye, EyeOff, KeyRound, Loader2, RotateCcw } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
-import { useMcpStore } from './store'
+import { useAiStore } from './store'
 
 /**
  * AI › Agents — 에이전트 연동 화면.
@@ -78,7 +78,7 @@ function ReregisterButtons({
 
 /** 접속 키 관리 카드 — 마스킹 표시 + 보기/복사/재발급. */
 function TokenCard() {
-  const st = useMcpStore()
+  const st = useAiStore()
   const [copied, setCopied] = useState(false)
   const [confirming, setConfirming] = useState(false)
   // 재발급 직후 — 재등록 안내를 바로 그 자리에 펼쳐 준다("키가 달라졌으니 이렇게 다시 등록").
@@ -139,12 +139,12 @@ function TokenCard() {
             <Button
               variant="destructive" size="sm" className="h-6 px-2 text-[11px]" disabled={st.rotating}
               onClick={() => {
-                void useMcpStore
+                void useAiStore
                   .getState()
                   .rotate()
                   .then(() => {
                     setConfirming(false)
-                    if (!useMcpStore.getState().error) setJustRotated(true)
+                    if (!useAiStore.getState().error) setJustRotated(true)
                   })
               }}
             >
@@ -180,11 +180,11 @@ function TokenCard() {
 }
 
 export function AgentsWorkspace() {
-  const st = useMcpStore()
+  const st = useAiStore()
 
   // 화면에 들어올 때마다 상태 재점검(+접속 키는 다시 마스킹).
   useEffect(() => {
-    void useMcpStore.getState().refresh()
+    void useAiStore.getState().refresh()
   }, [])
 
   const running = st.status?.running === true

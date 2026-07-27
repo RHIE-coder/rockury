@@ -29,7 +29,7 @@ export function registerStoreIpc(): void {
   ipcMain.handle('designs:delete', (_event, id: string) => deleteDesign(id))
 
   ipcMain.handle('tables:list', () => listTables())
-  // 설계 스코프 저장 — 전량 교체(tables:replaceAll)는 제거됨(spec mcp-server 쓰기 경합 차단).
+  // 설계 스코프 저장 — 전량 교체(tables:replaceAll)는 제거됨(spec ai-server 쓰기 경합 차단).
   ipcMain.handle('tables:replaceForDesign', (_event, designId: string, records: TableRecord[]) =>
     replaceTablesForDesign(designId, records)
   )

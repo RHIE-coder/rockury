@@ -51,7 +51,7 @@ export function listTables(): TableRecord[] {
  * 설계 스코프 교체 — 대상 설계의 행만 지우고 다시 쓴다(tx, wipe + rewrite).
  * 전량 교체(구 replaceAllTables)를 대체: 에이전트(MCP)와 렌더러가 서로 다른 설계를
  * 동시에 저장해도 낡은 사본이 상대 설계를 되덮지 못하게 저장 단위를 설계로 좁혔다
- * (spec mcp-server tools.write AC-4).
+ * (spec ai-server tools.write AC-4).
  */
 export function replaceTablesForDesign(designId: string, records: TableRecord[]): void {
   const d = getDb()
