@@ -108,7 +108,7 @@ describe('MCP 커버리지 핀 — 서비스별 분할 이후', () => {
     // 채널은 전부 서비스 폴더로 내려갔다. 한 겹만 훑으면 여기서 크게 미달한다.
     expect(actual.size).toBeGreaterThan(50)
     // 각 서비스 폴더에서 실제로 하나 이상 잡히는지 — 대표 채널로 확인.
-    for (const ch of ['designs:list', 'query:run', 'col:list', 'mcp:status', 'window:close']) {
+    for (const ch of ['designs:list', 'query:run', 'col:list', 'ai:mcpStatus', 'window:close']) {
       expect(actual.has(ch), `${ch} 채널을 스캐너가 못 찾음 — 재귀 스캔이 깨졌다`).toBe(true)
     }
   })
@@ -148,10 +148,10 @@ describe('MCP 커버리지 핀 — 서비스별 분할 이후', () => {
 
   it('CASE-pdev-014 다섯 서비스 + 셸이 모두 자기 지도 파일을 갖는다', () => {
     expect(SERVICE_COVERAGE.map((c) => c.service).sort()).toEqual([
+      'ai',
       'api',
       'db',
       'infra',
-      'mcp',
       'shell',
       'uiux'
     ])

@@ -10,7 +10,7 @@ describe('병렬 워크트리 계획', () => {
 
   it('다섯 서비스가 코드와 같은 토큰을 쓴다', () => {
     // nav registry·IPC 접두어·마이그레이션/커버리지/흐름 파일 이름과 같은 id 여야 한다.
-    expect(SERVICES.map((s) => s.id)).toEqual(['uiux', 'api', 'db', 'infra', 'mcp'])
+    expect(SERVICES.map((s) => s.id)).toEqual(['uiux', 'api', 'db', 'infra', 'ai'])
   })
 
   it('CASE-pdev-060 서비스 → (브랜치, 폴더) 대응이 결정적이다', () => {
@@ -20,14 +20,14 @@ describe('병렬 워크트리 계획', () => {
       'feat/api',
       'feat/db',
       'feat/infra',
-      'feat/mcp'
+      'feat/ai'
     ])
     expect(plan.map((p) => p.dir)).toEqual([
       '/Users/x/Workspace/.worktrees/rockury/uiux',
       '/Users/x/Workspace/.worktrees/rockury/api',
       '/Users/x/Workspace/.worktrees/rockury/db',
       '/Users/x/Workspace/.worktrees/rockury/infra',
-      '/Users/x/Workspace/.worktrees/rockury/mcp'
+      '/Users/x/Workspace/.worktrees/rockury/ai'
     ])
   })
 

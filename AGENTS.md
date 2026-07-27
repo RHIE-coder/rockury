@@ -16,7 +16,7 @@ Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 
 ## 🌿 Git (MUST)
 - **`main` 은 통합 전용이다 — 직접 작업하지 않고 병합만 받는다.**
   각 서비스는 자기 브랜치 `feat/<서비스 id>` 에서 일한다: `feat/uiux` · `feat/api` · `feat/db` ·
-  `feat/infra` · `feat/mcp`(AI). (2026-07-27 사용자 지시로 개정 — 그전 규칙은 "main 직접 작업"이었고,
+  `feat/infra` · `feat/ai`. (2026-07-27 사용자 지시로 개정 — 그전 규칙은 "main 직접 작업"이었고,
   5서비스 병렬 개발을 켜면서 뒤집었다.)
 - 예외: **어느 서비스에도 안 속하는 것**(공용 파일 구조, `AGENTS.md`, 의존성 추가)은 `main` 에서 한다.
 - 커밋/푸시는 사용자가 요청할 때만. 커밋 메시지 끝에 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
@@ -30,9 +30,15 @@ Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 
 저장소 밖이므로 `.gitignore` 는 필요 없다(git 시야가 저장소 밖까지 미치지 않는다).
 
 ### 서비스 id — 서비스당 토큰 하나
-`uiux` · `api` · `db` · `infra` · `mcp`. **AI 서비스의 코드 id 는 `mcp` 다**(표시명만 'AI').
-이 토큰 하나가 nav registry 의 `Service.id`, IPC 채널 접두어, 폴더·파일 이름, 브랜치 이름에
-전부 그대로 쓰인다 — 토큰을 둘로 늘리면 "내 파일이 어느 쪽이냐"가 흐려진다.
+`uiux` · `api` · `db` · `infra` · `ai`. 이 토큰 하나가 nav registry 의 `Service.id`,
+IPC 채널 접두어, 폴더·파일 이름, 브랜치 이름에 전부 그대로 쓰인다 —
+토큰을 둘로 늘리면 "내 파일이 어느 쪽이냐"가 흐려진다.
+
+**`ai` 와 `mcp` 를 헷갈리지 말 것.** `ai` 는 **서비스**(AI 기능 전체가 자랄 자리)이고,
+MCP(에이전트 연동)는 그 서비스가 지금 가진 **기능 하나**다. 그래서
+`src/main/mcp/**`(MCP 프로토콜 서버 구현)과 `docs/spec/mcp-server.md` 는 `mcp` 가 맞고,
+서비스를 가리키는 자리(폴더·채널 접두어·브랜치)는 전부 `ai` 다 —
+MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접두어를 쓴다.
 
 ### 내 파일이 어디까지인가 (`<svc>` = 서비스 id)
 | 무엇 | 내 파일 |
@@ -54,7 +60,7 @@ Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 
 `src/renderer/src/ui/**`(공용 컴포넌트 — 고쳐야 하면 `main` 에서, 다섯 서비스에 영향).
 
 ### 네임스페이스 (충돌 방지)
-- **IPC 채널**: `<svc>:<동작>` (예: `infra:listContainers`). 기존 DB 채널은 무접두어 그대로 둔다.
+- **IPC 채널**: `<svc>:<동작>` (예: `infra:listContainers`, `ai:mcpStatus`). 기존 DB 채널은 무접두어 그대로 둔다(레거시 예외).
 - **SQLite 테이블**: `<svc>_` 접두어. 두 서비스가 같은 테이블을 선언하면 앱이 안 켜진다(런타임 검사).
 - **preload 최상위 키**: 서비스마다 달라야 한다. 겹치면 조립이 실패한다.
 

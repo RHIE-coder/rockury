@@ -34,9 +34,9 @@ function toStatus(info: McpInfo | null): McpStatusPayload {
   return { running: true, url: info.url, port: info.port, token: info.token, ...buildAgentCommands(info.url, info.token) }
 }
 
-export function registerMcpIpc(): void {
-  ipcMain.handle('mcp:status', () => envelope(() => toStatus(getMcpInfo())))
+export function registerAiIpc(): void {
+  ipcMain.handle('ai:mcpStatus', () => envelope(() => toStatus(getMcpInfo())))
 
   // 접속 키 재발급 — 즉시 적용(구 키 401). 기존 등록 에이전트는 재등록 필요(UI 가 확인 후 호출).
-  ipcMain.handle('mcp:rotateToken', () => envelope(() => toStatus(rotateMcpToken())))
+  ipcMain.handle('ai:mcpRotateToken', () => envelope(() => toStatus(rotateMcpToken())))
 }

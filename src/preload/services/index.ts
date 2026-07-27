@@ -3,7 +3,7 @@ import { uiuxApi } from './uiux'
 import { apiApi } from './api'
 import { dbApi } from './db'
 import { infraApi } from './infra'
-import { mcpApi } from './mcp'
+import { aiApi } from './ai'
 
 /**
  * 서비스별 preload 창구 등록부 — 순서는 `nav/registry.ts` 의 서비스 순서를 따른다.
@@ -17,7 +17,7 @@ export const SERVICE_APIS = [
   { service: 'api', api: apiApi },
   { service: 'db', api: dbApi },
   { service: 'infra', api: infraApi },
-  { service: 'mcp', api: mcpApi }
+  { service: 'ai', api: aiApi }
 ] as const
 
 /**
@@ -53,4 +53,4 @@ export type AssembledApi = typeof shellApi &
   typeof apiApi &
   typeof dbApi &
   typeof infraApi &
-  typeof mcpApi
+  typeof aiApi

@@ -34,7 +34,7 @@ describe('화면 기준선 서비스별 분할', () => {
   it('formFactor 첫 마디로 소유 서비스를 정한다', () => {
     expect(serviceOf('db/console/query')).toBe('db')
     expect(serviceOf('uiux/canvas')).toBe('uiux')
-    expect(serviceOf('mcp/agents')).toBe('mcp')
+    expect(serviceOf('ai/agents')).toBe('ai')
     // 서비스 이름이 아니면 공용 — 부팅 화면은 어느 서비스 것도 아니다.
     expect(serviceOf('boot')).toBe(SHELL_KEY)
     expect(serviceOf('')).toBe(SHELL_KEY)

@@ -8,8 +8,8 @@ import * as path from 'node:path'
  * 생성물이라 손으로 풀 수도 없었다. 이제 서비스마다 파일 하나라 자기 것만 바뀐다.
  */
 
-/** 서비스 식별자 — nav registry 의 Service.id 와 같은 토큰(AI 서비스는 `mcp`). */
-export const SERVICE_IDS = ['uiux', 'api', 'db', 'infra', 'mcp']
+/** 서비스 식별자 — nav registry 의 Service.id 와 같은 토큰. */
+export const SERVICE_IDS = ['uiux', 'api', 'db', 'infra', 'ai']
 
 /** 어느 서비스에도 안 속하는 findings(부팅 화면 등)가 모이는 파일 이름. */
 export const SHELL_KEY = 'shell'

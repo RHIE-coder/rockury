@@ -4,7 +4,7 @@ import { uiuxMigration } from './uiux'
 import { apiMigration } from './api'
 import { dbMigration } from './db'
 import { infraMigration } from './infra'
-import { mcpMigration } from './mcp'
+import { aiMigration } from './ai'
 
 export type { ServiceMigration, ServiceId } from './types'
 export { SERVICE_IDS, addColumnIfMissing } from './types'
@@ -20,7 +20,7 @@ export const MIGRATIONS: ServiceMigration[] = [
   apiMigration,
   dbMigration,
   infraMigration,
-  mcpMigration
+  aiMigration
 ]
 
 /** 등록된 마이그레이션이 소유를 주장하는 테이블 전집합. */

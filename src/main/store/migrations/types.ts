@@ -2,10 +2,10 @@ import type { DatabaseSync } from 'node:sqlite'
 
 /**
  * 서비스 식별자 — `src/renderer/src/nav/registry.ts` 의 `Service.id` 와 **같은 토큰**을 쓴다.
- * AI 서비스의 코드 id 는 `mcp` 다(표시명만 'AI'). 토큰을 둘로 늘리면 병렬 개발에서
- * "내 파일이 어느 쪽이냐"가 흐려진다 — 서비스당 이름 하나.
+ * 토큰을 둘로 늘리면 병렬 개발에서 "내 파일이 어느 쪽이냐"가 흐려진다 — 서비스당 이름 하나.
+ * (AI 서비스는 `ai` 다. MCP 는 그 안의 기능 하나일 뿐이라 서비스 이름이 될 수 없다.)
  */
-export const SERVICE_IDS = ['uiux', 'api', 'db', 'infra', 'mcp'] as const
+export const SERVICE_IDS = ['uiux', 'api', 'db', 'infra', 'ai'] as const
 export type ServiceId = (typeof SERVICE_IDS)[number]
 
 /**

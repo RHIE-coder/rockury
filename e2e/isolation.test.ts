@@ -44,7 +44,7 @@ describe('e2e 격리 불변식', () => {
     // 그러면 새 흐름 파일을 놓을 때마다 이 공용 테스트를 고쳐야 해서, 병렬 개발에서
     // 없애려던 공용 파일 충돌이 되살아난다. 수집은 재귀 글롭이라 새 파일도 자동으로 덮인다.
     const names = flows.map((f) => f.path)
-    for (const s of ['uiux', 'api', 'db', 'infra', 'mcp']) {
+    for (const s of ['uiux', 'api', 'db', 'infra', 'ai']) {
       expect(names, `${s} 흐름 파일이 검사 대상에 없다`).toContain(`flows/${s}.mjs`)
     }
   })

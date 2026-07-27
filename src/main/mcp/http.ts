@@ -296,7 +296,7 @@ export async function startMcp(opts: StartMcpOptions): Promise<McpInfo | null> {
   }
 }
 
-/** 현재 리스닝 중인 MCP 접속 정보 — AI 화면(ipc/mcp)이 조회. 꺼져 있으면 null. */
+/** 현재 리스닝 중인 MCP 접속 정보 — AI 화면(ipc/ai)이 조회. 꺼져 있으면 null. */
 export function getMcpInfo(): McpInfo | null {
   return runtime?.info ?? null
 }

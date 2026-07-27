@@ -40,7 +40,7 @@ export const useMcpStore = create<McpState>()((set) => ({
 
   refresh: async () => {
     try {
-      const status = await window.rockury.mcp.status()
+      const status = await window.rockury.ai.status()
       set({ status, loaded: true, error: null, revealed: false })
     } catch (e) {
       set({ loaded: true, error: e instanceof Error ? e.message : String(e) })
@@ -52,7 +52,7 @@ export const useMcpStore = create<McpState>()((set) => ({
   rotate: async () => {
     set({ rotating: true })
     try {
-      const status = await window.rockury.mcp.rotateToken()
+      const status = await window.rockury.ai.rotateToken()
       set({ status, rotating: false, error: null })
     } catch (e) {
       set({ rotating: false, error: e instanceof Error ? e.message : String(e) })

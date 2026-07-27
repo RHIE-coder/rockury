@@ -116,7 +116,6 @@ describe('서비스별 마이그레이션 분할', () => {
   })
 
   it('다섯 서비스가 모두 자기 마이그레이션 자리를 갖는다 (병렬 개발 소유권)', () => {
-    // AI 서비스의 코드 id 는 `mcp` — nav registry·파일 경로·preload 키와 같은 토큰을 쓴다.
-    expect(MIGRATIONS.map((m) => m.service).sort()).toEqual(['api', 'db', 'infra', 'mcp', 'uiux'])
+    expect(MIGRATIONS.map((m) => m.service).sort()).toEqual(['ai', 'api', 'db', 'infra', 'uiux'])
   })
 })

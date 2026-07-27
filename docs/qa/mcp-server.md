@@ -59,11 +59,11 @@
 - **CASE-mcp-062** 지도 도구 키 = TOOL_NAMES(9종 — 읽기 4 + 쓰기 5) · 한 채널의 노출/제외 동시 등재 금지. (공통 불변식)
 - **CASE-mcp-063** 삭제류 미노출 핀: `designs:delete`/`versions:delete` 등 파괴 채널이 노출 지도에 등장하지 않고, 제외 사유가 확정 문구("파괴적 조작은 사람이 앱에서만")로 갱신 — "2단계 검토" 잔존 금지. (tools.write AC-7)
 
-## Scenario S8 — 앱 구동 흐름 (e2e/flows/mcp.mjs — 접근성 쿼리 금지, CSS/text 로케이터만)
+## Scenario S8 — 앱 구동 흐름 (e2e/flows/ai.mjs — 접근성 쿼리 금지, CSS/text 로케이터만)
 - **CASE-mcp-070** 기존: 상태 IPC→initialize→tools/list→`list_designs`(시드) + 무토큰 401 + `mcp.json` 미생성. (검증 절, http.gate/tools.read) [자동]
 - **CASE-mcp-071** 기존: AI 화면 — 게이트웨이 열림 표시·등록 명령(URL 포함)·키 기본 마스킹·재발급 실 흐름(구 키 즉시 401·새 키 접속). (agents.gateway AC-1/AC-2, agents.token AC-1/AC-2) [자동]
 - **CASE-mcp-074** 재등록 명령: 상태 payload 의 claude/codex 재등록 명령이 `remove`(rockury) 를 add 앞에 두고 현재 키를 담는다 — 재발급 후에도 새 키로 갱신됨. (agents.token AC-3) → `src/main/mcp/registration.test.ts` [자동]
-- **CASE-mcp-075** e2e: AI 화면에 "접속 키를 바꾼 뒤" 재등록 안내 + Claude/Codex 재등록 복사 버튼이 보이고, 재발급 후 재등록 명령이 새 키를 담는다. (agents.token AC-3) → `e2e/flows/mcp.mjs` [자동]
+- **CASE-mcp-075** e2e: AI 화면에 "접속 키를 바꾼 뒤" 재등록 안내 + Claude/Codex 재등록 복사 버튼이 보이고, 재발급 후 재등록 명령이 새 키를 담는다. (agents.token AC-3) → `e2e/flows/ai.mjs` [자동]
 - **CASE-mcp-072** 신설: 쓰기 리하이드레이션 — Studio 화면을 연 채 MCP `set_schema` 호출 → 신규 테이블명이 화면 텍스트에 즉시 나타남(수동 재조회 없이). (tools.write AC-3, tools.rehydration AC-1/AC-2) [자동]
 - **CASE-mcp-073** 신설: `create_version` 호출 → Versions 타임라인에 새 버전 번호 텍스트 등장 + tools/list 에 쓰기 5종 노출 확인. (tools.write AC-5, tools.rehydration AC-2) [자동]
 

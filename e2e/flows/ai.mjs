@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 /**
- * AI 서비스(코드 id `mcp`) 앱 구동 흐름 — MCP 서버 프로토콜 + AI › Agents 화면.
+ * AI 서비스 앱 구동 흐름 — MCP 서버 프로토콜 + AI › Agents 화면.
  *
  * 새 AI 흐름은 **이 파일에만** 더한다(누적 자산 — 지우지 않는다, AGENTS.md 불변식 3).
  * 다른 서비스 흐름 파일이나 `e2e/smoke.mjs` 는 건드리지 않는다.
@@ -14,7 +14,7 @@ export async function run(ctx) {
   {
     // 접속 정보 파일을 디스크에 만들지 않는다 — 주소·키는 앱 상태 IPC 로만 얻는다.
     check('MCP: 접속 정보 파일(mcp.json) 미생성', !fs.existsSync(path.join(ctx.userData, 'mcp.json')))
-    const mcpStatus = await ctx.page.evaluate(() => window.rockury.mcp.status())
+    const mcpStatus = await ctx.page.evaluate(() => window.rockury.ai.status())
     const mcp = { url: mcpStatus.url, token: mcpStatus.token }
     check('MCP: 상태 IPC — 실행 중 + 키 제공', mcpStatus.running === true && !!mcp.token)
     const mcpHeaders = {
@@ -51,10 +51,10 @@ export async function run(ctx) {
 
   // ── AI › Agents 화면 — 게이트웨이 상태(초록불) + 접속 키 마스킹/재발급 실 흐름 ──
   {
-    await click('[data-nav-service="mcp"]')
+    await click('[data-nav-service="ai"]')
     await ctx.page.waitForSelector('text=에이전트 게이트웨이', { timeout: 5_000 })
     check('AI 화면: 게이트웨이 열림 표시', (await body()).includes('에이전트 게이트웨이 열림'))
-    const st1 = await ctx.page.evaluate(() => window.rockury.mcp.status())
+    const st1 = await ctx.page.evaluate(() => window.rockury.ai.status())
     check('AI 화면: 등록 명령 생성(Claude/Codex, url 포함)',
       st1.claudeCommand?.includes(st1.url) === true && st1.codexCommand?.includes(st1.url) === true)
     // 접속 키는 기본 마스킹 — 전체 값이 화면 텍스트에 노출되지 않는다
@@ -64,7 +64,7 @@ export async function run(ctx) {
     await ctx.page.waitForSelector('text=다시 등록해야 해요', { timeout: 3_000 })
     await click('button:has-text("재발급 진행")')
     await ctx.page.waitForTimeout(500)
-    const st2 = await ctx.page.evaluate(() => window.rockury.mcp.status())
+    const st2 = await ctx.page.evaluate(() => window.rockury.ai.status())
     check('재발급: 키 교체됨', !!st2.token && st2.token !== st1.token)
     const oldKeyRes = await fetch(st2.url, {
       method: 'POST',

@@ -21,6 +21,7 @@ const { assembleApi, SERVICE_APIS } = await import('./index')
  * 손으로 적어 둔 대조 기준 — 하나라도 사라지면 그 그룹을 쓰던 화면이 런타임에 죽는다.
  */
 const KEYS_BEFORE_SPLIT = [
+  'ai',
   'collections',
   'connectionGroups',
   'connections',
@@ -29,7 +30,6 @@ const KEYS_BEFORE_SPLIT = [
   'envVars',
   'environments',
   'introspection',
-  'mcp',
   'migration',
   'query',
   'savedQueries',
@@ -105,7 +105,7 @@ const METHODS_BEFORE_SPLIT: Record<string, string[]> = {
     'reorderItems'
   ],
   migration: ['saveSnapshot', 'latestSnapshot', 'appendLog', 'listLogs'],
-  mcp: ['status', 'rotateToken'],
+  ai: ['status', 'rotateToken'],
   diagram: ['getLayout', 'saveLayout', 'clearLayout']
 }
 
@@ -142,10 +142,10 @@ describe('preload 서비스 분할', () => {
 
   it('다섯 서비스 + 셸이 모두 자기 preload 파일을 갖는다', () => {
     expect(SERVICE_APIS.map((s) => s.service).sort()).toEqual([
+      'ai',
       'api',
       'db',
       'infra',
-      'mcp',
       'shell',
       'uiux'
     ])

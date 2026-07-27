@@ -3,7 +3,7 @@ import { registerUiuxIpc } from './uiux'
 import { registerApiIpc } from './api'
 import { registerDbIpc } from './db'
 import { registerInfraIpc } from './infra'
-import { registerMcpIpc } from './mcp'
+import { registerAiIpc } from './ai'
 
 /**
  * 서비스별 IPC 등록부 — 순서는 `nav/registry.ts` 의 서비스 순서를 따른다.
@@ -16,7 +16,7 @@ export const SERVICE_IPC: { service: string; register: () => void }[] = [
   { service: 'api', register: registerApiIpc },
   { service: 'db', register: registerDbIpc },
   { service: 'infra', register: registerInfraIpc },
-  { service: 'mcp', register: registerMcpIpc }
+  { service: 'ai', register: registerAiIpc }
 ]
 
 /**

@@ -457,7 +457,7 @@ export async function run(ctx) {
   // ── MCP 쓰기 도구(2단계) — 에이전트 쓰기가 열린 화면에 즉시 반영(리하이드레이션) ──
   // CASE-mcp-072/073 (docs/qa/mcp-server.md). 토큰은 위 재발급 이후 값을 새로 조회.
   {
-    const st = await ctx.page.evaluate(() => window.rockury.mcp.status())
+    const st = await ctx.page.evaluate(() => window.rockury.ai.status())
     const wHdrs = {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',

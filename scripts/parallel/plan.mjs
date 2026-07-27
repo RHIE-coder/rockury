@@ -8,14 +8,14 @@ import * as path from 'node:path'
 /**
  * 다섯 서비스. `id` 는 코드 전체가 쓰는 단 하나의 토큰이다 —
  * nav registry 의 `Service.id`, IPC 채널 접두어, 마이그레이션/커버리지/흐름 파일 이름이 모두 같다.
- * AI 서비스의 id 가 `mcp` 인 것은 기존 관례(표시명만 'AI') — 토큰을 둘로 늘리지 않는다.
+ * 토큰을 둘로 늘리지 않는다 — 서비스당 이름 하나.
  */
 export const SERVICES = [
   { id: 'uiux', label: 'UI/UX' },
   { id: 'api', label: 'API' },
   { id: 'db', label: 'DB' },
   { id: 'infra', label: 'Infra' },
-  { id: 'mcp', label: 'AI' }
+  { id: 'ai', label: 'AI' }
 ]
 
 /** 워크트리들을 모아 두는 숨김 폴더 이름 — 저장소 **바깥**(상위 폴더)에 만든다. */
