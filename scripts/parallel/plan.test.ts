@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SERVICES, planWorktrees } from './plan.mjs'
+import { SERVICES, planWorktrees, syncVerdict } from './plan.mjs'
 
 /**
  * TestPlan: parallel-dev · Scenario S7 (CASE-pdev-060)
@@ -71,5 +71,58 @@ describe('병렬 워크트리 계획', () => {
   it('경로 표기가 달라도 같은 폴더로 알아본다 (끝 슬래시·중복 슬래시)', () => {
     const plan = planWorktrees(REPO, ['/Users/x/Workspace//.worktrees/rockury/db/'], [])
     expect(plan.find((p) => p.id === 'db')?.worktreeExists).toBe(true)
+  })
+})
+
+/**
+ * TestPlan: parallel-dev · Scenario S7 — 워크트리를 main 에 맞추는 판정.
+ * 되돌릴 수 없는 조작을 하지 않는 것이 요점이다: 끌어올릴 수 있을 때만 손대고,
+ * 갈라졌거나 앞서 있으면 사람에게 넘긴다.
+ */
+describe('워크트리 동기화 판정', () => {
+  it('뒤처지기만 했으면 빨리감기 대상', () => {
+    const v = syncVerdict({ exists: true, behind: 3 })
+    expect(v.kind).toBe('behind')
+    expect(v.act).toBe(true)
+    expect(v.text).toContain('3커밋')
+  })
+
+  it('이미 최신이면 손대지 않는다', () => {
+    expect(syncVerdict({ exists: true, behind: 0 })).toMatchObject({ kind: 'current', act: false })
+  })
+
+  it('앞서 있으면 손대지 않는다 — 올릴 차례지 내릴 차례가 아니다', () => {
+    expect(syncVerdict({ exists: true, ahead: 2 })).toMatchObject({ kind: 'ahead', act: false })
+  })
+
+  it('갈라졌으면 손대지 않고 rebase 를 안내한다 (작업물 보호)', () => {
+    const v = syncVerdict({ exists: true, ahead: 2, behind: 3 })
+    expect(v.kind).toBe('diverged')
+    expect(v.act).toBe(false)
+    expect(v.text).toContain('rebase')
+  })
+
+  it('워크트리가 없으면 건너뛴다', () => {
+    expect(syncVerdict({ exists: false, behind: 5 })).toMatchObject({ kind: 'missing', act: false })
+  })
+
+  it('미커밋이 있어도 뒤처짐이면 시도한다 — 겹치면 git 이 거부하므로 안전', () => {
+    const v = syncVerdict({ exists: true, behind: 1, dirty: 2 })
+    expect(v.act).toBe(true)
+    expect(v.text).toContain('미커밋')
+  })
+
+  it('어떤 상태에서도 되돌릴 수 없는 조작을 지시하지 않는다', () => {
+    const cases = [
+      { exists: false },
+      { exists: true },
+      { exists: true, behind: 1 },
+      { exists: true, ahead: 1 },
+      { exists: true, ahead: 1, behind: 1 },
+      { exists: true, behind: 1, dirty: 3 }
+    ]
+    for (const c of cases) {
+      expect(syncVerdict(c).text).not.toMatch(/reset|--hard|force/)
+    }
   })
 })

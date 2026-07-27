@@ -65,8 +65,12 @@ MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접�
 - **preload 최상위 키**: 서비스마다 달라야 한다. 겹치면 조립이 실패한다.
 
 ### 병합
-1. 매일 아침 자기 워크트리에서 `git pull --rebase origin main`.
-2. 기능이 끝나면 게이트(`npm run typecheck && npm test && npm run build`) 통과 후 `main` 으로 병합.
+1. **받기** — `main` 이 움직였으면 본진에서 `node scripts/parallel/setup.mjs sync` 한 번.
+   뒤처진 워크트리만 빨리감기하고, **앞서 있거나 갈라진 것은 건드리지 않고 안내만** 한다
+   (`reset --hard` 는 어떤 경로로도 실행되지 않는다 — 작업물 보호).
+   갈라졌다고 나오면 그 폴더에서 `git rebase main` 후 다시.
+2. **올리기** — 기능이 끝나면 게이트(`npm run typecheck && npm test && npm run build`) 통과 후
+   본진에서 `git merge --ff-only feat/<서비스>`. `main` 은 다른 폴더가 열고 있으므로 병합은 본진 몫이다.
 3. 새 파일 위주라 충돌이 거의 없다 — 충돌이 잦으면 공용 파일을 건드리고 있다는 신호다.
 
 ### Claude Code 가 만드는 임시 워크트리

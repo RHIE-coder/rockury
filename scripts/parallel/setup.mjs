@@ -3,6 +3,7 @@
 //
 //   node scripts/parallel/setup.mjs           준비(멱등 — 두 번 돌려도 안전)
 //   node scripts/parallel/setup.mjs status    현황만 본다
+//   node scripts/parallel/setup.mjs sync      워크트리를 main 최신으로 끌어올린다(빨리감기만)
 //   node scripts/parallel/setup.mjs remove    워크트리 정리(미커밋 변경이 있으면 멈춘다)
 //   node scripts/parallel/setup.mjs --no-install   npm install 을 건너뛴다(빠른 확인용)
 //
@@ -11,7 +12,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SERVICES, describePlan, planWorktrees } from './plan.mjs'
+import { SERVICES, describePlan, planWorktrees, syncVerdict } from './plan.mjs'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const cmd = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : 'setup'
@@ -143,6 +144,68 @@ function printNextSteps(todo) {
   say(`${C.dim}현황: node scripts/parallel/setup.mjs status · 정리: … remove${C.x}`)
 }
 
+// ─────────────────────────────────────────────────────────────── sync
+
+/** 통합 브랜치 이름 — 저장소의 기본 브랜치. */
+const MAIN = 'main'
+
+function sync() {
+  say(`${C.b}워크트리를 ${MAIN} 최신으로 맞춤${C.x}`)
+  const head = git(['log', '--oneline', '-1', MAIN])
+  say(`${C.dim}${MAIN}: ${head}${C.x}`)
+  say()
+
+  let moved = 0
+  let blocked = 0
+
+  for (const p of plan()) {
+    const count = (range) => {
+      try {
+        return parseInt(git(['rev-list', '--count', range]), 10)
+      } catch {
+        return 0
+      }
+    }
+    const dirty = p.worktreeExists
+      ? git(['status', '--porcelain'], { cwd: p.dir }).split('\n').filter(Boolean).length
+      : 0
+    const v = syncVerdict({
+      exists: p.worktreeExists,
+      behind: count(`${p.branch}..${MAIN}`),
+      ahead: count(`${MAIN}..${p.branch}`),
+      dirty
+    })
+
+    process.stdout.write(`  ${p.label.padEnd(6)} `)
+    if (!v.act) {
+      const color = v.kind === 'current' ? C.g : v.kind === 'missing' ? C.dim : C.y
+      say(`${color}${v.text}${C.x}`)
+      if (v.kind === 'diverged' || v.kind === 'ahead') blocked++
+      continue
+    }
+
+    // 빨리감기만 한다 — 갈라졌으면 git 이 거부하고, 우리는 강제하지 않는다.
+    const r = spawnSync('git', ['merge', '--ff-only', MAIN], {
+      cwd: p.dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    if (r.status === 0) {
+      say(`${C.g}✔${C.x} ${v.text} → 최신`)
+      moved++
+    } else {
+      // 대개 미커밋 파일이 병합 대상과 겹친 경우. 무엇을 하라고 알려 준다.
+      say(`${C.r}✗ 끌어올리지 못함${C.x} ${C.dim}(${(r.stderr || '').trim().split('\n')[0]})${C.x}`)
+      say(`         ${C.dim}그 폴더에서 변경을 커밋하거나 되돌린 뒤 다시 실행하세요: ${p.dir}${C.x}`)
+      blocked++
+    }
+  }
+
+  say()
+  say(`  ${moved}개 최신화${blocked > 0 ? ` · ${C.y}${blocked}개는 사람 확인 필요${C.x}` : ''}`)
+  if (blocked > 0) process.exitCode = 1
+}
+
 // ─────────────────────────────────────────────────────────────── remove
 
 function remove() {
@@ -191,10 +254,11 @@ function remove() {
 // ───────────────────────────────────────────────────────────────
 
 if (cmd === 'status') showStatus()
+else if (cmd === 'sync') sync()
 else if (cmd === 'remove') remove()
 else if (cmd === 'setup') setup()
 else {
   say(`알 수 없는 명령: ${cmd}`)
-  say('사용법: node scripts/parallel/setup.mjs [setup|status|remove] [--no-install]')
+  say('사용법: node scripts/parallel/setup.mjs [setup|status|sync|remove] [--no-install]')
   process.exitCode = 1
 }
