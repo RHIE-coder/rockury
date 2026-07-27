@@ -21,11 +21,11 @@ values:
   test_command: "npm test"
   build_command: "npm run build"
 bindings:
-  ui-preview: "./.harness/steward/project/impl/ui-preview.md"   # 빌드 앱을 _electron 로 띄워 직접 조작·검증 + e2e/flows/<서비스>.mjs 로 축적
+  ui-preview: "./.harness/steward/project/impl/ui-preview.md"   # 빌드 앱을 _electron 로 띄워 직접 조작·검증 + e2e/suites/NN-*.mjs 로 축적
   ui-shot: "./.harness/steward/project/impl/ui-shot.md"         # 같은 런치 위에서 스크린샷 증거 캡처
   token-guard: ""                     # (미지정) 정적 색상 린트 미구현 — 토큰 정본은 globals.css(@theme), 하드코딩 색 소수 존재(후속)
   contrast-check: "npm run surface-verify"   # 대비(WCAG 2.2)는 surface-verify 의 contrast 검사가 대체
-  e2e-runner: "npm run e2e"           # node e2e/smoke.mjs — 서비스별 흐름(e2e/flows/*.mjs) 순회 러너
+  e2e-runner: "npm run e2e"           # node e2e/smoke.mjs — e2e/suites/*.mjs 를 자동 발견해 이름순 실행하는 러너
   surface-verify: "npm run surface-verify"   # Electron 어댑터: 화면→정규화 모델→판정기 surface-checks.mjs. 기록: artifacts/<feature>/surface-verify.json
 impl: {}
 

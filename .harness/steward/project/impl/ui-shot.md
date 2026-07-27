@@ -7,4 +7,4 @@ steward review 단계에서 "화면이 제대로 그려졌다"는 **증거(캡�
 1. `ui-preview` 절차대로 빌드 + 런치(격리 userData, CSS/text 로케이터).
 2. 검증할 화면으로 이동한 뒤 `await page.screenshot({ path: '<scratchpad>/<이름>.png' })`.
 3. 캡처 경로를 리뷰 산출물에 **첨부**한다.
-4. 그 이동 경로가 회귀 가치가 있으면 `ui-preview` 의 축적 규칙대로 `e2e/flows/<서비스>.mjs` 로 승격.
+4. 그 이동 경로가 회귀 가치가 있으면 `ui-preview` 의 축적 규칙대로 `e2e/suites/NN-*.mjs` 로 승격.

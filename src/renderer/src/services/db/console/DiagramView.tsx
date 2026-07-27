@@ -23,7 +23,7 @@ import type { TableDef } from '../workspaces/definition/types'
 import { useActiveConnection } from '../connections/store'
 import { useConsoleStore } from './store'
 import { buildErd } from './diagram/graph'
-import { estimateNodeSize, layoutErd, type Positions } from './diagram/layout'
+import { estimateEdgeLabelWidth, estimateNodeSize, layoutErd, type Positions } from './diagram/layout'
 import { seedNodes } from './diagram/seed'
 import { isolatedTableIds, matchTables } from './diagram/filter'
 import { exportFileName, exportViewport, contentBoundsForExport } from './diagram/export'
@@ -41,7 +41,7 @@ function toFlow(tables: TableDef[]): { nodes: Node[]; edges: Edge[] } {
   const erd = buildErd(tables)
   const positions = layoutErd(
     erd.nodes.map((n) => ({ id: n.id, ...estimateNodeSize(n.table) })),
-    erd.edges.map((e) => ({ source: e.source, target: e.target }))
+    erd.edges.map((e) => ({ source: e.source, target: e.target, labelWidth: estimateEdgeLabelWidth(e) }))
   )
   const nodes: Node[] = erd.nodes.map((n) => ({
     id: n.id,
@@ -62,7 +62,7 @@ function toFlow(tables: TableDef[]): { nodes: Node[]; edges: Edge[] } {
       onDelete: e.onDelete,
       onUpdate: e.onUpdate,
       selfRef: e.selfRef,
-      labelOffset: e.labelOffset
+      labelShiftY: e.labelShiftY
     }
   }))
   return { nodes, edges }

@@ -1,6 +1,6 @@
 # TestPlan: db-console 기능 이관 (Tier A·B + Data 도우미 + 서비스 전역)
 
-> 정의(무엇을 검증하나)만 여기. 코드는 대상 모듈 옆 `*.test.ts`(vitest) + 앱 흐름 `e2e/flows/<서비스>.mjs`.
+> 정의(무엇을 검증하나)만 여기. 코드는 대상 모듈 옆 `*.test.ts`(vitest) + 앱 흐름 스위트 `e2e/suites/NN-*.mjs`.
 > 회차 기록은 `docs/qa/runs/`.
 
 ## Scenario S1 — Data 그리드/도우미 (순수 로직)
@@ -35,7 +35,7 @@
 - **CASE-console-030** Run-All 상태 전이: 실패 시 이후 skipped, 재시도 시 실패 지점부터 running. (collection.run-all AC-1/AC-2)
 - **CASE-console-031** 삭제 가드: 참조 중인 쿼리 삭제 시 거부 + 참조 목록 반환. (collection.items AC-2)
 
-## Scenario S5 — 앱 구동 흐름 (e2e/flows/db.mjs, CSS/text 로케이터만)
+## Scenario S5 — 앱 구동 흐름 (e2e/suites/07-console-schema · 08-console-query-data · 09-console-collection, CSS/text 로케이터만)
 - **CASE-console-040** Data 뷰 진입 → 사이드바에 테이블/VIEWS 분리 표시, 헤더에 PK/FK 텍스트 배지 표시.
 - **CASE-console-041** Constraints 탭 전환 → 종류 필터 칩과 제약 목록 렌더.
 - **CASE-console-042** Query 뷰 → `{{키워드}}` 입력 시 값 입력칸 노출, 실행.

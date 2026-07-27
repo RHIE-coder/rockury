@@ -1,10 +1,24 @@
 #!/bin/sh
-# Rockury pre-commit 게이트 (CLAUDE.md 테스트 의무 강제) — 통과 못 하면 커밋 차단.
+# Rockury pre-commit 게이트 (AGENTS.md 테스트 의무 강제) — 통과 못 하면 커밋 차단.
 # 우회가 필요하면 `git commit --no-verify` (권장하지 않음, 사용자 판단).
-# e2e 는 docker test-db 가 필요해 여기서 제외(별도 `npm run db:up && npm run e2e`).
 set -e
 echo "[pre-commit] typecheck · test · build (통과해야 커밋)"
 npm run typecheck
 npm test
 npm run build >/dev/null
+
+# ── e2e(앱 구동 스모크) — docker test-db 가 **기본 전제**다(`npm run db:up`).
+#    · src/ 또는 e2e/ 를 건드린 커밋에서만 돌린다(문서·설정만 고친 커밋은 생략).
+#    · 통째로 건너뛰기:       SKIP_E2E=1 git commit ...
+#    · test-db 없이 앞부분만:  E2E_ARGS=--no-db git commit ...   (뒷 스위트는 "미검증"으로 남는다)
+#    어느 쪽이든 건너뛴 스위트는 스모크 요약과 체크포인트에 미검증으로 남는다(조용한 통과 없음).
+if [ -n "$SKIP_E2E" ]; then
+  echo "[pre-commit] ⚠ e2e 건너뜀(SKIP_E2E) — 앱 흐름은 이번 커밋에서 검증되지 않았습니다"
+elif git diff --cached --quiet -- src e2e; then
+  echo "[pre-commit] e2e 생략 — src/·e2e/ 스테이징 변경 없음"
+else
+  echo "[pre-commit] e2e (앱 구동 스모크 — test-db 전제, 없으면 \`npm run db:up\`)"
+  # shellcheck disable=SC2086
+  npm run e2e ${E2E_ARGS:+-- $E2E_ARGS}
+fi
 echo "[pre-commit] ✔ 통과"

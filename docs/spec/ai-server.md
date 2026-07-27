@@ -149,6 +149,6 @@
   정상 본문(한글·이모지·개행) 오탐 없음. `patch.test.ts` — 연산 적용·참조 추적(개명 따라가기,
   참조 남은 삭제 거부)·원자성(실패 시 원본 불변). `src/main/store/stores.test.ts` — 설계 스코프
   교체 격리(다른 설계 행 불변).
-- e2e: `e2e/flows/ai.mjs` — 실 앱에서 상태 IPC→initialize→tools/list→tools/call·401 거부 +
+- e2e: `e2e/suites/01-boot-mcp.mjs` · `02-ai-agents.mjs` · `05-mcp-write.mjs` — 실 앱에서 상태 IPC→initialize→tools/list→tools/call·401 거부 +
   쓰기 흐름(도구 호출→열린 화면 즉시 반영·자기 메아리 없음) + AI 화면 초록 상태등·키 마스킹·
   재발급 실 흐름(구 키 즉시 무효) + mcp.json 미생성.

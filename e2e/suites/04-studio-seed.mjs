@@ -1,0 +1,333 @@
+// 스모크 스위트 — Studio › Seed 시드 세트 저작(선언·행·변수) + Versions 시드 버전/Diff
+// 실행: `npm run e2e`(e2e/smoke.mjs 러너가 순서대로 부른다). 단독 실행용 진입점은 없다.
+// ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
+
+export const meta = {
+  name: '04-studio-seed',
+  needsDb: false,
+  desc: 'Studio › Seed 시드 세트 저작(선언·행·변수) + Versions 시드 버전/Diff'
+}
+
+export async function run(ctx) {
+  const { check, click, body } = ctx
+  let page = ctx.page
+  // ── Studio › Seed — 시드 세트 저작(선언 → 행 → 변수). CASE-studio-040~044 (docs/qa/db-studio.md) ──
+  {
+    await click('button:has-text("Seed")')
+    await page.waitForSelector('text=아직 시드 세트가 없어요', { timeout: 8_000 })
+    check('Studio › Seed: 세트 없을 때 빈 상태 CTA', (await body()).includes('테이블에서 시드 세트 만들기'))
+
+    // 테이블 고르기 — orders 의 PK 는 AUTO_INCREMENT 라 짝짓기 기준 기본값이 비어야 한다(사람이 고름).
+    await click('button:has-text("테이블에서 시드 세트 만들기")')
+    await page.waitForSelector('[data-seed-candidate]', { timeout: 8_000 })
+    // 뷰는 데이터를 담지 않으므로 세트 후보에서 빠진다 — 앞서 Definition 에서 만든 뷰로 실제 검증.
+    check('Studio › Seed: 등록 후보에 뷰가 없다', (await page.locator('[data-seed-candidate^="new_view"]').count()) === 0)
+    check('Studio › Seed: 등록 후보에 테이블은 있다', (await page.locator('[data-seed-candidate]').count()) > 0)
+    await click('[data-seed-candidate="orders"]')
+    await page.waitForSelector('[data-seed-set-row="orders"]', { timeout: 8_000 })
+    check('Studio › Seed: 세트 등록(orders)', (await page.locator('[data-seed-set-row="orders"]').count()) === 1)
+    check('Studio › Seed: 자동증가 PK → 짝짓기 기준 경고', (await page.locator('[data-seed-needs-key]').count()) === 1)
+
+    // 컬럼 역할 토글 1개로 짝짓기 기준 지정 → 경고 해제. 기본은 '포함'이라 한 번 누르면 '무시', 두 번이면 '짝짓기'.
+    check(
+      'Studio › Seed: 컬럼 역할 토글은 컬럼당 1개',
+      (await page.locator('[data-seed-role-toggle="order_number"]').count()) === 1
+    )
+    check(
+      'Studio › Seed: 컬럼 기본 역할은 포함',
+      (await page.locator('[data-seed-role-toggle="order_number"][data-seed-col-role="include"]').count()) === 1
+    )
+    await click('[data-seed-role-toggle="order_number"]')
+    await page.waitForTimeout(200)
+    check(
+      'Studio › Seed: 역할 순환 포함 → 무시',
+      (await page.locator('[data-seed-role-toggle="order_number"][data-seed-col-role="ignore"]').count()) === 1
+    )
+    await click('[data-seed-role-toggle="order_number"]')
+    await page.waitForTimeout(300)
+    check(
+      'Studio › Seed: 역할 순환 무시 → 짝짓기',
+      (await page.locator('[data-seed-role-toggle="order_number"][data-seed-col-role="key"]').count()) === 1
+    )
+    check('Studio › Seed: 짝짓기 기준 지정 → 경고 해제', (await page.locator('[data-seed-needs-key]').count()) === 0)
+
+    // DB 가 값을 만드는 컬럼(orders.id = AUTO_INCREMENT)은 짝짓기 기준으로 갈 수 없다 — 역할 순환이 건너뛴다.
+    {
+      for (let i = 0; i < 3; i++) {
+        await click('[data-seed-role-toggle="id"]')
+        await page.waitForTimeout(150)
+      }
+      check(
+        'Studio › Seed: DB 생성 컬럼은 짝짓기 기준으로 갈 수 없다(역할 순환 건너뜀)',
+        (await page.locator('[data-seed-role-toggle="id"][data-seed-col-role="key"]').count()) === 0
+      )
+      // 원복 — 이후 저장 검증이 무시 컬럼 목록을 전제로 한다(id 를 무시로 남기면 순서가 달라진다).
+      while ((await page.locator('[data-seed-role-toggle="id"][data-seed-col-role="include"]').count()) === 0) {
+        await click('[data-seed-role-toggle="id"]')
+        await page.waitForTimeout(150)
+      }
+    }
+
+    // 짝짓기 기준을 UNIQUE 가 뒷받침하는지 안내 — order_number 엔 UK 가 있어 조용하고,
+    // UNIQUE 없는 구성(order_number+status)으로 바꾸면 반영 단계 함의를 알린다.
+    check(
+      'Studio › Seed: UNIQUE 가 뒷받침하는 짝짓기 기준엔 안내 없음',
+      (await page.locator('[data-seed-key-unbacked]').count()) === 0
+    )
+    const cycleTo = async (column, role) => {
+      for (let i = 0; i < 3; i++) {
+        if ((await page.locator(`[data-seed-role-toggle="${column}"][data-seed-col-role="${role}"]`).count()) === 1) return
+        await click(`[data-seed-role-toggle="${column}"]`)
+        await page.waitForTimeout(200)
+      }
+    }
+    await cycleTo('status', 'key')
+    check(
+      'Studio › Seed: UNIQUE 없는 짝짓기 기준 구성 → UPSERT 불가 안내',
+      (await page.locator('[data-seed-key-unbacked]').count()) === 1
+    )
+    await cycleTo('status', 'include') // 원복
+
+    // 무시 컬럼 지정(비교 소음 제거)
+    await cycleTo('ordered_at', 'ignore')
+    check(
+      'Studio › Seed: 무시 컬럼 지정 표시',
+      (await page.locator('[data-seed-role-toggle="ordered_at"][data-seed-col-role="ignore"]').count()) === 1
+    )
+
+    // 무시 컬럼 감추기 토글 — 표에서만 빠진다(선언은 그대로). 끝에 반드시 원복해야
+    // 이후 흐름(컬럼 이름으로 셀 찍기)이 감춰진 컬럼을 못 찾는 일이 없다.
+    {
+      const colsShown = await page.locator('[data-seed-col]').count()
+      check('Studio › Seed: 무시 컬럼이 있으면 감추기 버튼이 나온다',
+        (await page.locator('[data-seed-hide-ignored="false"]').count()) === 1)
+      await click('[data-seed-hide-ignored]')
+      await page.waitForTimeout(200)
+      check(
+        'Studio › Seed: 감추기 → 무시 컬럼이 표에서 빠진다',
+        (await page.locator('[data-seed-col="ordered_at"]').count()) === 0 &&
+          (await page.locator('[data-seed-col]').count()) === colsShown - 1
+      )
+      // 선언 바는 이름을 늘어놓지 않고 **개수만** 보인다(UI 소음) — 이름은 설명(title)에 남는다.
+      // 확인할 것은 "표에서 감춰도 선언은 안 바뀐다"이므로 개수와 설명으로 가른다.
+      const ignoredChip = page.locator('[data-seed-ignored-count]')
+      check(
+        'Studio › Seed: 감춰도 선언은 그대로(무시 개수 유지 · 이름은 설명에 남는다)',
+        (await ignoredChip.getAttribute('data-seed-ignored-count')) === '1' &&
+          ((await ignoredChip.getAttribute('title')) ?? '').includes('ordered_at')
+      )
+      await click('[data-seed-hide-ignored]')
+      await page.waitForTimeout(200)
+      check(
+        'Studio › Seed: 다시 보이기 → 컬럼 수 원복',
+        (await page.locator('[data-seed-col]').count()) === colsShown &&
+          (await page.locator('[data-seed-hide-ignored="false"]').count()) === 1
+      )
+    }
+
+    // 행 추가 + 셀 입력
+    const fill = async (rowIdx, column, value) => {
+      const cell = page.locator('[data-seed-row]').nth(rowIdx).locator(`[data-seed-cell="${column}"]`)
+      await cell.click()
+      await page.waitForTimeout(150)
+      // 기존 값이 있으면 지우고 쓴다 — 안 지우면 입력이 덧붙어 값이 뒤섞인다.
+      await page.keyboard.press('ControlOrMeta+A')
+      await page.keyboard.type(value)
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(200)
+    }
+    await click('button:has-text("행 추가")')
+    await page.waitForSelector('[data-seed-row]', { timeout: 5_000 })
+    await fill(0, 'order_number', 'SEED-0001')
+    check('Studio › Seed: 셀 입력 반영', (await body()).includes('SEED-0001'))
+
+    // 중복 짝짓기 기준 값 → 두 행 모두 오류 표시
+    await click('button:has-text("행 추가")')
+    await page.waitForTimeout(200)
+    await fill(1, 'order_number', 'SEED-0001')
+    check('Studio › Seed: 중복 짝짓기 기준 → 두 행 오류 표시',
+      (await page.locator('[data-seed-row-issue="duplicate-key"]').count()) === 2)
+
+    // 값을 바꿔 중복 해소 → 오류 사라짐
+    await fill(1, 'order_number', 'SEED-0002')
+    check('Studio › Seed: 중복 해소 → 오류 없음', (await page.locator('[data-seed-row-issue]').count()) === 0)
+
+    // 컬럼 머리에 제약이 보인다 — Definition 화면과 왕복하지 않게(grid AC-7)
+    check('Studio › Seed: 컬럼 머리 PK 배지', (await page.locator('[data-seed-col-badge="PK"]').count()) === 1)
+    check('Studio › Seed: 필수 컬럼 배지', (await page.locator('[data-seed-col-required]').count()) >= 1)
+
+    // 필수인데 빈 셀 → 행 표시, 채우면 해제(grid AC-8). orders 는 user_id 가 NOT NULL·기본값 없음.
+    const missingBefore = await page.locator('[data-seed-row-missing]').count()
+    check('Studio › Seed: 필수 값 빈 행 표시', missingBefore === 2)
+    await fill(0, 'user_id', '1001')
+    check(
+      'Studio › Seed: 필수 값 채우면 표시 해제',
+      (await page.locator('[data-seed-row-missing]').count()) === missingBefore - 1
+    )
+
+    // ── 별칭 + 시드 행끼리의 참조 (CASE-studio-042c) ──
+    {
+      // 별칭 칸은 **이름 훅**으로 찍는다 — 위치(`td` nth)로 찍으면 앞에 칸이 하나 늘어날 때
+      // 엉뚱한 칸(행 삭제)을 눌러 행이 지워진다(실제로 그렇게 깨졌다).
+      const setAlias = async (rowIdx, v) => {
+        await page.locator('[data-seed-alias-cell]').nth(rowIdx).click()
+        await page.waitForTimeout(150)
+        await page.keyboard.type(v)
+        await page.keyboard.press('Enter')
+        await page.waitForTimeout(200)
+      }
+      await setAlias(0, 'first-order')
+      check('Studio › Seed: 별칭 저장', (await page.locator('[data-seed-row-alias="first-order"]').count()) === 1)
+
+      // 겹치는 별칭 → 양쪽 다 오류
+      await setAlias(1, 'first-order')
+      check(
+        'Studio › Seed: 겹치는 별칭 → 두 행 오류',
+        (await page.locator('[data-seed-row-alias-issue="duplicate-alias"]').count()) === 2
+      )
+      await setAlias(1, 'second-order')
+      check('Studio › Seed: 별칭 중복 해소', (await page.locator('[data-seed-row-alias-issue]').count()) === 0)
+
+      // user_id 는 users 를 가리키는 FK — orders 를 가리키면 관계 불일치로 잡힌다
+      await fill(1, 'user_id', '@orders#first-order')
+      check('Studio › Seed: 참조 셀 표식', (await page.locator('[data-seed-ref-cell]').count()) === 1)
+      check(
+        'Studio › Seed: FK 가 가리키는 테이블과 다른 참조 → 오류',
+        (await page.locator('[data-seed-row-ref-issue="true"]').count()) === 1
+      )
+
+      // 깨진 참조(없는 별칭)도 오류 — users 세트가 없으니 unknown-table 로 잡힌다
+      await fill(1, 'user_id', '@users#ghost')
+      check(
+        'Studio › Seed: 세트 없는 테이블 참조 → 오류 유지',
+        (await page.locator('[data-seed-row-ref-issue="true"]').count()) === 1
+      )
+      // 원복 — 이후 흐름(저장 검증)은 평범한 값을 전제
+      await fill(1, 'user_id', '2002')
+      check('Studio › Seed: 참조 지우면 오류 해제', (await page.locator('[data-seed-row-ref-issue]').count()) === 0)
+    }
+
+    // 행 삭제 버튼 — 호버 없이 항상 보여야 한다(Console › Data 와 같은 문법).
+    // (회귀: opacity-0 + group-hover 라 표 오른쪽 끝의 빈 컬럼으로만 보였고 발견할 방법이 없었다.)
+    check(
+      'Studio › Seed: 행 삭제 버튼이 호버 없이 보인다',
+      await page.locator('[data-seed-row-delete]').first().isVisible()
+    )
+    // 머리와 본문의 칸 수가 같아야 한다 — 칸을 하나 끼워 넣을 때 한쪽만 고치면 표 전체가
+    // 한 칸씩 밀린다(실제로 그렇게 깨졌고 "보인다" 검사만으로는 안 잡혔다).
+    check(
+      'Studio › Seed: 표 머리와 본문 칸 수 일치(열 밀림 방지)',
+      (await page.locator('thead tr th').count()) ===
+        (await page.locator('[data-seed-row]').first().locator('td').count())
+    )
+
+    // 변수 자리표시자 — 환경마다 다른 값은 값 대신 변수로
+    await fill(0, 'memo', '{{ADMIN_PASSWORD_HASH}}')
+    check('Studio › Seed: 변수 셀 표식', (await page.locator('[data-seed-variable-cell]').count()) === 1)
+    check('Studio › Seed: 세트가 요구하는 변수 목록',
+      (await page.locator('[data-seed-variable="ADMIN_PASSWORD_HASH"]').count()) === 1)
+
+    // PK 생성 규칙 — 자유 입력이 아니라 **고르기**다. 목록은 PK 컬럼 타입으로 걸러진다.
+    // orders.id 는 BIGINT 자동증가라 문자열 규칙이 목록에 아예 없어야 한다(사고를 목록에서 없앤다).
+    check('Studio › Seed: PK 가 DB 담당이면 규칙 줄이 없다', (await page.locator('[data-seed-pk-rule]').count()) === 0)
+    await click('[data-seed-pk-strategy="seed"]')
+    await page.waitForSelector('[data-seed-pk-rule]', { timeout: 5_000 })
+    check(
+      'Studio › Seed: 규칙이 비면 미리보기가 셀 값 없음을 알린다',
+      (await page.locator('[data-seed-pk-preview-from="none"]').count()) === 1
+    )
+    await click('[data-seed-pk-rule]')
+    await page.waitForSelector('[data-seed-pk-rule-option]', { timeout: 5_000 })
+    // 숫자 PK → `셀에 직접 쓴 값` + `직접 입력…` 둘뿐. {uuid}·{key} 는 고를 수 없다.
+    check(
+      'Studio › Seed: 숫자 PK 는 문자열 규칙을 목록에 안 내놓는다',
+      (await page.locator('[data-seed-pk-rule-option]').count()) === 2 &&
+        (await page.locator('[data-seed-pk-rule-option="{uuid}"]').count()) === 0
+    )
+    // `직접 입력…` 으로 가면 자유 입력칸 + 조각 칩이 열린다(접두사가 필요한 드문 경우).
+    await click('[data-seed-pk-rule-option="__custom__"]')
+    await page.waitForSelector('[data-seed-pk-template]', { timeout: 5_000 })
+    check('Studio › Seed: 직접 입력 → 조각 칩 4개 노출', (await page.locator('[data-seed-pk-token]').count()) === 4)
+    await click('[data-seed-pk-token="{table}"]')
+    await page.waitForTimeout(200)
+    await click('[data-seed-pk-token="{alias}"]')
+    await page.waitForTimeout(250)
+    check(
+      'Studio › Seed: 칩이 규칙 끝에 붙는다',
+      (await page.locator('[data-seed-pk-template]').inputValue()) === '{table}{alias}'
+    )
+    check(
+      'Studio › Seed: 미리보기가 규칙 결과를 보인다',
+      (await page.locator('[data-seed-pk-preview-from="template"]').count()) === 1
+    )
+    // 직접 입력 경로에만 남는 사고들 — 오타 · 타입 불일치 · 상수 규칙(전 행 같은 PK).
+    await page.locator('[data-seed-pk-template]').fill('{uuidd}')
+    await page.waitForTimeout(250)
+    check('Studio › Seed: 모르는 자리표시자 경고', (await page.locator('[data-seed-pk-unknown]').count()) === 1)
+    await page.locator('[data-seed-pk-template]').fill('{uuid}')
+    await page.waitForTimeout(250)
+    check('Studio › Seed: 숫자 PK 에 UUID → 타입 경고', (await page.locator('[data-seed-pk-type-issue]').count()) === 1)
+    await page.locator('[data-seed-pk-template]').fill('fixed-1')
+    await page.waitForTimeout(250)
+    check('Studio › Seed: 상수 규칙 → 전 행 같은 PK 경고', (await page.locator('[data-seed-pk-constant]').count()) === 1)
+    await page.locator('[data-seed-pk-template]').fill('u-{alias}')
+    await page.waitForTimeout(250)
+    check(
+      'Studio › Seed: 행마다 달라지는 규칙이면 경고 해제',
+      (await page.locator('[data-seed-pk-constant]').count()) === 0
+    )
+    // 원복 — 이후 버전 컷·Diff 검증이 보는 세트 상태를 바꾸지 않는다.
+    await page.locator('[data-seed-pk-template]').fill('')
+    await page.waitForTimeout(200)
+    await click('[data-seed-pk-strategy="db"]')
+    await page.waitForTimeout(200)
+    check('Studio › Seed: DB 담당으로 되돌리면 규칙 줄이 사라진다', (await page.locator('[data-seed-pk-rule]').count()) === 0)
+
+    // '설계에 없는 행 = 삭제 후보' 선택 → 경고 문구
+    await click('[data-seed-strength="authoritative"]')
+    await page.waitForTimeout(200)
+    check('Studio › Seed: 삭제 후보 선택 시 경고 문구', (await body()).includes('삭제 후보'))
+
+    // 저장(설계 스코프) — 디바운스 후 저장소에 남는다
+    await page.waitForTimeout(600)
+    const saved = await page.evaluate(async () => {
+      const list = await window.rockury.seedSets.list()
+      const s = list.find((x) => x.designId === 'commerce-core' && x.tableName === 'orders')
+      return s ? { key: s.naturalKey, ignored: s.ignoredColumns, strength: s.strength, rows: s.rows.length } : null
+    })
+    check('Studio › Seed: 선언·행이 설계 스코프로 저장',
+      saved?.key?.[0] === 'order_number' && saved?.ignored?.[0] === 'ordered_at' &&
+      saved?.strength === 'authoritative' && saved?.rows === 2)
+  }
+
+  // Definition 으로 복귀(이후 흐름 원복)
+  await click('button:has-text("Definition")')
+  await page.waitForTimeout(200)
+
+  // Versions › Timeline — 시드 버전
+  await click('button:has-text("Versions")')
+  await page.waitForSelector('text=버전 타임라인', { timeout: 5_000 })
+  await page.waitForTimeout(300)
+  const tl = await body()
+  check('Timeline: 시드 버전 v0.3.14 표시', tl.includes('v0.3.14'))
+
+  // 버전 컷 (Patch → v0.3.15)
+  await click('button:has-text("버전 컷")')
+  await page.waitForSelector('text=증가 유형', { timeout: 5_000 })
+  await click('button[aria-pressed]:has-text("Patch")')
+  await click('button[type="submit"]')
+  await page.waitForTimeout(500)
+  check('버전 컷 후 v0.3.15 등장', (await body()).includes('v0.3.15'))
+  check('버전 컷: 시드 행 수 표시(스냅샷에 시드 동봉)', (await page.locator('[data-version-seed-rows]').count()) >= 1)
+
+  // ⭐ Version Diff 에 시드 섹션 — 시드 없던 옛 버전(v0.3.14)↔시드 담긴 새 버전(v0.3.15).
+  //    CASE-studio-045: 옛 스냅샷 폴백이 깨지지 않고 시드 델타가 보인다.
+  await click('button:has-text("Version Diff")')
+  await page.waitForSelector('text=버전 비교', { timeout: 8_000 })
+  await page.waitForTimeout(400)
+  check('Version Diff: 시드 섹션 렌더', (await page.locator('[data-seed-diff]').count()) === 1)
+  check('Version Diff: 시드 세트(orders) 델타 표시', (await page.locator('[data-seed-diff-set="orders"]').count()) === 1)
+  await click('button:has-text("Timeline")')
+  await page.waitForTimeout(300)
+
+}

@@ -1,6 +1,6 @@
 # TestPlan: db-studio (Studio › Definition 뷰 선언 · 공용 사이드 패널 · Seed 시드 세트 저작 + 버전 Diff)
 
-> 정의(무엇을 검증하나)만 여기. 코드는 대상 모듈 옆 `*.test.ts`(vitest) + 앱 흐름 `e2e/flows/<서비스>.mjs`.
+> 정의(무엇을 검증하나)만 여기. 코드는 대상 모듈 옆 `*.test.ts`(vitest) + 앱 흐름 스위트 `e2e/suites/NN-*.mjs`.
 > 회차 기록은 `docs/qa/runs/`. 명세 정본: `docs/spec/db-studio.md`.
 
 ## Scenario S1 — 세트 선언 판정 (순수 로직) → `services/db/workspaces/seed/seedSet.test.ts`
@@ -44,7 +44,7 @@
 - **CASE-studio-031** 설계 스코프 교체: 설계 X 의 세트를 저장해도 설계 Y 의 세트가 남는다. (persistence AC-1)
 - **CASE-studio-032** MCP 커버리지: 새 IPC 채널이 노출 또는 제외 사유로 등재돼 `coverage.test.ts` 가 통과한다. (persistence AC-3) → `src/main/ai/coverage.test.ts`
 
-## Scenario S5 — 앱 구동 흐름 (e2e/flows/db.mjs, CSS/text 로케이터만)
+## Scenario S5 — 앱 구동 흐름 (e2e/suites/03-studio-definition · 04-studio-seed, CSS/text 로케이터만)
 - **CASE-studio-040** Studio › Seed 진입 → 시드 세트 없을 때 빈 상태 CTA 표시. (set-list AC-4)
 - **CASE-studio-041** 테이블에서 세트 등록(후보에 뷰 없음 — 앞서 만든 설계 뷰가 후보에 안 뜬다) → **자동증가 PK 라 짝짓기 경고** → 컬럼당 역할 토글 **1개**로 `포함 → 무시 → 짝짓기` 순환해 기준 지정 → 경고 해제 → 무시 컬럼 지정 → 행 추가·값 입력 → 목록에 행 수 반영. (set-list AC-1/AC-2/AC-5, declaration AC-1/AC-2/AC-3, grid AC-1/AC-2)
 - **CASE-studio-042** 중복 짝짓기 기준 값 입력 → 두 행 모두 오류 표시, 값을 바꿔 해소하면 오류 사라짐. (grid AC-3)
@@ -66,7 +66,7 @@
 - **CASE-studio-052** 뷰 Diff: 테이블 ↔ 뷰 전환과 본문(`viewSql`) 변경을 각각 차이로 잡고, 안 바뀌면 조용하다. (definition.view AC-6)
 - **CASE-studio-053** 뷰 저장 왕복: `viewSql` 이 저장→조회에서 보존되고, 뷰가 아닌 테이블은 빈 문자열로 정규화된다. (definition.view AC-6)
 
-## Scenario S7 — 공용 사이드 패널·뷰 선언 앱 흐름 (e2e/flows/db.mjs)
+## Scenario S7 — 공용 사이드 패널·뷰 선언 앱 흐름 (e2e/suites/03-studio-definition)
 - **CASE-studio-060** Studio › Definition 사이드 패널 `제약` 탭: 테이블별 그룹과 제약 행이 뜨고, 종류 필터(FK)가 다른 종류를 걸러내며, 제약을 누르면 그 테이블로 이동한다. (definition.side-panel AC-2/AC-3)
 - **CASE-studio-061** 사이드바 `+` → `뷰 추가` → 뷰 배지가 뜨고 제약 구역이 사라지며 본문 SELECT 편집기가 나타난다. 목록이 테이블/뷰로 갈린다. (definition.view AC-1/AC-3/AC-4, definition.side-panel AC-2)
 - **CASE-studio-062** 본문 SELECT 를 쓰면 SQL 폼이 `CREATE OR REPLACE VIEW` + 그 본문을 내고 `CREATE TABLE` 은 내지 않는다. 뷰 표식·본문이 로컬 저장소까지 왕복한다. (definition.view AC-5/AC-6)
@@ -93,7 +93,7 @@
 - **CASE-studio-083** FK 값을 참조 표기로 되돌린다. 되돌릴 근거가 없으면 원값을 두고 **알린다**. (apply-contract AC-6/AC-7)
 - **CASE-studio-084** 준비 안 된 세트는 가져오지 않고 이유를 남긴다. (declaration AC-9)
 
-## Scenario S8 — 실 DB 반영·되먹임 (e2e/flows/db.mjs · 실 MySQL)
+## Scenario S8 — 실 DB 반영·되먹임 (e2e/suites/10-migration · 실 MySQL)
 - **CASE-studio-090** 역설계로 들여온 설계에 `roles` 시드 세트 등록 → 짝짓기 기준(name) 지정 → UNIQUE 뒷받침 안내 없음. (declaration AC-6/AC-8)
 - **CASE-studio-091** Migration › Seed 계획: 넣기 1개, 막는 것 0개. (db-migration.seed AC-2)
 - **CASE-studio-092** 적용 → **커밋 전에는 실 DB 에 없고**, 커밋 후 심어진다. 재계획 시 할 일 없음(멱등). (db-migration.seed AC-3)

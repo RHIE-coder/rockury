@@ -22,7 +22,7 @@ import type { TableDef } from '../definition/types'
 import { useActiveDesign } from '../../designs/store'
 import { useDefinitionStore, useDesignTables, useStudioReadOnly } from '../definition/store'
 import { buildErd } from '../../console/diagram/graph'
-import { estimateNodeSize, layoutErd, type Positions } from '../../console/diagram/layout'
+import { estimateEdgeLabelWidth, estimateNodeSize, layoutErd, type Positions } from '../../console/diagram/layout'
 import { seedNodes } from '../../console/diagram/seed'
 import { matchTables } from '../../console/diagram/filter'
 import { exportFileName, exportViewport, contentBoundsForExport } from '../../console/diagram/export'
@@ -39,7 +39,7 @@ function toFlow(tables: TableDef[], editable: boolean): { nodes: Node[]; edges: 
   const erd = buildErd(tables)
   const positions = layoutErd(
     erd.nodes.map((n) => ({ id: n.id, ...estimateNodeSize(n.table) })),
-    erd.edges.map((e) => ({ source: e.source, target: e.target }))
+    erd.edges.map((e) => ({ source: e.source, target: e.target, labelWidth: estimateEdgeLabelWidth(e) }))
   )
   const nodes: Node[] = erd.nodes.map((n) => ({
     id: n.id,
@@ -69,7 +69,7 @@ function toFlow(tables: TableDef[], editable: boolean): { nodes: Node[]; edges: 
       onDelete: e.onDelete,
       onUpdate: e.onUpdate,
       selfRef: e.selfRef,
-      labelOffset: e.labelOffset
+      labelShiftY: e.labelShiftY
     }
   }))
   return { nodes, edges }
