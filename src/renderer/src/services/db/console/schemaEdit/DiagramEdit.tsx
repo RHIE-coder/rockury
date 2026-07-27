@@ -19,7 +19,7 @@ import type { ConnectionDef } from '../../connections/store'
 import type { DialectId } from '../../dialects'
 import type { TableDef } from '../../workspaces/definition/types'
 import { buildErd } from '../diagram/graph'
-import { estimateNodeSize, layoutErd, type Positions } from '../diagram/layout'
+import { estimateEdgeLabelWidth, estimateNodeSize, layoutErd, type Positions } from '../diagram/layout'
 import { seedNodes } from '../diagram/seed'
 import { matchTables } from '../diagram/filter'
 import { TableErdNode } from '../diagram/TableErdNode'
@@ -37,7 +37,7 @@ function toFlow(tables: TableDef[]): { nodes: Node[]; edges: Edge[] } {
   const erd = buildErd(tables)
   const positions = layoutErd(
     erd.nodes.map((n) => ({ id: n.id, ...estimateNodeSize(n.table) })),
-    erd.edges.map((e) => ({ source: e.source, target: e.target }))
+    erd.edges.map((e) => ({ source: e.source, target: e.target, labelWidth: estimateEdgeLabelWidth(e) }))
   )
   const nodes: Node[] = erd.nodes.map((n) => ({
     id: n.id,
@@ -58,7 +58,7 @@ function toFlow(tables: TableDef[]): { nodes: Node[]; edges: Edge[] } {
       onDelete: e.onDelete,
       onUpdate: e.onUpdate,
       selfRef: e.selfRef,
-      labelOffset: e.labelOffset
+      labelShiftY: e.labelShiftY
     }
   }))
   return { nodes, edges }

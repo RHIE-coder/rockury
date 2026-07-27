@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { TableDef } from '../../workspaces/definition/types'
-import { estimateNodeSize, layoutErd, type LayoutNode } from './layout'
+import { estimateEdgeLabelWidth, estimateNodeSize, layoutErd, type LayoutNode } from './layout'
 
 const n = (id: string, width = 200, height = 100): LayoutNode => ({ id, width, height })
 
@@ -34,6 +34,40 @@ describe('layoutErd', () => {
     expect(gap).toBeGreaterThanOrEqual(150)
   })
 
+  // 회귀: 랭크 간격이 고정(180)이면 긴 라벨("card_id → id  D:SET NULL  U:NO ACTION")이
+  // 참조 테이블 밑으로 깔려 글자가 잘려 보였다 → 간격은 가장 긴 라벨을 품어야 한다.
+  it('긴 관계선 라벨이 통째로 들어갈 만큼 랭크 간격을 벌린다', () => {
+    const labelWidth = estimateEdgeLabelWidth({
+      label: 'detail_fetched_at → id',
+      onDelete: 'SET NULL',
+      onUpdate: 'NO ACTION'
+    })
+    const pos = layoutErd(
+      [n('a', 200, 100), n('b', 200, 100)],
+      [{ source: 'a', target: 'b', labelWidth }]
+    )
+    const gap = pos.b.x - (pos.a.x + 200)
+    // 라벨 앵커(소스 핸들 +26px) 뒤로 라벨 전체가 들어가야 한다.
+    expect(gap).toBeGreaterThanOrEqual(labelWidth + 26)
+    expect(gap).toBeGreaterThan(180) // 기본 간격보다 실제로 넓어졌다
+  })
+
+  it('짧은 라벨이면 기본 간격을 좁히지 않는다', () => {
+    const pos = layoutErd(
+      [n('a', 200, 100), n('b', 200, 100)],
+      [{ source: 'a', target: 'b', labelWidth: estimateEdgeLabelWidth({ label: 'a → b' }) }]
+    )
+    expect(pos.b.x - (pos.a.x + 200)).toBeGreaterThanOrEqual(180)
+  })
+
+  it('병적으로 긴 라벨도 랭크 간격 상한(520)을 넘기지 않는다', () => {
+    const pos = layoutErd(
+      [n('a', 200, 100), n('b', 200, 100)],
+      [{ source: 'a', target: 'b', labelWidth: 5000 }]
+    )
+    expect(pos.b.x - (pos.a.x + 200)).toBeLessThanOrEqual(520)
+  })
+
   // 회귀: 같은 랭크에 쌓인 테이블끼리도 세로로 붙지 않아야(자기참조 루프가 위 노드를 덮지 않게).
   it('같은 랭크 노드끼리 세로 간격을 둔다', () => {
     const pos = layoutErd([n('a', 200, 100), n('b', 200, 100)], [])
@@ -56,6 +90,41 @@ describe('layoutErd', () => {
     // 단일 노드는 marginx/marginy(20)에서 시작, 중심-절반 변환 후에도 여백만큼 양수.
     expect(pos.a.x).toBeGreaterThanOrEqual(0)
     expect(pos.a.y).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('estimateEdgeLabelWidth', () => {
+  it('라벨이 길수록 넓어진다', () => {
+    const short = estimateEdgeLabelWidth({ label: 'a → b' })
+    const long = estimateEdgeLabelWidth({ label: 'very_long_fk_column_name → id' })
+    expect(long).toBeGreaterThan(short)
+  })
+
+  // 카드형(2줄)이므로 정책 줄은 라벨 줄과 **더해지지 않고** 더 넓은 쪽만 반영된다
+  // → 한 줄로 늘어놓던 옛 버전보다 좁아 랭크가 덜 벌어진다.
+  it('정책 줄은 라벨 줄과 합산되지 않고 최대치만 반영(2줄 카드)', () => {
+    const long = 'very_long_fk_column_name → id' // 라벨 줄이 훨씬 길다
+    expect(estimateEdgeLabelWidth({ label: long, onDelete: 'CASCADE' })).toBe(
+      estimateEdgeLabelWidth({ label: long })
+    )
+  })
+
+  it('라벨이 짧고 정책이 길면 정책 줄이 폭을 정한다', () => {
+    const bare = estimateEdgeLabelWidth({ label: 'a → b' })
+    const withPolicy = estimateEdgeLabelWidth({
+      label: 'a → b',
+      onDelete: 'SET NULL',
+      onUpdate: 'NO ACTION'
+    })
+    expect(withPolicy).toBeGreaterThan(bare)
+  })
+
+  it('자기참조는 노드 위 루프에 얹히므로 랭크 간격과 무관(0)', () => {
+    expect(estimateEdgeLabelWidth({ label: 'parent_id → id', selfRef: true })).toBe(0)
+  })
+
+  it('내용이 없으면 0', () => {
+    expect(estimateEdgeLabelWidth({})).toBe(0)
   })
 })
 

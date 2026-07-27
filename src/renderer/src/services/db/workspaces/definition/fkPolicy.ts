@@ -10,6 +10,10 @@ import type { Constraint, FkAction } from './types'
  *  3. 값이 없으면 SQL 기본값 NO ACTION 을 채우되 `implicit` 로 표시해 흐리게 그린다.
  *     (설계부가 미지정을 RESTRICT 로 보여주던 표기는 DDL 생성 결과와 어긋나 폐기 —
  *      ddl.ts 는 값이 없으면 절을 아예 안 쓰므로 실제로는 DB 기본값 NO ACTION 이 걸린다.)
+ *  4. 흐림만으로는 "값이 빠졌다"로 오독된다 → 흐린 칩에는 **왜 흐린지 `note` 를 눈에 보이게** 붙인다.
+ *     `미지정`(설계부에서 아직 안 고름) / `기본값`(값은 있고 그게 DB 기본 동작)로 나눈다.
+ *     운영부(Console)는 카탈로그가 "안 썼음"과 "NO ACTION 이라 썼음"을 구분해 저장하지 않으므로
+ *     (postgres `confupdtype='a'`, mysql `NO ACTION`) 항상 `기본값` 쪽이다 — 미지정이라 단정하지 않는다.
  */
 
 /** FK 정책을 명시하지 않았을 때 DB 가 적용하는 값. */
@@ -24,6 +28,10 @@ export interface FkPolicyChip {
   label: string
   /** 제약에 값이 없거나 NO ACTION 이라 "특별한 정책이 아님" — 흐리게 그린다. */
   implicit: boolean
+  /** 제약에 값 자체가 없다(설계부에서 아직 안 고름). 운영부는 카탈로그가 채워 주므로 항상 false. */
+  unset: boolean
+  /** 흐린 이유를 화면에 같이 찍는 짧은 꼬리표 — `미지정` / `기본값`. 흐리지 않으면 없음. */
+  note?: string
   /** 마우스를 올렸을 때의 설명(쉬운 말). */
   hint: string
 }
@@ -47,12 +55,20 @@ const HINT: Record<FkPolicyKind, Record<FkAction, string>> = {
 
 const chip = (kind: FkPolicyKind, raw: FkAction | undefined): FkPolicyChip => {
   const value = raw ?? IMPLIED_FK_ACTION
+  const unset = raw == null
+  const implicit = unset || value === IMPLIED_FK_ACTION
   return {
     kind,
     value,
     label: `${kind} ${value}`,
-    implicit: raw == null || value === IMPLIED_FK_ACTION,
-    hint: raw == null ? `${HINT[kind][value]} (지정하지 않아 DB 기본값)` : HINT[kind][value]
+    implicit,
+    unset,
+    note: unset ? '미지정' : implicit ? '기본값' : undefined,
+    hint: unset
+      ? `지정하지 않았습니다 — DB 기본값 ${value} 이 적용됩니다. ${HINT[kind][value]}`
+      : implicit
+        ? `${HINT[kind][value]} 특별히 다른 정책을 건 게 아닙니다.`
+        : HINT[kind][value]
   }
 }
 

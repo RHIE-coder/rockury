@@ -35,6 +35,12 @@ const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'rockury-surface-'))
 // 순회 실패 안전핀 — 현재 nav 는 leaf 30+개. 이 밑으로 떨어지면 훅/순회가 깨진 것이다.
 const MIN_LEAVES = 5
 
+/**
+ * 검사 창 크기(고정) — 판정을 결정적으로 만드는 기준 폼팩터. 기준선(baseline.json)도 이 크기에서 뜬 것이다.
+ * 바꾸면 잘림/겹침 판정이 통째로 달라지므로 기준선 재수립(`--update-baseline`)이 필요하다.
+ */
+const WINDOW = { w: 1440, h: 900 }
+
 // feature 폴더 — steward 규칙과 동일(config feature: → git 브랜치 → default).
 function featureName() {
   const cfg = path.join(APP, '.harness/steward/config.yaml')
@@ -134,7 +140,33 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console.error: ' + m.text()) })
   // 미저장 가드 등 confirm 은 수락(순회가 막히지 않게).
   page.on('dialog', (d) => d.accept().catch(() => {}))
+  // ⭐ 검사 창을 **주 디스플레이 + 고정 크기**로 못박는다 — 판정이 결정적이어야 하기 때문.
+  //   앱은 "커서가 있는 화면"에 창을 띄우는데(src/main/index.ts), 좁은 세로 모니터(예: 1080폭)에
+  //   걸리면 macOS 가 창 폭을 그 모니터 폭으로 잘라 버린다(windowSize.ts 주석의 실측 사례).
+  //   그러면 표 컬럼 폭이 달라져 같은 커밋이 block ↔ ok 를 왕복했다(실측 flake).
+  //   위치를 먼저 주 디스플레이로 옮긴 뒤 크기를 주고, **실제로 그 크기가 됐는지 확인**한다.
+  const got = await app.evaluate(async ({ BrowserWindow, screen }, size) => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (!win) return null
+    const wa = screen.getPrimaryDisplay().workArea
+    win.setResizable(true)
+    win.unmaximize()
+    // 위치 → 크기 순서. 반대로 하면 옮기는 도중 좁은 화면에 걸려 폭이 잘린다.
+    win.setBounds({ x: wa.x + 16, y: wa.y + 16, width: size.w, height: size.h })
+    win.setContentSize(size.w, size.h)
+    const [w, h] = win.getContentSize()
+    return { w, h }
+  }, WINDOW)
+  if (!got || got.w !== WINDOW.w || got.h !== WINDOW.h) {
+    // 조용히 다른 폼팩터로 재는 대신 크게 실패한다 — 기준선과 비교 불가한 측정이기 때문.
+    throw new Error(
+      `검사 창을 ${WINDOW.w}×${WINDOW.h} 로 만들지 못했습니다(실제 ${got ? `${got.w}×${got.h}` : '없음'}).` +
+        ' 주 디스플레이 작업영역이 그보다 작으면 판정이 기준선과 어긋나므로 검증불가로 둡니다.'
+    )
+  }
   await page.waitForSelector('text=Studio', { timeout: 15_000 })
+  // 웹폰트 로드 전 측정하면 글자 폭이 달라져 잘림 판정이 또 흔들린다 → 폰트까지 기다린다.
+  await page.evaluate(() => document.fonts?.ready.then(() => true))
   await page.waitForTimeout(400) // 초기 렌더 안정화
 
   await captureScreen('boot')

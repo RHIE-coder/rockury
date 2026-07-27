@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, Position, useInternalNode } from '@xyflow/react'
 import type { EdgeProps } from '@xyflow/react'
@@ -15,8 +15,8 @@ export interface RelationErdEdgeData {
   onDelete?: string
   onUpdate?: string
   selfRef?: boolean
-  /** 라벨 세로 레인 오프셋(중앙 0 기준, ±). graph.ts 가 겹침 완화용으로 계산. */
-  labelOffset?: number
+  /** 라벨 카드 세로 보정(px, ±). graph.ts 가 카드끼리 안 겹치게 계산. */
+  labelShiftY?: number
   [key: string]: unknown
 }
 
@@ -139,6 +139,9 @@ function RelationErdEdgeComponent({
   const hasPolicies = !!onDelete || !!onUpdate
   // 자기참조 루프는 노드 위로 뜬다 → 실제 측정된 노드 상단이 필요(핸들 Y 는 중앙이라 부정확).
   const selfNode = useInternalNode(source)
+  // 라벨 호버 → 플로팅 카드로 펼침(선택된 관계도 펼쳐 둔다).
+  const [hovered, setHovered] = useState(false)
+  const open = hovered || !!selected
 
   const color = selfRef
     ? 'var(--color-accent-2)'
@@ -172,12 +175,18 @@ function RelationErdEdgeComponent({
     // 26px: 소스 마커(카디널리티 글리프, ~+22px)를 지나친 지점.
     const anchor = offset(sourcePosition, 26)
     lx = sourceX + anchor.x
-    // 같은 컬럼에서 복수 FK 가 나갈 때만 레인 분산(한 줄 라벨 높이 ≈ 20px).
-    ly = sourceY + anchor.y + (d?.labelOffset ?? 0) * 20
+    // 카드가 컬럼 행보다 높아 가까운 FK 행끼리 겹치므로 graph.ts 가 계산한 만큼 비켜 둔다.
+    ly = sourceY + anchor.y + (d?.labelShiftY ?? 0)
   }
 
   const so = offset(sourcePosition, 10)
   const to = offset(targetPosition, 10)
+
+  // 안전핀 — 노드는 라벨 위에 그려지므로, 참조 테이블까지 남은 폭보다 라벨이 길면 글자 중간이
+  // 노드에 덮여 잘려 보인다. 배치가 라벨 폭만큼 랭크를 벌리지만(layout.ts) 사용자가 노드를 끌어
+  // 붙였거나 라벨이 상한을 넘긴 경우엔 좁아질 수 있다 → 남은 폭으로 줄이고(말줄임) 호버로 편다.
+  const room = targetX - lx - 8
+  const clamped = !selfRef && room > 60 ? room : undefined
 
   return (
     <>
@@ -199,16 +208,25 @@ function RelationErdEdgeComponent({
         <Marker x={targetX + to.x} y={targetY + to.y} position={targetPosition} color={color}>
           {OneGlyph}
         </Marker>
-        {/* 라벨 + 정책 배지 — 자기참조는 루프 정상 중앙, 일반은 소스 핸들 옆 좌측 정렬. */}
+        {/* 라벨 + 정책 배지 — 자기참조는 루프 정상 중앙, 일반은 소스 핸들 옆 좌측 정렬.
+            호버하면 자체 플로팅 카드로 펴진다(브라우저 기본 툴팁 안 씀):
+            z-index 로 노드 위에 올라오고 폭 제한이 풀려 전문이 보인다. */}
         <div
-          className="nodrag nopan"
+          className="nodrag"
           style={{
             position: 'absolute',
             transform: `${selfRef ? 'translate(-50%, -50%)' : 'translate(0, -50%)'} translate(${lx}px,${ly}px)`,
-            pointerEvents: 'none'
+            // 캔버스 이동(pan)은 라벨 위에서도 되게 두고, 호버만 받는다.
+            pointerEvents: 'auto',
+            zIndex: open ? 10 : undefined
           }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
         >
-          <div className={cnEdgeLabel(selfRef)}>
+          <div
+            className={cnEdgeLabel(selfRef, open)}
+            style={!selfRef && !open && clamped ? { maxWidth: clamped } : undefined}
+          >
             {selfRef ? (
               <>
                 <div className="text-center text-[9px] font-bold tracking-wider text-accent-2">SELF</div>
@@ -221,12 +239,17 @@ function RelationErdEdgeComponent({
                 )}
               </>
             ) : (
-              // 한 줄 압축 — 라벨 높이를 컬럼 행 간격(22px) 안에 눌러, 이웃 FK 행 라벨과 안 겹치게.
-              <div className="flex items-center gap-1.5 whitespace-nowrap">
-                {label && <span className="text-[10px] text-muted">{label}</span>}
-                {onDelete && <span className="text-[9px] text-danger">D:{onDelete}</span>}
-                {onUpdate && <span className="text-[9px] text-info">U:{onUpdate}</span>}
-              </div>
+              // 카드형 — 1줄 `col → refCol`, 2줄 정책(D:/U:). 두 줄이라 한 줄로 늘어놓을 때보다
+              // 좁아 랭크가 덜 벌어진다. 카드끼리 세로 겹침은 graph.ts 의 레인 보정이 막는다.
+              <>
+                <div className="truncate font-mono text-[10px] leading-[14px] text-fg">{label}</div>
+                {hasPolicies && (
+                  <div className="flex gap-2 truncate text-[9px] leading-[13px]">
+                    {onDelete && <span className="text-danger">D:{onDelete}</span>}
+                    {onUpdate && <span className="text-info">U:{onUpdate}</span>}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -235,10 +258,12 @@ function RelationErdEdgeComponent({
   )
 }
 
-function cnEdgeLabel(selfRef: boolean): string {
-  return selfRef
-    ? 'rounded border border-accent-2/40 bg-accent-2-soft px-1.5 py-0.5 shadow-sm'
-    : 'rounded border border-line bg-canvas/95 px-1.5 py-0.5 shadow-sm'
+function cnEdgeLabel(selfRef: boolean, open: boolean): string {
+  if (selfRef) return 'rounded border border-accent-2/40 bg-accent-2-soft px-1.5 py-0.5 shadow-sm'
+  // 카드형 — 호버(open)면 테두리·그림자를 올려 떠 있음을 알리고 폭 제한이 풀린다.
+  return open
+    ? 'rounded-md border border-accent/60 bg-canvas px-2 py-1 shadow-md ring-2 ring-accent/15'
+    : 'rounded-md border border-line bg-canvas/95 px-2 py-1 shadow-sm'
 }
 
 export const RelationErdEdge = memo(RelationErdEdgeComponent)

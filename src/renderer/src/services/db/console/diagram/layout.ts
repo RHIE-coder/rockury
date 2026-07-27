@@ -16,6 +16,8 @@ export interface LayoutNode {
 export interface LayoutEdge {
   source: string
   target: string
+  /** 이 관계선 라벨의 추정 폭(px) — 랭크 간격이 라벨을 품도록. `estimateEdgeLabelWidth` 참고. */
+  labelWidth?: number
 }
 
 export interface LayoutOptions {
@@ -56,16 +58,58 @@ export function estimateNodeSize(table: TableDef): { width: number; height: numb
   return { width, height }
 }
 
+/** 라벨 앵커 오프셋(소스 핸들에서 오른쪽으로) — RelationErdEdge 의 26px 과 맞춘다. */
+const LABEL_ANCHOR = 26
+/** 라벨 끝과 참조 테이블 사이 최소 숨 쉴 틈. */
+const LABEL_TAIL = 14
+/** 기본 랭크 간격 — 라벨이 짧아도 이만큼은 벌린다. */
+const BASE_RANKSEP = 180
+/** 라벨이 병적으로 길어도 캔버스가 가로로 터지지 않게 상한(넘치면 뷰가 라벨을 줄인다). */
+const MAX_RANKSEP = 520
+
+/**
+ * 관계선 라벨 폭 추정(px) — RelationErdEdge 의 **카드형 라벨** 마크업 기준.
+ * 카드는 두 줄이다: 1줄 `col → refCol`(10px mono), 2줄 `D:정책 U:정책`(9px).
+ * → 필요한 폭은 두 줄의 **합이 아니라 최대치** (한 줄로 늘어놓던 옛 버전보다 좁다 = 랭크가 덜 벌어진다).
+ * 자기참조는 노드 위 루프에 얹히므로 랭크 간격과 무관 → 0.
+ */
+export function estimateEdgeLabelWidth(e: {
+  label?: string
+  onDelete?: string
+  onUpdate?: string
+  selfRef?: boolean
+}): number {
+  if (e.selfRef) return 0
+  const BOX = 18 // px-2 좌우(16) + border(2)
+  const GAP = 8 // 정책 두 배지 사이 gap-2
+  const CH_LABEL = 6.4 // 10px mono
+  const CH_POLICY = 5.5 // 9px
+  const line1 = (e.label?.length ?? 0) * CH_LABEL
+  const policies: number[] = []
+  if (e.onDelete) policies.push((e.onDelete.length + 2) * CH_POLICY) // "D:" 접두
+  if (e.onUpdate) policies.push((e.onUpdate.length + 2) * CH_POLICY)
+  const line2 = policies.reduce((a, b) => a + b, 0) + GAP * Math.max(0, policies.length - 1)
+  const inner = Math.max(line1, line2)
+  if (inner <= 0) return 0
+  return Math.ceil(BOX + inner)
+}
+
 export function layoutErd(
   nodes: LayoutNode[],
   edges: LayoutEdge[],
   opts: LayoutOptions = {}
 ): Positions {
+  // 가로 계층 간격 — 관계선 라벨(예: "user_id → id  D:RESTRICT U:CASCADE")이 통째로 낄 자리를 둔다.
+  // 라벨은 소스 노드 오른쪽(랭크 사이 빈칸)에 붙으므로, 간격이 라벨보다 좁으면 참조 테이블 아래로
+  // 깔려 잘려 보인다(회귀) → 가장 긴 라벨을 기준으로 벌린다.
+  const widestLabel = edges.reduce((max, e) => Math.max(max, e.labelWidth ?? 0), 0)
+  const labelRanksep = widestLabel > 0 ? widestLabel + LABEL_ANCHOR + LABEL_TAIL : 0
+  const ranksep = Math.min(MAX_RANKSEP, Math.max(opts.ranksep ?? BASE_RANKSEP, labelRanksep))
+
   const g = new dagre.graphlib.Graph()
   g.setGraph({
     rankdir: opts.direction ?? 'LR',
-    // 가로 계층 간격 — 관계선 라벨(예: "user_id → id / D:RESTRICT U:CASCADE")이 낄 여유를 둔다.
-    ranksep: opts.ranksep ?? 180,
+    ranksep,
     // 세로 노드 간격 — 이웃 테이블끼리, 그리고 노드 위로 부푸는 자기참조 루프가 겹치지 않게 넉넉히.
     nodesep: opts.nodesep ?? 100,
     marginx: 20,

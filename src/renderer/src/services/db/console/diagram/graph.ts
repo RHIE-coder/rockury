@@ -34,11 +34,13 @@ export interface ErdEdge {
   /** 자기참조(refTable === 자기 테이블). */
   selfRef: boolean
   /**
-   * 라벨 세로 레인 오프셋(중앙 0 기준, ±). 라벨은 소스(FK 컬럼 행) 옆에 붙으므로
-   * 겹칠 수 있는 건 "같은 컬럼에서 나가는 복수 FK"뿐 — 그 그룹 안에서만 상하로 분산한다.
-   * 뷰가 이 값 × 라벨 높이만큼 라벨 Y 를 옮긴다. 자기참조는 별도 배치이므로 항상 0.
+   * 라벨 카드의 세로 보정(px, ±). 라벨은 소스(FK 컬럼 행) 옆에 붙는데 카드는 컬럼 행(22px)보다
+   * 높아서, FK 컬럼이 서로 가까운 행에 있으면 카드끼리 겹친다 → 그 무리만 위아래로 벌린다.
+   * 뷰가 이 값만큼 라벨 Y 를 옮긴다. 자기참조는 별도 배치이므로 항상 0.
    */
-  labelOffset: number
+  labelShiftY: number
+  /** 소스 FK 컬럼의 행 번호(0-based) — 라벨 앵커 Y 계산용(겹침 판정). */
+  sourceRow: number
 }
 
 export interface Erd {
@@ -67,6 +69,7 @@ export function buildErd(tables: TableDef[]): Erd {
     )
     const colName = new Map(table.columns.map((c) => [c.id, c.name]))
     const nullableById = new Map(table.columns.map((c) => [c.id, c.nullable]))
+    const rowById = new Map(table.columns.map((c, i) => [c.id, i]))
 
     for (const fk of table.constraints) {
       if (fk.kind !== 'fk' || !fk.refTable) continue
@@ -89,7 +92,8 @@ export function buildErd(tables: TableDef[]): Erd {
         onDelete: fk.onDelete,
         onUpdate: fk.onUpdate,
         selfRef: fk.refTable === table.name,
-        labelOffset: 0
+        labelShiftY: 0,
+        sourceRow: rowById.get(srcColIds[0] ?? '') ?? 0
       })
     }
   }
@@ -97,25 +101,54 @@ export function buildErd(tables: TableDef[]): Erd {
   return { nodes, edges }
 }
 
+/** 컬럼 행 높이(px) — TableErdNode 렌더/estimateNodeSize 의 ROW 와 같은 값. */
+const ROW_H = 22
+/** 라벨 카드 한 장이 차지하는 세로 레인(2줄 카드 ≈ 36px + 숨 틈). */
+export const LABEL_LANE_H = 42
+
 /**
- * 라벨 겹침 완화(순수) — 각 엣지에 세로 레인 오프셋을 부여한다.
- * 라벨 앵커는 소스 FK 컬럼 행 옆(뷰가 배치)이라, 겹칠 수 있는 유일한 경우는
- * **같은 컬럼에서 복수 FK 가 나갈 때**뿐 — 그 그룹만 중앙 정렬 오프셋(2개면 -0.5, +0.5)로
- * 상하 분산한다. 자기참조는 별도 루프 배치라 제외. 엣지 생성 순서를 따르므로 결정적 → 테스트 의무.
+ * 라벨 겹침 완화(순수) — 각 엣지에 세로 보정(px)을 부여한다.
+ * 라벨은 소스 FK 컬럼 행 옆에 붙는데, 카드가 컬럼 행(22px)보다 높아 **FK 컬럼이 가까운 행끼리**
+ * (같은 컬럼 포함) 카드가 겹친다 → 같은 테이블에서 나가는 라벨들을 앵커 Y 순으로 훑어
+ * LABEL_LANE_H 안에 몰린 무리를 하나로 묶고, 그 무리를 원래 중심에 맞춰 균등 분산한다.
+ * 자기참조는 노드 위 루프에 얹히므로 제외. 엣지 순서를 따르므로 결정적 → 테스트 의무.
  */
 function assignLabelLanes(edges: ErdEdge[]): void {
-  const groups = new Map<string, ErdEdge[]>()
+  const byTable = new Map<string, ErdEdge[]>()
   for (const e of edges) {
     if (e.selfRef) continue
-    const key = `${e.source}|${e.sourceColumnId}`
-    const arr = groups.get(key) ?? []
+    const arr = byTable.get(e.source) ?? []
     arr.push(e)
-    groups.set(key, arr)
+    byTable.set(e.source, arr)
   }
-  for (const group of groups.values()) {
+
+  for (const group of byTable.values()) {
     if (group.length < 2) continue
-    group.forEach((e, i) => {
-      e.labelOffset = i - (group.length - 1) / 2
-    })
+    // 앵커 Y(행 × 행높이) 오름차순. 같은 행이면 엣지 생성 순서 유지(안정 정렬).
+    const sorted = group
+      .map((e, i) => ({ e, y: e.sourceRow * ROW_H, i }))
+      .sort((a, b) => a.y - b.y || a.i - b.i)
+
+    // 앞 라벨과 한 레인 안에 겹치면 같은 무리로 이어 붙인다.
+    let cluster: typeof sorted = []
+    const flush = (): void => {
+      if (cluster.length < 2) {
+        cluster = []
+        return
+      }
+      // 무리의 원래 중심을 유지한 채 레인 간격으로 균등 배치(위/아래로 반씩 벌어진다).
+      const center = cluster.reduce((sum, c) => sum + c.y, 0) / cluster.length
+      cluster.forEach((c, k) => {
+        const target = center + (k - (cluster.length - 1) / 2) * LABEL_LANE_H
+        c.e.labelShiftY = Math.round(target - c.y)
+      })
+      cluster = []
+    }
+    for (const cur of sorted) {
+      const prev = cluster[cluster.length - 1]
+      if (prev && cur.y - prev.y >= LABEL_LANE_H) flush()
+      cluster.push(cur)
+    }
+    flush()
   }
 }

@@ -19,21 +19,33 @@ describe('fkPolicyChips', () => {
     expect(chips.every((c) => !c.implicit)).toBe(true)
   })
 
-  it('값이 없으면 DB 기본값(NO ACTION)을 채우고 implicit 로 표시한다', () => {
+  it('명시된 정책에는 꼬리표를 달지 않는다', () => {
+    const chips = fkPolicyChips(fk({ onDelete: 'RESTRICT', onUpdate: 'CASCADE' }))
+    expect(chips.every((c) => c.note === undefined)).toBe(true)
+    expect(chips.every((c) => !c.unset)).toBe(true)
+  })
+
+  it('값이 없으면 DB 기본값(NO ACTION)을 채우고 `미지정` 꼬리표를 붙인다', () => {
     const chips = fkPolicyChips(fk({ onDelete: 'CASCADE' }))
     expect(chips[1].value).toBe(IMPLIED_FK_ACTION)
     expect(chips[1].label).toBe('ON UPDATE NO ACTION')
     expect(chips[1].implicit).toBe(true)
+    expect(chips[1].unset).toBe(true)
+    expect(chips[1].note).toBe('미지정')
     expect(chips[1].hint).toContain('DB 기본값')
     // 명시된 쪽은 흐리게 처리하지 않는다.
     expect(chips[0].implicit).toBe(false)
+    expect(chips[0].note).toBeUndefined()
   })
 
-  it('실 DB 가 NO ACTION 을 실제로 돌려줘도 흐리게 본다(특별한 정책이 아니므로)', () => {
+  it('실 DB 가 NO ACTION 을 실제로 돌려주면 흐리되 `기본값`으로 — 미지정이라 단정하지 않는다', () => {
+    // 운영부(Console)는 카탈로그가 값을 채워 주므로 "안 썼음"과 "NO ACTION 이라 썼음"을 구분 못 한다.
     const chips = fkPolicyChips(fk({ onDelete: 'NO ACTION', onUpdate: 'NO ACTION' }))
     expect(chips.every((c) => c.implicit)).toBe(true)
-    // 다만 값이 명시된 경우는 "지정하지 않아" 문구를 붙이지 않는다.
-    expect(chips[0].hint).not.toContain('지정하지 않아')
+    expect(chips.every((c) => !c.unset)).toBe(true)
+    expect(chips.map((c) => c.note)).toEqual(['기본값', '기본값'])
+    // 값이 명시된 경우는 "지정하지 않" 문구를 붙이지 않는다.
+    expect(chips[0].hint).not.toContain('지정하지 않')
   })
 
   it('fk 가 아니면 칩이 없다', () => {

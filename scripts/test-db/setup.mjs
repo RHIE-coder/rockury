@@ -5,13 +5,13 @@ import { resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
   SCRIPT_DIR, DATA_DIR, SQLITE_PATH, CONTAINERS,
-  log, ok, warn, fail, styleText
+  log, ok, warn, fail, styleText, dockerEnv
 } from './lib.mjs';
 
 // 1. Docker 컨테이너 기동 (전용 rockury 네트워크는 compose 가 함께 만든다)
 log('Starting Docker containers...');
 try {
-  execSync('docker compose up -d', { cwd: SCRIPT_DIR, stdio: 'inherit' });
+  execSync('docker compose up -d', { cwd: SCRIPT_DIR, stdio: 'inherit', env: dockerEnv() });
 } catch {
   fail('Failed to start Docker containers. Is Docker running?');
   process.exit(1);
@@ -58,7 +58,7 @@ for (const name of CONTAINERS) {
     try {
       const status = execSync(
         `docker inspect --format='{{.State.Health.Status}}' ${name}`,
-        { encoding: 'utf-8' }
+        { encoding: 'utf-8', env: dockerEnv() }
       ).trim();
       if (status === 'healthy') {
         healthy = true;
