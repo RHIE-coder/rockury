@@ -20,6 +20,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { runChecks, exitCodeFor } from './checks.mjs'
+import { loadBaseline, writeBaseline } from './baseline.mjs'
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const require = createRequire(path.join(APP, 'package.json'))
@@ -53,7 +54,9 @@ fs.mkdirSync(ARTIFACTS, { recursive: true })
 
 // 기준선 — 수용된 기존 findings(커밋되는 정본). 있으면 그 findings 는 차단에서 제외(관찰),
 //   새로 생긴 회귀만 차단한다. `--update-baseline` 로 현재 상태를 기준선으로 굳힌다.
-const BASELINE = path.join(APP, 'e2e/surface/baseline.json')
+//   **서비스별 파일**로 나뉘어 있다(baseline/<서비스>.json) — 생성물이라 손으로 병합할 수
+//   없는데 다섯 서비스가 같은 파일을 갱신하면 충돌이 나기 때문이다.
+const BASELINE_DIR = path.join(APP, 'e2e/surface/baseline')
 const UPDATE_BASELINE = process.argv.includes('--update-baseline')
 
 if (!fs.existsSync(MAIN)) {
@@ -182,10 +185,11 @@ try {
   // --update-baseline: 현재 findings 를 수용 기준선으로 굳힌다(기준선 없이 계산한 raw).
   if (UPDATE_BASELINE) {
     const raw = runChecks(captures, {})
-    fs.writeFileSync(BASELINE, JSON.stringify(raw.findings, null, 2))
-    console.log(`기준선 갱신 → ${BASELINE} (현재 ${raw.findings.length}건 수용)`)
+    const groups = writeBaseline(BASELINE_DIR, raw.findings)
+    const per = Object.entries(groups).map(([s, l]) => `${s} ${l.length}`).join(' · ')
+    console.log(`기준선 갱신 → ${BASELINE_DIR}/ (현재 ${raw.findings.length}건 수용 — ${per})`)
   }
-  const baseline = fs.existsSync(BASELINE) ? JSON.parse(fs.readFileSync(BASELINE, 'utf8')) : []
+  const baseline = loadBaseline(BASELINE_DIR)
 
   const record = { generatedAt: null, feature: featureName(), captures, baseline }
   const recPath = path.join(ARTIFACTS, 'surface-verify.json')

@@ -1,15 +1,6 @@
 import { app, BrowserWindow, screen, shell } from 'electron'
 import { join } from 'path'
-import { registerWindowIpc } from './ipc/window'
-import { registerStoreIpc } from './ipc/store'
-import { registerConnectionIpc } from './ipc/connections'
-import { registerEnvironmentIpc } from './ipc/environments'
-import { registerIntrospectionIpc } from './ipc/introspection'
-import { registerQueryIpc } from './ipc/query'
-import { registerMigrationIpc } from './ipc/migration'
-import { registerCollectionIpc } from './ipc/collections'
-import { registerDiagramIpc } from './ipc/diagram'
-import { registerMcpIpc } from './ipc/mcp'
+import { registerAllIpc } from './ipc/registry'
 import { setDbPath } from './store/db'
 import { defaultWindowBounds } from './windowSize'
 import { startMcp, stopMcp } from './mcp/http'
@@ -74,16 +65,8 @@ app.on('second-instance', () => {
 app.whenReady().then(() => {
   // 로컬 저장소 DB 경로 주입(userData). getDb() 첫 호출 전에 설정한다.
   setDbPath(join(app.getPath('userData'), 'rockury.db'))
-  registerWindowIpc()
-  registerStoreIpc()
-  registerConnectionIpc()
-  registerEnvironmentIpc()
-  registerIntrospectionIpc()
-  registerQueryIpc()
-  registerMigrationIpc()
-  registerCollectionIpc()
-  registerDiagramIpc()
-  registerMcpIpc()
+  // 서비스별 IPC 등록부(`ipc/registry.ts`)가 순회한다 — 새 채널이 생겨도 이 진입점은 안 바뀐다.
+  registerAllIpc()
   // MCP 서버 — 메인 프로세스 내장(생명주기 한몸). 실패해도 앱 부팅은 계속(내부 재시도).
   // 접속 키는 OS 키체인 암호화 저장 — 디스크에 접속 정보 파일을 남기지 않는다.
   const userData = app.getPath('userData')

@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
-import { envelope } from './envelope'
-import { getMcpInfo, rotateMcpToken, type McpInfo } from '../mcp/http'
-import { buildAgentCommands } from '../mcp/registration'
+import { envelope } from '../envelope'
+import { getMcpInfo, rotateMcpToken, type McpInfo } from '../../mcp/http'
+import { buildAgentCommands } from '../../mcp/registration'
 
 /**
  * AI 화면(에이전트 연동) IPC — 게이트웨이 상태 + 접속 키 관리.

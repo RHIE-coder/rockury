@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
-import { queryService } from '../services/queryService'
-import { appendHistory, clearHistory, listHistory, type AppendHistoryInput } from '../store/queryHistory'
-import { envelope } from './envelope'
+import { queryService } from '../../services/queryService'
+import { appendHistory, clearHistory, listHistory, type AppendHistoryInput } from '../../store/queryHistory'
+import { envelope } from '../envelope'
 
 /**
  * 쿼리 실행 IPC(§ops-plan Phase 2c) — 봉투 패턴.

@@ -16,7 +16,7 @@ npm run build && npm run e2e
 - 선택 커밋은 `button[type="submit"]` 등으로 다이얼로그 버튼을 특정(타임라인의 "버전 컷"과 다이얼로그 "… 컷"이 텍스트로 겹침).
 
 ## 확장
-새 플로우는 `smoke.mjs` 패턴(launch → click(CSS) → assert → screenshot)을 복사해 추가.
+새 플로우는 자기 서비스 흐름 파일 `flows/<서비스>.mjs` 에 추가한다 — 패턴(click(CSS) → assert → screenshot)은 `flows/db.mjs` 를 복사. 앱 런치·정리는 러너 `smoke.mjs` 가 맡는다.
 Electron 구동/드라이브를 프로젝트 스킬로 박제하려면 `/run-skill-generator` 사용 권장.
 
 ## surface-verify (UI 품질 게이트) — `npm run surface-verify`
@@ -24,5 +24,5 @@ Electron 구동/드라이브를 프로젝트 스킬로 박제하려면 `/run-ski
 화면마다 대비(WCAG)/잘림/넘침/겹침/렌더 에러를 검사한다(판정 로직은 `surface/checks.mjs`, vitest 커버).
 - **새 화면은 nav 등록만 하면 자동 커버** — 수동 등록 없음. 셸의 data-nav 훅을 지우면 안 된다
   (leaf < MIN_LEAVES 면 검증불가(2)로 크게 실패하는 안전핀 내장).
-- 기존에 수용한 findings 는 `surface/baseline.json`(커밋되는 정본) — **새 회귀만 차단**한다.
+- 기존에 수용한 findings 는 `surface/baseline/<서비스>.json`(커밋되는 정본, 서비스별 분할) — **새 회귀만 차단**한다.
   의도한 시각 변경으로 새 finding 이 생기면 확인 후 `node e2e/surface/verify.mjs --update-baseline`.

@@ -5,16 +5,16 @@ import {
   listDesigns,
   updateDesign,
   type CreateDesignInput
-} from '../store/designs'
-import { listTables, replaceTablesForDesign, type TableRecord } from '../store/tables'
-import { listSeedSets, replaceSeedSetsForDesign, type SeedSetRecord } from '../store/seedSets'
+} from '../../store/designs'
+import { listTables, replaceTablesForDesign, type TableRecord } from '../../store/tables'
+import { listSeedSets, replaceSeedSetsForDesign, type SeedSetRecord } from '../../store/seedSets'
 import {
   deleteEnvVariable,
   listEnvVariables,
   resolveEnvVariables,
   setEnvVariable
-} from '../store/envVariables'
-import { createVersion, deleteVersion, listVersions, type CreateVersionInput } from '../store/versions'
+} from '../../store/envVariables'
+import { createVersion, deleteVersion, listVersions, type CreateVersionInput } from '../../store/versions'
 
 /**
  * 로컬 메타 저장소 IPC — 렌더러가 preload(window.rockury.*)를 통해 호출한다.

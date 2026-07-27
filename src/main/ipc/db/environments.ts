@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
-import { environmentService } from '../services/environmentService'
-import { envelope } from './envelope'
+import { environmentService } from '../../services/environmentService'
+import { envelope } from '../envelope'
 
 /**
  * Environment(바인딩) IPC(§IA · 결정 B) — (connection × design) 마이그레이션 상태.

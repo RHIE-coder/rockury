@@ -14,9 +14,60 @@ Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 
 - **간결·핵심만.** 해결하면 뭘 했는지 1~2줄. 요청 없으면 설명 안 붙인다. (steward "쉬운 말" 규율 위에서.)
 
 ## 🌿 Git (MUST)
-- **main 에서 직접 작업·커밋한다. feature 브랜치를 만들지 않는다.** (사용자 지시 — Claude Code/steward
-  기본 "브랜치 먼저" 관례를 이 프로젝트에선 덮어씀.)
+- **`main` 은 통합 전용이다 — 직접 작업하지 않고 병합만 받는다.**
+  각 서비스는 자기 브랜치 `feat/<서비스 id>` 에서 일한다: `feat/uiux` · `feat/api` · `feat/db` ·
+  `feat/infra` · `feat/mcp`(AI). (2026-07-27 사용자 지시로 개정 — 그전 규칙은 "main 직접 작업"이었고,
+  5서비스 병렬 개발을 켜면서 뒤집었다.)
+- 예외: **어느 서비스에도 안 속하는 것**(공용 파일 구조, `AGENTS.md`, 의존성 추가)은 `main` 에서 한다.
 - 커밋/푸시는 사용자가 요청할 때만. 커밋 메시지 끝에 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+
+## 👥 병렬 개발 규칙 (5서비스 동시 작업)
+다섯 에이전트(UI/UX · API · DB · Infra · AI)가 각자 워크트리(= 한 저장소를 여러 폴더에
+동시에 펼쳐 놓는 git 기능)에서 동시에 일한다. 준비: `node scripts/parallel/setup.mjs`
+(현황 `… status` · 정리 `… remove`). 폴더는 저장소 **바깥**의 숨김 폴더
+`../.worktrees/rockury/<서비스 id>` 에 생긴다 — 저장소 안에 두면 빌드·테스트·검색이 `**` 로
+훑을 때 자기 사본을 파고들고, 숨김 폴더라 상위 폴더 목록이 어질러지지 않는다.
+저장소 밖이므로 `.gitignore` 는 필요 없다(git 시야가 저장소 밖까지 미치지 않는다).
+
+### 서비스 id — 서비스당 토큰 하나
+`uiux` · `api` · `db` · `infra` · `mcp`. **AI 서비스의 코드 id 는 `mcp` 다**(표시명만 'AI').
+이 토큰 하나가 nav registry 의 `Service.id`, IPC 채널 접두어, 폴더·파일 이름, 브랜치 이름에
+전부 그대로 쓰인다 — 토큰을 둘로 늘리면 "내 파일이 어느 쪽이냐"가 흐려진다.
+
+### 내 파일이 어디까지인가 (`<svc>` = 서비스 id)
+| 무엇 | 내 파일 |
+|---|---|
+| 화면 | `src/renderer/src/services/<svc>/**` |
+| 메인 IPC 채널 | `src/main/ipc/<svc>/**` |
+| 로컬 DB 스키마 | `src/main/store/migrations/<svc>.ts` |
+| MCP 노출 지도 | `src/main/mcp/coverage/<svc>.ts` |
+| 렌더러 창구(preload) | `src/preload/services/<svc>.ts` |
+| 앱 구동 e2e 흐름 | `e2e/flows/<svc>.mjs` |
+| 화면 품질 기준선 | `e2e/surface/baseline/<svc>.json` (생성물 — 손으로 고치지 않는다) |
+| 기획·테스트 정본 | `docs/spec/<svc>-*.md` · `docs/qa/<svc>-*.md` |
+
+### 건드리지 않는 공용 파일
+아래는 **새 서비스를 만들 때만** 바뀐다. 기능을 더할 때 열 일이 없다 — 열게 되면 대개
+설계가 잘못된 것이다: `nav/registry.ts` · `main/index.ts` · `main/ipc/registry.ts` ·
+`store/db.ts` · `store/migrations/index.ts` · `mcp/coverage/index.ts` ·
+`preload/index.ts` · `preload/services/index.ts` · `e2e/smoke.mjs` · `e2e/flows/index.mjs` ·
+`src/renderer/src/ui/**`(공용 컴포넌트 — 고쳐야 하면 `main` 에서, 다섯 서비스에 영향).
+
+### 네임스페이스 (충돌 방지)
+- **IPC 채널**: `<svc>:<동작>` (예: `infra:listContainers`). 기존 DB 채널은 무접두어 그대로 둔다.
+- **SQLite 테이블**: `<svc>_` 접두어. 두 서비스가 같은 테이블을 선언하면 앱이 안 켜진다(런타임 검사).
+- **preload 최상위 키**: 서비스마다 달라야 한다. 겹치면 조립이 실패한다.
+
+### 병합
+1. 매일 아침 자기 워크트리에서 `git pull --rebase origin main`.
+2. 기능이 끝나면 게이트(`npm run typecheck && npm test && npm run build`) 통과 후 `main` 으로 병합.
+3. 새 파일 위주라 충돌이 거의 없다 — 충돌이 잦으면 공용 파일을 건드리고 있다는 신호다.
+
+### 워크트리로 격리되지 않는 것 (한 번에 한 명)
+- **앱을 손으로 띄워 확인** — 로컬 DB(`userData/rockury.db`) 파일 하나를 공유하고, 앱은 단일 인스턴스 잠금이 걸려 있다.
+- **`npm run db:reset`** — 도커 테스트 DB 는 고정 포트(13306/13307/15432) 공유. 남이 쓰는 중에 리셋하면 그 사람 테스트가 깨진다.
+- **의존성 추가(`package.json`/lock)** — `main` 에서 한 명만. 나머지는 rebase 로 받아간다.
+- 자동 e2e(`npm run e2e`)는 임시 userData + MCP 포트 0 이라 **동시에 돌려도 안전하다**.
 
 ## ✅ 테스트 의무 (MUST — 예외 없음)
 테스트 없이 로직을 머지하지 않는다.
@@ -33,20 +84,24 @@ Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 
 1. **테스트·스크립트는 실 사용자 데이터를 절대 파괴하지 않는다.** 앱 로컬 DB
    (`~/Library/Application Support/Rockury/rockury.db`)를 테스트가 지우거나 그 경로로 앱을 띄우면 **안 된다**.
    e2e 는 격리된 임시 userData(`--user-data-dir=<mkdtemp>`)로 띄우고 그 임시 디렉터리만 정리한다.
-   `e2e/isolation.test.ts` 가 `smoke.mjs` 를 검사해 강제(실 경로 참조/실 DB rmSync 시 `npm test` 실패).
+   `e2e/isolation.test.ts` 가 **`e2e/**/*.mjs` 전부를**(러너 `smoke.mjs` + 서비스 흐름 `flows/*.mjs`
+   + `surface/verify.mjs`) 재귀로 검사해 강제 — 실 경로 참조/실 DB rmSync 시 `npm test` 실패.
+   새 흐름 파일은 등록 없이 자동으로 검사에 들어온다(파일 목록 하드코딩 금지).
 2. **커밋 게이트는 git pre-commit 훅이 강제**(`scripts/git-hooks/pre-commit`, `core.hooksPath` 로 추적·공유).
    typecheck && test && build 통과해야 커밋. `npm install` 시 `prepare` 가 훅 경로 자동 설정.
    **`--no-verify` 우회는 사용자 승인 없이 쓰지 않는다.**
-3. **e2e 는 버리는 1회용이 아니라 누적 회귀 자산이다.** 새 실 앱 흐름은 `smoke.mjs` 에 체크를 더해 쌓고
-   지우지 않는다. (steward `ui-preview` 능력도 검증 드라이브를 `smoke.mjs` 로 승격하도록 규정.)
+3. **e2e 는 버리는 1회용이 아니라 누적 회귀 자산이다.** 새 실 앱 흐름은 **자기 서비스 흐름 파일
+   `e2e/flows/<서비스>.mjs`** 에 체크를 더해 쌓고 지우지 않는다(러너 `e2e/smoke.mjs` 는 흐름을 순회할
+   뿐이라 건드리지 않는다). (steward `ui-preview` 능력도 검증 드라이브를 흐름 파일로 승격하도록 규정.)
    **UI 품질 게이트(`e2e/surface/verify.mjs`)는 셸 훅(`data-nav-service/module/view`)으로 전 서비스×모듈×뷰를
    자동 순회**하므로 새 화면은 nav 에 등록만 하면 커버리지에 자동으로 들어온다 — 이 data-nav 훅을 지우면
    순회가 깨지고 안전핀(MIN_LEAVES)이 검증불가(2)로 실패한다. 훅을 지우지 말 것.
 4. **MCP 서버는 앱 능력과 함께 자란다(스테일 금지).** MCP(에이전트 연동) 서버는 메인 프로세스 내장
-   (`src/main/mcp/`, 명세 `docs/spec/mcp-server.md`). `src/main/ipc` 의 모든 채널은
-   `src/main/mcp/coverage.ts` 에 **노출(도구 대응) 또는 제외(사유)** 로 등재돼야 하며
-   `coverage.test.ts` 가 강제한다 — 새 IPC 채널을 미등재로 두거나, 지운 채널을 지도에 남기면
-   `npm test` 실패. 새 채널을 만들면 MCP 도구를 함께 갱신하거나 의식적으로 제외 사유를 적는다.
+   (`src/main/mcp/`, 명세 `docs/spec/mcp-server.md`). `src/main/ipc/**` 의 모든 채널은
+   **`src/main/mcp/coverage/<서비스>.ts`** 에 **노출(도구 대응) 또는 제외(사유)** 로 등재돼야 하며
+   `coverage.test.ts` 가 하위 폴더까지 재귀로 스캔해 강제한다 — 새 IPC 채널을 미등재로 두거나,
+   지운 채널을 지도에 남기면 `npm test` 실패. 새 채널을 만들면 MCP 도구를 함께 갱신하거나
+   의식적으로 제외 사유를 적는다. 두 서비스가 같은 채널을 등재해도 실패한다(조용한 덮어쓰기 방지).
 
 ## 검증 인프라
 - 단위: `npm test`(vitest). watch: `npm run test:watch`.

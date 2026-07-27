@@ -8,7 +8,7 @@ Playwright `_electron` 으로 빌드된 앱을 띄워 CSS/text 로케이터로 �
 1. `npm run build` (`out/main/index.js` 필요).
 2. Playwright `_electron` 로 런치 — **반드시 격리된 임시 userData**:
    `args: [MAIN, '--user-data-dir=<mkdtemp>']`. 실 앱 DB(`~/Library/Application Support/Rockury/rockury.db`)를
-   절대 건드리지 않는다(불변식). 런치/드라이브 패턴은 `e2e/smoke.mjs` 를 그대로 복사한다.
+   절대 건드리지 않는다(불변식). 런치/드라이브 패턴은 `e2e/smoke.mjs`(러너)와 `e2e/flows/db.mjs`(흐름) 를 그대로 복사한다.
 3. 조작은 **CSS/text 로케이터만**. `getByRole` 등 접근성 쿼리는 이 창을 **크래시**시킨다.
 4. 눈으로만 보지 말고 **실제로 click·fill** 하고 `document.body.innerText`·`th` 셀 등으로 단언한다
    (겉만 있는 기능은 정지 화면에 안 드러난다).
@@ -16,9 +16,9 @@ Playwright `_electron` 으로 빌드된 앱을 띄워 CSS/text 로케이터로 �
 
 ## ⭐ 축적 규칙 (이 프로젝트의 핵심 개선점)
 드라이브를 **1회용으로 버리지 말 것.** 지금까지 임시 스크립트로 띄워보고 버려서 회귀 자산이
-안 쌓인 게 기회비용이었다. 검증한 흐름이 회귀 가치가 있으면(대부분 있다) `e2e/smoke.mjs` 에
+안 쌓인 게 기회비용이었다. 검증한 흐름이 회귀 가치가 있으면(대부분 있다) 자기 서비스 흐름 파일 `e2e/flows/<서비스>.mjs` 에
 `check(...)` 블록으로 **추가해 누적**한다 — 지우지 않는다(CLAUDE.md 불변식 · `e2e/README.md` "확장").
-임시 드라이브 스크립트는 scratchpad 에 두되, 살아남을 검사는 반드시 smoke.mjs 로 **승격**한다.
+임시 드라이브 스크립트는 scratchpad 에 두되, 살아남을 검사는 반드시 `e2e/flows/<서비스>.mjs` 로 **승격**한다.
 
 ## 함정 (실측 — `e2e/README.md`)
 - 접근성 쿼리(`getByRole` 등) → 창 크래시. **CSS/text 로케이터만.**

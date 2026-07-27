@@ -1,0 +1,30 @@
+[
+  {
+    "check": "contrast",
+    "formFactor": "uiux/canvas",
+    "role": "text",
+    "text": "depth 2 · UI/UX › Canvas",
+    "bounds": {
+      "x": 764.71875,
+      "y": 533.4375,
+      "w": 158.5546875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/components",
+    "role": "text",
+    "text": "depth 2 · UI/UX › Components",
+    "bounds": {
+      "x": 749.6484375,
+      "y": 533.4375,
+      "w": 188.703125,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  }
+]

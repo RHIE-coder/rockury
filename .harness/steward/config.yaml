@@ -2,6 +2,8 @@
 core: steward
 managed_by: steward
 schema_version: 1
+# feature: 는 비워 둔다 — 산출물 폴더가 git 브랜치 이름을 따라간다.
+# 병렬 개발에서 워크트리마다 브랜치가 다르므로, 여기 값을 박으면 다섯이 같은 폴더를 쓴다.
 phases:
   - intake
   - spec
@@ -19,18 +21,18 @@ values:
   test_command: "npm test"
   build_command: "npm run build"
 bindings:
-  ui-preview: "./.harness/steward/project/impl/ui-preview.md"   # 빌드 앱을 _electron 로 띄워 직접 조작·검증 + smoke.mjs 로 축적
+  ui-preview: "./.harness/steward/project/impl/ui-preview.md"   # 빌드 앱을 _electron 로 띄워 직접 조작·검증 + e2e/flows/<서비스>.mjs 로 축적
   ui-shot: "./.harness/steward/project/impl/ui-shot.md"         # 같은 런치 위에서 스크린샷 증거 캡처
   token-guard: ""                     # (미지정) 정적 색상 린트 미구현 — 토큰 정본은 globals.css(@theme), 하드코딩 색 소수 존재(후속)
   contrast-check: "npm run surface-verify"   # 대비(WCAG 2.2)는 surface-verify 의 contrast 검사가 대체
-  e2e-runner: "npm run e2e"           # node e2e/smoke.mjs — Playwright _electron 누적 스모크
+  e2e-runner: "npm run e2e"           # node e2e/smoke.mjs — 서비스별 흐름(e2e/flows/*.mjs) 순회 러너
   surface-verify: "npm run surface-verify"   # Electron 어댑터: 화면→정규화 모델→판정기 surface-checks.mjs. 기록: artifacts/<feature>/surface-verify.json
 impl: {}
 
 # 커밋 UI 게이트 (ON). 이 글롭에 걸리는 UI 파일을 건드린 커밋은 surface-verify 통과 기록을
 # 요구하고, surface-gate 훅이 판정기를 재실행해 강제한다(에이전트 주장 불신, 기계 재검증).
 #   워크플로: UI 수정 후 커밋 전 → `npm run build && npm run surface-verify` (기록 갱신) → 커밋.
-#   기존 findings 는 e2e/surface/baseline.json 에 수용됨(차단 제외) — 새 회귀만 막힌다.
+#   기존 findings 는 e2e/surface/baseline/<서비스>.json 에 수용됨(차단 제외) — 새 회귀만 막힌다.
 #   기준선 갱신(현재 상태 수용): `npm run surface-verify -- --update-baseline`.
 ui_globs:
   - "src/renderer/**/*.tsx"

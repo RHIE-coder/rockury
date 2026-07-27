@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
-import { envelope } from './envelope'
-import { clearLayout, getLayout, saveLayout, type SaveLayoutInput } from '../store/diagramLayouts'
+import { envelope } from '../envelope'
+import { clearLayout, getLayout, saveLayout, type SaveLayoutInput } from '../../store/diagramLayouts'
 
 /** Console 실 ERD 레이아웃 영속(§ops-plan 2e · v2). 봉투 규약. */
 export function registerDiagramIpc(): void {

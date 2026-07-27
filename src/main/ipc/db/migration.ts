@@ -6,8 +6,8 @@ import {
   saveSnapshot,
   type CreateLogInput,
   type CreateSnapshotInput
-} from '../store/migration'
-import { envelope } from './envelope'
+} from '../../store/migration'
+import { envelope } from '../envelope'
 
 /**
  * Migration IPC(§ops-plan Phase 3) — 스냅샷 기준선 + 로그 체인(봉투 패턴).

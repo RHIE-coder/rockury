@@ -1,90 +1,6 @@
 [
   {
     "check": "contrast",
-    "formFactor": "boot",
-    "role": "text",
-    "text": "운영",
-    "bounds": {
-      "x": 449.953125,
-      "y": 94.25,
-      "w": 30.90625,
-      "h": 19
-    },
-    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
-    "formFactor": "boot",
-    "role": "text",
-    "text": "depth 2 · DB › Overview",
-    "bounds": {
-      "x": 767.09375,
-      "y": 555.4375,
-      "w": 153.8046875,
-      "h": 20.5
-    },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
-    "formFactor": "uiux/canvas",
-    "role": "text",
-    "text": "depth 2 · UI/UX › Canvas",
-    "bounds": {
-      "x": 764.71875,
-      "y": 533.4375,
-      "w": 158.5546875,
-      "h": 20.5
-    },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
-    "formFactor": "uiux/components",
-    "role": "text",
-    "text": "depth 2 · UI/UX › Components",
-    "bounds": {
-      "x": 749.6484375,
-      "y": 533.4375,
-      "w": 188.703125,
-      "h": 20.5
-    },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
-    "formFactor": "api/endpoints",
-    "role": "text",
-    "text": "depth 2 · API › Endpoints",
-    "bounds": {
-      "x": 763.71875,
-      "y": 533.4375,
-      "w": 160.5546875,
-      "h": 20.5
-    },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
-    "formFactor": "api/testing",
-    "role": "text",
-    "text": "depth 2 · API › Testing",
-    "bounds": {
-      "x": 771.203125,
-      "y": 533.4375,
-      "w": 145.5859375,
-      "h": 20.5
-    },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
     "formFactor": "db/overview",
     "role": "text",
     "text": "운영",
@@ -1291,48 +1207,6 @@
       "x": 764.765625,
       "y": 555.4375,
       "w": 158.46875,
-      "h": 20.5
-    },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
-    "formFactor": "infra/overview",
-    "role": "text",
-    "text": "depth 2 · Infra › Overview",
-    "bounds": {
-      "x": 762.09375,
-      "y": 533.4375,
-      "w": 163.8125,
-      "h": 20.5
-    },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
-    "formFactor": "infra/containers",
-    "role": "text",
-    "text": "depth 2 · Infra › Containers",
-    "bounds": {
-      "x": 757.671875,
-      "y": 533.4375,
-      "w": 172.6484375,
-      "h": 20.5
-    },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
-    "severity": "block"
-  },
-  {
-    "check": "contrast",
-    "formFactor": "infra/cloud",
-    "role": "text",
-    "text": "depth 2 · Infra › Cloud",
-    "bounds": {
-      "x": 771.8125,
-      "y": 533.4375,
-      "w": 144.375,
       "h": 20.5
     },
     "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",

@@ -1,6 +1,6 @@
 # TestPlan: db-connections (자동확인 제외 표시 + 그룹/DnD)
 
-> 정의(무엇을 검증하나)만 여기. 코드는 대상 모듈 옆 `*.test.ts`(vitest) + 앱 흐름 `e2e/smoke.mjs`.
+> 정의(무엇을 검증하나)만 여기. 코드는 대상 모듈 옆 `*.test.ts`(vitest) + 앱 흐름 `e2e/flows/<서비스>.mjs`.
 
 ## Scenario S1 — 자동 확인 판정 (순수 로직)
 - **CASE-conn-001** 제외 플래그가 꺼진 연결만 확인 대상으로 남긴다. (auto-check AC-1) → `connections/autoCheck.test.ts`
@@ -18,7 +18,7 @@
 - **CASE-conn-021** moveConnection: group_id + 전역 sort_order 를 단일 트랜잭션 반영, 없는 그룹/연결 거부. (dnd AC-5)
 - **CASE-conn-022** reorderConnectionGroups: 그룹 sort_order 재부여로 목록 순서 변경. (groups AC-7)
 
-## Scenario S4 — 앱 구동 흐름 (e2e/smoke.mjs, CSS/text 로케이터만)
+## Scenario S4 — 앱 구동 흐름 (e2e/flows/db.mjs, CSS/text 로케이터만)
 - **CASE-conn-030** `새 그룹` → 인라인 이름 입력 → Enter → 그룹 섹션 표시. (groups AC-1)
 - **CASE-conn-031** 카드를 그룹 영역으로 마우스 드래그 → `connections.list()` 에 groupId 저장. (dnd AC-4)
 - **CASE-conn-032** 카드를 미분류 영역으로 드래그 아웃 → groupId null 복귀. (dnd AC-4)

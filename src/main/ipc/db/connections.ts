@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
-import { connectionService, type ConnectionFormData } from '../services/connectionService'
-import { envelope } from './envelope'
+import { connectionService, type ConnectionFormData } from '../../services/connectionService'
+import { envelope } from '../envelope'
 
 /**
  * Connection IPC(§IA · 결정 B) — 원시 접속 CRUD + 연결 테스트(봉투 패턴).

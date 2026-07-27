@@ -8,7 +8,7 @@ import {
   renameFolder,
   reorderTree,
   updateSavedQuery
-} from '../store/savedQueries'
+} from '../../store/savedQueries'
 import {
   addItem,
   addReference,
@@ -26,8 +26,8 @@ import {
   reorderItems,
   updateCollection,
   updateItem
-} from '../store/collections'
-import { envelope } from './envelope'
+} from '../../store/collections'
+import { envelope } from '../envelope'
 
 /**
  * 저장 쿼리 라이브러리(트리) + 컬렉션 IPC(§ops 향상). 봉투 패턴.
