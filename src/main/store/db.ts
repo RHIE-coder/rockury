@@ -65,7 +65,8 @@ function migrate(d: DatabaseSync): void {
       position    INTEGER NOT NULL DEFAULT 0,
       columns     TEXT NOT NULL DEFAULT '[]',
       constraints TEXT NOT NULL DEFAULT '[]',
-      is_view     INTEGER NOT NULL DEFAULT 0
+      is_view     INTEGER NOT NULL DEFAULT 0,
+      view_sql    TEXT NOT NULL DEFAULT ''
     );
     CREATE INDEX IF NOT EXISTS idx_tables_design ON tables(design_id);
 
@@ -239,6 +240,16 @@ function migrate(d: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_seed_sets_design ON seed_sets(design_id);
 
+    -- 환경 변수 값 — 시드의 {{NAME}} 을 반영할 때 채우는 값. 값은 OS 키체인으로 암호화해 넣는다
+    -- (비밀값이 평문으로 남지 않게). 스코프는 환경(connection×design 바인딩).
+    CREATE TABLE IF NOT EXISTS env_variables (
+      env_id          TEXT NOT NULL,
+      name            TEXT NOT NULL,
+      encrypted_value TEXT NOT NULL DEFAULT '',
+      updated_at      TEXT NOT NULL,
+      PRIMARY KEY (env_id, name)
+    );
+
     -- Console 실 ERD(2e) 레이아웃 — 연결별 노드 위치/뷰포트(JSON). 노드 키는 t:<테이블명>.
     CREATE TABLE IF NOT EXISTS diagram_layouts (
       connection_id TEXT PRIMARY KEY,
@@ -313,6 +324,13 @@ function migrate(d: DatabaseSync): void {
     .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('tables') WHERE name='is_view'`)
     .get() as unknown as { c: number }
   if (hasIsView.c === 0) d.exec('ALTER TABLE tables ADD COLUMN is_view INTEGER NOT NULL DEFAULT 0')
+
+  // tables.view_sql — 설계부에서 선언한 뷰의 본문 SELECT(`CREATE VIEW … AS` 뒷부분).
+  // is_view 만으로는 뷰를 실 DB 에 만들 수 없다 — 본문이 있어야 DDL 이 성립한다. 구 스키마 호환 ALTER.
+  const hasViewSql = d
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('tables') WHERE name='view_sql'`)
+    .get() as unknown as { c: number }
+  if (hasViewSql.c === 0) d.exec(`ALTER TABLE tables ADD COLUMN view_sql TEXT NOT NULL DEFAULT ''`)
 }
 
 /** 첫 실행 시드 — commerce-core (MySQL) 설계 + 예제 테이블. designs 가 비어 있을 때만. */

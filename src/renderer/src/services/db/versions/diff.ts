@@ -114,6 +114,20 @@ function diffTable(base: TableDef, target: TableDef): TableDiff | null {
     tableChanges.push({ field: '이름', before: base.name, after: target.name })
   if (base.comment !== target.comment)
     tableChanges.push({ field: '설명', before: base.comment || '—', after: target.comment || '—' })
+  // 테이블 ↔ 뷰 전환과 뷰 본문 변경은 실 DB 반영이 CREATE TABLE/VIEW 로 갈리는 큰 변화다 —
+  // 컬럼·제약만 보면 조용히 지나간다.
+  if (!!base.isView !== !!target.isView)
+    tableChanges.push({
+      field: '종류',
+      before: base.isView ? '뷰' : '테이블',
+      after: target.isView ? '뷰' : '테이블'
+    })
+  if ((base.viewSql ?? '') !== (target.viewSql ?? ''))
+    tableChanges.push({
+      field: '뷰 본문',
+      before: base.viewSql || '—',
+      after: target.viewSql || '—'
+    })
 
   const columns: ColumnDiff[] = []
   const baseCols = new Map(base.columns.map((c) => [c.id, c]))

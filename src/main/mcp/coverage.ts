@@ -17,10 +17,12 @@ export const MCP_TOOL_CHANNELS: Record<string, string[]> = {
   get_schema: ['tables:list'],
   list_versions: ['versions:list'],
   get_version: ['versions:list'],
-  // ── 쓰기 4종(2단계) — 삭제류는 여기 못 들어온다(파괴적 조작은 사람이 앱에서만, 테스트 핀). ──
+  // ── 쓰기 5종 — 삭제류는 여기 못 들어온다(파괴적 조작은 사람이 앱에서만, 테스트 핀). ──
   create_design: ['designs:create'],
   update_design: ['designs:update'],
   set_schema: ['tables:replaceForDesign'],
+  // 부분 수정도 저장은 같은 설계 스코프 교체 경로다 — 조준만 도구가 하고 저장 계층은 그대로.
+  patch_schema: ['tables:replaceForDesign'],
   create_version: ['versions:create']
 }
 
@@ -35,6 +37,11 @@ export const MCP_EXCLUDED_CHANNELS: Record<string, string> = {
   //   시드는 실 DB 에 심어질 기준 데이터이고, 그 값에 환경 변수 자리표시자가 섞인다.
   //   에이전트가 시드를 쓰는 것은 반영 파이프라인((b) 설계→운영 UPSERT)의 안전장치가 선 뒤에
   //   함께 설계한다 — 읽기도 그때 같은 도구로 노출한다(반쪽 노출로 의미가 왜곡되는 것을 피함).
+  'envVars:list': '환경 변수 메타 — 시드 반영 값(비밀값 포함 가능) 계열로 함께 보류',
+  'envVars:set': '비밀값 쓰기 — 원격 노출 금지',
+  'envVars:delete': '파괴적 쓰기 — 노출 금지',
+  'envVars:resolve': '비밀값 평문 반환 — 반영 직전 앱 내부 전용, 원격 노출 절대 금지',
+
   'seedSets:list': '시드 저작은 앱 화면 전용 — 반영 파이프라인((b) 단계)과 함께 도구 설계 예정',
   'seedSets:replaceForDesign': '시드 쓰기 — 반영 파이프라인((b) 단계) 안전장치 확정 전 노출 금지',
 

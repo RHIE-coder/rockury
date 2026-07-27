@@ -31,6 +31,8 @@ export function DefinitionToolbar() {
           <button
             key={id}
             type="button"
+            // e2e 가 표현 토글을 라벨 문자열이 아니라 역할로 집게 하는 훅 — 지우면 스모크가 깨진다.
+            data-definition-form={id}
             onClick={() => setForm(id)}
             aria-pressed={form === id}
             className={cx(

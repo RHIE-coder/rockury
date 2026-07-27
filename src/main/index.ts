@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import { join } from 'path'
 import { registerWindowIpc } from './ipc/window'
 import { registerStoreIpc } from './ipc/store'
@@ -11,14 +11,21 @@ import { registerCollectionIpc } from './ipc/collections'
 import { registerDiagramIpc } from './ipc/diagram'
 import { registerMcpIpc } from './ipc/mcp'
 import { setDbPath } from './store/db'
+import { defaultWindowBounds } from './windowSize'
 import { startMcp, stopMcp } from './mcp/http'
 import { setStoreChangeNotifier } from './mcp/tools'
 import { createKeychainTokenStore } from './mcp/tokenStore'
 
 function createWindow(): void {
+  // 커서가 있는 화면에 띄운다 — 사용자가 지금 보고 있는 모니터. 위치를 직접 정해야
+  // 창이 좁은 모니터에 걸려 폭이 잘리지 않는다(defaultWindowBounds 주석 참고).
+  const target = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  const { x, y, width, height } = defaultWindowBounds(target.workArea)
   const mainWindow = new BrowserWindow({
-    width: 1320,
-    height: 840,
+    x,
+    y,
+    width,
+    height,
     minWidth: 960,
     minHeight: 600,
     show: false,

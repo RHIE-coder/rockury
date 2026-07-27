@@ -130,13 +130,13 @@ describe('CASE-studio-023 변수 이름 비교', () => {
 })
 
 describe('CASE-studio-024 선언 변경', () => {
-  it("자연키·무시 컬럼·'설계에 없는 행' 처리 변경을 잡는다", () => {
+  it("짝짓기 기준·무시 컬럼·'설계에 없는 행' 처리 변경을 잡는다", () => {
     const d = diffSeeds(
       [set({ naturalKey: ['code'], ignoredColumns: [], strength: 'ensure' })],
       [set({ naturalKey: ['code', 'org'], ignoredColumns: ['id'], strength: 'authoritative' })]
     )
     expect(d.sets[0].declarationChanges).toEqual([
-      { field: '자연키', before: 'code', after: 'code, org' },
+      { field: '짝짓기 기준', before: 'code', after: 'code, org' },
       { field: '무시 컬럼', before: '—', after: 'id' },
       { field: '설계에 없는 행', before: '그대로 둠', after: '삭제 후보' }
     ])

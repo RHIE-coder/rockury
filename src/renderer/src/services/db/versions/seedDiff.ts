@@ -68,7 +68,7 @@ function rowChanges(base: SeedRow, target: SeedRow, ignored: Set<string>): Field
 function declarationChanges(base: SeedSet, target: SeedSet): FieldChange[] {
   const out: FieldChange[] = []
   if (base.naturalKey.join(',') !== target.naturalKey.join(','))
-    out.push({ field: '자연키', before: listLabel(base.naturalKey), after: listLabel(target.naturalKey) })
+    out.push({ field: '짝짓기 기준', before: listLabel(base.naturalKey), after: listLabel(target.naturalKey) })
   if (base.ignoredColumns.join(',') !== target.ignoredColumns.join(','))
     out.push({ field: '무시 컬럼', before: listLabel(base.ignoredColumns), after: listLabel(target.ignoredColumns) })
   if (base.strength !== target.strength)

@@ -85,3 +85,32 @@ describe('diffSnapshots', () => {
     expect(d.summary.constraintsModified).toBe(1)
   })
 })
+
+describe('diffSnapshots — 뷰', () => {
+  const asTable = snap([tbl('t9', 'v_summary', [col('c9', 'total', 'BIGINT')])])
+  const asView = snap([
+    { ...tbl('t9', 'v_summary', [col('c9', 'total', 'BIGINT')]), isView: true, viewSql: 'SELECT 1' }
+  ])
+
+  it('테이블 ↔ 뷰 전환을 놓치지 않는다', () => {
+    const d = diffSnapshots(asTable, asView)
+    expect(d.tables[0].tableChanges).toContainEqual({ field: '종류', before: '테이블', after: '뷰' })
+    expect(d.summary.tablesModified).toBe(1)
+  })
+
+  it('뷰 본문 변경도 잡는다', () => {
+    const changed = snap([
+      { ...tbl('t9', 'v_summary', [col('c9', 'total', 'BIGINT')]), isView: true, viewSql: 'SELECT 2' }
+    ])
+    const d = diffSnapshots(asView, changed)
+    expect(d.tables[0].tableChanges).toContainEqual({
+      field: '뷰 본문',
+      before: 'SELECT 1',
+      after: 'SELECT 2'
+    })
+  })
+
+  it('아무것도 안 바뀌면 조용하다', () => {
+    expect(isEmptyDiff(diffSnapshots(asView, asView))).toBe(true)
+  })
+})

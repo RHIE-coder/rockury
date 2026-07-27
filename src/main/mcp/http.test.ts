@@ -66,7 +66,7 @@ describe('MCP HTTP 서버', () => {
     expect(health.version).toBe('0.0.0-test')
   })
 
-  it('initialize → tools/list — 읽기 4종 + 쓰기 4종 노출, 삭제류 부재 (CASE-mcp-011)', async () => {
+  it('initialize → tools/list — 읽기 4종 + 쓰기 5종 노출, 삭제류 부재 (CASE-mcp-011)', async () => {
     const sid = await initSession()
     const json = (await (await post({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, sid)).json()) as {
       result: { tools: Array<{ name: string }> }
@@ -74,7 +74,7 @@ describe('MCP HTTP 서버', () => {
     const names = json.result.tools.map((t) => t.name)
     for (const n of [
       'list_designs', 'get_schema', 'list_versions', 'get_version',
-      'create_design', 'update_design', 'set_schema', 'create_version'
+      'create_design', 'update_design', 'set_schema', 'patch_schema', 'create_version'
     ]) expect(names).toContain(n)
     // 파괴적 조작은 사람이 앱에서만 — 삭제류 도구가 생기면 명세(tools.write AC-7) 위반.
     expect(names.filter((n) => /delete|remove|drop/.test(n))).toEqual([])

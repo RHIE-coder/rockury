@@ -1,7 +1,7 @@
 import { KIND_LABEL, typeLabel } from '../../console/data/columnMeta'
 import { checkColumnIds, keyBadgesOf } from '../definition/derive'
 import { fkRefText } from '../definition/fkPolicy'
-import type { Column, TableDef } from '../definition/types'
+import type { Column, KeyType, TableDef } from '../definition/types'
 import { isAutoIncrement } from './seedSet'
 
 /**
@@ -13,12 +13,21 @@ import { isAutoIncrement } from './seedSet'
  * (`derive.keyBadgesOf`·`fkPolicy.fkRefText`·`derive.checkColumnIds`)을 재사용한다.
  */
 
+/** 컬럼 머리 키 배지 하나 — 색은 `ui/badge` 의 종류별 variant 를 쓴다(서비스 공통 색 정본). */
+export interface SeedKeyBadge {
+  kind: KeyType
+  /** 복합 제약에서의 1-based 위치(단일이면 undefined). */
+  pos?: number
+  /** 화면 표기 — `PK` · `UK1`. */
+  label: string
+}
+
 export interface SeedColumnHint {
   name: string
   /** 헤더 둘째 줄 타입 라벨(소문자 정리). */
   typeLabel: string
-  /** `PK`·`FK1` 처럼 위치까지 붙은 텍스트 배지. */
-  badges: string[]
+  /** 종류·위치가 담긴 키 배지(색은 종류로 정해진다). */
+  badges: SeedKeyBadge[]
   /** 어느 CHECK 라도 이 컬럼을 참조하면 true → `CHK` 마커. */
   hasCheck: boolean
   /** 시드가 **반드시 채워야 하는** 컬럼: NOT NULL + 기본값 없음 + 자동증가 아님. */
@@ -39,7 +48,7 @@ export function requiredSeedColumns(table: TableDef): string[] {
   return table.columns.filter(isRequiredForSeed).map((c) => c.name)
 }
 
-function detailOf(table: TableDef, col: Column, badges: string[], hasCheck: boolean): string {
+function detailOf(table: TableDef, col: Column, badges: SeedKeyBadge[], hasCheck: boolean): string {
   const lines: string[] = [`${col.name} · ${typeLabel(col.type)}`]
 
   const nullPart = col.nullable ? 'NULL 허용' : 'NOT NULL'
@@ -50,7 +59,7 @@ function detailOf(table: TableDef, col: Column, badges: string[], hasCheck: bool
       : `기본값 ${col.defaultValue}`
   lines.push(`${nullPart} · ${defPart}${isRequiredForSeed(col) ? ' → 시드가 채워야 함' : ''}`)
 
-  if (badges.length) lines.push(`제약 ${badges.join(' · ')}${hasCheck ? ' · CHK' : ''}`)
+  if (badges.length) lines.push(`제약 ${badges.map((b) => b.label).join(' · ')}${hasCheck ? ' · CHK' : ''}`)
   else if (hasCheck) lines.push('제약 CHK')
 
   // FK 는 어디를 가리키는지가 핵심이다 — 정책까지 붙여 보인다(fkPolicy 정본 표기).
@@ -78,9 +87,11 @@ export function seedColumnHints(table: TableDef): SeedColumnHint[] {
   const checkIds = checkColumnIds(table)
 
   return table.columns.map((col) => {
-    const badges = (keyBadges.get(col.id) ?? []).map(
-      (b) => `${KIND_LABEL[b.kind]}${b.pos ?? ''}`
-    )
+    const badges: SeedKeyBadge[] = (keyBadges.get(col.id) ?? []).map((b) => ({
+      kind: b.kind,
+      pos: b.pos,
+      label: `${KIND_LABEL[b.kind]}${b.pos ?? ''}`
+    }))
     const hasCheck = checkIds.has(col.id)
     return {
       name: col.name,

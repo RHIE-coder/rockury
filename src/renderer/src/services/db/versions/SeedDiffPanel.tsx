@@ -36,7 +36,7 @@ export function SeedDiffPanel({ diff }: { diff: SeedDiff }) {
               {!s.comparable && s.status === 'modified' && (
                 <span
                   className="ml-auto flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-warning"
-                  title="자연키가 없거나 양쪽 선언이 달라 행을 짝지을 수 없어요"
+                  title="짝짓기 기준이 없거나 양쪽 선언이 달라 행을 짝지을 수 없어요"
                 >
                   <AlertTriangle className="size-3" />
                   행 비교 불가

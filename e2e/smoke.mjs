@@ -161,6 +161,60 @@ try {
   await page.waitForSelector('text=orders', { timeout: 5_000 })
   check('Definition: 시드 테이블(orders) 표시', (await body()).includes('orders'))
 
+  // ── Studio › Definition — 사이드 패널 제약 탭(Console 과 같은 구성) ──
+  {
+    await click('[data-side-tab="constraints"]')
+    await page.waitForSelector('[data-constraint-group]', { timeout: 5_000 })
+    check('Studio › Definition: 제약 탭에 테이블별 그룹', (await page.locator('[data-constraint-group]').count()) > 0)
+    check('Studio › Definition: 제약 행 표시(pk_orders)', (await page.locator('[data-constraint-row="pk_orders"]').count()) === 1)
+    // 종류 필터 — FK 만 남기면 pk 행이 사라진다
+    await click('[data-constraint-filter="fk"]')
+    await page.waitForTimeout(200)
+    check('Studio › Definition: 제약 종류 필터(FK)', (await page.locator('[data-constraint-row="pk_orders"]').count()) === 0)
+    await click('[data-constraint-filter="ALL"]')
+    await page.waitForTimeout(150)
+    // 제약을 누르면 그 제약이 걸린 테이블로 이동한다
+    await click('[data-constraint-row="pk_orders"]')
+    await page.waitForTimeout(250)
+    await click('[data-side-tab="tables"]')
+    await page.waitForTimeout(200)
+    check('Studio › Definition: 제약 클릭 → 그 테이블로 이동', (await body()).includes('orders'))
+  }
+
+  // ── Studio › Definition — 뷰 선언(설계부에서 뷰 만들기 → 목록이 테이블/뷰로 갈린다) ──
+  {
+    await click('button[aria-label="테이블 추가"]')
+    await page.waitForSelector('[data-definition-add="view"]', { timeout: 5_000 })
+    await click('[data-definition-add="view"]')
+    await page.waitForSelector('[data-definition-view-badge]', { timeout: 5_000 })
+    check('Studio › Definition: 뷰 추가 → 뷰 배지', (await page.locator('[data-definition-view-badge]').count()) === 1)
+    check('Studio › Definition: 뷰엔 제약 구역이 없다', !(await body()).includes('제약 추가'))
+    check('Studio › Definition: 뷰 본문 편집기', (await page.locator('[data-view-body]').count()) === 1)
+    // 목록이 테이블/뷰 구역으로 갈린다 — 이 화면이 Console 과 같아지는 지점
+    check('Studio › Definition: 목록에 뷰 구역 등장', (await body()).includes('뷰'))
+
+    // 본문 SELECT 를 쓰면 SQL 폼이 CREATE VIEW 로 나온다
+    await page.locator('[data-view-body] .cm-content').click()
+    await page.keyboard.type('SELECT id, order_number FROM orders')
+    await page.waitForTimeout(400)
+    await click('[data-definition-form="sql"]')
+    await page.waitForTimeout(400)
+    const sqlBody = await body()
+    check('Studio › Definition: 뷰 DDL 은 CREATE VIEW', sqlBody.includes('CREATE OR REPLACE VIEW'))
+    check('Studio › Definition: 뷰 DDL 에 CREATE TABLE 없음', !sqlBody.includes('CREATE TABLE'))
+    check('Studio › Definition: 뷰 DDL 에 본문 SELECT 포함', sqlBody.includes('SELECT id, order_number FROM orders'))
+    await click('[data-definition-form="table"]')
+    await page.waitForTimeout(250)
+
+    // 저장 왕복 — 뷰 표식과 본문이 로컬 저장소까지 살아남는다
+    await page.waitForTimeout(600)
+    const storedView = await page.evaluate(async () => {
+      const list = await window.rockury.tables.list()
+      return list.filter((t) => t.designId === 'commerce-core' && t.isView).map((t) => t.viewSql)
+    })
+    check('Studio › Definition: 뷰 선언·본문 저장 왕복', storedView.length === 1 && storedView[0].includes('SELECT id, order_number'))
+  }
+
   // Studio › Diagram — 가상 ERD 편집기(설계 테이블 렌더 + 편집 + 설계 스코프 위치 영속).
   await click('button:has-text("Diagram")')
   await page.waitForSelector('.react-flow__node[data-id]', { timeout: 10_000 })
@@ -180,11 +234,28 @@ try {
   {
     const nd = page.locator('.react-flow__node[data-id]').last()
     const box = await nd.boundingBox()
-    await page.mouse.move(box.x + box.width / 2, box.y + 8)
+    const tfPre = await nd.evaluate((el) => el.style.transform)
+    const win = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }))
+    const from = { x: box.x + box.width / 2, y: box.y + 8 }
+    // ⚠ 드래그 끝점은 **반드시 창 안**이어야 한다. 창 밖에서 mouseup 하면 pointerup 이 페이지에
+    //   닿지 않아 React Flow 의 onNodeDragStop 이 안 불리고 위치 저장이 통째로 스킵된다.
+    //   (회귀: 마지막 노드가 창 아래쪽에 배치되면 목표 y 가 창 높이를 4px 넘어 간헐 실패했다.
+    //    앱 버그가 아니라 합성 입력이 창을 벗어난 것 — 방향을 뒤집어 안쪽으로 끈다.)
+    const to = {
+      x: from.x + (from.x + 140 < win.w - 20 ? 140 : -140),
+      y: from.y + (from.y + 90 < win.h - 20 ? 90 : -90)
+    }
+    await page.mouse.move(from.x, from.y)
     await page.mouse.down()
-    await page.mouse.move(box.x + box.width / 2 + 140, box.y + 8 + 90, { steps: 8 })
+    await page.mouse.move(to.x, to.y, { steps: 8 })
     await page.mouse.up()
     await page.waitForTimeout(500)
+    // 드래그가 실제로 일어났는지 먼저 가른다 — 저장 실패와 "드래그 자체가 안 됨"을 구별해야
+    // 다음에 깨졌을 때 원인을 바로 안다.
+    check(
+      'Studio › Diagram: 드래그로 노드가 실제로 움직임',
+      (await nd.evaluate((el) => el.style.transform)) !== tfPre
+    )
     const saved = await page.evaluate(async () => {
       const l = await window.rockury.diagram.getLayout('design:commerce-core')
       return l && l.positions ? Object.keys(l.positions).length : 0
@@ -211,45 +282,121 @@ try {
     await page.waitForSelector('text=아직 시드 세트가 없어요', { timeout: 8_000 })
     check('Studio › Seed: 세트 없을 때 빈 상태 CTA', (await body()).includes('테이블에서 시드 세트 만들기'))
 
-    // 테이블 고르기 — orders 의 PK 는 AUTO_INCREMENT 라 자연키 기본값이 비어야 한다(사람이 고름).
+    // 테이블 고르기 — orders 의 PK 는 AUTO_INCREMENT 라 짝짓기 기준 기본값이 비어야 한다(사람이 고름).
     await click('button:has-text("테이블에서 시드 세트 만들기")')
     await page.waitForSelector('[data-seed-candidate]', { timeout: 8_000 })
-    check('Studio › Seed: 등록 후보에 뷰가 없다', (await page.locator('[data-seed-candidate="v_active_products"]').count()) === 0)
+    // 뷰는 데이터를 담지 않으므로 세트 후보에서 빠진다 — 앞서 Definition 에서 만든 뷰로 실제 검증.
+    check('Studio › Seed: 등록 후보에 뷰가 없다', (await page.locator('[data-seed-candidate^="new_view"]').count()) === 0)
+    check('Studio › Seed: 등록 후보에 테이블은 있다', (await page.locator('[data-seed-candidate]').count()) > 0)
     await click('[data-seed-candidate="orders"]')
     await page.waitForSelector('[data-seed-set-row="orders"]', { timeout: 8_000 })
     check('Studio › Seed: 세트 등록(orders)', (await page.locator('[data-seed-set-row="orders"]').count()) === 1)
-    check('Studio › Seed: 자동증가 PK → 자연키 경고', (await page.locator('[data-seed-needs-key]').count()) === 1)
+    check('Studio › Seed: 자동증가 PK → 짝짓기 기준 경고', (await page.locator('[data-seed-needs-key]').count()) === 1)
 
-    // 자연키 지정 → 경고 해제
-    await click('[data-seed-key-toggle="order_number"]')
+    // 컬럼 역할 토글 1개로 짝짓기 기준 지정 → 경고 해제. 기본은 '포함'이라 한 번 누르면 '무시', 두 번이면 '짝짓기'.
+    check(
+      'Studio › Seed: 컬럼 역할 토글은 컬럼당 1개',
+      (await page.locator('[data-seed-role-toggle="order_number"]').count()) === 1
+    )
+    check(
+      'Studio › Seed: 컬럼 기본 역할은 포함',
+      (await page.locator('[data-seed-role-toggle="order_number"][data-seed-col-role="include"]').count()) === 1
+    )
+    await click('[data-seed-role-toggle="order_number"]')
+    await page.waitForTimeout(200)
+    check(
+      'Studio › Seed: 역할 순환 포함 → 무시',
+      (await page.locator('[data-seed-role-toggle="order_number"][data-seed-col-role="ignore"]').count()) === 1
+    )
+    await click('[data-seed-role-toggle="order_number"]')
     await page.waitForTimeout(300)
-    check('Studio › Seed: 자연키 지정 → 경고 해제', (await page.locator('[data-seed-needs-key]').count()) === 0)
+    check(
+      'Studio › Seed: 역할 순환 무시 → 짝짓기',
+      (await page.locator('[data-seed-role-toggle="order_number"][data-seed-col-role="key"]').count()) === 1
+    )
+    check('Studio › Seed: 짝짓기 기준 지정 → 경고 해제', (await page.locator('[data-seed-needs-key]').count()) === 0)
 
-    // 자연키를 UNIQUE 가 뒷받침하는지 안내 — order_number 엔 UK 가 있어 조용하고,
+    // DB 가 값을 만드는 컬럼(orders.id = AUTO_INCREMENT)은 짝짓기 기준으로 갈 수 없다 — 역할 순환이 건너뛴다.
+    {
+      for (let i = 0; i < 3; i++) {
+        await click('[data-seed-role-toggle="id"]')
+        await page.waitForTimeout(150)
+      }
+      check(
+        'Studio › Seed: DB 생성 컬럼은 짝짓기 기준으로 갈 수 없다(역할 순환 건너뜀)',
+        (await page.locator('[data-seed-role-toggle="id"][data-seed-col-role="key"]').count()) === 0
+      )
+      // 원복 — 이후 저장 검증이 무시 컬럼 목록을 전제로 한다(id 를 무시로 남기면 순서가 달라진다).
+      while ((await page.locator('[data-seed-role-toggle="id"][data-seed-col-role="include"]').count()) === 0) {
+        await click('[data-seed-role-toggle="id"]')
+        await page.waitForTimeout(150)
+      }
+    }
+
+    // 짝짓기 기준을 UNIQUE 가 뒷받침하는지 안내 — order_number 엔 UK 가 있어 조용하고,
     // UNIQUE 없는 구성(order_number+status)으로 바꾸면 반영 단계 함의를 알린다.
     check(
-      'Studio › Seed: UNIQUE 가 뒷받침하는 자연키엔 안내 없음',
+      'Studio › Seed: UNIQUE 가 뒷받침하는 짝짓기 기준엔 안내 없음',
       (await page.locator('[data-seed-key-unbacked]').count()) === 0
     )
-    await click('[data-seed-key-toggle="status"]')
-    await page.waitForTimeout(250)
+    const cycleTo = async (column, role) => {
+      for (let i = 0; i < 3; i++) {
+        if ((await page.locator(`[data-seed-role-toggle="${column}"][data-seed-col-role="${role}"]`).count()) === 1) return
+        await click(`[data-seed-role-toggle="${column}"]`)
+        await page.waitForTimeout(200)
+      }
+    }
+    await cycleTo('status', 'key')
     check(
-      'Studio › Seed: UNIQUE 없는 자연키 구성 → UPSERT 불가 안내',
+      'Studio › Seed: UNIQUE 없는 짝짓기 기준 구성 → UPSERT 불가 안내',
       (await page.locator('[data-seed-key-unbacked]').count()) === 1
     )
-    await click('[data-seed-key-toggle="status"]') // 원복
-    await page.waitForTimeout(250)
+    await cycleTo('status', 'include') // 원복
 
     // 무시 컬럼 지정(비교 소음 제거)
-    await click('[data-seed-ignore-toggle="ordered_at"]')
-    await page.waitForTimeout(200)
-    check('Studio › Seed: 무시 컬럼 지정 표시', (await body()).includes('무시'))
+    await cycleTo('ordered_at', 'ignore')
+    check(
+      'Studio › Seed: 무시 컬럼 지정 표시',
+      (await page.locator('[data-seed-role-toggle="ordered_at"][data-seed-col-role="ignore"]').count()) === 1
+    )
+
+    // 무시 컬럼 감추기 토글 — 표에서만 빠진다(선언은 그대로). 끝에 반드시 원복해야
+    // 이후 흐름(컬럼 이름으로 셀 찍기)이 감춰진 컬럼을 못 찾는 일이 없다.
+    {
+      const colsShown = await page.locator('[data-seed-col]').count()
+      check('Studio › Seed: 무시 컬럼이 있으면 감추기 버튼이 나온다',
+        (await page.locator('[data-seed-hide-ignored="false"]').count()) === 1)
+      await click('[data-seed-hide-ignored]')
+      await page.waitForTimeout(200)
+      check(
+        'Studio › Seed: 감추기 → 무시 컬럼이 표에서 빠진다',
+        (await page.locator('[data-seed-col="ordered_at"]').count()) === 0 &&
+          (await page.locator('[data-seed-col]').count()) === colsShown - 1
+      )
+      // 선언 바는 이름을 늘어놓지 않고 **개수만** 보인다(UI 소음) — 이름은 설명(title)에 남는다.
+      // 확인할 것은 "표에서 감춰도 선언은 안 바뀐다"이므로 개수와 설명으로 가른다.
+      const ignoredChip = page.locator('[data-seed-ignored-count]')
+      check(
+        'Studio › Seed: 감춰도 선언은 그대로(무시 개수 유지 · 이름은 설명에 남는다)',
+        (await ignoredChip.getAttribute('data-seed-ignored-count')) === '1' &&
+          ((await ignoredChip.getAttribute('title')) ?? '').includes('ordered_at')
+      )
+      await click('[data-seed-hide-ignored]')
+      await page.waitForTimeout(200)
+      check(
+        'Studio › Seed: 다시 보이기 → 컬럼 수 원복',
+        (await page.locator('[data-seed-col]').count()) === colsShown &&
+          (await page.locator('[data-seed-hide-ignored="false"]').count()) === 1
+      )
+    }
 
     // 행 추가 + 셀 입력
     const fill = async (rowIdx, column, value) => {
       const cell = page.locator('[data-seed-row]').nth(rowIdx).locator(`[data-seed-cell="${column}"]`)
       await cell.click()
       await page.waitForTimeout(150)
+      // 기존 값이 있으면 지우고 쓴다 — 안 지우면 입력이 덧붙어 값이 뒤섞인다.
+      await page.keyboard.press('ControlOrMeta+A')
       await page.keyboard.type(value)
       await page.keyboard.press('Enter')
       await page.waitForTimeout(200)
@@ -259,11 +406,11 @@ try {
     await fill(0, 'order_number', 'SEED-0001')
     check('Studio › Seed: 셀 입력 반영', (await body()).includes('SEED-0001'))
 
-    // 중복 자연키 → 두 행 모두 오류 표시
+    // 중복 짝짓기 기준 값 → 두 행 모두 오류 표시
     await click('button:has-text("행 추가")')
     await page.waitForTimeout(200)
     await fill(1, 'order_number', 'SEED-0001')
-    check('Studio › Seed: 중복 자연키 → 두 행 오류 표시',
+    check('Studio › Seed: 중복 짝짓기 기준 → 두 행 오류 표시',
       (await page.locator('[data-seed-row-issue="duplicate-key"]').count()) === 2)
 
     // 값을 바꿔 중복 해소 → 오류 사라짐
@@ -283,11 +430,123 @@ try {
       (await page.locator('[data-seed-row-missing]').count()) === missingBefore - 1
     )
 
+    // ── 별칭 + 시드 행끼리의 참조 (CASE-studio-042c) ──
+    {
+      // 별칭 칸은 **이름 훅**으로 찍는다 — 위치(`td` nth)로 찍으면 앞에 칸이 하나 늘어날 때
+      // 엉뚱한 칸(행 삭제)을 눌러 행이 지워진다(실제로 그렇게 깨졌다).
+      const setAlias = async (rowIdx, v) => {
+        await page.locator('[data-seed-alias-cell]').nth(rowIdx).click()
+        await page.waitForTimeout(150)
+        await page.keyboard.type(v)
+        await page.keyboard.press('Enter')
+        await page.waitForTimeout(200)
+      }
+      await setAlias(0, 'first-order')
+      check('Studio › Seed: 별칭 저장', (await page.locator('[data-seed-row-alias="first-order"]').count()) === 1)
+
+      // 겹치는 별칭 → 양쪽 다 오류
+      await setAlias(1, 'first-order')
+      check(
+        'Studio › Seed: 겹치는 별칭 → 두 행 오류',
+        (await page.locator('[data-seed-row-alias-issue="duplicate-alias"]').count()) === 2
+      )
+      await setAlias(1, 'second-order')
+      check('Studio › Seed: 별칭 중복 해소', (await page.locator('[data-seed-row-alias-issue]').count()) === 0)
+
+      // user_id 는 users 를 가리키는 FK — orders 를 가리키면 관계 불일치로 잡힌다
+      await fill(1, 'user_id', '@orders#first-order')
+      check('Studio › Seed: 참조 셀 표식', (await page.locator('[data-seed-ref-cell]').count()) === 1)
+      check(
+        'Studio › Seed: FK 가 가리키는 테이블과 다른 참조 → 오류',
+        (await page.locator('[data-seed-row-ref-issue="true"]').count()) === 1
+      )
+
+      // 깨진 참조(없는 별칭)도 오류 — users 세트가 없으니 unknown-table 로 잡힌다
+      await fill(1, 'user_id', '@users#ghost')
+      check(
+        'Studio › Seed: 세트 없는 테이블 참조 → 오류 유지',
+        (await page.locator('[data-seed-row-ref-issue="true"]').count()) === 1
+      )
+      // 원복 — 이후 흐름(저장 검증)은 평범한 값을 전제
+      await fill(1, 'user_id', '2002')
+      check('Studio › Seed: 참조 지우면 오류 해제', (await page.locator('[data-seed-row-ref-issue]').count()) === 0)
+    }
+
+    // 행 삭제 버튼 — 호버 없이 항상 보여야 한다(Console › Data 와 같은 문법).
+    // (회귀: opacity-0 + group-hover 라 표 오른쪽 끝의 빈 컬럼으로만 보였고 발견할 방법이 없었다.)
+    check(
+      'Studio › Seed: 행 삭제 버튼이 호버 없이 보인다',
+      await page.locator('[data-seed-row-delete]').first().isVisible()
+    )
+    // 머리와 본문의 칸 수가 같아야 한다 — 칸을 하나 끼워 넣을 때 한쪽만 고치면 표 전체가
+    // 한 칸씩 밀린다(실제로 그렇게 깨졌고 "보인다" 검사만으로는 안 잡혔다).
+    check(
+      'Studio › Seed: 표 머리와 본문 칸 수 일치(열 밀림 방지)',
+      (await page.locator('thead tr th').count()) ===
+        (await page.locator('[data-seed-row]').first().locator('td').count())
+    )
+
     // 변수 자리표시자 — 환경마다 다른 값은 값 대신 변수로
     await fill(0, 'memo', '{{ADMIN_PASSWORD_HASH}}')
     check('Studio › Seed: 변수 셀 표식', (await page.locator('[data-seed-variable-cell]').count()) === 1)
     check('Studio › Seed: 세트가 요구하는 변수 목록',
       (await page.locator('[data-seed-variable="ADMIN_PASSWORD_HASH"]').count()) === 1)
+
+    // PK 생성 규칙 — 자유 입력이 아니라 **고르기**다. 목록은 PK 컬럼 타입으로 걸러진다.
+    // orders.id 는 BIGINT 자동증가라 문자열 규칙이 목록에 아예 없어야 한다(사고를 목록에서 없앤다).
+    check('Studio › Seed: PK 가 DB 담당이면 규칙 줄이 없다', (await page.locator('[data-seed-pk-rule]').count()) === 0)
+    await click('[data-seed-pk-strategy="seed"]')
+    await page.waitForSelector('[data-seed-pk-rule]', { timeout: 5_000 })
+    check(
+      'Studio › Seed: 규칙이 비면 미리보기가 셀 값 없음을 알린다',
+      (await page.locator('[data-seed-pk-preview-from="none"]').count()) === 1
+    )
+    await click('[data-seed-pk-rule]')
+    await page.waitForSelector('[data-seed-pk-rule-option]', { timeout: 5_000 })
+    // 숫자 PK → `셀에 직접 쓴 값` + `직접 입력…` 둘뿐. {uuid}·{key} 는 고를 수 없다.
+    check(
+      'Studio › Seed: 숫자 PK 는 문자열 규칙을 목록에 안 내놓는다',
+      (await page.locator('[data-seed-pk-rule-option]').count()) === 2 &&
+        (await page.locator('[data-seed-pk-rule-option="{uuid}"]').count()) === 0
+    )
+    // `직접 입력…` 으로 가면 자유 입력칸 + 조각 칩이 열린다(접두사가 필요한 드문 경우).
+    await click('[data-seed-pk-rule-option="__custom__"]')
+    await page.waitForSelector('[data-seed-pk-template]', { timeout: 5_000 })
+    check('Studio › Seed: 직접 입력 → 조각 칩 4개 노출', (await page.locator('[data-seed-pk-token]').count()) === 4)
+    await click('[data-seed-pk-token="{table}"]')
+    await page.waitForTimeout(200)
+    await click('[data-seed-pk-token="{alias}"]')
+    await page.waitForTimeout(250)
+    check(
+      'Studio › Seed: 칩이 규칙 끝에 붙는다',
+      (await page.locator('[data-seed-pk-template]').inputValue()) === '{table}{alias}'
+    )
+    check(
+      'Studio › Seed: 미리보기가 규칙 결과를 보인다',
+      (await page.locator('[data-seed-pk-preview-from="template"]').count()) === 1
+    )
+    // 직접 입력 경로에만 남는 사고들 — 오타 · 타입 불일치 · 상수 규칙(전 행 같은 PK).
+    await page.locator('[data-seed-pk-template]').fill('{uuidd}')
+    await page.waitForTimeout(250)
+    check('Studio › Seed: 모르는 자리표시자 경고', (await page.locator('[data-seed-pk-unknown]').count()) === 1)
+    await page.locator('[data-seed-pk-template]').fill('{uuid}')
+    await page.waitForTimeout(250)
+    check('Studio › Seed: 숫자 PK 에 UUID → 타입 경고', (await page.locator('[data-seed-pk-type-issue]').count()) === 1)
+    await page.locator('[data-seed-pk-template]').fill('fixed-1')
+    await page.waitForTimeout(250)
+    check('Studio › Seed: 상수 규칙 → 전 행 같은 PK 경고', (await page.locator('[data-seed-pk-constant]').count()) === 1)
+    await page.locator('[data-seed-pk-template]').fill('u-{alias}')
+    await page.waitForTimeout(250)
+    check(
+      'Studio › Seed: 행마다 달라지는 규칙이면 경고 해제',
+      (await page.locator('[data-seed-pk-constant]').count()) === 0
+    )
+    // 원복 — 이후 버전 컷·Diff 검증이 보는 세트 상태를 바꾸지 않는다.
+    await page.locator('[data-seed-pk-template]').fill('')
+    await page.waitForTimeout(200)
+    await click('[data-seed-pk-strategy="db"]')
+    await page.waitForTimeout(200)
+    check('Studio › Seed: DB 담당으로 되돌리면 규칙 줄이 사라진다', (await page.locator('[data-seed-pk-rule]').count()) === 0)
 
     // '설계에 없는 행 = 삭제 후보' 선택 → 경고 문구
     await click('[data-seed-strength="authoritative"]')
@@ -363,7 +622,7 @@ try {
 
     const wNames = (await (await wPost({ jsonrpc: '2.0', id: 42, method: 'tools/list' }, wSid)).json())
       .result.tools.map((t) => t.name)
-    check('MCP 쓰기: tools/list 쓰기 4종 노출', ['create_design', 'update_design', 'set_schema', 'create_version'].every((n) => wNames.includes(n)))
+    check('MCP 쓰기: tools/list 쓰기 5종 노출', ['create_design', 'update_design', 'set_schema', 'patch_schema', 'create_version'].every((n) => wNames.includes(n)))
     check('MCP 쓰기: 삭제류 도구 부재', wNames.every((n) => !/delete|remove|drop/.test(n)))
 
     // create_version(번호 생략 → 최신 v0.3.15 에서 patch 증가) — Versions 타임라인이 열린 채 호출.
@@ -395,6 +654,34 @@ try {
     // 쓰기 오류 규율 — 미상 설계는 프로토콜 오류가 아닌 isError + 해결 안내.
     const bad = await callTool('set_schema', { designId: 'no-such', tables: [] }, 46)
     check('MCP 쓰기: 미상 설계 isError + list_designs 안내', bad?.isError === true && bad?.content?.[0]?.text?.includes('list_designs') === true)
+
+    // patch_schema — 전체 재전송 없이 부분 수정, 열린 화면에 즉시 반영. (spec tools.write AC-8)
+    const patched = await callTool(
+      'patch_schema',
+      { designId: 'commerce-core', operations: [{ op: 'rename_table', table: 'mcp_probe', newName: 'mcp_patched' }] },
+      47
+    )
+    check('MCP 쓰기: patch_schema 부분 수정 성공', patched?.isError !== true)
+    await page.waitForSelector('text=mcp_patched', { timeout: 5_000 })
+    check('MCP 쓰기: patch_schema 즉시 반영(mcp_patched)', (await body()).includes('mcp_patched'))
+
+    // 저장 전 위생 검사 — 깨진 글자는 반영 0 으로 막힌다. (spec tools.write AC-9)
+    const dirty = await callTool(
+      'patch_schema',
+      { designId: 'commerce-core', operations: [{ op: 'set_table_comment', table: 'mcp_patched', comment: '깨\uFFFD짐' }] },
+      48
+    )
+    check(
+      'MCP 쓰기: 깨진 글자는 저장 전에 차단(경로·코드포인트 안내)',
+      dirty?.isError === true && dirty?.content?.[0]?.text?.includes('U+FFFD') === true
+    )
+
+    // 방언 미지정 — 앱이 "사용자에게 물어보라"고 되돌린다(에이전트가 지어내지 못하게). (spec tools.write AC-1)
+    const noDialect = await callTool('create_design', { name: 'E2E 방언 미지정' }, 49)
+    check(
+      'MCP 쓰기: 방언 누락 시 사용자 선택 요구(생성 안 함)',
+      noDialect?.isError === true && noDialect?.content?.[0]?.text?.includes('사용자에게') === true
+    )
   }
 
   // ── 운영부: Connection(1급) 생성 + mysql test-db 연결 테스트 (설계 불필요) ──
@@ -996,6 +1283,137 @@ try {
   check('운영→설계: 새 설계 Draft 채워짐(Studio 에서 보임)', nd.tables > 0)
   check('운영→설계: 새 설계 첫 버전 컷', nd.versions === 1)
   check('운영→설계: 새 설계가 활성으로 전환됨(드롭다운·헤더 반영)', (await body()).includes('e2e-imported'))
+
+  // ⭐⭐ 시드 반영(설계→운영) + 되먹임(운영→설계) — 실 MySQL 에 트랜잭션 게이트로 쓴다.
+  //    대상은 방금 역설계로 들여온 설계(e2e-imported)라 컬럼이 실 DB 와 정확히 맞는다.
+  //    CASE-studio-090~094 (docs/qa/db-studio.md). 끝에서 심은 행을 지워 DB 를 원상복구한다.
+  {
+    const ROLE = 'e2e-seed-role'
+    // 검증·정리용 직접 조회는 이 연결로 한다(화면은 활성 연결을 쓰고, 둘은 같은 테스트 DB 다).
+    const connId = await page.evaluate(
+      async () => (await window.rockury.connections.list()).find((c) => c.name === 'E2E-mysql')?.id
+    )
+    const countRole = async (name) =>
+      Number(
+        (
+          await page.evaluate(
+            async ([cid, n]) =>
+              window.rockury.query.runParams(cid, 'SELECT COUNT(*) AS c FROM roles WHERE name = ?', [n]),
+            [connId, name]
+          )
+        ).rows[0].c
+      )
+
+    // ── 설계에 시드 세트 저작 ──
+    await click('button:has-text("Studio")')
+    await click('button:has-text("Seed")')
+    await page.waitForTimeout(500)
+    await click('button:has-text("테이블에서 시드 세트 만들기")')
+    await page.waitForSelector('[data-seed-candidate="roles"]', { timeout: 8_000 })
+    await click('[data-seed-candidate="roles"]')
+    await page.waitForSelector('[data-seed-set-row="roles"]', { timeout: 8_000 })
+
+    const cycleTo2 = async (column, role) => {
+      for (let i = 0; i < 4; i++) {
+        if ((await page.locator(`[data-seed-role-toggle="${column}"][data-seed-col-role="${role}"]`).count()) === 1) return
+        await click(`[data-seed-role-toggle="${column}"]`)
+        await page.waitForTimeout(150)
+      }
+    }
+    await cycleTo2('name', 'key')
+    check('시드 반영: 짝짓기 기준(name) 지정', (await page.locator('[data-seed-needs-key]').count()) === 0)
+    check(
+      '시드 반영: UNIQUE 뒷받침되는 기준이라 안내 없음',
+      (await page.locator('[data-seed-key-unbacked]').count()) === 0
+    )
+    // created_at/updated_at 은 DB 기본값이 있어 필수가 아니다 → 값 없이도 반영된다.
+    const fill2 = async (rowIdx, column, value) => {
+      await page.locator('[data-seed-row]').nth(rowIdx).locator(`[data-seed-cell="${column}"]`).click()
+      await page.waitForTimeout(150)
+      await page.keyboard.press('ControlOrMeta+A')
+      await page.keyboard.type(value)
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(200)
+    }
+    await click('button:has-text("행 추가")')
+    await page.waitForSelector('[data-seed-row]', { timeout: 5_000 })
+    await fill2(0, 'name', ROLE)
+    await fill2(0, 'description', '시드 반영 테스트')
+    await page.waitForTimeout(600) // 설계 스코프 저장 디바운스
+
+    // 규칙 목록의 타입 필터링을 **반대쪽**에서도 확인 — roles.id 는 char(36) 이라 {uuid} 가 나와야
+    // 한다(orders 의 BIGINT 에서는 안 나왔다). 고르면 미리보기가 실제 UUID 를 보인다.
+    {
+      await click('[data-seed-pk-strategy="seed"]')
+      await page.waitForSelector('[data-seed-pk-rule]', { timeout: 5_000 })
+      await click('[data-seed-pk-rule]')
+      await page.waitForSelector('[data-seed-pk-rule-option]', { timeout: 5_000 })
+      check(
+        '시드 반영: char(36) PK 는 {uuid} 를 고를 수 있다',
+        (await page.locator('[data-seed-pk-rule-option="{uuid}"]').count()) === 1
+      )
+      await click('[data-seed-pk-rule-option="{uuid}"]')
+      await page.waitForTimeout(300)
+      const previewed = await page.locator('[data-seed-pk-preview]').first().getAttribute('data-seed-pk-preview')
+      check(
+        '시드 반영: {uuid} 미리보기가 UUID 모양이고 타입 경고 없음',
+        /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(previewed ?? '') &&
+          (await page.locator('[data-seed-pk-type-issue]').count()) === 0
+      )
+      // 원복 — 이 흐름의 반영·되먹임 검증은 DB 가 PK 를 만드는 것을 전제로 한다.
+      await click('[data-seed-pk-strategy="db"]')
+      await page.waitForTimeout(400)
+    }
+
+    // ── Migration › Seed: 계획 → 적용 → 커밋 ──
+    await click('button:has-text("Migration")')
+    await click('[data-nav-view="seed"]')
+    await page.waitForSelector('text=시드 반영', { timeout: 8_000 })
+    await click('button:has-text("계획 만들기")')
+    await page.waitForSelector('[data-seed-step]', { timeout: 15_000 })
+    check('시드 반영: 계획에 넣기 문장 1개', (await page.locator('[data-seed-step="insert"]').count()) === 1)
+    check('시드 반영: 막는 것 없음', (await page.locator('[data-seed-blockers]').count()) === 0)
+
+    await click('button:has-text("적용")')
+    await page.waitForSelector('[data-seed-tx-gate]', { timeout: 15_000 })
+    check('시드 반영: 트랜잭션 게이트(커밋 대기)', (await body()).includes('아직 커밋되지'))
+    check('시드 반영: 커밋 전에는 실 DB 에 없다', (await countRole(ROLE)) === 0)
+
+    await click('button:has-text("커밋")')
+    await page.waitForTimeout(1200)
+    check('시드 반영: 커밋 후 실 DB 에 심어짐', (await countRole(ROLE)) === 1)
+    check('시드 반영: 재계획 시 할 일 없음(멱등)', (await body()).includes('할 일이 없습니다'))
+
+    // ── 되먹임: 실 DB 에서 값을 바꾼 뒤 가져오기 → 채택 → 설계 반영 ──
+    await page.evaluate(
+      async ([cid, n]) =>
+        window.rockury.query.runParams(cid, 'UPDATE roles SET description = ? WHERE name = ?', ['운영에서 고친 설명', n]),
+      [connId, ROLE]
+    )
+    await click('[data-seed-ops-tab="import"]')
+    await click('button:has-text("실 DB 읽기")')
+    await page.waitForSelector('[data-seed-import-row]', { timeout: 15_000 })
+    check(
+      '시드 되먹임: 값이 다른 행을 후보로 잡는다',
+      (await page.locator('[data-seed-import-row="changed"]').count()) >= 1
+    )
+    await page.locator('[data-seed-import-row="changed"] button[role="checkbox"]').first().click()
+    await click('[data-seed-import-accept]')
+    await page.waitForTimeout(800)
+    const seededDesc = await page.evaluate(async () => {
+      const list = await window.rockury.seedSets.list()
+      const s = list.find((x) => x.tableName === 'roles')
+      return s?.rows?.[0]?.values?.description ?? null
+    })
+    check('시드 되먹임: 채택한 값이 설계 시드에 담김', seededDesc === '운영에서 고친 설명')
+
+    // ── DB 원상복구(심은 행 제거) ──
+    await page.evaluate(
+      async ([cid, n]) => window.rockury.query.runParams(cid, 'DELETE FROM roles WHERE name = ?', [n]),
+      [connId, ROLE]
+    )
+    check('시드 반영: 정리 후 실 DB 원복', (await countRole(ROLE)) === 0)
+  }
 
   // Migration › Logs — 기준선 로그 기록(Phase 3e)
   await click('button:has-text("Logs")')

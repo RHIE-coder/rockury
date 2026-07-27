@@ -5,7 +5,7 @@ import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { dialectInfo } from '../dialects'
-import { TableListPanel } from '../TableListPanel'
+import { TableSidePanel } from '../TableSidePanel'
 import { generateDdl } from '../workspaces/definition/ddl'
 import { HighlightedSqlLine } from '../workspaces/definition/HighlightedSql'
 import type { TableDef } from '../workspaces/definition/types'
@@ -212,7 +212,7 @@ export function DefinitionView() {
           <div className="min-h-0 flex-1">
             <WorkspacePanels
               autoSaveId="db.console.definition"
-              sidebarTitle="TABLES"
+              sidebarTitle="SCHEMA"
               sidebarActions={
                 isEditing ? (
                   <Button variant="ghost" size="icon" className="size-6" aria-label="테이블 추가" onClick={() => addTableEdit(conn.dbType)}>
@@ -222,14 +222,14 @@ export function DefinitionView() {
               }
               sidebar={
                 isEditing ? (
-                  <TableListPanel
+                  <TableSidePanel
                     tables={draft}
                     activeId={editActive?.id ?? null}
                     onPick={(t) => setEditActive(t.id)}
                     searchPlaceholder="테이블/컬럼 검색…"
                   />
                 ) : (
-                  <TableListPanel
+                  <TableSidePanel
                     tables={list}
                     activeId={active?.id ?? null}
                     onPick={(t) => setActiveId(t.id)}

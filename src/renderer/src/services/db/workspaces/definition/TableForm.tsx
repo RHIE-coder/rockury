@@ -8,7 +8,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowDown, ArrowUp, GripVertical, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Eye, GripVertical, MoreHorizontal, Pencil, Plus, Table2, Trash2 } from 'lucide-react'
 import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { Checkbox } from '@renderer/ui/checkbox'
@@ -26,10 +26,11 @@ import { cn } from '@renderer/lib/utils'
 import { useActiveDesign } from '../../designs/store'
 import { dialectInfo } from '../../dialects'
 import { defaultSuggestions, isKnownType, typeSuggestions } from '../../typeCatalog'
-import { useActiveTable, useDefinitionStore, useStudioReadOnly } from './store'
+import { useActiveTable, useDefinitionStore, useDesignTables, useStudioReadOnly } from './store'
 import { checkColumnIds, keyBadgesOf, type KeyBadge } from './derive'
 import { EditableText } from './EditableText'
 import { ConstraintsSection } from './ConstraintsSection'
+import { ViewBodySection } from './ViewBodySection'
 import { FkBadge } from './FkRef'
 import type { Column } from './types'
 
@@ -38,6 +39,9 @@ import type { Column } from './types'
 // 말줄임 처리된다. 그보다 좁아지면 카드 안에서 가로 스크롤(GRID_MIN_W).
 const GRID =
   '24px 28px minmax(100px,1.1fr) minmax(120px,1.3fr) 108px 40px minmax(90px,0.9fr) minmax(120px,1.4fr) 32px'
+// 뷰 그리드 — Keys 열이 없다. 뷰에는 제약을 걸 수 없으니 영원히 빈 열이 되어 자리만 먹는다.
+const VIEW_GRID =
+  '24px 28px minmax(100px,1.1fr) minmax(120px,1.3fr) 40px minmax(90px,0.9fr) minmax(120px,1.4fr) 32px'
 const GRID_MIN_W = 660
 
 /** 컬럼 행 ⋯ 메뉴 — 이동 · 키 토글(제약 기반) · 삭제. FK 는 제약 에디터에서. */
@@ -45,12 +49,15 @@ function ColumnMenu({
   colId,
   index,
   count,
-  badges
+  badges,
+  isView
 }: {
   colId: string
   index: number
   count: number
   badges: KeyBadge[]
+  /** 뷰의 결과 컬럼이면 키 토글을 감춘다 — 뷰에는 제약을 걸 수 없다. */
+  isView: boolean
 }) {
   const moveColumn = useDefinitionStore((s) => s.moveColumn)
   const deleteColumn = useDefinitionStore((s) => s.deleteColumn)
@@ -75,29 +82,33 @@ function ColumnMenu({
           <ArrowDown />
           아래로 이동
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>키 (제약으로 반영)</DropdownMenuLabel>
-        <DropdownMenuCheckboxItem
-          checked={has('pk')}
-          onCheckedChange={() => togglePk(colId)}
-          onSelect={(e) => e.preventDefault()}
-        >
-          Primary Key
-        </DropdownMenuCheckboxItem>
-        <DropdownMenuCheckboxItem
-          checked={has('uk')}
-          onCheckedChange={() => toggleUnique(colId)}
-          onSelect={(e) => e.preventDefault()}
-        >
-          Unique
-        </DropdownMenuCheckboxItem>
-        <DropdownMenuCheckboxItem
-          checked={has('idx')}
-          onCheckedChange={() => toggleIndex(colId)}
-          onSelect={(e) => e.preventDefault()}
-        >
-          Index
-        </DropdownMenuCheckboxItem>
+        {!isView && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>키 (제약으로 반영)</DropdownMenuLabel>
+            <DropdownMenuCheckboxItem
+              checked={has('pk')}
+              onCheckedChange={() => togglePk(colId)}
+              onSelect={(e) => e.preventDefault()}
+            >
+              Primary Key
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={has('uk')}
+              onCheckedChange={() => toggleUnique(colId)}
+              onSelect={(e) => e.preventDefault()}
+            >
+              Unique
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={has('idx')}
+              onCheckedChange={() => toggleIndex(colId)}
+              onSelect={(e) => e.preventDefault()}
+            >
+              Index
+            </DropdownMenuCheckboxItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={() => deleteColumn(colId)}>
           <Trash2 />
@@ -115,7 +126,8 @@ function SortableColumnRow({
   count,
   badges,
   inCheck,
-  readOnly
+  readOnly,
+  isView
 }: {
   c: Column
   index: number
@@ -123,6 +135,7 @@ function SortableColumnRow({
   badges: KeyBadge[]
   inCheck: boolean
   readOnly: boolean
+  isView: boolean
 }) {
   const updateColumn = useDefinitionStore((s) => s.updateColumn)
   const toggleNullable = useDefinitionStore((s) => s.toggleNullable)
@@ -141,7 +154,7 @@ function SortableColumnRow({
         isDragging && 'relative z-10 rounded-md bg-panel opacity-90 shadow-lg'
       )}
       style={{
-        gridTemplateColumns: GRID,
+        gridTemplateColumns: isView ? VIEW_GRID : GRID,
         minHeight: 34,
         transform: CSS.Transform.toString(transform),
         transition
@@ -202,23 +215,25 @@ function SortableColumnRow({
           }
         />
       </div>
-      <div className="flex gap-1 px-1">
-        {badges.map((b) =>
-          b.kind === 'fk' ? (
-            <FkBadge key="fk" colId={c.id} pos={b.pos} />
-          ) : (
-            <Badge key={b.kind} variant={b.kind} className="px-1.5 py-0.5 text-[10px]">
-              {b.kind.toUpperCase()}
-              {b.pos != null && <span className="opacity-70">·{b.pos}</span>}
+      {!isView && (
+        <div className="flex gap-1 px-1">
+          {badges.map((b) =>
+            b.kind === 'fk' ? (
+              <FkBadge key="fk" colId={c.id} pos={b.pos} />
+            ) : (
+              <Badge key={b.kind} variant={b.kind} className="px-1.5 py-0.5 text-[10px]">
+                {b.kind.toUpperCase()}
+                {b.pos != null && <span className="opacity-70">·{b.pos}</span>}
+              </Badge>
+            )
+          )}
+          {inCheck && (
+            <Badge variant="check" className="px-1.5 py-0.5 text-[10px]" title="CHECK 제약에 참여">
+              CHK
             </Badge>
-          )
-        )}
-        {inCheck && (
-          <Badge variant="check" className="px-1.5 py-0.5 text-[10px]" title="CHECK 제약에 참여">
-            CHK
-          </Badge>
-        )}
-      </div>
+          )}
+        </div>
+      )}
       <div className="flex justify-center">
         <Checkbox
           checked={c.nullable}
@@ -253,7 +268,9 @@ function SortableColumnRow({
         />
       </div>
       <div className="flex justify-center text-transparent group-hover:text-muted">
-        {!readOnly && <ColumnMenu colId={c.id} index={index} count={count} badges={badges} />}
+        {!readOnly && (
+          <ColumnMenu colId={c.id} index={index} count={count} badges={badges} isView={isView} />
+        )}
       </div>
     </div>
   )
@@ -262,10 +279,12 @@ function SortableColumnRow({
 export function TableForm() {
   const design = useActiveDesign()
   const table = useActiveTable()
+  const siblings = useDesignTables()
   const addColumn = useDefinitionStore((s) => s.addColumn)
   const reorderColumns = useDefinitionStore((s) => s.reorderColumns)
   const updateTable = useDefinitionStore((s) => s.updateTable)
   const deleteTable = useDefinitionStore((s) => s.deleteTable)
+  const toggleView = useDefinitionStore((s) => s.toggleView)
   const setEditing = useDefinitionStore((s) => s.setEditing)
   const readOnly = useStudioReadOnly()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
@@ -273,6 +292,7 @@ export function TableForm() {
   // 부모(DefinitionWorkspace)가 설계 선택·테이블 존재를 보장하지만 방어적으로 가드.
   if (!design || !table) return null
 
+  const isView = !!table.isView
   const badgeMap = keyBadgesOf(table)
   const checkCols = checkColumnIds(table)
 
@@ -280,6 +300,25 @@ export function TableForm() {
     if (readOnly) return
     const { active, over } = e
     if (over && active.id !== over.id) reorderColumns(String(active.id), String(over.id))
+  }
+
+  /**
+   * 테이블 → 뷰 전환은 제약을 버린다(뷰엔 걸 수 없으므로) — 되돌릴 수 없으니 먼저 묻는다.
+   * Radix 메뉴아이템에서 곧장 블로킹 확인창을 띄우면 body `pointer-events:none` 이 남는다 →
+   * 프로젝트 관례대로 다음 틱으로 미룬다(e2e/README 함정).
+   */
+  const askToggleView = (): void => {
+    const losing = !isView && table.constraints.length > 0
+    setTimeout(() => {
+      if (
+        losing &&
+        !window.confirm(
+          `뷰로 바꾸면 이 테이블의 제약 ${table.constraints.length}개(PK·FK·인덱스 등)가 지워집니다. 뷰에는 제약을 걸 수 없어요. 계속할까요?`
+        )
+      )
+        return
+      toggleView()
+    }, 0)
   }
 
   return (
@@ -300,6 +339,15 @@ export function TableForm() {
               {dialectInfo(design.dialect).label}
             </span>
             <span className="font-medium text-muted">/</span>
+            {isView && (
+              <span
+                data-definition-view-badge
+                title="뷰 — 실 DB 에는 CREATE VIEW 로 만들어져요"
+                className="flex shrink-0 items-center gap-1 rounded-full bg-info-soft px-1.5 py-0.5 text-[10px] font-semibold tracking-normal text-info"
+              >
+                <Eye className="size-3" />뷰
+              </span>
+            )}
             <EditableText
               editKey="table:name"
               value={table.name}
@@ -320,15 +368,19 @@ export function TableForm() {
           />
         </div>
         <div className="ml-auto flex items-center gap-2.5 whitespace-nowrap text-[11.5px] tabular-nums text-muted">
-          <span>{table.columns.length} columns</span>
-          <span>·</span>
-          <span>{table.constraints.length} constraints</span>
+          <span>{isView ? `결과 컬럼 ${table.columns.length}` : `${table.columns.length} columns`}</span>
+          {!isView && (
+            <>
+              <span>·</span>
+              <span>{table.constraints.length} constraints</span>
+            </>
+          )}
         </div>
         {!readOnly && (
           <div className="flex gap-1.5">
             <Button size="sm" onClick={addColumn}>
               <Plus />
-              컬럼 추가
+              {isView ? '결과 컬럼 추가' : '컬럼 추가'}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -346,9 +398,14 @@ export function TableForm() {
                   설명 편집
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem data-definition-toggle-view onSelect={() => askToggleView()}>
+                  {isView ? <Table2 /> : <Eye />}
+                  {isView ? '테이블로 바꾸기' : '뷰로 바꾸기'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onSelect={() => deleteTable(table.id)}>
                   <Trash2 />
-                  테이블 삭제
+                  {isView ? '뷰 삭제' : '테이블 삭제'}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -356,18 +413,27 @@ export function TableForm() {
         )}
       </div>
 
+      {/* 뷰면 본문 SELECT 가 먼저 — 아래 컬럼 표는 그 본문이 내놓는 결과 컬럼이다. */}
+      {isView && (
+        <ViewBodySection table={table} dialect={design.dialect} siblings={siblings} readOnly={readOnly} />
+      )}
+
+      {isView && (
+        <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted">결과 컬럼</h3>
+      )}
+
       {/* 컬럼 그리드 (드래그 정렬) — 좁은 폭에선 카드 안에서만 가로 스크롤(본문은 안 밀림) */}
       <div className="overflow-x-auto rounded-[10px] border border-line">
        <div style={{ minWidth: GRID_MIN_W }}>
         <div
           className="grid items-center bg-panel text-[11px] font-semibold uppercase tracking-wide text-muted"
-          style={{ gridTemplateColumns: GRID, minHeight: 30 }}
+          style={{ gridTemplateColumns: isView ? VIEW_GRID : GRID, minHeight: 30 }}
         >
           <div />
           <div className="px-1 text-right">#</div>
           <div className="px-1">Name</div>
           <div className="px-1">Type</div>
-          <div className="px-1">Keys</div>
+          {!isView && <div className="px-1">Keys</div>}
           <div className="text-center">Null</div>
           <div className="px-1">Default</div>
           <div className="px-1">Comment</div>
@@ -385,6 +451,7 @@ export function TableForm() {
                 badges={badgeMap.get(c.id) ?? []}
                 inCheck={checkCols.has(c.id)}
                 readOnly={readOnly}
+                isView={isView}
               />
             ))}
           </SortableContext>
@@ -394,14 +461,15 @@ export function TableForm() {
           <div className="border-t border-dashed border-line px-3 py-2 pl-[56px]">
             <Button variant="soft" size="sm" onClick={addColumn}>
               <Plus />
-              컬럼 추가
+              {isView ? '결과 컬럼 추가' : '컬럼 추가'}
             </Button>
           </div>
         )}
        </div>
       </div>
 
-      <ConstraintsSection readOnly={readOnly} />
+      {/* 뷰에는 제약을 걸 수 없다 — 구역 자체를 감춘다(빈 구역이 "걸 수 있다"는 오해를 준다). */}
+      {!isView && <ConstraintsSection readOnly={readOnly} />}
     </div>
   )
 }

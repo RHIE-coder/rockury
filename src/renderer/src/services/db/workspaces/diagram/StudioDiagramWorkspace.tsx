@@ -14,7 +14,7 @@ import {
 import type { Node, Edge, NodeMouseHandler, Viewport, Connection } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { toPng, toSvg } from 'html-to-image'
-import { GitBranch, Search, X, Plus, Trash2, KeyRound, LayoutGrid, Lock } from 'lucide-react'
+import { GitBranch, Search, X, Plus, Trash2, Eye, KeyRound, LayoutGrid, Lock } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
@@ -45,7 +45,16 @@ function toFlow(tables: TableDef[], editable: boolean): { nodes: Node[]; edges: 
     id: n.id,
     type: 'tableErd',
     position: positions[n.id] ?? { x: 0, y: 0 },
-    data: { table: n.table, selected: false, highlighted: false, matched: false, dimmed: false, compact: false, editable }
+    data: {
+      table: n.table,
+      selected: false,
+      highlighted: false,
+      matched: false,
+      dimmed: false,
+      compact: false,
+      // 뷰 노드는 관계 핸들을 열지 않는다 — FK 를 걸 수 없는 대상에 연결점을 보이면 거짓말이다.
+      editable: editable && !n.table.isView
+    }
   }))
   const edges: Edge[] = erd.edges.map((e) => ({
     id: e.id,
@@ -305,7 +314,7 @@ function EditPanel({ table, allTables }: { table: TableDef; allTables: TableDef[
         />
         <button
           type="button"
-          title="테이블 삭제"
+          title={table.isView ? '뷰 삭제' : '테이블 삭제'}
           onClick={() => st.getState().deleteTable(table.id)}
           className="shrink-0 rounded p-1 text-muted hover:bg-destructive/10 hover:text-destructive"
         >
@@ -322,18 +331,20 @@ function EditPanel({ table, allTables }: { table: TableDef; allTables: TableDef[
         </div>
         {table.columns.map((col) => (
           <div key={col.id} className="flex items-center gap-1 rounded border border-line bg-canvas px-1.5 py-1">
-            <button
-              type="button"
-              aria-pressed={pkCols.has(col.id)}
-              title="Primary Key 토글"
-              onClick={() => st.getState().togglePk(col.id)}
-              className={cn(
-                'shrink-0 rounded p-0.5',
-                pkCols.has(col.id) ? 'text-accent-2' : 'text-muted/40 hover:text-muted'
-              )}
-            >
-              <KeyRound className="size-3.5" />
-            </button>
+            {!table.isView && (
+              <button
+                type="button"
+                aria-pressed={pkCols.has(col.id)}
+                title="Primary Key 토글"
+                onClick={() => st.getState().togglePk(col.id)}
+                className={cn(
+                  'shrink-0 rounded p-0.5',
+                  pkCols.has(col.id) ? 'text-accent-2' : 'text-muted/40 hover:text-muted'
+                )}
+              >
+                <KeyRound className="size-3.5" />
+              </button>
+            )}
             <input
               value={col.name}
               placeholder="컬럼명"
@@ -368,7 +379,11 @@ function EditPanel({ table, allTables }: { table: TableDef; allTables: TableDef[
 
       <div className="flex flex-col gap-1.5 border-t border-line p-3">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">관계(FK)</span>
-        {fks.length === 0 ? (
+        {table.isView ? (
+          <p className="text-[11px] text-muted">
+            뷰에는 관계(FK)를 걸 수 없어요 — 본문 SELECT 는 Definition 에서 씁니다.
+          </p>
+        ) : fks.length === 0 ? (
           <p className="text-[11px] text-muted">
             노드의 컬럼 오른쪽 점을 다른 테이블로 끌어 관계를 만듭니다.
           </p>
@@ -407,6 +422,7 @@ export function StudioDiagramWorkspace() {
   const readOnly = useStudioReadOnly()
   const scoped = useDesignTables()
   const addTable = useDefinitionStore((s) => s.addTable)
+  const addView = useDefinitionStore((s) => s.addView)
 
   // useDesignTables 는 매 렌더 새 배열 → 콘텐츠 기준으로 identity 안정화(재배치 폭주 방지).
   const scopedSig = JSON.stringify(scoped)
@@ -450,6 +466,8 @@ export function StudioDiagramWorkspace() {
       const src = tables.find((t) => t.id === c.source)
       const tgt = tables.find((t) => t.id === c.target)
       if (!src || !tgt) return
+      // 뷰에는 FK 를 걸 수 없다(양쪽 어디든) — 끌어다 놓아도 조용히 무시한다.
+      if (src.isView || tgt.isView) return
       const patch = buildFkPatch(src, c.sourceHandle, tgt)
       if (!patch) return
       const st = useDefinitionStore.getState()
@@ -504,9 +522,14 @@ export function StudioDiagramWorkspace() {
             <LayoutGrid /> 자동 배치
           </Button>
           {!readOnly && (
-            <Button size="sm" variant="outline" onClick={() => addTable(design.id)}>
-              <Plus /> 테이블 추가
-            </Button>
+            <>
+              <Button size="sm" variant="outline" onClick={() => addTable(design.id)}>
+                <Plus /> 테이블 추가
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => addView(design.id)}>
+                <Eye /> 뷰 추가
+              </Button>
+            </>
           )}
         </div>
       </div>

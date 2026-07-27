@@ -4,13 +4,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { createDesign, listDesigns, updateDesign } from '../store/designs'
 import { listTables, replaceTablesForDesign, type TableRecord } from '../store/tables'
 import { createVersion, listVersions } from '../store/versions'
-import { DIALECT_IDS } from '../../shared/dialects'
+import { DIALECT_IDS, DIALECT_META } from '../../shared/dialects'
 import { formatVersion, nextVersion, parseVersion } from '../../shared/versionNumber'
+import { applyOperations, assertTablesConsistent, patchOpSchema } from './patch'
+import { assertCleanText } from './textGuard'
 
 /**
  * MCP 도구 정의 — AI 에이전트에게 노출되는 Rockury 능력의 단일 목록.
  *
- * 읽기 4종(설계·스키마·버전 열람) + 쓰기 4종(설계 생성/수정·스키마 반영·버전 컷).
+ * 읽기 4종(설계·스키마·버전 열람) + 쓰기 5종(설계 생성/수정·스키마 전체 반영·부분 수정·버전 컷).
  * 삭제류는 노출하지 않는다 — 파괴적 조작은 사람이 앱에서만(spec tools.write AC-7).
  *
  * 도구 ↔ IPC 채널 대응은 coverage.ts 가 정본이고 coverage.test.ts 가 스테일을 막는다:
@@ -88,66 +90,81 @@ const tableSchema = z.looseObject({
 /** 렌더러 id 시퀀스(`-N` 접미 스캔)와 절대 안 겹치는 생성 id — 하이픈+숫자 꼬리 없음. */
 const newId = (): string => `mcp_${randomUUID().replace(/-/g, '').slice(0, 8)}`
 
-function invalid(prefix: string, error: z.ZodError): never {
+const SHAPE_GUIDE = 'get_schema 결과와 같은 형태(tables[].name/columns[].name·type)로 보내세요.'
+
+function invalid(prefix: string, error: z.ZodError, guide: string = SHAPE_GUIDE): never {
   const issues = error.issues
     .slice(0, 5)
     .map((i) => `${i.path.join('.') || '(루트)'}: ${i.message}`)
     .join(' · ')
-  throw new Error(`${prefix} — ${issues}. get_schema 결과와 같은 형태(tables[].name/columns[].name·type)로 보내세요.`)
+  throw new Error(`${prefix} — ${issues}. ${guide}`)
 }
 
 /**
- * 검증된(zod 구조) 입력을 저장 레코드로 정규화 + 도메인 정합 검증.
- * 화면 편집기가 능동적으로 지키는 불변식(제약은 실재 컬럼만 참조·중복 이름 금지)을 여기서도
- * 강제한다 — set_schema 는 그 안전선을 우회하는 별도 진입 경로이기 때문. 위반은 저장 전
- * 친절한 오류(throw→isError)로 돌려보낸다(부분 반영 없음, spec tools.write AC-6).
+ * 에이전트가 임의로 못 정하는 값 — 사용자에게 고르게 시킨다.
+ *
+ * 방언은 생성 후 못 바꾸는 고정 속성이라 잘못 고르면 설계를 새로 파야 한다. 사용자가 벤더를
+ * 말하지 않았다는 것은 "아무거나"가 아니라 "아직 안 정했다"에 가깝다 — 그런데 도구가 평범한
+ * 검증 오류만 돌려주면 에이전트는 그럴듯한 값을 채워 재시도한다. 그래서 앱이 직접
+ * "묻고 오라"고 지시한다(선택지 문구는 앱 생성 모달과 같은 정본 @shared/dialects).
+ * 반대로 이름은 나중에 update_design 으로 바꿀 수 있으므로 에이전트가 제안해도 된다.
+ */
+function askUserForDialect(lead: string): never {
+  const options = DIALECT_META.map((d) => `  · ${d.id} — ${d.label} · ${d.blurb}`).join('\n')
+  throw new Error(
+    `${lead}\n` +
+      '에이전트가 임의로 고르지 마세요 — 사용자에게 아래 중 무엇으로 만들지 물어보고, 답을 받은 뒤\n' +
+      'dialect 를 넣어 create_design 을 다시 호출하세요. 방언은 생성 후 바꿀 수 없습니다.\n' +
+      options
+  )
+}
+
+/**
+ * 검증된(zod 구조) 입력을 저장 레코드로 정규화. 도메인 정합 검증은 patch.ts 의
+ * assertTablesConsistent 가 맡는다 — set_schema(통째 반영)와 patch_schema(부분 수정)가
+ * 같은 안전선을 통과해야 하므로 검증을 한 곳에 모았다(부분 반영 없음, spec tools.write AC-6).
  */
 function normalizeTables(designId: string, input: z.infer<typeof tableSchema>[]): TableRecord[] {
-  const guide = 'get_schema 결과 형태를 참고하세요 — 제약이 참조할 새 컬럼은 columns[].id 를 직접 정해 columnId 로 가리키면 됩니다.'
-  const tableNames = new Set<string>()
-  const allIds = new Set<string>()
-  const claimId = (id: string, what: string): string => {
-    if (allIds.has(id)) throw new Error(`중복 id "${id}"(${what}) — 각 테이블·컬럼 id 는 유일해야 합니다. ${guide}`)
-    allIds.add(id)
-    return id
+  const records = input.map((t) => ({
+    // 미지의 필드(isView·drift 표식 등)를 흘리지 않고 보존한다 — 왕복 손실 금지.
+    ...t,
+    id: t.id ?? newId(),
+    designId,
+    name: t.name,
+    comment: t.comment ?? '',
+    columns: t.columns.map((c) => ({
+      ...c,
+      id: c.id ?? newId(),
+      nullable: c.nullable ?? true,
+      defaultValue: c.defaultValue ?? null,
+      comment: c.comment ?? ''
+    })),
+    constraints: (t.constraints ?? []).map((k) => ({
+      ...k,
+      id: k.id ?? newId(),
+      name: k.name ?? '',
+      columns: k.columns ?? []
+    }))
+  })) as TableRecord[]
+  assertTablesConsistent(records)
+  return records
+}
+
+/**
+ * 쓰기 응답 요약 — 스키마 본문을 되돌려주지 않는다.
+ * 33개 테이블 반영 한 번이 127KB 에코를 낳아 호출자의 문맥을 통째로 잡아먹은 사고가 있었다.
+ * 본문이 필요하면 get_schema(테이블 필터 가능)로 필요한 만큼만 읽는다.
+ */
+function summarize(design: { id: string; name: string; dialect: string }, records: TableRecord[]) {
+  return {
+    design: { id: design.id, name: design.name, dialect: design.dialect },
+    tableCount: records.length,
+    tables: records.map((t) => ({
+      name: t.name,
+      columns: (t.columns as unknown[]).length,
+      constraints: (t.constraints as unknown[]).length
+    }))
   }
-
-  return input.map((t) => {
-    if (tableNames.has(t.name)) throw new Error(`중복 테이블 이름 "${t.name}" — 한 설계 안에서 테이블 이름은 유일해야 합니다.`)
-    tableNames.add(t.name)
-
-    const colNames = new Set<string>()
-    const columns = t.columns.map((c) => {
-      if (colNames.has(c.name)) throw new Error(`테이블 "${t.name}" 에 중복 컬럼 이름 "${c.name}" — 컬럼 이름은 테이블 안에서 유일해야 합니다.`)
-      colNames.add(c.name)
-      return {
-        ...c,
-        id: claimId(c.id ?? newId(), `테이블 ${t.name}.${c.name}`),
-        nullable: c.nullable ?? true,
-        defaultValue: c.defaultValue ?? null,
-        comment: c.comment ?? ''
-      }
-    })
-
-    const validColIds = new Set(columns.map((c) => c.id))
-    const constraints = (t.constraints ?? []).map((k) => {
-      // 제약이 실재하지 않는 컬럼을 가리키면 조용히 깨진 스키마를 저장하지 않고 되돌린다.
-      for (const ref of k.columns ?? []) {
-        if (!validColIds.has(ref.columnId))
-          throw new Error(
-            `테이블 "${t.name}" 의 ${k.kind.toUpperCase()} 제약이 없는 컬럼 "${ref.columnId}" 를 참조합니다. ${guide}`
-          )
-      }
-      return {
-        ...k,
-        id: claimId(k.id ?? newId(), `테이블 ${t.name} 제약`),
-        name: k.name ?? '',
-        columns: k.columns ?? []
-      }
-    })
-
-    return { id: claimId(t.id ?? newId(), '테이블'), designId, name: t.name, comment: t.comment ?? '', columns, constraints }
-  })
 }
 
 export const TOOL_DEFS: ToolDef[] = [
@@ -172,11 +189,26 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'get_schema',
     description:
-      '설계의 현재 작업본(draft) 스키마 전체를 반환한다 — 테이블·컬럼(이름/타입/NULL/기본값/주석)·제약(PK/UK/FK/CHECK/IDX). 스키마 검토·분석의 기본 입력.',
-    inputSchema: { designId: z.string().describe('설계 id (list_designs 로 확인)') },
-    handler: ({ designId }) => {
+      '설계의 현재 작업본(draft) 스키마를 반환한다 — 테이블·컬럼(이름/타입/NULL/기본값/주석)·제약(PK/UK/FK/CHECK/IDX). 스키마 검토·분석의 기본 입력. tables 로 필요한 테이블만 추려 읽을 수 있다(큰 설계에서 권장).',
+    inputSchema: {
+      designId: z.string().describe('설계 id (list_designs 로 확인)'),
+      tables: z
+        .array(z.string())
+        .optional()
+        .describe('읽을 테이블 이름만 추린다(생략 시 전체) — 한두 테이블만 고칠 때 전체를 읽지 않기 위한 것')
+    },
+    handler: ({ designId, tables }) => {
       const d = requireDesign(designId)
-      return { design: d, tables: listTables().filter((t) => t.designId === d.id) }
+      const all = listTables().filter((t) => t.designId === d.id)
+      const want = Array.isArray(tables) ? tables.map(String) : []
+      if (want.length === 0) return { design: d, tables: all }
+      // 오타로 조용히 빈 결과를 받는 것보다 이름이 틀렸다고 알려주는 편이 낫다.
+      const missing = want.filter((n) => !all.some((t) => t.name === n))
+      if (missing.length > 0)
+        throw new Error(
+          `설계 "${d.id}" 에 없는 테이블: ${missing.join(', ')} — 이 설계의 테이블: ${all.map((t) => t.name).join(', ') || '(없음)'}`
+        )
+      return { design: d, tables: all.filter((t) => want.includes(t.name)) }
     }
   },
   {
@@ -209,26 +241,36 @@ export const TOOL_DEFS: ToolDef[] = [
     }
   },
 
-  // ── 쓰기 4종 — 성공 시에만 store:changed 를 발행해 열린 앱 화면이 따라온다. ──
+  // ── 쓰기 5종 — 성공 시에만 store:changed 를 발행해 열린 앱 화면이 따라온다. ──
   // 입력 검증은 핸들러 안(zod) — 실패는 프로토콜 오류가 아닌 isError 로(spec tools.write AC-6).
   {
     name: 'create_design',
     description:
-      '새 설계(Design)를 만든다 — 이름·방언(dialect: postgresql|mysql|mariadb|sqlite)·설명. id 는 이름 슬러그로 자동 생성되어 반환된다. 방언은 생성 후 변경 불가.',
+      '새 설계(Design)를 만든다 — 이름·방언(dialect: postgresql|mysql|mariadb|sqlite)·설명. id 는 이름 슬러그로 자동 생성되어 반환된다. 방언은 생성 후 변경 불가이므로, 사용자가 DB 벤더를 말하지 않았으면 임의로 고르지 말고 물어본 뒤 호출할 것(안 넣고 부르면 선택지를 돌려준다).',
     inputSchema: {
       name: z.string().optional().describe('설계 이름 (필수)'),
-      dialect: z.string().optional().describe('DB 방언: postgresql | mysql | mariadb | sqlite (필수)'),
+      dialect: z
+        .string()
+        .optional()
+        .describe('DB 방언: postgresql | mysql | mariadb | sqlite (필수 — 사용자가 안 정했으면 물어볼 것)'),
       description: z.string().optional().describe('한 줄 설명 (선택)')
     },
     handler: (args) => {
+      // 방언 판정을 zod 앞에 세운다 — 평범한 구조 오류로 섞이면 에이전트가 값을 지어내 재시도한다.
+      const dialect = typeof args.dialect === 'string' ? args.dialect.trim().toLowerCase() : ''
+      if (!dialect) askUserForDialect('방언(dialect)이 지정되지 않았습니다.')
+      if (!(DIALECT_IDS as readonly string[]).includes(dialect))
+        askUserForDialect(`"${String(args.dialect)}" 는 Rockury 가 지원하지 않는 방언입니다.`)
+
       const parsed = z
         .object({
           name: z.string().min(1, '설계 이름은 비울 수 없습니다'),
           dialect: z.enum(DIALECT_IDS),
           description: z.string().optional()
         })
-        .safeParse(args)
+        .safeParse({ ...args, dialect })
       if (!parsed.success) invalid('create_design 입력이 올바르지 않습니다', parsed.error)
+      assertCleanText(parsed.data, 'create_design')
       const rec = createDesign(parsed.data)
       notifyStoreChanged({ domain: 'designs', designId: rec.id })
       return rec
@@ -252,6 +294,7 @@ export const TOOL_DEFS: ToolDef[] = [
         })
         .safeParse(args)
       if (!parsed.success) invalid('update_design 입력이 올바르지 않습니다', parsed.error)
+      assertCleanText(parsed.data, 'update_design')
       const d = requireDesign(parsed.data.designId)
       const rec = updateDesign(d.id, {
         name: parsed.data.name ?? d.name,
@@ -264,7 +307,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'set_schema',
     description:
-      '설계 하나의 작업본(draft) 스키마 전체를 통째로 반영한다 — 보낸 tables 배열이 그 설계의 새 스키마가 된다(빠진 테이블은 삭제됨). 부분 수정은 get_schema 로 현재를 읽어 고친 전체를 되보내는 방식으로. 다른 설계는 건드리지 않는다.',
+      '설계 하나의 작업본(draft) 스키마 전체를 통째로 반영한다 — 보낸 tables 배열이 그 설계의 새 스키마가 된다(빠진 테이블은 삭제됨). **일부만 고칠 때는 patch_schema 를 쓸 것** — 이 도구는 새 설계를 처음 채우거나 전체를 갈아엎을 때만. 응답은 요약(테이블별 개수)이며 본문은 get_schema 로 읽는다. 다른 설계는 건드리지 않는다.',
     inputSchema: {
       designId: z.string().optional().describe('설계 id (list_designs 로 확인, 필수)'),
       tables: z
@@ -278,10 +321,44 @@ export const TOOL_DEFS: ToolDef[] = [
       const d = requireDesign(args.designId)
       const parsed = z.array(tableSchema).safeParse(args.tables)
       if (!parsed.success) invalid(`설계 "${d.id}" 스키마 구조가 올바르지 않습니다`, parsed.error)
+      assertCleanText(parsed.data, 'set_schema', 'tables')
       const records = normalizeTables(d.id, parsed.data)
       replaceTablesForDesign(d.id, records)
       notifyStoreChanged({ domain: 'tables', designId: d.id })
-      return { design: d, tableCount: records.length, tables: records }
+      return summarize(d, records)
+    }
+  },
+  {
+    name: 'patch_schema',
+    description:
+      '설계 스키마를 **부분 수정**한다 — 연산 목록을 순서대로 원자 적용(하나라도 실패하면 전부 미반영). 주석 한 줄·컬럼 하나를 고치려고 스키마 전체를 다시 보내지 않기 위한 도구다. 조준은 테이블·컬럼 **이름**으로 하고(내부 id 불필요), 제약의 대상 컬럼도 이름으로 적는다. 남이 가리키는 참조는 따라 고치거나(테이블 개명·컬럼 개명) 막는다(참조 남은 채 삭제 금지).',
+    inputSchema: {
+      designId: z.string().optional().describe('설계 id (list_designs 로 확인, 필수)'),
+      operations: z
+        .array(z.record(z.string(), z.unknown()))
+        .optional()
+        .describe(
+          '연산 목록 (필수, 순서대로 적용). 각 연산의 op 와 인자: ' +
+            'add_table{table,comment?,columns:[{name,type,nullable?,defaultValue?,comment?}],constraints?:[{kind,name?,columns:[컬럼이름],refTable?,refColumns?,onDelete?,onUpdate?,expression?}]} · ' +
+            'drop_table{table} · rename_table{table,newName} · set_table_comment{table,comment} · ' +
+            'add_column{table,column:{name,type,...},after?} · update_column{table,column,set:{name?,type?,nullable?,defaultValue?,comment?}} · drop_column{table,column} · ' +
+            'add_constraint{table,constraint:{kind,name?,columns:[컬럼이름],...}} · drop_constraint{table,name}'
+        )
+    },
+    handler: (args) => {
+      const d = requireDesign(args.designId)
+      const guide =
+        'op 는 add_table·drop_table·rename_table·set_table_comment·add_column·update_column·drop_column·add_constraint·drop_constraint 중 하나입니다.'
+      const parsed = z.array(patchOpSchema).min(1, '연산을 최소 1개 보내세요').safeParse(args.operations)
+      if (!parsed.success) invalid(`patch_schema 연산 목록이 올바르지 않습니다`, parsed.error, guide)
+      assertCleanText(parsed.data, 'patch_schema', 'operations')
+
+      const current = listTables().filter((t) => t.designId === d.id)
+      const { tables, changes, warnings } = applyOperations(d.id, current, parsed.data, newId)
+      assertTablesConsistent(tables) // 연산 조합이 만든 어긋남까지 저장 전에 잡는다
+      replaceTablesForDesign(d.id, tables)
+      notifyStoreChanged({ domain: 'tables', designId: d.id })
+      return { ...summarize(d, tables), applied: parsed.data.length, changes, warnings }
     }
   },
   {
@@ -295,6 +372,7 @@ export const TOOL_DEFS: ToolDef[] = [
     },
     handler: (args) => {
       const d = requireDesign(args.designId)
+      assertCleanText(args.note ?? '', 'create_version')
       const versions = listVersions(d.id)
       let number: string
       const raw = args.number == null ? '' : String(args.number).trim()

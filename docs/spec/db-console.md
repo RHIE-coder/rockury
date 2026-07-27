@@ -133,6 +133,7 @@
 - **AC-3** 항목 클릭 시 활성 테이블을 전환한다. 기본 활성은 첫 테이블. 재조회로 스키마가 바뀌어 활성 id 가 사라지면 첫 테이블로 폴백. 편집 중이면 `+` 로 새 테이블을 추가한다.
 - **AC-4** 목록은 **테이블 묶음과 뷰 묶음을 갈라** 각각 개수와 함께 섹션으로 보인다(Data 사이드바와 같은 구성). 해당 묶음이 비면 그 섹션 머리는 그리지 않는다.
 - **AC-5** 이 목록은 화면마다 따로 그리지 않는다 — Definition(운영/설계)·Diagram 이 **같은 컴포넌트**(`db/TableListPanel`)와 같은 순수 로직(`db/tableList`)을 쓴다. 각 행에는 이름으로 집을 수 있는 `data-table-row` 훅이 있다(e2e 가 구조 대신 이 훅으로 행을 집는다 — 지우면 스모크가 깨진다).
+- **AC-6** 사이드바는 이 목록을 `테이블` 탭으로 담고 `제약` 탭을 함께 둔다(`db/TableSidePanel`) — Data 사이드바와 같은 구성. 제약 탭의 규칙은 `db-studio.definition.side-panel` 이 정본이다.
 
 #### Section db-console.definition.detail — 상세 (Table 뷰)
 - **AC-1** 컬럼 그리드: `#`/`Name`/`Type`/`Keys`/`Null`/`Default`/`Comment`. 키는 서비스 공통 불변식대로 `PK`/`FK`/`UK`/`IDX` 텍스트 배지(복합키는 위치 표기), CHECK 참여 컬럼은 `CHK` 마커.
@@ -162,12 +163,13 @@
 - **AC-1** 미접속 시 "연결을 선택하세요" 안내 화면(placeholder)을 보인다.
 - **AC-2** `새로고침` 으로 활성 연결을 재역설계한다(Diagram·Object 와 캐시 공유).
 
-### Surface db-console.diagram.table-panel — ERD 좌측 테이블 목록 (신설)
-> Data 사이드바와 같은 구성의 목록을 ERD 왼쪽에 둔다 — 노드가 많으면 캔버스에서 테이블을 눈으로 찾기 어렵다.
-> 설계부(Studio › Diagram)·운영부(Console › Diagram 읽기/편집) 셋 다 **같은 컴포넌트**(`console/diagram/DiagramTablePanel`)를 쓴다.
-- **AC-1** 좌측 패널에 테이블/뷰를 갈라 목록으로 보인다(`db-console.definition.table-list` 와 같은 목록 컴포넌트·같은 규칙).
+### Surface db-console.diagram.table-panel — ERD 좌측 사이드 패널 (신설)
+> Data 사이드바와 같은 구성의 패널을 ERD 왼쪽에 둔다 — 노드가 많으면 캔버스에서 테이블을 눈으로 찾기 어렵다.
+> 설계부(Studio › Diagram)·운영부(Console › Diagram 읽기/편집) 셋 다 **같은 컴포넌트**(`console/diagram/DiagramTablePanel` → `db/TableSidePanel`)를 쓴다.
+- **AC-1** 좌측 패널에 `테이블`/`제약` 두 탭을 보인다. `테이블` 탭은 테이블/뷰를 갈라 목록으로 보인다(Definition·Data 와 같은 공용 패널·같은 규칙 — `db-studio.definition.side-panel`).
 - **AC-2** 항목을 누르면 그 노드를 선택하고 **캔버스를 그 노드로 옮긴다**(부드럽게 이동, 과확대 방지 상한). 선택 상태는 캔버스 클릭과 공유한다.
 - **AC-3** 필터(`관계만`)로 캔버스에서 빠진 테이블은 목록에서도 빠진다 — 눌러도 갈 곳이 없는 항목을 보이지 않기 위해 선택·필터 상태를 캔버스와 같은 곳에서 든다.
+- **AC-4** `제약` 탭의 항목을 누르면 그 제약이 걸린 테이블 노드로 캔버스가 이동한다(AC-2 와 같은 이동).
 
 ### Surface db-console.diagram (편집) — ERD 캔버스 편집 (신설)
 > Console › Diagram 을 편집 가능하게. Definition 과 **같은 연결 단위 편집 스토어·적용 파이프라인**(baseline↔draft diff → DDL 미리보기 → tx 게이트 → 재역설계)을 공유하며, 캔버스가 편집 표면이 된다. 시각 레이어(노드/엣지/배치)는 읽기 Diagram·Studio ERD 와 공유.

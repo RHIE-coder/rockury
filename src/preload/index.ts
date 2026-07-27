@@ -47,8 +47,10 @@ export interface TableRecord {
   comment: string
   columns: unknown[]
   constraints: unknown[]
-  /** 역설계로 들여온 뷰(view)면 true. */
+  /** 뷰(view)면 true — 역설계로 들여왔거나 설계부에서 선언했거나. */
   isView?: boolean
+  /** 뷰 본문 SELECT(`CREATE VIEW … AS` 뒷부분). 뷰일 때만 의미. */
+  viewSql?: string
 }
 
 /** 시드 세트 레코드 (main/store/seedSets 와 동일 형태). 컬럼은 이름으로 가리킨다. */
@@ -59,6 +61,14 @@ export interface SeedSetRecord {
   ignoredColumns: string[]
   strength: string
   rows: unknown[]
+}
+
+/** 환경 변수 정보 — **값(평문)은 담기지 않는다.** */
+export interface EnvVariableInfo {
+  envId: string
+  name: string
+  hasValue: boolean
+  updatedAt: string
 }
 
 /** 버전 스냅샷 레코드 (main/store/versions 와 동일 형태). */
@@ -113,6 +123,16 @@ const api = {
     // tables 와 같은 설계 스코프 저장 — 설계 X 저장이 설계 Y 시드를 건드리지 않는다.
     replaceForDesign: (designId: string, records: SeedSetRecord[]): Promise<void> =>
       ipcRenderer.invoke('seedSets:replaceForDesign', designId, records)
+  },
+  envVars: {
+    list: (envId: string): Promise<EnvVariableInfo[]> => ipcRenderer.invoke('envVars:list', envId),
+    set: (envId: string, name: string, value: string): Promise<void> =>
+      ipcRenderer.invoke('envVars:set', envId, name, value),
+    delete: (envId: string, name: string): Promise<void> =>
+      ipcRenderer.invoke('envVars:delete', envId, name),
+    /** 반영 직전에만 — 평문 값. 화면에 그대로 보이지 않게 다룬다. */
+    resolve: (envId: string): Promise<Record<string, string>> =>
+      ipcRenderer.invoke('envVars:resolve', envId)
   },
   // 메인발 저장소 변경 알림(MCP 에이전트 쓰기) — 구독 해제 함수를 반환한다.
   store: {

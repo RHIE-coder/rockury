@@ -1,4 +1,4 @@
-# TestPlan: mcp-server (MCP 서버 — 읽기 4종 + 쓰기 4종)
+# TestPlan: mcp-server (MCP 서버 — 읽기 4종 + 쓰기 5종)
 
 > 정의(무엇을 검증하나)만 여기. 코드는 `src/main/mcp/*.test.ts`(vitest) + store `src/main/store/*.test.ts`
 > + 앱 흐름 `e2e/smoke.mjs`. 회차 기록은 `docs/qa/runs/`. 명세: `docs/spec/mcp-server.md`.
@@ -10,7 +10,7 @@
 ## Scenario S2 — HTTP 리스너·생명주기 (통합: 실 리스너·포트 0·임시 DB, 기존 1단계 자산)
 → `src/main/mcp/http.test.ts` [자동]
 - **CASE-mcp-010** `GET /health` 무인증 — 이름·버전만 반환(pid 등 프로세스 정보 미노출). (http.gate AC-3)
-- **CASE-mcp-011** initialize→tools/list — 읽기 4종+쓰기 4종(총 8종) 노출, 삭제류 도구 부재. (tools.read AC-1~4, tools.write AC-1~3/AC-5/AC-7)
+- **CASE-mcp-011** initialize→tools/list — 읽기 4종+쓰기 5종(총 9종) 노출, 삭제류 도구 부재. (tools.read AC-1~4, tools.write AC-1~3/AC-5/AC-7)
 - **CASE-mcp-012** 보안 거부 실선: 무토큰 401·악성 Origin 403·무세션 400 — 거부 응답은 일반화 문구. (http.gate AC-1/AC-4)
 - **CASE-mcp-013** 본문 4MB 상한 초과 요청은 처리 거부(리셋 또는 4xx). (http.gate AC-5)
 - **CASE-mcp-014** 세션 64 상한 + LRU 축출 — 최근 사용 세션은 생존, 유휴 세션이 밀려남. (http.gate AC-5)
@@ -33,10 +33,10 @@
 - **CASE-mcp-032** tx 원자성: 불량 레코드가 섞인 배치는 전체 롤백 — 부분 반영 0, 기존 행 보존. (tools.write AC-4/AC-6)
 - **CASE-mcp-033** 순서·JSON 왕복: 저장 순서(position) 유지, columns/constraints 직렬화 왕복 정합 — 구 `replaceAllTables` 가 하던 계약의 승계 확인. (tools.write AC-4)
 
-## Scenario S5 — 쓰기 도구 4종 (핸들러 단위, 신설 — T3)
+## Scenario S5 — 쓰기 도구 (핸들러 단위, 신설 — T3. 방언 선택·부분 수정은 S9)
 → `src/main/mcp/tools.test.ts` 확장 [자동]
 - **CASE-mcp-040** `create_design` 정상: 생성 후 `list_designs` 에 등장, 방언 반영, id 는 앱 슬러그 규칙. (tools.write AC-1)
-- **CASE-mcp-041** `create_design` 불량 입력(필수 필드 누락·미상 방언 — zod 구조 위반) → isError + 해결 안내. (tools.write AC-1/AC-6)
+- **CASE-mcp-041** `create_design` 이름 누락(zod 구조 위반) → isError + 해결 안내. 방언 누락·미지원은 별도 규율(S9 CASE-mcp-080/081). (tools.write AC-1/AC-6)
 - **CASE-mcp-042** `update_design` 정상 갱신 + 미상 designId → isError + `list_designs` 안내. (tools.write AC-2/AC-6)
 - **CASE-mcp-043** `set_schema` 정상: 설계 draft 전체 반영 → `get_schema` 왕복 정합(테이블·컬럼·제약). (tools.write AC-3)
 - **CASE-mcp-044** `set_schema` 미상 designId → isError + 안내(설계 존재 확인 선행). (tools.write AC-3/AC-6)
@@ -56,7 +56,7 @@
 → `src/main/mcp/coverage.test.ts` [자동]
 - **CASE-mcp-060** IPC 채널 전수 = 노출∪제외 — 신규 `tables:replaceForDesign` 등재 + `designs:create`/`designs:update`/`versions:create` 노출 전환. (공통 불변식 스테일 방지 핀)
 - **CASE-mcp-061** 유령 등재 방지 — 제거된 `tables:replaceAll` 이 지도·코드 양쪽에서 소거됨. (공통 불변식)
-- **CASE-mcp-062** 지도 도구 키 = TOOL_NAMES(8종) · 한 채널의 노출/제외 동시 등재 금지. (공통 불변식)
+- **CASE-mcp-062** 지도 도구 키 = TOOL_NAMES(9종 — 읽기 4 + 쓰기 5) · 한 채널의 노출/제외 동시 등재 금지. (공통 불변식)
 - **CASE-mcp-063** 삭제류 미노출 핀: `designs:delete`/`versions:delete` 등 파괴 채널이 노출 지도에 등장하지 않고, 제외 사유가 확정 문구("파괴적 조작은 사람이 앱에서만")로 갱신 — "2단계 검토" 잔존 금지. (tools.write AC-7)
 
 ## Scenario S8 — 앱 구동 흐름 (e2e/smoke.mjs — 접근성 쿼리 금지, CSS/text 로케이터만)
@@ -65,7 +65,36 @@
 - **CASE-mcp-074** 재등록 명령: 상태 payload 의 claude/codex 재등록 명령이 `remove`(rockury) 를 add 앞에 두고 현재 키를 담는다 — 재발급 후에도 새 키로 갱신됨. (agents.token AC-3) → `src/main/mcp/registration.test.ts` [자동]
 - **CASE-mcp-075** e2e: AI 화면에 "접속 키를 바꾼 뒤" 재등록 안내 + Claude/Codex 재등록 복사 버튼이 보이고, 재발급 후 재등록 명령이 새 키를 담는다. (agents.token AC-3) → `e2e/smoke.mjs` [자동]
 - **CASE-mcp-072** 신설: 쓰기 리하이드레이션 — Studio 화면을 연 채 MCP `set_schema` 호출 → 신규 테이블명이 화면 텍스트에 즉시 나타남(수동 재조회 없이). (tools.write AC-3, tools.rehydration AC-1/AC-2) [자동]
-- **CASE-mcp-073** 신설: `create_version` 호출 → Versions 타임라인에 새 버전 번호 텍스트 등장 + tools/list 에 쓰기 4종 노출 확인. (tools.write AC-5, tools.rehydration AC-2) [자동]
+- **CASE-mcp-073** 신설: `create_version` 호출 → Versions 타임라인에 새 버전 번호 텍스트 등장 + tools/list 에 쓰기 5종 노출 확인. (tools.write AC-5, tools.rehydration AC-2) [자동]
+
+## Scenario S9 — 부분 수정·위생 검사·선택 요구 (신설 — 3단계)
+> 실제 사고에서 나왔다: 33개 테이블 설계를 `set_schema` 로 반영했더니 ⑴ 주석 한 곳에 U+FFFD 가
+> 박힌 채 저장됐고 ⑵ 그 한 글자를 고치려면 전체 재전송뿐이었으며 ⑶ 응답 에코가 127KB 였다.
+
+### 방언 선택 요구 → `src/main/mcp/tools.test.ts` [자동]
+- **CASE-mcp-080** `create_design` 방언 누락 → 생성하지 않고 "임의로 고르지 말고 사용자에게 물어보라" + 선택지 4종을 담은 isError. 설계 목록 불변, 이벤트 없음. (tools.write AC-1)
+- **CASE-mcp-081** 미지원 방언(`oracle`) → 같은 선택 안내(그럴듯한 값으로 재시도 유도 금지). (tools.write AC-1)
+- **CASE-mcp-082** 표기 흔들림(`  MySQL  `) → 정규화해 수용(물어볼 일이 아님). (tools.write AC-1)
+
+### 응답 요약·읽기 필터 → `src/main/mcp/tools.test.ts` [자동]
+- **CASE-mcp-083** `set_schema` 응답에 스키마 본문이 없다 — 테이블별 개수 요약만. (공통 불변식 "응답은 요약", tools.write AC-3)
+- **CASE-mcp-084** `get_schema` `tables` 필터로 필요한 테이블만 반환. (tools.read AC-2)
+- **CASE-mcp-085** 필터에 없는 이름 → 조용한 빈 결과 대신 "이 설계의 테이블" 목록과 함께 isError. (tools.read AC-2/AC-5)
+
+### 저장 전 위생 검사 → `src/main/mcp/textGuard.test.ts` · `tools.test.ts` [자동]
+- **CASE-mcp-086** `set_schema` 입력에 U+FFFD → 인자 기준 경로(`tables[0].columns[0].comment`)·코드포인트·문맥과 함께 거부, 저장소 불변·이벤트 없음. (tools.write AC-9)
+- **CASE-mcp-087** `patch_schema`·`create_design`·`create_version` 도 같은 관문을 지난다. (tools.write AC-9)
+- **CASE-mcp-094** 판정 정확도: 치환문자·짝 잃은 서로게이트(상위/하위/문자열 끝)·제어문자·문장 속 BOM 은 잡고, 정상 한글·이모지(서로게이트 쌍·ZWJ 결합)·탭/개행은 통과. 객체 키도 검사. 10곳 초과 시 나머지는 개수로. (공통 불변식)
+
+### 부분 수정 → `src/main/mcp/patch.test.ts` · `tools.test.ts` [자동]
+- **CASE-mcp-088** `patch_schema` 주석 한 줄 수정 → 그 컬럼만 바뀌고 컬럼 id·나머지 테이블은 그대로. (tools.write AC-8)
+- **CASE-mcp-089** 여러 연산 일괄 적용(`add_column` after 위치 지정·`add_constraint` 컬럼 이름 지정·`set_table_comment`) + 응답은 `changes` 목록. (tools.write AC-8)
+- **CASE-mcp-090** 컬럼 개명 → 남의 FK `refColumns` 자동 갱신. 테이블 개명 → 가리키던 FK `refTable` 자동 갱신. CHECK 식은 못 고치므로 `warnings`. (tools.write AC-8)
+- **CASE-mcp-091** 연산 중 하나 실패 → 앞선 연산 포함 반영 0, 메시지가 몇 번째 연산인지 밝힘. (tools.write AC-6/AC-8)
+- **CASE-mcp-092** 미상 designId·빈 연산 목록·미지의 op → isError + 쓸 수 있는 op 목록 안내. (tools.write AC-6/AC-8)
+- **CASE-mcp-093** 설계 격리: `patch_schema` 후 다른 설계 스키마 불변. (tools.write AC-4/AC-8)
+- **CASE-mcp-095** 참조 보호: 제약이 쓰는 컬럼·남의 FK 가 가리키는 컬럼/테이블 삭제는 거부하고 무엇을 먼저 뗄지 알린다. 제약을 먼저 떼면 삭제된다. (tools.write AC-8)
+- **CASE-mcp-096** 조준 실패 안내: 없는 테이블·컬럼은 그 설계/테이블의 실제 이름 목록을 함께 준다. (tools.write AC-6/AC-8)
 
 ## 알려진 커버리지 구멍 (의도적 — 근거 포함)
 - **http.lifecycle AC-1(시작 실패 30초 재시도)**: Electron 생명주기 타이머 — 단위 seam 없음, e2e 로 포트 선점 시나리오 구성 비용 과대. 자동화 보류(수동 확인 항목).

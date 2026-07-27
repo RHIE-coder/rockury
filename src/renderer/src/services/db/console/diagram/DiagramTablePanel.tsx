@@ -1,15 +1,15 @@
 import { useCallback } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { TableListPanel } from '../../TableListPanel'
+import { TableSidePanel } from '../../TableSidePanel'
 import type { TableDef } from '../../workspaces/definition/types'
 
 /** 클릭한 테이블이 화면 한가운데 오도록 하되, 너무 확대되지 않게 상한을 둔다. */
 const FOCUS = { duration: 400, padding: 0.55, maxZoom: 1.1 }
 
 /**
- * Diagram 좌측 테이블 목록 패널 — Console › Data 사이드바와 같은 구성(테이블/뷰 분리).
- * 항목을 누르면 그 노드를 선택하고 캔버스를 그 노드로 옮긴다(포커싱).
- * `useReactFlow` 를 쓰므로 반드시 `ReactFlowProvider` **안쪽**에 놓아야 한다.
+ * Diagram 좌측 사이드 패널 — Console › Data 사이드바와 같은 구성(테이블/뷰 분리 + 제약 탭).
+ * 항목을 누르면 그 노드를 선택하고 캔버스를 그 노드로 옮긴다(포커싱) — 제약을 눌러도 그 제약이
+ * 걸린 테이블로 날아간다. `useReactFlow` 를 쓰므로 반드시 `ReactFlowProvider` **안쪽**에 놓아야 한다.
  */
 export function DiagramTablePanel({
   tables,
@@ -35,12 +35,9 @@ export function DiagramTablePanel({
   return (
     <aside
       data-diagram-table-panel
-      className="flex w-56 shrink-0 flex-col border-r border-line bg-canvas"
+      className="flex w-60 shrink-0 flex-col border-r border-line bg-canvas"
     >
-      <div className="shrink-0 px-3 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
-        테이블 목록
-      </div>
-      <TableListPanel
+      <TableSidePanel
         tables={tables}
         activeId={selectedId}
         onPick={focus}

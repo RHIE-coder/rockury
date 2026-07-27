@@ -12,8 +12,10 @@ export interface TableRecord {
   comment: string
   columns: unknown[]
   constraints: unknown[]
-  /** 역설계로 들여온 뷰(view)면 true — 목록에서 테이블과 갈라 보이기 위해 저장까지 보존한다. */
+  /** 뷰(view)면 true — 목록에서 테이블과 갈라 보이기 위해 저장까지 보존한다. */
   isView?: boolean
+  /** 뷰 본문 SELECT — 뷰일 때만 의미. 비어 있으면 아직 안 쓴 것. */
+  viewSql?: string
 }
 
 interface TableRow {
@@ -24,12 +26,13 @@ interface TableRow {
   columns: string
   constraints: string
   is_view: number
+  view_sql: string
 }
 
 export function listTables(): TableRecord[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, design_id, name, comment, columns, constraints, is_view FROM tables ORDER BY design_id, position'
+      'SELECT id, design_id, name, comment, columns, constraints, is_view, view_sql FROM tables ORDER BY design_id, position'
     )
     .all() as unknown as TableRow[]
   return rows.map((r) => ({
@@ -39,7 +42,8 @@ export function listTables(): TableRecord[] {
     comment: r.comment,
     columns: JSON.parse(r.columns),
     constraints: JSON.parse(r.constraints),
-    isView: r.is_view === 1
+    isView: r.is_view === 1,
+    viewSql: r.view_sql ?? ''
   }))
 }
 
@@ -52,7 +56,7 @@ export function listTables(): TableRecord[] {
 export function replaceTablesForDesign(designId: string, records: TableRecord[]): void {
   const d = getDb()
   const insert = d.prepare(
-    'INSERT INTO tables (id, design_id, name, comment, position, columns, constraints, is_view) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO tables (id, design_id, name, comment, position, columns, constraints, is_view, view_sql) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   )
   d.exec('BEGIN')
   try {
@@ -69,7 +73,8 @@ export function replaceTablesForDesign(designId: string, records: TableRecord[])
         i,
         JSON.stringify(t.columns ?? []),
         JSON.stringify(t.constraints ?? []),
-        t.isView ? 1 : 0
+        t.isView ? 1 : 0,
+        t.viewSql ?? ''
       )
     })
     d.exec('COMMIT')

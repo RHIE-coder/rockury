@@ -346,6 +346,20 @@ describe('tables — 설계 스코프 교체 (replaceTablesForDesign)', () => {
     ])
   })
 
+  it('뷰 본문(viewSql)이 저장 왕복에서 살아남는다 — 없으면 CREATE VIEW 를 만들 수 없다', () => {
+    const body = 'SELECT id, name FROM products WHERE deleted_at IS NULL'
+    replaceTablesForDesign('scope_vs', [
+      { ...tbl('scope_vs', 'vs1', 'v_active'), isView: true, viewSql: body },
+      tbl('scope_vs', 'vs2', 'products')
+    ])
+    const got = listTables().filter((t) => t.designId === 'scope_vs')
+    expect(got.map((t) => [t.name, t.viewSql])).toEqual([
+      ['v_active', body],
+      // 뷰가 아닌 테이블은 빈 문자열로 정규화(undefined 가 섞여 들어오지 않게).
+      ['products', '']
+    ])
+  })
+
   it('CASE-mcp-032: 다른 설계 레코드가 섞인 배치는 전체 롤백 — 부분 반영 0', () => {
     replaceTablesForDesign('scope_x', [tbl('scope_x', 'x9', 'nine')])
     expect(() =>

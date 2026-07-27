@@ -52,7 +52,7 @@ export function validateSeedRows(rows: SeedRow[], naturalKey: string[]): Record<
       return v == null || v.trim() === ''
     })
     if (empty) {
-      out[r.id] = { kind: 'empty-key', message: '자연키 값이 비었어요' }
+      out[r.id] = { kind: 'empty-key', message: '짝짓기 기준 값이 비었어요' }
       continue
     }
     const k = naturalKeyOf(r, naturalKey)
@@ -62,7 +62,7 @@ export function validateSeedRows(rows: SeedRow[], naturalKey: string[]): Record<
   }
   for (const ids of byKey.values()) {
     if (ids.length < 2) continue
-    for (const id of ids) out[id] = { kind: 'duplicate-key', message: '자연키가 다른 행과 겹쳐요' }
+    for (const id of ids) out[id] = { kind: 'duplicate-key', message: '짝짓기 기준 값이 다른 행과 겹쳐요' }
   }
   return out
 }

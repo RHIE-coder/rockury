@@ -69,7 +69,30 @@ function colList(d: DialectId, t: TableDef, con: Constraint, withDirection: bool
  * 기본 사용은 소속 Design 의 방언 그대로 출력("쓴 그대로 나온다").
  * 타 방언 경로(타입 매핑·자동증가·ENUM 에뮬레이션 등)는 추후 포팅 엔진으로 승격 예정.
  */
+/**
+ * 뷰 DDL — `CREATE VIEW <name> AS <본문 SELECT>`.
+ * `OR REPLACE` 는 MySQL/MariaDB/PostgreSQL 만 지원한다(SQLite 는 DROP 후 재생성해야 함) →
+ * 방언이 받는 구문만 낸다. 본문이 비면 자리만 만들고 무엇이 비었는지 주석으로 알린다.
+ */
+function generateViewDdl(t: TableDef, d: DialectId): string {
+  const label = dialectInfo(d).label
+  const body = (t.viewSql ?? '').trim().replace(/;\s*$/, '')
+  const head = d === 'sqlite' ? 'CREATE VIEW' : 'CREATE OR REPLACE VIEW'
+  const out: string[] = [`-- ${t.name}  (${label} · 뷰)`, '']
+  // 본문이 없는 경우가 둘이다 — 설계부에서 아직 안 쓴 뷰, 그리고 운영부 역설계로 들어온 뷰
+  // (introspection 은 뷰 본문을 가져오지 않는다). 어느 쪽인지 모르므로 둘 다 알린다.
+  if (!body)
+    out.push('-- 뷰 본문(SELECT)이 비어 있어요 — 설계에서 선언한 뷰면 Definition 에서 채우세요(실 DB 역설계는 본문을 가져오지 않습니다).')
+  out.push(`${head} ${q(d, t.name)} AS`)
+  out.push(`${body || 'SELECT 1'};`)
+  // PG 는 뷰 설명도 COMMENT ON 으로 따로 붙는다(테이블 경로와 같은 규칙).
+  if (d === 'postgresql' && t.comment) out.push('', `COMMENT ON VIEW ${q(d, t.name)} IS '${esc(t.comment)}';`)
+  return out.join('\n')
+}
+
 export function generateDdl(t: TableDef, d: DialectId): string {
+  if (t.isView) return generateViewDdl(t, d)
+
   const label = dialectInfo(d).label
   const pre: string[] = []
   const comments: string[] = []

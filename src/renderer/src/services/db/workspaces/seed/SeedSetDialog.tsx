@@ -92,10 +92,10 @@ export function SeedSetDialog({
                   <span className="shrink-0 text-[11px] text-muted">
                     {key.length ? (
                       <>
-                        자연키 <span className="font-mono">{key.join(', ')}</span>
+                        짝짓기 기준 <span className="font-mono">{key.join(', ')}</span>
                       </>
                     ) : (
-                      '자연키 선택 필요'
+                      '짝짓기 기준 선택 필요'
                     )}
                   </span>
                 </button>

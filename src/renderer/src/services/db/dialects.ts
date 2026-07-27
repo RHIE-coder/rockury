@@ -5,7 +5,7 @@
  * 설계 화면·DDL 은 이 방언의 네이티브 구문 그대로 저술/출력되고,
  * 벤더 이동은 명시적 "포팅"(새 Design 생성)으로만 이뤄진다.
  */
-import type { DialectId } from '@shared/dialects'
+import { DIALECT_META, type DialectId } from '@shared/dialects'
 
 export type { DialectId }
 
@@ -18,17 +18,15 @@ export interface DialectInfo {
   blurb: string
 }
 
-export const DIALECTS: DialectInfo[] = [
-  {
-    id: 'postgresql',
-    label: 'PostgreSQL 16',
-    dot: '#336791',
-    blurb: '표준 지향 · JSONB/배열 등 풍부한 타입'
-  },
-  { id: 'mysql', label: 'MySQL 8.0', dot: '#e48f10', blurb: '가장 널리 쓰이는 웹 백엔드 RDBMS' },
-  { id: 'mariadb', label: 'MariaDB 11', dot: '#b0745e', blurb: 'MySQL 호환 오픈소스 포크' },
-  { id: 'sqlite', label: 'SQLite 3', dot: '#58a7d4', blurb: '파일 기반 임베디드 · 프로토타이핑' }
-]
+/** 벤더 아이덴티티 컬러 — 화면 전용이라 공용 정본(@shared/dialects)에 두지 않는다. */
+const DOT: Record<DialectId, string> = {
+  postgresql: '#336791',
+  mysql: '#e48f10',
+  mariadb: '#b0745e',
+  sqlite: '#58a7d4'
+}
+
+export const DIALECTS: DialectInfo[] = DIALECT_META.map((d) => ({ ...d, dot: DOT[d.id] }))
 
 export function dialectInfo(id: DialectId): DialectInfo {
   return DIALECTS.find((d) => d.id === id) ?? DIALECTS[0]

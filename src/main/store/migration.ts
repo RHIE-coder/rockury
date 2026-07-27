@@ -67,7 +67,8 @@ export function latestSnapshot(envId: string): SnapshotRecord | null {
   return row ? toSnapshot(row) : null
 }
 
-export type MigrationLogKind = 'baseline' | 'drift' | 'apply'
+/** 시드 반영은 스키마 반영(apply)과 성격이 달라 종류를 가른다 — 이력에서 구분해 읽어야 한다. */
+export type MigrationLogKind = 'baseline' | 'drift' | 'apply' | 'seed-apply'
 
 export interface MigrationLogRecord {
   id: string

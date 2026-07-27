@@ -55,7 +55,11 @@ interface DefinitionState {
 
   // ── Table CRUD ──
   addTable: (designId: string) => void
-  updateTable: (patch: Partial<Pick<TableDef, 'name' | 'comment'>>) => void
+  /** 뷰 신설 — 본문 SELECT 는 비운 채 만들고 사람이 채운다(컬럼도 사람이 적는다). */
+  addView: (designId: string) => void
+  updateTable: (patch: Partial<Pick<TableDef, 'name' | 'comment' | 'viewSql'>>) => void
+  /** 활성 대상의 테이블 ↔ 뷰 전환. 뷰로 바꾸면 제약은 뜻이 없어 비운다. */
+  toggleView: () => void
   deleteTable: (id: string) => void
 }
 
@@ -336,7 +340,32 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
       }
       return { tables: [...s.tables, table], activeTableId: id, editing: null, openConstraintId: null }
     }),
+  addView: (designId) =>
+    set((s) => {
+      const id = `tbl-${seq++}`
+      // 뷰는 PK 템플릿이 없다 — 결과 컬럼은 본문 SELECT 를 쓰면서 사람이 채운다.
+      const view: TableDef = {
+        id,
+        designId,
+        name: `new_view_${seq++}`,
+        comment: '',
+        columns: [],
+        constraints: [],
+        isView: true,
+        viewSql: ''
+      }
+      return { tables: [...s.tables, view], activeTableId: id, editing: null, openConstraintId: null }
+    }),
   updateTable: (patch) => set((s) => patchActive(s, (t) => ({ ...t, ...patch }))),
+  toggleView: () =>
+    set((s) =>
+      patchActive(s, (t) =>
+        t.isView
+          ? { ...t, isView: false, viewSql: '' }
+          : // 뷰에는 PK·FK·인덱스를 걸 수 없다 — 남겨 두면 DDL 에도 Diagram 관계에도 거짓이 된다.
+            { ...t, isView: true, constraints: [], viewSql: t.viewSql ?? '' }
+      )
+    ),
   deleteTable: (id) =>
     set((s) => {
       const victim = s.tables.find((t) => t.id === id)
@@ -436,7 +465,8 @@ useDefinitionStore.subscribe((s, prev) => {
             comment: t.comment,
             columns: t.columns,
             constraints: t.constraints,
-            isView: t.isView ?? false
+            isView: t.isView ?? false,
+            viewSql: t.viewSql ?? ''
           }))
       )
     }

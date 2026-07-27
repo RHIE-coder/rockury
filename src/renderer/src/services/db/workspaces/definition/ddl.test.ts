@@ -88,3 +88,61 @@ describe('quoteId — 식별자 인용부호 이스케이프(주입 차단)', ()
     expect(ddl).toContain('`id`` ); DROP TABLE users; -- `')
   })
 })
+
+// ── 뷰 DDL — 설계부에서 선언한 뷰(isView + viewSql)는 CREATE TABLE 이 아니라 CREATE VIEW 로 나온다 ──
+const activeProducts: TableDef = {
+  id: 'v',
+  designId: 'd',
+  name: 'v_active_products',
+  comment: '판매 중 상품',
+  columns: [col('vc1', 'id', 'BIGINT UNSIGNED'), col('vc2', 'name', 'VARCHAR(200)')],
+  constraints: [],
+  isView: true,
+  viewSql: 'SELECT id, name FROM products WHERE deleted_at IS NULL'
+}
+
+describe('generateDdl — 뷰', () => {
+  it('mysql: CREATE OR REPLACE VIEW + 본문 SELECT', () => {
+    const ddl = generateDdl(activeProducts, 'mysql')
+    expect(ddl).toContain('CREATE OR REPLACE VIEW `v_active_products` AS')
+    expect(ddl).toContain('SELECT id, name FROM products WHERE deleted_at IS NULL;')
+    expect(ddl).not.toContain('CREATE TABLE')
+  })
+
+  it('sqlite: OR REPLACE 를 지원하지 않으므로 CREATE VIEW 로만 낸다', () => {
+    const ddl = generateDdl(activeProducts, 'sqlite')
+    expect(ddl).toContain('CREATE VIEW "v_active_products" AS')
+    expect(ddl).not.toContain('OR REPLACE')
+  })
+
+  it('postgresql: 설명은 COMMENT ON VIEW 로 따로 붙는다', () => {
+    const ddl = generateDdl(activeProducts, 'postgresql')
+    expect(ddl).toContain('CREATE OR REPLACE VIEW "v_active_products" AS')
+    expect(ddl).toContain(`COMMENT ON VIEW "v_active_products" IS '판매 중 상품';`)
+  })
+
+  it('본문 끝의 세미콜론이 겹치지 않는다', () => {
+    const ddl = generateDdl({ ...activeProducts, viewSql: 'SELECT 1;' }, 'mysql')
+    expect(ddl).not.toContain(';;')
+  })
+
+  it('본문이 비면 무엇이 비었는지 알리고 DDL 은 깨지지 않는다', () => {
+    const ddl = generateDdl({ ...activeProducts, viewSql: '' }, 'mysql')
+    expect(ddl).toContain('뷰 본문(SELECT)이 비어 있어요')
+    // 운영부(역설계)로 들어온 뷰도 본문이 비는데, 그건 Definition 에서 채울 대상이 아니다 — 둘 다 알린다.
+    expect(ddl).toContain('실 DB 역설계는 본문을 가져오지 않습니다')
+    expect(ddl).toContain('CREATE OR REPLACE VIEW `v_active_products` AS')
+  })
+
+  it('역설계로 들어온 뷰(본문 없음)도 CREATE TABLE 로 잘못 나오지 않는다', () => {
+    const introspected: TableDef = { ...activeProducts, viewSql: undefined }
+    const ddl = generateDdl(introspected, 'mysql')
+    expect(ddl).toContain('CREATE OR REPLACE VIEW')
+    expect(ddl).not.toContain('CREATE TABLE')
+  })
+
+  it('뷰 이름도 식별자 인용을 탈출하지 못한다(주입 방어)', () => {
+    const ddl = generateDdl({ ...activeProducts, name: 'v`; DROP TABLE users; --' }, 'mysql')
+    expect(ddl).toContain('`v``; DROP TABLE users; --`')
+  })
+})

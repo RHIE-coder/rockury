@@ -50,6 +50,16 @@ export interface TableDef {
   comment: string
   columns: Column[]
   constraints: Constraint[]
-  /** 운영부 introspection 에서 뷰(view/matview)로 판별되면 true(설계부에선 미사용). */
+  /**
+   * 뷰(view/matview)면 true. 운영부는 introspection 이 판별해 채우고,
+   * 설계부는 사람이 Definition 에서 선언한다(테이블 ↔ 뷰 전환).
+   */
   isView?: boolean
+  /**
+   * 뷰 본문 SELECT — `CREATE VIEW … AS <viewSql>` 의 뒷부분. 뷰일 때만 의미가 있다.
+   * 왜 본문을 그냥 문자열로 두나: 뷰는 조인·집계·윈도우까지 들어오는 임의 질의라
+   * 컬럼·제약처럼 구조화해도 방언 차이를 못 흡수한다 — 설계 방언 SQL 을 그대로 보관한다.
+   * (뷰의 `columns` 는 그 SELECT 가 내놓는 결과 컬럼을 사람이 적어 두는 것 — ERD·Data 표시용.)
+   */
+  viewSql?: string
 }

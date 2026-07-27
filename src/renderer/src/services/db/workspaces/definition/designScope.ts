@@ -9,6 +9,7 @@ interface TableRecordLike {
   columns: unknown[]
   constraints: unknown[]
   isView?: boolean
+  viewSql?: string
 }
 
 /**
@@ -23,7 +24,8 @@ export function toTableDef(r: TableRecordLike): TableDef {
     comment: r.comment,
     columns: r.columns as Column[],
     constraints: r.constraints as Constraint[],
-    isView: r.isView ?? false
+    isView: r.isView ?? false,
+    viewSql: r.viewSql ?? ''
   }
 }
 

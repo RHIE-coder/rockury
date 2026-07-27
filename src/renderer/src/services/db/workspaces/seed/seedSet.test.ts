@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { TableDef } from '../definition/types'
 import {
+  canBeMatchKey,
   createSeedSet,
+  isDbGenerated,
+  matchKeyBlockedReason,
+  seedApplyReadiness,
+  cycleSeedColumnRole,
   naturalKeyBacking,
   defaultNaturalKey,
   isAutoIncrement,
   pkColumnNames,
+  seedColumnRole,
   seedSetCandidates,
   seedSetStatus,
-  toggleIgnoredColumn,
-  toggleNaturalKeyColumn
+  setSeedColumnRole,
+  visibleSeedColumns
 } from './seedSet'
 import type { SeedSet } from './types'
 
@@ -60,6 +66,12 @@ describe('CASE-studio-001 자연키 기본값', () => {
     for (const t of [mysql, pg, pgIdentity, sqlite]) expect(defaultNaturalKey(t)).toEqual([])
   })
 
+  it('DB 가 값을 만드는 PK(DEFAULT (UUID())·gen_random_uuid())도 비운다 — 회귀', () => {
+    const mysqlUuid = table('roles', [col('c1', 'id', { type: 'CHAR(36)', defaultValue: '(UUID())' })], ['c1'])
+    const pgUuid = table('roles', [col('c1', 'id', { defaultValue: 'gen_random_uuid()' })], ['c1'])
+    for (const t of [mysqlUuid, pgUuid]) expect(defaultNaturalKey(t)).toEqual([])
+  })
+
   it('복합 PK 중 하나만 자동증가여도 비운다', () => {
     const t = table(
       'x',
@@ -80,7 +92,7 @@ describe('CASE-studio-001 자연키 기본값', () => {
   })
 })
 
-describe('CASE-studio-002 자연키·무시 컬럼 상호 배타', () => {
+describe('CASE-studio-002 컬럼 역할(짝짓기/포함/무시) — 한 축 3상태', () => {
   const base: SeedSet = {
     designId: 'd1',
     tableName: 'roles',
@@ -90,27 +102,77 @@ describe('CASE-studio-002 자연키·무시 컬럼 상호 배타', () => {
     rows: []
   }
 
-  it('무시 컬럼을 자연키로 켜면 무시 목록에서 빠진다', () => {
-    const s = toggleNaturalKeyColumn(base, 'created_at')
+  it('역할 판정 — 선언 목록에서 셋 중 하나로 읽힌다', () => {
+    expect(seedColumnRole(base, 'code')).toBe('key')
+    expect(seedColumnRole(base, 'created_at')).toBe('ignore')
+    expect(seedColumnRole(base, 'org')).toBe('include')
+  })
+
+  it('순환 순서는 짝짓기 → 포함 → 무시 → 짝짓기', () => {
+    let s = { ...base, naturalKey: ['code'], ignoredColumns: [] as string[] }
+    expect(seedColumnRole(s, 'code')).toBe('key')
+    s = cycleSeedColumnRole(s, 'code')
+    expect(seedColumnRole(s, 'code')).toBe('include')
+    s = cycleSeedColumnRole(s, 'code')
+    expect(seedColumnRole(s, 'code')).toBe('ignore')
+    s = cycleSeedColumnRole(s, 'code')
+    expect(seedColumnRole(s, 'code')).toBe('key')
+  })
+
+  it('한 컬럼이 짝짓기와 무시에 동시에 들어가지 않는다(상호 배타)', () => {
+    const s = setSeedColumnRole(base, 'created_at', 'key')
     expect(s.naturalKey).toEqual(['code', 'created_at'])
     expect(s.ignoredColumns).toEqual([])
+
+    const t = setSeedColumnRole(base, 'code', 'ignore')
+    expect(t.ignoredColumns).toEqual(['created_at', 'code'])
+    expect(t.naturalKey).toEqual([])
   })
 
-  it('자연키 컬럼을 무시로 켜면 자연키에서 빠진다', () => {
-    const s = toggleIgnoredColumn(base, 'code')
-    expect(s.ignoredColumns).toEqual(['created_at', 'code'])
-    expect(s.naturalKey).toEqual([])
-  })
-
-  it('끄기는 상대 목록을 건드리지 않는다', () => {
-    const s = toggleNaturalKeyColumn(base, 'code')
+  it('포함으로 바꾸면 양쪽 목록 어디에도 안 남는다', () => {
+    const s = setSeedColumnRole(base, 'code', 'include')
     expect(s.naturalKey).toEqual([])
     expect(s.ignoredColumns).toEqual(['created_at'])
   })
 
-  it('켜는 순서가 키 구성 순서다', () => {
-    const s = toggleNaturalKeyColumn(toggleNaturalKeyColumn({ ...base, naturalKey: [] }, 'org'), 'code')
+  it('짝짓기로 켜는 순서가 키 구성 순서다', () => {
+    const empty = { ...base, naturalKey: [] as string[] }
+    const s = setSeedColumnRole(setSeedColumnRole(empty, 'org', 'key'), 'code', 'key')
     expect(s.naturalKey).toEqual(['org', 'code'])
+  })
+
+  it('다른 컬럼의 역할은 건드리지 않는다', () => {
+    const s = cycleSeedColumnRole(base, 'org')
+    expect(seedColumnRole(s, 'code')).toBe('key')
+    expect(seedColumnRole(s, 'created_at')).toBe('ignore')
+  })
+
+  describe('무시 컬럼 감추기(보기 설정)', () => {
+    const cols = [col('c1', 'code'), col('c2', 'org'), col('c3', 'created_at')]
+
+    it('꺼져 있으면 컬럼을 그대로 준다(같은 배열)', () => {
+      expect(visibleSeedColumns(base, cols, false)).toBe(cols)
+    })
+
+    it('켜면 무시 컬럼만 빠지고 나머지 순서는 그대로', () => {
+      expect(visibleSeedColumns(base, cols, true).map((c) => c.name)).toEqual(['code', 'org'])
+    })
+
+    it('무시 컬럼이 없으면 켜도 아무것도 안 빠진다', () => {
+      const s = { ...base, ignoredColumns: [] as string[] }
+      expect(visibleSeedColumns(s, cols, true).map((c) => c.name)).toEqual(['code', 'org', 'created_at'])
+    })
+
+    it('선언(naturalKey·ignoredColumns)은 건드리지 않는다 — 보기 설정일 뿐', () => {
+      visibleSeedColumns(base, cols, true)
+      expect(base.ignoredColumns).toEqual(['created_at'])
+      expect(base.naturalKey).toEqual(['code'])
+    })
+
+    it('전부 무시면 빈 목록', () => {
+      const s = { ...base, naturalKey: [] as string[], ignoredColumns: ['code', 'org', 'created_at'] }
+      expect(visibleSeedColumns(s, cols, true)).toEqual([])
+    })
   })
 })
 
@@ -194,5 +256,59 @@ describe('CASE-studio-008 자연키를 UNIQUE 가 뒷받침하는가', () => {
     const t = table('m', [col('c1', 'code')])
     t.constraints = [{ id: 'k', kind: 'idx', name: 'ix_code', columns: [{ columnId: 'c1' }] }]
     expect(naturalKeyBacking(t, ['code']).backed).toBe(false)
+  })
+})
+
+describe('CASE-studio-065 짝짓기 기준 자격 · 반영 준비', () => {
+  it('DB 가 값을 만드는 컬럼은 기준이 될 수 없다', () => {
+    expect(canBeMatchKey(col('c', 'code'))).toBe(true)
+    expect(canBeMatchKey(col('c', 'id', { defaultValue: 'AUTO_INCREMENT' }))).toBe(false)
+    expect(canBeMatchKey(col('c', 'id', { type: 'serial' }))).toBe(false)
+    expect(canBeMatchKey(col('c', 'id', { defaultValue: 'uuid()' }))).toBe(false)
+    expect(canBeMatchKey(col('c', 'id', { defaultValue: 'gen_random_uuid()' }))).toBe(false)
+    expect(canBeMatchKey(col('c', 'at', { defaultValue: 'CURRENT_TIMESTAMP' }))).toBe(false)
+  })
+
+  it('사람이 값을 주는 기본값은 DB 생성이 아니다', () => {
+    expect(isDbGenerated(col('c', 'status', { defaultValue: "'pending'" }))).toBe(false)
+    expect(isDbGenerated(col('c', 'n', { defaultValue: '0' }))).toBe(false)
+  })
+
+  it('못 고르는 이유를 문장으로 알려준다', () => {
+    expect(matchKeyBlockedReason(col('c', 'code'))).toBeNull()
+    expect(matchKeyBlockedReason(col('c', 'id', { defaultValue: 'AUTO_INCREMENT' }))).toContain('자동증가')
+    expect(matchKeyBlockedReason(col('c', 'id', { defaultValue: 'uuid()' }))).toContain('DB 가 값을 만드는')
+  })
+
+  it('역할 순환에서 짝짓기를 건너뛴다(allowKey=false)', () => {
+    let s: SeedSet = {
+      designId: 'd1',
+      tableName: 'roles',
+      naturalKey: [],
+      ignoredColumns: [],
+      strength: 'ensure',
+      rows: []
+    }
+    s = cycleSeedColumnRole(s, 'id', false) // include → ignore
+    expect(s.ignoredColumns).toEqual(['id'])
+    s = cycleSeedColumnRole(s, 'id', false) // ignore → include (짝짓기 건너뜀)
+    expect(s.naturalKey).toEqual([])
+    expect(s.ignoredColumns).toEqual([])
+  })
+
+  it('반영 준비: 기준에 안정적인 컬럼이 1개 이상 있어야 한다', () => {
+    const t = table('roles', [col('c1', 'id', { defaultValue: 'AUTO_INCREMENT' }), col('c2', 'code')], ['c1'])
+    const base = { tableName: 'roles' }
+    expect(seedApplyReadiness({ ...base, naturalKey: ['code'] }, t)).toEqual({ ready: true })
+    expect(seedApplyReadiness({ ...base, naturalKey: [] }, t)).toMatchObject({ ready: false, reason: 'no-key' })
+    expect(seedApplyReadiness({ ...base, naturalKey: ['id'] }, t)).toMatchObject({
+      ready: false,
+      reason: 'volatile-key',
+      columns: ['id']
+    })
+    expect(seedApplyReadiness({ ...base, naturalKey: ['code'] }, undefined)).toMatchObject({
+      ready: false,
+      reason: 'missing-table'
+    })
   })
 })

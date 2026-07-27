@@ -4,8 +4,8 @@ import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { useVersionsStore } from '../../versions/store'
 import { changedDesignIds } from '../definition/designScope'
 import type { TableDef } from '../definition/types'
-import { createSeedSet, toggleIgnoredColumn, toggleNaturalKeyColumn } from './seedSet'
-import type { SeedRow, SeedSet, SeedStrength } from './types'
+import { createSeedSet, cycleSeedColumnRole } from './seedSet'
+import type { SeedPkStrategy, SeedRow, SeedSet, SeedStrength } from './types'
 // 순환 참조 주의: seed → {designs, versions, definition/designScope} 방향만 존재.
 
 let rowSeq = 1
@@ -29,8 +29,20 @@ interface SeedState {
 
   addSet: (t: TableDef) => void
   removeSet: (key: string) => void
-  toggleKeyColumn: (column: string) => void
-  toggleIgnored: (column: string) => void
+  /** 컬럼 역할 순환 — 짝짓기 → 포함 → 무시 → 짝짓기(버튼 하나). */
+  cycleColumnRole: (column: string, allowKey?: boolean) => void
+  /** 행 별칭 설정 — 다른 시드 행이 이 행을 가리킬 이름(설계 전용, DB 에 안 들어감). */
+  setRowAlias: (rowId: string, alias: string) => void
+  /** PK 획득 방식 선언(반영 계약) — 활성 세트에. */
+  setPkStrategy: (strategy: SeedPkStrategy, template?: string) => void
+  /**
+   * 되먹임 채택 — 실 DB 에서 가져온 후보를 Draft 시드에 반영한다.
+   * `rowId` 가 있으면 그 행의 값만 덮고, 없으면 새 행으로 넣는다(활성 세트가 아니어도 된다).
+   */
+  applyImported: (
+    designId: string,
+    items: { table: string; rowId?: string; values: Record<string, string | null>; alias?: string }[]
+  ) => void
   setStrength: (strength: SeedStrength) => void
 
   addRow: () => void
@@ -84,8 +96,37 @@ export const useSeedStore = create<SeedState>()((set) => ({
       return { sets, activeKey: s.activeKey === key ? '' : s.activeKey, editing: null }
     }),
 
-  toggleKeyColumn: (column) => set((s) => patchActive(s, (x) => toggleNaturalKeyColumn(x, column))),
-  toggleIgnored: (column) => set((s) => patchActive(s, (x) => toggleIgnoredColumn(x, column))),
+  cycleColumnRole: (column, allowKey = true) =>
+    set((s) => patchActive(s, (x) => cycleSeedColumnRole(x, column, allowKey))),
+  setPkStrategy: (strategy, template) =>
+    set((s) => patchActive(s, (x) => ({ ...x, pkStrategy: strategy, pkTemplate: template ?? x.pkTemplate }))),
+  applyImported: (designId, items) =>
+    set((s) => {
+      let rows = s.sets
+      for (const item of items) {
+        rows = rows.map((x) => {
+          if (x.designId !== designId || x.tableName !== item.table) return x
+          if (item.rowId) {
+            return {
+              ...x,
+              rows: x.rows.map((r) => (r.id === item.rowId ? { ...r, values: { ...r.values, ...item.values } } : r))
+            }
+          }
+          return {
+            ...x,
+            rows: [...x.rows, { id: `row-${rowSeq++}`, alias: item.alias, values: { ...item.values } }]
+          }
+        })
+      }
+      return { sets: rows }
+    }),
+  setRowAlias: (rowId, alias) =>
+    set((s) =>
+      patchActive(s, (x) => ({
+        ...x,
+        rows: x.rows.map((r) => (r.id === rowId ? { ...r, alias: alias.trim() } : r))
+      }))
+    ),
   setStrength: (strength) => set((s) => patchActive(s, (x) => ({ ...x, strength }))),
 
   addRow: () =>

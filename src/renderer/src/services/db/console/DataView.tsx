@@ -37,14 +37,8 @@ import { badgeLabels, typeLabel } from './data/columnMeta'
 import { genUuid } from './data/genValue'
 import { normalizeDateTime, nowDateTime } from './data/timeValue'
 import { formatDateCell, timezoneOptions, TZ_MODES, type TzMode } from './data/timezone'
-import {
-  countByKind,
-  filterByKind,
-  flattenConstraints,
-  groupConstraintsByTable,
-  KIND_FILTERS,
-  type KindFilter
-} from './constraintsView'
+import { flattenConstraints, type KindFilter } from './constraintsView'
+import { ConstraintListPanel, KindBadge } from '../ConstraintListPanel'
 import { useOutsideClose } from '@renderer/lib/useOutsideClose'
 import { toCsv, toJson, toSqlInsert } from './data/exportRows'
 import { PAGE_SIZES, rowKey, useDataStore } from './data/store'
@@ -170,9 +164,6 @@ export function DataView() {
   const all = tables ?? []
   const { tables: baseTables, views } = splitTablesAndViews(all)
   const constraints = flattenConstraints(all)
-  const counts = countByKind(constraints)
-  const filteredConstraints = filterByKind(constraints, cfilter)
-  const constraintGroups = groupConstraintsByTable(filteredConstraints)
 
   const selected: TableDef | null = all.find((t) => t.name === d.table) ?? null
   const editable = selected ? canEdit(selected) : false
@@ -268,51 +259,14 @@ export function DataView() {
           </aside>
         ) : (
           <aside className="flex w-72 shrink-0 flex-col border-r border-line">
-            <div className="flex flex-wrap gap-1 border-b border-line px-2 py-2">
-              {KIND_FILTERS.map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setCfilter(k)}
-                  className={cn('rounded px-1.5 py-0.5 text-[10.5px] font-semibold outline-none', cfilter === k ? 'bg-accent text-white' : 'bg-panel-strong text-muted hover:text-fg')}
-                >
-                  {k === 'ALL' ? 'ALL' : k.toUpperCase()} {counts[k]}
-                </button>
-              ))}
-            </div>
-            {/* 테이블별 그룹(Header) > 그 테이블 제약들 — 같은 테이블 제약을 한 묶음으로 본다. */}
-            <div className="min-h-0 flex-1 overflow-auto">
-              {constraintGroups.map((g) => (
-                <div key={g.table}>
-                  <button
-                    type="button"
-                    onClick={() => { const t = all.find((x) => x.name === g.table); if (t) pickTable(t) }}
-                    className={cn('sticky top-0 z-10 flex w-full items-center gap-1.5 border-b border-line bg-panel px-3 py-1.5 text-left outline-none hover:bg-panel-strong', g.table === d.table && 'text-accent')}
-                    title={`${g.table} 테이블 보기`}
-                  >
-                    <Table2 className="size-3.5 shrink-0 opacity-60" />
-                    <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-semibold">{g.table}</span>
-                    <span className="shrink-0 text-[10.5px] text-muted">{g.constraints.length}</span>
-                  </button>
-                  {g.constraints.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => { const t = all.find((x) => x.name === c.table); if (t) pickTable(t) }}
-                      className={cn('flex w-full flex-col gap-0.5 border-b border-line/50 py-1.5 pl-6 pr-3 text-left outline-none hover:bg-panel', c.table === d.table && 'bg-accent-soft/30')}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <KindBadge kind={c.kind} />
-                        <span className="min-w-0 truncate font-mono text-[11.5px] text-fg">{c.name}</span>
-                      </span>
-                      <span className="min-w-0 truncate font-mono text-[10.5px] text-muted">{c.columns.join(', ')}</span>
-                      {c.refLabel && <span className="min-w-0 truncate font-mono text-[10.5px] text-accent">{c.refLabel}</span>}
-                    </button>
-                  ))}
-                </div>
-              ))}
-              {constraintGroups.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">제약 없음</div>}
-            </div>
+            {/* 목록 표현은 Definition·Diagram 과 같은 공용 패널을 쓴다(구현 하나). */}
+            <ConstraintListPanel
+              tables={all}
+              activeTableName={d.table || null}
+              onPickTable={pickTable}
+              filter={cfilter}
+              onFilterChange={setCfilter}
+            />
           </aside>
         )}
 
@@ -649,18 +603,6 @@ function TableRow({ t, active, onPick, isView }: { t: TableDef; active: boolean;
       <span className="shrink-0 text-[10.5px] text-muted">{t.columns.length}</span>
     </button>
   )
-}
-
-/** 제약 종류 텍스트 배지(PK/FK/UK/IDX/CHECK). 열쇠 이모지 금지. */
-function KindBadge({ kind }: { kind: Constraint['kind'] }) {
-  const color: Record<Constraint['kind'], string> = {
-    pk: 'bg-amber-100 text-amber-700',
-    fk: 'bg-sky-100 text-sky-700',
-    uk: 'bg-emerald-100 text-emerald-700',
-    idx: 'bg-violet-100 text-violet-700',
-    check: 'bg-rose-100 text-rose-700'
-  }
-  return <span className={cn('shrink-0 rounded px-1 text-[9px] font-bold uppercase', color[kind])}>{kind}</span>
 }
 
 /** 현재 테이블 제약 패널(읽기 전용) — Type/Name/Columns/Reference. */

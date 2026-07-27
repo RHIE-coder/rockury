@@ -48,6 +48,7 @@ import { CollectionView } from './console/CollectionView'
 import { HistoryView } from './console/HistoryView'
 import { DriftView, PlanView, RunView, LogsView } from './migration/views'
 import { CompareView } from './migration/CompareView'
+import { SeedOpsView } from './migration/SeedOpsView'
 import './rehydration' // 에이전트(MCP) 쓰기 → store:changed → 스코프 재조회 구독(부수효과 모듈)
 
 /**
@@ -185,6 +186,8 @@ export const dbService: Service = {
       views: [
         { id: 'drift', label: 'Drift', icon: Radar, workspace: DriftView },
         { id: 'plan', label: 'Plan', icon: FileDiff, workspace: PlanView },
+        // 시드 반영·되먹임 — 스키마(Plan/Run)와 갈라 둔다: 대상이 데이터고 게이트도 따로다.
+        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView },
         { id: 'run', label: 'Run', icon: Play, workspace: RunView },
         // 실DB↔실DB 비교(DEV·STG·PROD) — 설계 무관, 연결 2개만 필요.
         { id: 'compare', label: 'Compare', icon: GitCompare, workspace: CompareView },

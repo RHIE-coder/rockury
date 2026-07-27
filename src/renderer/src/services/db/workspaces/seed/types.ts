@@ -28,10 +28,36 @@ export const STRENGTH_HINT: Record<SeedStrength, string> = {
 }
 
 export interface SeedRow {
-  /** 행 로컬 id — 그리드 편집·React key 용. 행의 **정체성은 자연키**이고 이 id 는 화면 편의값이다. */
+  /** 행 로컬 id — 그리드 편집·React key 용. 행의 **정체성은 짝짓기 기준**이고 이 id 는 화면 편의값이다. */
   id: string
+  /**
+   * **별칭** — 다른 시드 행이 이 행을 가리킬 때 쓰는 이름(`@users#admin` 의 `admin`).
+   * 설계 안에서만 쓰이고 **실 DB 에는 들어가지 않는다.** 왜 짝짓기 기준 값을 그대로 쓰지 않나:
+   * 기준 값(email·code)은 실제로 바뀌는데, 그때 그걸 가리키던 참조가 전부 깨진다.
+   * 비어 있어도 된다(참조 대상이 아닌 행). 같은 세트 안에서는 겹칠 수 없다.
+   */
+  alias?: string
   /** 컬럼명 → 값. `null` 은 SQL NULL. `{{NAME}}` 문자열은 변수 자리표시자(환경차 분리). */
   values: Record<string, string | null>
+}
+
+/**
+ * PK(대체키) 를 **누가 만드는가** — 반영 계약의 핵심 선언(spec `db-studio.seed.apply-contract` AC-2).
+ *  - `db`   : DB 가 만든다(자동증가·`DEFAULT uuid()`) → 시드는 PK 를 담지 않는다.
+ *  - `seed` : 시드가 값을 준다 — 셀에 직접 쓰거나 `pkTemplate` 으로 **결정적으로** 만든다.
+ * 랜덤 생성은 허용하지 않는다: 재실행마다 값이 달라져 같은 행이 두 벌 생긴다.
+ */
+export type SeedPkStrategy = 'db' | 'seed'
+
+export const PK_STRATEGY_LABEL: Record<SeedPkStrategy, string> = {
+  db: 'DB 가 만든다',
+  seed: '시드가 정한다'
+}
+
+export const PK_STRATEGY_HINT: Record<SeedPkStrategy, string> = {
+  db: '자동증가·DEFAULT uuid() 처럼 DB 가 채워요. 시드는 PK 를 담지 않고, 환경마다 값이 달라집니다.',
+  seed:
+    '시드가 PK 값을 정해 세 환경이 같은 값을 갖게 해요. 셀에 직접 쓰거나 생성 규칙(템플릿)으로 만듭니다 — 규칙은 결정적이어서 몇 번 돌려도 같은 값이 나옵니다.'
 }
 
 export interface SeedSet {
@@ -44,5 +70,13 @@ export interface SeedSet {
   /** 비교에서 뺄 컬럼명(`id`·`created_at` 류). */
   ignoredColumns: string[]
   strength: SeedStrength
+  /** PK 를 누가 만드는가(기본 `db`). */
+  pkStrategy?: SeedPkStrategy
+  /**
+   * `pkStrategy='seed'` 일 때 PK 값 생성 규칙. 비면 셀에 쓴 값을 그대로 쓴다.
+   * 자리표시자: `{table}` · `{key}`(짝짓기 기준 값들을 `-` 로 이음) · `{alias}` · `{uuid}`(결정적 UUID).
+   * 예: `{uuid}` · `role-{key}` · `{table}-{alias}`
+   */
+  pkTemplate?: string
   rows: SeedRow[]
 }

@@ -80,12 +80,14 @@ describe('CASE-studio-006 컬럼 머리 배지', () => {
   const byName = (n: string) => hints.find((h) => h.name === n)!
 
   it('PK·FK 를 텍스트 배지로 준다(이모지 없음)', () => {
-    expect(byName('id').badges).toEqual(['PK'])
-    expect(byName('org_id').badges).toEqual(['FK', 'UK1'])
+    expect(byName('id').badges.map((b) => b.label)).toEqual(['PK'])
+    expect(byName('org_id').badges.map((b) => b.label)).toEqual(['FK', 'UK1'])
+    // 색은 종류로 정해진다 — 종류가 함께 실려야 한다(ui/badge variant).
+    expect(byName('org_id').badges.map((b) => b.kind)).toEqual(['fk', 'uk'])
   })
 
   it('복합 제약은 위치 번호를 붙인다', () => {
-    expect(byName('email').badges).toEqual(['UK2'])
+    expect(byName('email').badges.map((b) => b.label)).toEqual(['UK2'])
   })
 
   it('CHECK 이 참조하는 컬럼은 CHK 로 표시한다', () => {

@@ -1,27 +1,57 @@
-import { ArrowLeft, Layers, Lock, Plus, TableProperties, X } from 'lucide-react'
+import { ArrowLeft, Eye, Layers, Lock, Plus, Table2, TableProperties, X } from 'lucide-react'
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { Button } from '@renderer/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@renderer/ui/dropdown-menu'
 import { useNav } from '@renderer/nav/useNav'
-import { TableListPanel } from '../../TableListPanel'
+import { TableSidePanel } from '../../TableSidePanel'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { useDefinitionStore, useDesignTables, useStudioReadOnly } from './store'
 import { TableForm } from './TableForm'
 import { SqlForm } from './SqlForm'
 
-/** 좌측 서브사이드바 — 활성 설계의 테이블/뷰 목록 + 검색. 클릭 시 active 테이블 전환. */
+/** 좌측 서브사이드바 — [테이블/뷰 목록 | 제약 목록] 탭. 클릭 시 active 테이블 전환. */
 function TablesSidebar() {
   const tables = useDesignTables()
   const activeId = useDefinitionStore((s) => s.activeTableId)
   const setActive = useDefinitionStore((s) => s.setActiveTable)
 
   return (
-    <TableListPanel
+    <TableSidePanel
       tables={tables}
       activeId={activeId}
       onPick={(t) => setActive(t.id)}
       searchPlaceholder="테이블/컬럼 검색…"
       emptyText="아직 테이블이 없어요"
     />
+  )
+}
+
+/** 사이드바 + 버튼 — 테이블과 뷰 중 무엇을 만들지 고른다. */
+function AddMenu({ designId }: { designId: string }) {
+  const addTable = useDefinitionStore((s) => s.addTable)
+  const addView = useDefinitionStore((s) => s.addView)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-6" aria-label="테이블 추가">
+          <Plus className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem data-definition-add="table" onSelect={() => addTable(designId)}>
+          <Table2 />
+          테이블 추가
+        </DropdownMenuItem>
+        <DropdownMenuItem data-definition-add="view" onSelect={() => addView(designId)}>
+          <Eye />뷰 추가
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -116,7 +146,7 @@ function ReadOnlyBanner({ version }: { version: string }) {
   )
 }
 
-/** Studio › Definition 워크스페이스 — [테이블 목록 | Table/SQL 폼]. 활성 Design 스코프. */
+/** Studio › Definition 워크스페이스 — [테이블·뷰/제약 사이드 패널 | Table/SQL 폼]. 활성 Design 스코프. */
 export function DefinitionWorkspace() {
   const design = useActiveDesign()
   const tables = useDesignTables()
@@ -130,20 +160,8 @@ export function DefinitionWorkspace() {
   return (
     <WorkspacePanels
       autoSaveId="db.definition"
-      sidebarTitle="TABLES"
-      sidebarActions={
-        readOnly ? undefined : (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            aria-label="테이블 추가"
-            onClick={() => addTable(design.id)}
-          >
-            <Plus className="size-4" />
-          </Button>
-        )
-      }
+      sidebarTitle="SCHEMA"
+      sidebarActions={readOnly ? undefined : <AddMenu designId={design.id} />}
       sidebar={<TablesSidebar />}
     >
       <div className="flex h-full flex-col">

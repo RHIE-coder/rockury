@@ -8,6 +8,12 @@ import {
 } from '../store/designs'
 import { listTables, replaceTablesForDesign, type TableRecord } from '../store/tables'
 import { listSeedSets, replaceSeedSetsForDesign, type SeedSetRecord } from '../store/seedSets'
+import {
+  deleteEnvVariable,
+  listEnvVariables,
+  resolveEnvVariables,
+  setEnvVariable
+} from '../store/envVariables'
 import { createVersion, deleteVersion, listVersions, type CreateVersionInput } from '../store/versions'
 
 /**
@@ -33,6 +39,14 @@ export function registerStoreIpc(): void {
   ipcMain.handle('seedSets:replaceForDesign', (_event, designId: string, records: SeedSetRecord[]) =>
     replaceSeedSetsForDesign(designId, records)
   )
+
+  // 환경 변수 값 — 목록은 평문을 싣지 않고, 평문은 반영 직전 resolve 로만 나간다.
+  ipcMain.handle('envVars:list', (_event, envId: string) => listEnvVariables(envId))
+  ipcMain.handle('envVars:set', (_event, envId: string, name: string, value: string) =>
+    setEnvVariable(envId, name, value)
+  )
+  ipcMain.handle('envVars:delete', (_event, envId: string, name: string) => deleteEnvVariable(envId, name))
+  ipcMain.handle('envVars:resolve', (_event, envId: string) => resolveEnvVariables(envId))
 
   ipcMain.handle('versions:list', (_event, designId: string) => listVersions(designId))
   ipcMain.handle('versions:create', (_event, input: CreateVersionInput) => createVersion(input))
