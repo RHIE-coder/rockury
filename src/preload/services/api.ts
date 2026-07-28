@@ -11,6 +11,12 @@ import type {
   OpenStreamResult,
   StreamEndedEvent
 } from '../../main/ipc/api/stream'
+import type {
+  InboxReceivedEvent,
+  InboxStatus,
+  StartInboxInput
+} from '../../main/ipc/api/inbox'
+import type { ReceivedRequest } from '../../shared/api/inbox'
 import type { ContractLog } from '../../main/store/apiContract'
 import type { ImportPreview, ImportSourceKind } from '../../main/ipc/api/transfer'
 import type { ApiChangedEvent } from '../../main/ai/apiTools'
@@ -36,6 +42,9 @@ export type {
   OpenStreamResult,
   SessionEvent,
   StreamEndedEvent,
+  StartInboxInput,
+  InboxStatus,
+  InboxReceivedEvent,
   ContractLog,
   AbsorbPreview,
   DriftResult,
@@ -129,6 +138,33 @@ export const apiApi = {
       const listener = (_e: unknown, payload: StreamEndedEvent): void => fn(payload)
       ipcRenderer.on('api:streamEnded', listener)
       return () => ipcRenderer.removeListener('api:streamEnded', listener)
+    }
+  },
+
+  /**
+   * 웹훅 수신 — **내가 안 보냈는데 들어온다.** 1차는 로컬 전용이라 이 컴퓨터 안에서만 닿는다.
+   * 앱을 켤 때는 늘 꺼짐으로 시작한다(모르는 새 포트가 열려 있지 않게).
+   */
+  apiInbox: {
+    start: (input: StartInboxInput): Promise<InboxStatus> =>
+      ipcRenderer.invoke('api:startInbox', input),
+    stop: (): Promise<InboxStatus> => ipcRenderer.invoke('api:stopInbox'),
+    /** 지금 상태 + 받아 둔 것 — 화면이 새로 떠도 대기 중인 것을 따라잡는다. */
+    get: (): Promise<{ status: InboxStatus; received: ReceivedRequest[] }> =>
+      ipcRenderer.invoke('api:getInbox'),
+    /** 되돌려줄 코드를 바꾼다. 대기를 끊지 않는다(재전송 유도를 켜고 끄는 자리). */
+    setResponseCode: (code: number): Promise<InboxStatus> =>
+      ipcRenderer.invoke('api:setInboxResponse', code),
+
+    onReceived: (fn: (e: InboxReceivedEvent) => void): (() => void) => {
+      const listener = (_e: unknown, payload: InboxReceivedEvent): void => fn(payload)
+      ipcRenderer.on('api:inbox', listener)
+      return () => ipcRenderer.removeListener('api:inbox', listener)
+    },
+    onStatus: (fn: (s: InboxStatus) => void): (() => void) => {
+      const listener = (_e: unknown, payload: InboxStatus): void => fn(payload)
+      ipcRenderer.on('api:inboxStatus', listener)
+      return () => ipcRenderer.removeListener('api:inboxStatus', listener)
     }
   },
 

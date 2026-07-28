@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { registerApiSpecIpc } from './specs'
 import { registerApiOpsIpc } from './ops'
 import { registerApiStreamIpc, shutdownApiStreams } from './stream'
+import { registerApiInboxIpc } from './inbox'
 import { registerApiContractIpc } from './contract'
 import { registerApiTransferIpc } from './transfer'
 import { setApiChangeNotifier } from '../../ai/apiTools'
@@ -17,6 +18,7 @@ export function registerApiIpc(): void {
   registerApiSpecIpc()
   registerApiOpsIpc()
   registerApiStreamIpc()
+  registerApiInboxIpc()
   registerApiContractIpc()
   registerApiTransferIpc()
 

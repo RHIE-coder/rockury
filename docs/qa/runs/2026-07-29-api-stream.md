@@ -61,3 +61,44 @@
   - `token-guard` 능력 **미바인딩** (프로젝트 설정대로 — 하드코딩 색 정적 검사 없음)
 
 - 판정: **PASS** — 전체 검사 4종 + UI 게이트 통과, 정본·테스트 정의 갱신 완료.
+
+---
+
+# gate run — 2026-07-29 · API Runner › Inbox (로컬 웹훅 수신)
+
+- 기준 커밋(HEAD=부모): `675ec53`
+- 범위: **Runner › Inbox 신설.** 자리표시자 2 → 1(Mocking 만 남음).
+  1. 순수 로직 — `shared/api/inbox.ts`(기대 본문 대조 4갈래 · 포트 제안 · 수신→Run · 목록 행 파생)
+  2. 수신 서버 — `main/api/inboxServer.ts`(`node:http`, **`127.0.0.1` 고정 바인딩**,
+     본문 2MB 상한, 목록 500건 상한)
+  3. IPC/창구 — `main/ipc/api/inbox.ts` 4채널(전부 MCP 제외 등재) · preload `apiInbox`
+  4. 화면 — `runner/InboxView.tsx` · `runner/inboxStore.ts`
+  5. e2e — `e2e/suites/19-api-inbox.mjs`(앱 밖 노드에서 실제 HTTP 를 쏴서 검증)
+
+- 결과:
+  - typecheck (`npm run typecheck`): **PASS**
+  - test (`npm test`): **PASS** — 1290 pass / 4 skip (이전 1263 → **+27**, 전부 `inbox.test.ts`)
+  - build (`npm run build`): **PASS**
+  - e2e (`npm run e2e`): **PASS** — ALL PASS, 19/19 스위트 · **407 체크**(이전 372 → +35).
+    신규 `19-api-inbox` 35체크. 건너뜀 0 · 미실행 0
+  - surface-verify (`npm run surface-verify`): **status=ok** · 차단 **0** · 관찰 120
+    (자리표시자를 실화면으로 바꾼 것이라 화면 수 불변)
+
+- drift:
+  - `api-runner.md` § inbox.received **AC-6 신설**(대조 결과 네 갈래 — `선언 없음`·`대조 불가`를
+    맞음으로 뭉치지 않는다 · 선언에 없는 필드가 더 와도 어긋남이 아니다 · `모름` 제외 건수) ·
+    § inbox.listener **AC-7~AC-10 신설**(받는 모양만 · 비밀 수신 경로 · 상한/조용한 소실 금지 ·
+    기록은 관문이 아니다) · AC-5 보강(코드 변경이 대기를 안 끊는다)
+  - `docs/qa/api-runner.md` CASE-apirunner-**043 보강 · 043b 신설 · 044 보강 · 047 보강 ·
+    056 전면 재작성**. 미구현 절에서 **Inbox 항목 삭제**(구현 완료)
+  - **커버리지 구멍 재점검**: "Inbox — 로컬 수신 서버 미구현" **전제 해소** → 삭제.
+    "외부 터널" 전제 유효 — 화면 상시 문구 + `127.0.0.1` 코드 고정으로 뒷받침한다고 보강
+
+- 미검증으로 남긴 것:
+  - **본문 2MB·목록 500건 상한** — "잘렸다/버렸다" 를 적는 것까지 구현했으나 e2e 로 안 밟았다
+  - **앱 재시작 후 대기 꺼짐** — 아무것도 자동 복원하지 않아 구조적으로 보장되지만,
+    `12-cold-restart` 가 API 스위트보다 먼저 돌아 재시작 검증에 안 들어간다(`main` 몫)
+  - **UI 시각 리뷰** — Stream 회차와 같은 이유로 이번에도 못 돌렸다(에이전트 세션 한도).
+    기계 검증(surface 차단 0 · e2e 35체크)만 통과
+
+- 판정: **PASS**

@@ -28,6 +28,7 @@ import { EnvironmentsView } from './ops/EnvironmentsView'
 import { SendView } from './runner/SendView'
 import { HistoryView } from './runner/HistoryView'
 import { StreamView } from './runner/StreamView'
+import { InboxView } from './runner/InboxView'
 import { TimelineView } from './versions/TimelineView'
 import { DiffView } from './versions/DiffView'
 import { DriftView } from './contract/DriftView'
@@ -44,8 +45,8 @@ import './rehydration' // 에이전트(MCP) 쓰기 → api:changed → 스코프
  *   운영부(ops)    : active 환경에 대고 쏘고, 그 기록으로 판정한다.
  *
  * 지금 구현된 것: Studio(Requests·Docs) · Versions(Timeline·Diff) · Environments ·
- * Runner(Send·History·Stream) · Contract(Drift·Accept·Logs).
- * 남은 자리(Mocking·Inbox)는 비워 두지 않고 자리표시자로 둔다 — 비우면 IA 가 다시
+ * Runner(Send·History·Stream·Inbox) · Contract(Drift·Accept·Logs).
+ * 남은 자리(Mocking)는 비워 두지 않고 자리표시자로 둔다 — 비우면 IA 가 다시
  * 흔들리고, 자리가 있으면 무엇이 남았는지 화면이 말해 준다.
  */
 
@@ -150,17 +151,7 @@ export const apiService: Service = {
         { id: 'send', label: 'Send', icon: Send, workspace: SendView },
         { id: 'history', label: 'History', icon: HistoryIcon, workspace: HistoryView },
         { id: 'stream', label: 'Stream', icon: Waves, workspace: StreamView },
-        {
-          id: 'inbox',
-          label: 'Inbox',
-          icon: Inbox,
-          workspace: soon(
-            Inbox,
-            'depth 3 · API › Runner › Inbox',
-            'Inbox',
-            '웹훅 수신 — 내가 안 보냈는데 들어오는 것. 1차는 이 컴퓨터 안에서만 닿습니다. (후속)'
-          )
-        }
+        { id: 'inbox', label: 'Inbox', icon: Inbox, workspace: InboxView }
       ]
     },
     {
