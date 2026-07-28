@@ -4,11 +4,13 @@ import {
   createNote,
   deleteNode,
   deleteNote,
+  getProjectTokens,
   getTree,
   listNotes,
   listProjects,
   saveSurfaceContent,
   setNoteResolved,
+  setProjectTokens,
   setSurfaceStatus,
   updateNode,
   type NodeInput,
@@ -49,4 +51,10 @@ export function registerUiuxSpecsIpc(): void {
   )
   ipcMain.handle('uiux:setNoteResolved', (_e, id: string, resolved: boolean) => setNoteResolved(id, resolved))
   ipcMain.handle('uiux:deleteNote', (_e, id: string) => deleteNote(id))
+
+  // 디자인 토큰 — 기본 한 벌 위에 프로젝트가 덮어쓰는 값만 오간다.
+  ipcMain.handle('uiux:getTokens', (_e, projectId: string) => getProjectTokens(projectId))
+  ipcMain.handle('uiux:setTokens', (_e, projectId: string, tokens: Record<string, string>) =>
+    setProjectTokens(projectId, tokens)
+  )
 }

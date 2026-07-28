@@ -26,7 +26,10 @@ export const uiuxCoverage: ServiceCoverage = {
     set_ui_surface_status: ['uiux:setSurfaceStatus'],
     // ── 의견(핀) — 사람이 화면에 남긴 요청을 에이전트가 읽고, 반영한 뒤 해결로 넘긴다 ──
     list_ui_notes: ['uiux:listNotes'],
-    resolve_ui_note: ['uiux:setNoteResolved']
+    resolve_ui_note: ['uiux:setNoteResolved'],
+    // ── 디자인 토큰 — 에이전트가 색·간격을 읽어 실제 코드의 토큰과 맞춘다 ──
+    get_ui_tokens: ['uiux:getTokens'],
+    set_ui_tokens: ['uiux:setTokens']
   },
   excluded: {
     // 이름·주소 고치기는 주소를 흔든다 — 흐름·규칙·의견이 전부 그 주소에 걸려 있어, 에이전트가

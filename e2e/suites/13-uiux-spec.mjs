@@ -5,7 +5,7 @@
 export const meta = {
   name: '13-uiux-spec',
   needsDb: false,
-  desc: 'UI/UX — 위계·구조 편집 · 미리보기 · 끌어놓기 · 의견(핀) · MCP 한 바퀴 · 능력 인덱스'
+  desc: 'UI/UX — 위계·구조 · 미리보기 · 끌어놓기 · 토큰 · 의견(핀) · MCP 한 바퀴 · 능력 인덱스'
 }
 
 /**
@@ -190,6 +190,31 @@ export async function run(ctx) {
   await page.waitForTimeout(300)
   check('Spec: 요소를 지우면 그것만 사라진다', (await page.locator('[data-spec-component]').count()) === 1)
 
+  // ── Style — 토큰을 바꾸면 미리보기가 따라 바뀐다 (Style 이 있는 이유) ──
+  await click('[data-nav-module="style"]')
+  await click('[data-nav-view="tokens"]')
+  await page.waitForSelector('[data-uiux-token="color.primary"]', { timeout: 5_000 })
+  check('Style: 처음엔 전부 기본값이다', (await page.locator('[data-uiux-token-changed="0"]').count()) === 1)
+  await page.fill('[data-uiux-token="color.primary"] input', '#0f766e')
+  await page.waitForTimeout(500)
+  check('Style: 바꾼 토큰 수를 알려준다', (await page.locator('[data-uiux-token-changed="1"]').count()) === 1)
+
+  await click('[data-nav-view="components"]')
+  await page.waitForTimeout(400)
+  check('Style: 컴포넌트를 종류별로 늘어놓는다', (await body()).includes('입력칸') && (await body()).includes('버튼'))
+
+  // 진짜 확인 — 미리보기가 그 색을 쓴다.
+  await click('[data-nav-module="screens"]')
+  await click('[data-nav-view="canvas"]')
+  await page.waitForSelector('[data-uiux-preview]', { timeout: 5_000 })
+  await page.waitForTimeout(500)
+  check(
+    'Style: 바꾼 토큰이 미리보기에 그대로 들어간다',
+    (await page.locator('[data-uiux-node="input"]').first().evaluate((el) =>
+      getComputedStyle(el).getPropertyValue('--t-color-primary').trim()
+    )) === '#0f766e'
+  )
+
   // ── Review — 화면 위 요소에 의견을 남긴다 (스크린샷 + 화살표를 대신하는 자리) ──
   await click('[data-nav-view="review"]')
   await page.waitForSelector('[data-uiux-review]', { timeout: 5_000 })
@@ -246,10 +271,14 @@ export async function run(ctx) {
       5
     )
     const missing = await call('get_ui_surface', { address: 'coupang.없는.주소.임' }, 6)
+    const tokens = JSON.parse((await call('get_ui_tokens', { project: 'coupang' }, 10)).content[0].text)
+    const setTokens = JSON.parse(
+      (await call('set_ui_tokens', { project: 'coupang', tokens: { 'space.md': '20px' } }, 11)).content[0].text
+    )
     const notes = JSON.parse((await call('list_ui_notes', { project: 'coupang' }, 7)).content[0].text)
     const resolved = await call('resolve_ui_note', { id: notes[0]?.id }, 8)
     const afterResolve = JSON.parse((await call('list_ui_notes', { project: 'coupang' }, 9)).content[0].text)
-    return { names, tree, surface, wrote, missing, notes, resolved, afterResolve }
+    return { names, tree, surface, wrote, missing, notes, resolved, afterResolve, tokens, setTokens }
   })
 
   check(
@@ -270,6 +299,14 @@ export async function run(ctx) {
     mcp.missing?.isError === true && mcp.missing.content[0].text.includes('get_ui_tree')
   )
 
+  check(
+    'MCP: 사람이 바꾼 토큰을 에이전트가 읽는다 (실제 코드의 토큰과 맞추라고)',
+    mcp.tokens.overrides['color.primary'] === '#0f766e'
+  )
+  check(
+    'MCP: set_ui_tokens 는 준 값만 바꾸고 나머지는 그대로 둔다',
+    mcp.setTokens.overrides['space.md'] === '20px' && mcp.setTokens.overrides['color.primary'] === '#0f766e'
+  )
   check(
     'MCP: 사람이 남긴 의견을 에이전트가 읽는다 (좌표가 아니라 요소에 붙어 온다)',
     mcp.notes.length === 1 && mcp.notes[0].target === 'input' && mcp.notes[0].body.includes('이메일 주소')

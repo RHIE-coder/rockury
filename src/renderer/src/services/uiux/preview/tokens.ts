@@ -37,6 +37,37 @@ export const DEFAULT_TOKENS: TokenMap = {
   'border.width': '1px'
 }
 
+/**
+ * 기본 한 벌 ⊕ 프로젝트가 덮어쓴 값. **덮어쓴 것만 저장하므로** 기본값이 바뀌면 안 건드린 토큰은
+ * 자동으로 따라온다 — 전부를 복사해 두면 그 길이 막힌다.
+ *
+ * 기본에 없는 이름도 받아들인다(열린 어휘) — 프로젝트가 자기 토큰을 더할 수 있다. 다만 조각이
+ * 안 쓰는 이름은 아무 데도 안 닿는다(그건 Style 화면이 알려 줄 몫).
+ */
+export function mergeTokens(overrides: TokenMap | undefined, base: TokenMap = DEFAULT_TOKENS): TokenMap {
+  if (!overrides) return base
+  const out: TokenMap = { ...base }
+  for (const [path, value] of Object.entries(overrides)) {
+    // 빈 값은 "기본으로 되돌림"이다 — 지우기와 같은 뜻이라 따로 삭제 동작을 두지 않는다.
+    if (typeof value === 'string' && value.trim() !== '') out[path] = value
+  }
+  return out
+}
+
+/** 기본과 다른 값만 추린다 — 저장할 때 차이만 남기기 위한 것. */
+export function diffTokens(current: TokenMap, base: TokenMap = DEFAULT_TOKENS): TokenMap {
+  const out: TokenMap = {}
+  for (const [path, value] of Object.entries(current)) {
+    if (base[path] !== value) out[path] = value
+  }
+  return out
+}
+
+/** 토큰을 묶어 보이기 위한 갈래 — 경로의 첫 조각(`color.primary` → `color`). */
+export function tokenGroup(path: string): string {
+  return path.split('.')[0] || 'etc'
+}
+
 /** 토큰 경로 → CSS 변수 이름. `color.primary` → `--t-color-primary`. 손 매핑을 두지 않는다(죽은 토큰 방지). */
 export function tokenVarName(path: string): string {
   return `--t-${path.replace(/\./g, '-')}`

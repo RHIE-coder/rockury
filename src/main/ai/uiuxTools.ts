@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   createNode,
   findByAddress,
+  getProjectTokens,
   getSurface,
   getTree,
   listNotes,
@@ -9,6 +10,7 @@ import {
   listProjects,
   saveSurfaceContent,
   setNoteResolved,
+  setProjectTokens,
   setSurfaceStatus,
   type SpecLevel
 } from '../store/uiuxSpecs'
@@ -231,6 +233,40 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
       }
       saveSurfaceContent(hit.surfaceId as string, JSON.stringify(content))
       return { address: String(address), sectionCount: value.sections.length }
+    }
+  },
+
+  {
+    name: 'get_ui_tokens',
+    description:
+      '프로젝트의 디자인 토큰을 반환한다 — 색·간격·글자·모서리 등. 화면을 구현할 때 **실제 코드의 토큰과 맞추라고** 있는 값이다. base 는 앱이 들고 있는 기본값, overrides 는 이 프로젝트가 덮어쓴 값(덮어쓴 것만 저장한다).',
+    inputSchema: { project: z.string().describe('프로젝트 주소 조각') },
+    handler: ({ project }) => {
+      const hit = requireAddress(project, 'project')
+      return { project: String(project), overrides: getProjectTokens(hit.projectId) }
+    }
+  },
+
+  {
+    name: 'set_ui_tokens',
+    description:
+      '프로젝트 디자인 토큰을 덮어쓴다 — **주는 값만 바뀌고 나머지는 그대로**다(통째로 교체하지 않는다). 값이 빈 문자열이면 기본값으로 되돌린다. 경로는 `color.primary` · `space.md` 처럼 뜻으로 짓는다(`blue600` 같은 값 이름을 쓰면 나중에 색을 바꿀 때 이름이 거짓말을 한다).',
+    inputSchema: {
+      project: z.string().describe('프로젝트 주소 조각'),
+      tokens: z.record(z.string(), z.string()).describe('{ "color.primary": "#0f766e", … }')
+    },
+    handler: ({ project, tokens }) => {
+      const hit = requireAddress(project, 'project')
+      const current = getProjectTokens(hit.projectId)
+      const patch = tokens as Record<string, string>
+      const next: Record<string, string> = { ...current }
+      for (const [path, value] of Object.entries(patch)) {
+        if (typeof value !== 'string') continue
+        if (value.trim() === '') delete next[path]
+        else next[path] = value
+      }
+      setProjectTokens(hit.projectId, next)
+      return { project: String(project), overrides: next }
     }
   },
 

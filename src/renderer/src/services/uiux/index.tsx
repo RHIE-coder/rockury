@@ -51,6 +51,15 @@ const FeaturesWorkspace = withSuspense(() =>
 const ReviewWorkspace = withSuspense(() =>
   import('./screens/ReviewWorkspace').then((m) => ({ default: m.ReviewWorkspace }))
 )
+// Style 은 뷰 둘이 같은 컴포넌트를 쓰고 `view` 로 갈린다 — 토큰과 그 결과를 한 화면에서 오가야 해서.
+const TokensView = withSuspense(() =>
+  import('./screens/StyleWorkspace').then((m) => ({ default: () => <m.StyleWorkspace view="tokens" /> }))
+)
+const ComponentsView = withSuspense(() =>
+  import('./screens/StyleWorkspace').then((m) => ({
+    default: () => <m.StyleWorkspace view="components" />
+  }))
+)
 const NodeDialog = withSuspense(() =>
   import('./screens/NodeDialog').then((m) => ({ default: m.NodeDialog }))
 )
@@ -174,28 +183,8 @@ export const uiuxService: Service = {
       label: 'Style',
       icon: Paintbrush,
       views: [
-        {
-          id: 'tokens',
-          label: 'Tokens',
-          icon: Braces,
-          workspace: view(
-            Braces,
-            'depth 3 · Style › Tokens',
-            'Tokens',
-            '색·간격·글자 등 디자인 토큰. 전역 기본값 위에 앱별 덮어쓰기가 얹힌다.'
-          )
-        },
-        {
-          id: 'components',
-          label: 'Components',
-          icon: Component,
-          workspace: view(
-            Component,
-            'depth 3 · Style › Components',
-            'Components',
-            '컴포넌트를 변형·상태별로 늘어놓은 매트릭스.'
-          )
-        }
+        { id: 'tokens', label: 'Tokens', icon: Braces, workspace: TokensView },
+        { id: 'components', label: 'Components', icon: Component, workspace: ComponentsView }
       ]
     },
     {

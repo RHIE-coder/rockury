@@ -46,6 +46,9 @@ export interface SpecState {
   /** 고른 화면에 달린 의견(핀). 화면을 바꾸면 함께 다시 읽는다. */
   notes: SpecNoteRow[]
 
+  /** 이 프로젝트가 **덮어쓴** 토큰만(전부가 아니라 차이만 — 기본값이 바뀌면 따라오게). */
+  tokens: Record<string, string>
+
   /** 마지막 오류 — 저장소가 거절한 이유를 그대로 보인다(주소 중복 등). */
   error: string | null
 
@@ -83,6 +86,10 @@ export interface SpecState {
   /** 화면 내용 편집 — `tree.ts` 순수 함수를 넘겨 부른다. 먼저 반영하고 저장한다. */
   editContent: (fn: (content: SurfaceContent) => SurfaceContent) => Promise<void>
 
+  loadTokens: (projectId: string | null) => Promise<void>
+  /** 토큰 하나를 바꾼다. 빈 값이면 기본으로 되돌린다(지우기와 같은 뜻). */
+  setToken: (path: string, value: string) => Promise<void>
+
   loadNotes: (surfaceId: string | null) => Promise<void>
   addNote: (target: string, body: string) => Promise<void>
   toggleNote: (id: string, resolved: boolean) => Promise<void>
@@ -105,6 +112,7 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
   content: null,
   selectedNodeId: null,
   notes: [],
+  tokens: {},
   error: null,
   dialog: null,
 
@@ -127,6 +135,7 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
     try {
       const tree = await window.rockury.uiux.getTree(projectId)
       set({ tree, treeLoading: false })
+      void get().loadTokens(projectId)
       // 고른 화면이 이 프로젝트에 없으면 선택을 놓는다(다른 프로젝트의 화면을 계속 열어 두지 않는다).
       const still = tree.surfaces.some((s) => s.id === get().selectedSurfaceId)
       if (!still) get().selectSurface(null)
@@ -196,6 +205,33 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
         if (get().selectedSurfaceId === id) get().selectSurface(null)
         await get().loadTree(activeProjectId())
       }
+    } catch (e) {
+      set({ error: message(e) })
+    }
+  },
+
+  loadTokens: async (projectId) => {
+    if (!projectId) {
+      set({ tokens: {} })
+      return
+    }
+    try {
+      set({ tokens: await window.rockury.uiux.getTokens(projectId) })
+    } catch (e) {
+      set({ error: message(e) })
+    }
+  },
+
+  setToken: async (path, value) => {
+    const projectId = activeProjectId()
+    if (!projectId) return
+    const next = { ...get().tokens }
+    if (value.trim() === '') delete next[path]
+    else next[path] = value
+    // 미리보기가 즉시 따라야 손맛이 산다 — 먼저 반영하고 저장한다(화면 내용 편집과 같은 판단).
+    set({ tokens: next })
+    try {
+      await window.rockury.uiux.setTokens(projectId, next)
     } catch (e) {
       set({ error: message(e) })
     }

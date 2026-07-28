@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { DRAG_THRESHOLD, dropTarget, guideLine, type DropTarget, type NodeRect, type SectionRect } from '../preview/dnd'
 import { renderSurface } from '../preview/render'
-import { VIEWPORT_WIDTH } from '../preview/tokens'
+import { mergeTokens, VIEWPORT_WIDTH } from '../preview/tokens'
+import { useSpecStore } from '../store'
 import type { SurfaceContent, Viewport } from '../types'
 
 /**
@@ -65,6 +66,8 @@ export function Preview({ content, viewport, selectedId, pinnedIds, onSelect, on
   const pendingRef = useRef<{ id: string; x: number; y: number } | null>(null)
   const targetRef = useRef<DropTarget | null>(null)
 
+  // 프로젝트가 덮어쓴 토큰이 미리보기에 그대로 들어간다 — 이게 "그 프로젝트의 얼굴"이 되는 지점.
+  const overrides = useSpecStore((s) => s.tokens)
   const [scale, setScale] = useState(1)
   const [dragging, setDragging] = useState<string | null>(null)
   const [guide, setGuide] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
@@ -76,10 +79,15 @@ export function Preview({ content, viewport, selectedId, pinnedIds, onSelect, on
     if (!host) return
     // 그림자 뿌리는 한 번만 만든다 — 두 번 부르면 던진다(개발 모드의 이중 실행 대비).
     if (!shadowRef.current) shadowRef.current = host.attachShadow({ mode: 'open' })
-    const { html, css } = renderSurface(content, { selectedId, draggingId: dragging, pinnedIds })
+    const { html, css } = renderSurface(content, {
+      selectedId,
+      draggingId: dragging,
+      pinnedIds,
+      tokens: mergeTokens(overrides)
+    })
     shadowRef.current.innerHTML = `<style>${css}</style>${html}`
-    // pinnedIds 는 배열이라 참조가 매번 바뀔 수 있어 내용으로 비교한다(불필요한 재렌더 방지).
-  }, [content, selectedId, dragging, (pinnedIds ?? []).join(',')])
+    // 배열·객체는 참조가 매번 바뀔 수 있어 내용으로 비교한다(불필요한 재렌더 방지).
+  }, [content, selectedId, dragging, (pinnedIds ?? []).join(','), JSON.stringify(overrides)])
 
   // 자리 폭에 맞춰 줄인다. 키우지는 않는다(1배가 실제 크기라 그보다 크게 보이면 눈이 속는다).
   useLayoutEffect(() => {

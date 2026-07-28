@@ -47,6 +47,11 @@ export const uiuxApi = {
     }): Promise<{ id: string }> => ipcRenderer.invoke('uiux:createNote', input),
     setNoteResolved: (id: string, resolved: boolean): Promise<void> =>
       ipcRenderer.invoke('uiux:setNoteResolved', id, resolved),
-    deleteNote: (id: string): Promise<void> => ipcRenderer.invoke('uiux:deleteNote', id)
+    deleteNote: (id: string): Promise<void> => ipcRenderer.invoke('uiux:deleteNote', id),
+
+    getTokens: (projectId: string): Promise<Record<string, string>> =>
+      ipcRenderer.invoke('uiux:getTokens', projectId),
+    setTokens: (projectId: string, tokens: Record<string, string>): Promise<void> =>
+      ipcRenderer.invoke('uiux:setTokens', projectId, tokens)
   }
 }

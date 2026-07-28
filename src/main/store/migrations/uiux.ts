@@ -1,4 +1,5 @@
-import type { ServiceMigration } from './types'
+import type { DatabaseSync } from 'node:sqlite'
+import { addColumnIfMissing, type ServiceMigration } from './types'
 
 /**
  * UI/UX 서비스의 로컬 저장소 스키마 — 명세 정본 `docs/spec/uiux-ia.md` §7.
@@ -23,12 +24,19 @@ export const uiuxMigration: ServiceMigration = {
     'uiux_notes'
   ],
 
+  alter(d: DatabaseSync): void {
+    // 디자인 토큰 — 기본 한 벌 위에 프로젝트가 덮어쓰는 값만 담는다(전부가 아니라 차이만).
+    // 함께 읽고 함께 쓰이므로 칸 하나에 JSON 으로 둔다(화면 내용과 같은 판단).
+    addColumnIfMissing(d, 'uiux_projects', 'tokens', "TEXT NOT NULL DEFAULT '{}'")
+  },
+
   schema: `
     CREATE TABLE IF NOT EXISTS uiux_projects (
       id          TEXT PRIMARY KEY,
       key         TEXT NOT NULL,
       name        TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
+      tokens      TEXT NOT NULL DEFAULT '{}',
       created_at  TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_uiux_projects_key ON uiux_projects(key);

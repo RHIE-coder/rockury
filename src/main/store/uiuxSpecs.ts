@@ -309,6 +309,33 @@ export function setSurfaceStatus(
     .run(status, new Date().toISOString(), by, note, id)
 }
 
+// ── 디자인 토큰 ─────────────────────────────────────────────────────
+
+/**
+ * 프로젝트가 덮어쓴 토큰만 반환한다(전부가 아니라 **차이만**). 기본 한 벌과의 병합은 렌더러가
+ * 한다 — 기본값이 바뀌면 안 건드린 토큰은 자동으로 따라와야 하고, 전부를 복사해 두면 그게 막힌다.
+ */
+export function getProjectTokens(projectId: string): Record<string, string> {
+  const row = getDb().prepare('SELECT tokens FROM uiux_projects WHERE id = ?').get(projectId) as unknown as
+    | { tokens: string }
+    | undefined
+  if (!row) return {}
+  try {
+    const parsed = JSON.parse(row.tokens || '{}')
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
+    // 값은 CSS 에 그대로 들어가므로 문자열만 살린다.
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter(([, v]) => typeof v === 'string')
+    ) as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+export function setProjectTokens(projectId: string, tokens: Record<string, string>): void {
+  getDb().prepare('UPDATE uiux_projects SET tokens = ? WHERE id = ?').run(JSON.stringify(tokens), projectId)
+}
+
 // ── 의견(핀) ────────────────────────────────────────────────────────
 
 export interface SpecNoteRow {
