@@ -18,7 +18,9 @@ export function TableSidePanel({
   searchPlaceholder,
   rowExtra,
   emptyText,
-  footer
+  footer,
+  groupTab,
+  groupCount
 }: {
   tables: TableDef[]
   activeId: string | null
@@ -27,28 +29,38 @@ export function TableSidePanel({
   rowExtra?: (t: TableDef) => ReactNode
   emptyText?: string
   footer?: ReactNode
+  /** 주면 `그룹` 탭이 생긴다(Diagram 전용 — 정본 §db-console.diagram.group-panel). */
+  groupTab?: ReactNode
+  groupCount?: number
 }) {
-  const [tab, setTab] = useState<'tables' | 'constraints'>('tables')
+  const [tab, setTab] = useState<'tables' | 'constraints' | 'groups'>('tables')
   const [filter, setFilter] = useState<KindFilter>('ALL')
 
   const constraintCount = flattenConstraints(tables).length
   const activeName = tables.find((t) => t.id === activeId)?.name ?? null
+  // 그룹 탭이 없는 화면에서 그 탭을 보고 있었다면(화면 전환) 테이블로 되돌린다.
+  const active = tab === 'groups' && !groupTab ? 'tables' : tab
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
         {/* 라벨이 `테이블` 이면 바로 아래 구역 머리(`테이블 4` · `뷰 1`)와 개수가 어긋나 보인다 —
             이 탭은 둘을 다 담으므로 이름도 둘을 다 말한다. */}
-        <TabButton active={tab === 'tables'} onClick={() => setTab('tables')} testId="tables">
+        <TabButton active={active === 'tables'} onClick={() => setTab('tables')} testId="tables">
           테이블·뷰 <span className="opacity-70">{tables.length}</span>
         </TabButton>
-        <TabButton active={tab === 'constraints'} onClick={() => setTab('constraints')} testId="constraints">
+        <TabButton active={active === 'constraints'} onClick={() => setTab('constraints')} testId="constraints">
           제약 <span className="opacity-70">{constraintCount}</span>
         </TabButton>
+        {groupTab && (
+          <TabButton active={active === 'groups'} onClick={() => setTab('groups')} testId="groups">
+            그룹 <span className="opacity-70">{groupCount ?? 0}</span>
+          </TabButton>
+        )}
       </div>
 
       <div className="min-h-0 flex-1">
-        {tab === 'tables' ? (
+        {active === 'tables' ? (
           <TableListPanel
             tables={tables}
             activeId={activeId}
@@ -58,6 +70,8 @@ export function TableSidePanel({
             emptyText={emptyText}
             footer={footer}
           />
+        ) : active === 'groups' ? (
+          groupTab
         ) : (
           <ConstraintListPanel
             tables={tables}

@@ -330,4 +330,50 @@ export async function run(ctx) {
   await click('button:has-text("Timeline")')
   await page.waitForTimeout(300)
 
+  // ⭐ CASE-studio-065 — 커밋 버전을 **열람**하는 동안에는 배치·그룹을 저장하지 않는다.
+  //    지나간 버전의 화면을 만졌다고 정본이 바뀌면 안 된다(정본 db-studio.diagram.scope AC-2).
+  {
+    const savedLayout = () =>
+      page.evaluate(async () => {
+        const l = await window.rockury.diagram.getLayout('design:commerce-core')
+        return JSON.stringify({ p: l?.positions ?? {}, g: l?.groups ?? [] })
+      })
+    await click('button:has-text("Version")')
+    await click('[role="menuitem"]:has-text("v0.3.15")')
+    await page.waitForTimeout(400)
+    await click('button:has-text("Studio")')
+    await click('button:has-text("Diagram")')
+    await page.waitForSelector('.react-flow__node[data-id]', { timeout: 10_000 })
+    await page.waitForTimeout(500)
+    check('Studio › Diagram(커밋 버전): 읽기 전용 배지', (await body()).includes('읽기 전용'))
+
+    const before = await savedLayout()
+    const nd = page.locator('.react-flow__node:not([data-id^="grp:"])').first()
+    const box = await nd.boundingBox()
+    const tfPre = await nd.evaluate((el) => el.style.transform)
+    await page.mouse.move(box.x + box.width / 2, box.y + 8)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + 120, box.y + 88, { steps: 8 })
+    await page.mouse.up()
+    await page.waitForTimeout(700)
+    check(
+      'Studio › Diagram(커밋 버전): 노드가 안 움직인다(배치 잠금)',
+      (await nd.evaluate((el) => el.style.transform)) === tfPre
+    )
+    check('Studio › Diagram(커밋 버전): 저장본이 그대로', (await savedLayout()) === before)
+    check(
+      'Studio › Diagram(커밋 버전): 그룹 만들기 버튼 없음',
+      (await page.locator('[data-side-tab="groups"]').count()) > 0 &&
+        (await page.locator('[data-group-create]').count()) === 0
+    )
+
+    // 렌즈를 Draft 로, 화면을 Versions › Timeline 으로 되돌린다 —
+    // 다음 스위트(05-mcp-write)는 타임라인이 열린 채로 시작한다고 본다(상태 의존 순서).
+    await click('button:has-text("Version")')
+    await click('[role="menuitem"]:has-text("Draft")')
+    await page.waitForTimeout(400)
+    await click('button:has-text("Versions")')
+    await click('button:has-text("Timeline")')
+    await page.waitForTimeout(400)
+  }
 }

@@ -12,7 +12,7 @@ Studio 의 뷰는 `Definition → Diagram → Seed → Mocking → Documenting �
 | Surface | 상태 |
 |---|---|
 | `db-studio.definition` | **부분 흡수** — 뷰 선언·사이드 패널만 이 문서에 명세됨(아래). 나머지는 근거가 `docs/before-steward-background/db-service-ia.md`, 동작은 코드(`services/db/workspaces/definition/`)와 `docs/qa/db-console.md` 의 Definition 케이스가 덮는다. |
-| `db-studio.diagram` | 구현 완료, **정본 미흡수** — 위와 같음(`services/db/workspaces/diagram/`). |
+| `db-studio.diagram` | **부분 흡수** — 배치·그룹·상세보기는 `db-console.diagram` 이 정본(세 캔버스 공용, 아래 참조). 가상 ERD 편집(테이블·뷰 추가, 컬럼 핸들 드래그로 FK)은 아직 미흡수(`services/db/workspaces/diagram/`). |
 | `db-studio.seed` | **이 문서에 명세됨**(아래). |
 | `db-studio.mocking` · `db-studio.documenting` · `db-studio.validation` | 미구현(placeholder). |
 
@@ -160,3 +160,16 @@ Studio 의 뷰는 `Definition → Diagram → Seed → Mocking → Documenting �
 - **AC-2** 패널은 `테이블` / `제약` 두 탭을 가진다. `테이블` 탭은 테이블과 뷰를 **구역으로 갈라** 각 구역의 개수를 보인다.
 - **AC-3** `제약` 탭은 종류 필터(`ALL`·`PK`·`FK`·`UK`·`IDX`·`CHECK`, 각 개수 표시)와 **테이블별 그룹**으로 제약을 보인다. 항목을 누르면 그 제약이 걸린 테이블로 이동한다(Diagram 에서는 그 노드로 화면이 이동).
 - **AC-4** 집계·정렬·필터는 순수 로직(`db/console/constraintsView`)이 하고 패널은 그리기만 한다 — 같은 계산을 두 번 만들지 않는다.
+
+---
+
+## Surface: db-studio.diagram (Diagram 뷰 — 부분 흡수: 공용 시각 레이어 참조)
+
+> 설계의 **가상 ERD**. 배치 영속·그룹(레이어)·상세보기 서랍은 Console › Diagram 과 **같은 코드·같은 규칙**이라
+> 정본을 두 벌 두지 않는다 — `db-console.diagram` 의 아래 절이 이 화면에도 그대로 적용된다:
+> `db-console.diagram.layout` · `.group` · `.group-panel` · `.detail`.
+
+### Section db-studio.diagram.scope — 설계 스코프 (Studio 만의 차이)
+- **AC-1** 배치·그룹의 저장 스코프는 **설계별**이다(키 `design:<설계 id>`). 설계를 바꾸면 그 설계의 배치·그룹이 뜬다.
+- **AC-2** **커밋된 버전을 보는 중(읽기 전용)에는 배치·그룹을 저장하지 않는다** — 지나간 버전의 화면을 만졌다고 정본이 바뀌면 안 된다.
+- **AC-3** 상세보기 서랍의 내용은 설계 편집 폼(`TableForm`)이다 — Studio › Definition 에서 되는 편집이 다이어그램에서도 그대로 된다. 이 서랍이 예전의 좁은 우측 편집 패널을 **대체**한다(같은 편집을 두 자리에서 다르게 하지 않는다).

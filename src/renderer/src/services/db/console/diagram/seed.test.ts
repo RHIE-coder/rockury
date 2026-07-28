@@ -42,6 +42,15 @@ describe('seedNodes', () => {
     expect(base.find((n) => n.id === 'a')!.position).toEqual({ x: 20, y: 20 })
   })
 
+  it('회귀: 화면에서 사라졌다 돌아온 노드는 **저장된 자리**로 돌아온다(dagre 로 안 튄다)', () => {
+    // 접힌 그룹을 펴거나 필터를 끄면 prev 에 없던 노드가 다시 등장한다.
+    // prev 만 보면 그 노드는 base(dagre) 자리로 튀어, 사용자가 옮겨 둔 배치가 사라졌다.
+    const prev = [node('a', 111, 222)] // b 는 필터/접힘으로 화면에서 빠져 있던 상태
+    const out = seedNodes(base, prev, false, { a: { x: 500, y: 500 }, b: { x: 800, y: 650 } })
+    expect(out.find((n) => n.id === 'a')!.position).toEqual({ x: 111, y: 222 }) // 화면이 저장본을 이긴다
+    expect(out.find((n) => n.id === 'b')!.position).toEqual({ x: 800, y: 650 }) // 저장본이 dagre 를 이긴다
+  })
+
   it('measured 는 prev 에서 이월(재측정 깜빡임 방지), 새 노드는 undefined', () => {
     const prev = [node('a', 20, 20, { width: 180, height: 120 })]
     const out = seedNodes(base, prev, false, {})

@@ -145,6 +145,8 @@ export function TableDetail({
                       <span className="text-accent-2">→</span>
                       <button
                         type="button"
+                        // e2e 가 구조 대신 이 훅으로 참조 링크를 집는다 — 지우면 스모크가 깨진다.
+                        data-fk-jump={con.refTable}
                         onClick={() => onJump?.(con.refTable!)}
                         className="rounded font-mono text-accent underline-offset-2 hover:underline"
                         title={`${con.refTable} 로 이동`}

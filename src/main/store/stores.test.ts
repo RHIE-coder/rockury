@@ -458,12 +458,20 @@ describe('diagramLayouts (Console 실 ERD 레이아웃 영속)', () => {
     expect(got?.viewport).toEqual({ x: -5, y: 12, zoom: 1.25 })
   })
 
-  it('재저장은 UPSERT — 행이 늘지 않고 덮어쓴다', () => {
+  it('재저장은 UPSERT — 행이 늘지 않고 덮어쓴다. 미지정 항목은 그대로 둔다', () => {
     saveLayout({ connectionId: CONN2, positions: { 't:users': { x: 99, y: 99 } } })
     const got = getLayout(CONN2)
     expect(got?.positions).toEqual({ 't:users': { x: 99, y: 99 } })
-    // viewport 미지정 → null 로 갱신
-    expect(got?.viewport).toBeNull()
+    // ⚠ viewport 미지정 = "그대로 둠". 캔버스(위치·뷰포트)와 그룹 패널(그룹)이 같은 행에
+    //    따로 쓰므로, 안 넘긴 항목을 지우면 서로의 저장을 날린다.
+    expect(got?.viewport).toEqual({ x: -5, y: 12, zoom: 1.25 })
+  })
+
+  it('viewport 를 null 로 명시하면 지운다(자동 배치)', () => {
+    saveLayout({ connectionId: CONN2, viewport: null })
+    expect(getLayout(CONN2)?.viewport).toBeNull()
+    // 위치는 안 넘겼으니 그대로
+    expect(getLayout(CONN2)?.positions).toEqual({ 't:users': { x: 99, y: 99 } })
   })
 
   it('연결별 격리 — 다른 연결 레이아웃에 영향 없음', () => {
@@ -471,7 +479,36 @@ describe('diagramLayouts (Console 실 ERD 레이아웃 영속)', () => {
     expect(getLayout(CONN2)?.positions).toEqual({ 't:users': { x: 99, y: 99 } })
   })
 
-  it('clearLayout → null', () => {
+  // CASE-console-05D — 그룹 영속 왕복
+  it('그룹(이름·색·소속·접힘)이 왕복한다. 그룹 열이 없던 옛 행은 빈 목록으로 읽힌다', () => {
+    // 그룹 없이 저장된 기존 행 → 빈 목록
+    expect(getLayout(CONN2)?.groups).toEqual([])
+
+    const groups = [
+      { id: 'g1', name: '주문', color: 'rose', tableIds: ['t:users', 't:orders'], collapsed: false, x: 10, y: 20 },
+      { id: 'g2', name: '', color: '', tableIds: [], collapsed: true, x: 0, y: 0 }
+    ]
+    saveLayout({ connectionId: CONN2, groups })
+    expect(getLayout(CONN2)?.groups).toEqual(groups)
+    // 그룹만 저장했으니 위치는 그대로
+    expect(getLayout(CONN2)?.positions).toEqual({ 't:users': { x: 99, y: 99 } })
+  })
+
+  it('위치만 저장해도 그룹은 안 지워진다(캔버스·패널 동시 쓰기)', () => {
+    saveLayout({ connectionId: CONN2, positions: { 't:users': { x: 7, y: 7 } } })
+    expect(getLayout(CONN2)?.groups.map((g) => g.id)).toEqual(['g1', 'g2'])
+  })
+
+  it('자동 배치(clearLayout)는 배치만 지우고 그룹은 남긴다', () => {
+    clearLayout(CONN2)
+    const got = getLayout(CONN2)
+    expect(got?.positions).toEqual({})
+    expect(got?.viewport).toBeNull()
+    expect(got?.groups.map((g) => g.id)).toEqual(['g1', 'g2'])
+  })
+
+  it('남길 그룹이 없으면 clearLayout 이 행을 지운다 → null', () => {
+    saveLayout({ connectionId: CONN2, groups: [] })
     clearLayout(CONN2)
     expect(getLayout(CONN2)).toBeNull()
   })

@@ -27,9 +27,32 @@ export interface LayoutOptions {
   ranksep?: number
   /** 같은 랭크 노드 간격. */
   nodesep?: number
+  /**
+   * 노드 id → 묶음 id. 주면 **같은 묶음끼리 붙여** 배치한다(dagre 의 compound graph).
+   * 다이어그램 그룹을 그대로 넘기면 `자동 배치` 가 그룹을 흩어 놓지 않는다.
+   * 안 주면 예전과 완전히 같은 배치가 나온다.
+   */
+  clusters?: Record<string, string>
 }
 
 export type Positions = Record<string, { x: number; y: number }>
+
+/**
+ * 배치 저장용 위치 병합(순수) — 지금 화면에 있는 노드의 위치를 **이미 저장된 위치 위에 얹는다**.
+ * 통째로 덮어쓰면 필터(`관계만`·`그룹만 보기`)로 숨어 있던 테이블의 자리가 지워진다(회귀 — 정본
+ * §db-console.diagram.layout AC-3). 정리는 **스키마에서 없어진 테이블**만 한다.
+ * `known` 이 비면(스키마를 아직 못 읽음) 아무것도 지우지 않는다 — 모른다는 것을 "없다"로 읽지 않는다.
+ */
+export function mergePositions(stored: Positions, visible: Positions, known: Iterable<string>): Positions {
+  const knownSet = new Set(known)
+  const out: Positions = {}
+  for (const [id, p] of Object.entries(stored)) {
+    if (knownSet.size > 0 && !knownSet.has(id)) continue
+    out[id] = p
+  }
+  for (const [id, p] of Object.entries(visible)) out[id] = p
+  return out
+}
 
 /**
  * 노드 크기 추정 — 헤더 + 컬럼 행 높이/폭. 배치 겹침을 줄이려 실제 렌더 크기에 근사.
@@ -106,7 +129,11 @@ export function layoutErd(
   const labelRanksep = widestLabel > 0 ? widestLabel + LABEL_ANCHOR + LABEL_TAIL : 0
   const ranksep = Math.min(MAX_RANKSEP, Math.max(opts.ranksep ?? BASE_RANKSEP, labelRanksep))
 
-  const g = new dagre.graphlib.Graph()
+  // compound: true 는 묶음(setParent)을 쓸 때만 필요하다. 없을 때도 켜 두면 배치가 달라질 수 있어
+  // 묶음이 실제로 있을 때만 켠다(그룹 없는 다이어그램의 배치를 건드리지 않기 위해).
+  const clusters = opts.clusters ?? {}
+  const clusterIds = [...new Set(Object.values(clusters))]
+  const g = new dagre.graphlib.Graph({ compound: clusterIds.length > 0 })
   g.setGraph({
     rankdir: opts.direction ?? 'LR',
     ranksep,
@@ -118,6 +145,11 @@ export function layoutErd(
   g.setDefaultEdgeLabel(() => ({}))
 
   for (const n of nodes) g.setNode(n.id, { width: n.width, height: n.height })
+  // 묶음 노드를 먼저 만들고 소속을 붙인다 — 없는 부모에 붙이면 dagre 가 던진다.
+  for (const cid of clusterIds) g.setNode(`cluster:${cid}`, {})
+  for (const [nodeId, cid] of Object.entries(clusters)) {
+    if (g.hasNode(nodeId)) g.setParent(nodeId, `cluster:${cid}`)
+  }
   // 자기참조 엣지는 랭크에 영향이 없고 dagre 를 흔드므로 배치 그래프에서 제외.
   for (const e of edges) {
     if (e.source === e.target) continue

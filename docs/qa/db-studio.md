@@ -71,6 +71,14 @@
 - **CASE-studio-061** 사이드바 `+` → `뷰 추가` → 뷰 배지가 뜨고 제약 구역이 사라지며 본문 SELECT 편집기가 나타난다. 목록이 테이블/뷰로 갈린다. (definition.view AC-1/AC-3/AC-4, definition.side-panel AC-2)
 - **CASE-studio-062** 본문 SELECT 를 쓰면 SQL 폼이 `CREATE OR REPLACE VIEW` + 그 본문을 내고 `CREATE TABLE` 은 내지 않는다. 뷰 표식·본문이 로컬 저장소까지 왕복한다. (definition.view AC-5/AC-6)
 
+## Scenario S9 — Studio › Diagram 그룹·상세보기 앱 흐름 (e2e/suites/03-studio-definition · 04-studio-seed)
+> 배치·그룹·상세보기의 규칙 정본은 `db-console.diagram` 이고, 여기서는 **설계 스코프**에서도 같게 도는지를 덮는다.
+- **CASE-studio-100** Studio › Diagram 에서 그룹을 만들고 테이블을 넣은 뒤 **영역을 끌면 소속 노드가 함께 움직인다.** 설계를 바꿨다 돌아와도 그 그룹·배치가 남는다(설계별 스코프). (db-studio.diagram.scope AC-1 · diagram.group AC-2/AC-7)
+- **CASE-studio-101** 노드를 고르면 아래 서랍에 **설계 편집 폼**이 뜨고, 거기서 컬럼을 더하면 Definition 화면에도 그대로 보인다(같은 저장소·같은 폼). (db-studio.diagram.scope AC-3 · diagram.detail AC-2)
+- **CASE-studio-066** 설계부 그룹 지우기: 확인 창에 `테이블도 함께 지우기` 가 있고, 고르면 **확인 문구를 그대로 입력해야** 버튼이 열린다. 지우면 그룹과 **소속 테이블이 설계에서 사라지고**, Definition 목록에도 없다. (db-console.diagram.group-panel AC-2b/AC-2c)
+- **CASE-studio-102** **커밋된 버전 열람(읽기 전용)에서는 배치·그룹이 저장되지 않는다** — 노드를 끌어도 안 움직이고, 저장본이 그대로이며, 그룹 만들기 버튼이 없다. (db-studio.diagram.scope AC-2) → `04-studio-seed`(버전 컷 뒤라 커밋 버전이 있다)
+- **CASE-studio-103** **설계부 그룹 지우기 — 테이블 동반 삭제**: 확인 창에 `테이블도 함께 지우기` 가 있고, 고르면 **확인 문구(`{N}개 테이블도 함께 삭제합니다`)를 그대로 입력해야** 지우기 버튼이 열린다. 지우면 그룹과 소속 테이블이 **설계에서** 사라진다. 운영부 확인 창에는 이 선택지가 아예 없다. (db-console.diagram.group-panel AC-2b/AC-2c)
+
 ## Scenario S6 — 반영 계획 (순수 로직) → `services/db/workspaces/seed/seedApplyPlan.test.ts`
 - **CASE-studio-070** 없는 행은 INSERT — 값은 파라미터 바인드(문자열 조립 금지), DB 생성 PK 는 담지 않는다. (apply-contract AC-1/AC-2)
 - **CASE-studio-071** 있는 행은 다른 값만 UPDATE, WHERE 는 **짝짓기 기준**(PK 아님). 값이 같으면 문장 없음. 무시 컬럼 제외. DB 가 숫자로 준 값도 문자열 시드 값과 같게 본다. (apply-contract AC-1)

@@ -1,8 +1,68 @@
 import { describe, it, expect } from 'vitest'
 import type { TableDef } from '../../workspaces/definition/types'
-import { estimateEdgeLabelWidth, estimateNodeSize, layoutErd, type LayoutNode } from './layout'
+import { estimateEdgeLabelWidth, estimateNodeSize, layoutErd, mergePositions, type LayoutNode } from './layout'
+
+// CASE-console-056 — 위치 병합 저장
+describe('mergePositions (배치 저장 병합)', () => {
+  const known = ['t:users', 't:orders', 't:hidden']
+
+  it('보이는 노드만 저장해도 안 보이는 노드의 자리가 남는다', () => {
+    const stored = { 't:users': { x: 1, y: 1 }, 't:hidden': { x: 9, y: 9 } }
+    const visible = { 't:users': { x: 50, y: 50 } }
+    expect(mergePositions(stored, visible, known)).toEqual({
+      't:users': { x: 50, y: 50 }, // 보이는 노드는 새 값으로
+      't:hidden': { x: 9, y: 9 } // 필터로 숨은 노드는 그대로 보존
+    })
+  })
+
+  it('스키마에서 없어진 테이블만 정리한다', () => {
+    const stored = { 't:users': { x: 1, y: 1 }, 't:gone': { x: 2, y: 2 } }
+    expect(mergePositions(stored, {}, known)).toEqual({ 't:users': { x: 1, y: 1 } })
+  })
+
+  it('아는 테이블 목록이 비면 아무것도 지우지 않는다(스키마 미로딩)', () => {
+    const stored = { 't:users': { x: 1, y: 1 } }
+    expect(mergePositions(stored, {}, [])).toEqual(stored)
+  })
+
+  it('새 노드는 그대로 더해진다', () => {
+    expect(mergePositions({}, { 't:orders': { x: 3, y: 4 } }, known)).toEqual({ 't:orders': { x: 3, y: 4 } })
+  })
+})
 
 const n = (id: string, width = 200, height = 100): LayoutNode => ({ id, width, height })
+
+// CASE-console-05F — 그룹 기준 자동 배치
+describe('layoutErd (그룹 묶음 배치)', () => {
+  const four = [n('a'), n('b'), n('c'), n('d')]
+  const chain = [
+    { source: 'a', target: 'b' },
+    { source: 'b', target: 'c' },
+    { source: 'c', target: 'd' }
+  ]
+  const spread = (pos: ReturnType<typeof layoutErd>, ids: string[]): number => {
+    const ys = ids.map((id) => pos[id].y)
+    return Math.max(...ys) - Math.min(...ys)
+  }
+
+  it('묶음을 안 주면 예전 배치와 완전히 같다(그룹 없는 다이어그램은 안 바뀐다)', () => {
+    expect(layoutErd(four, chain, { clusters: {} })).toEqual(layoutErd(four, chain))
+  })
+
+  it('묶음을 주면 같은 묶음 노드가 서로 더 붙는다', () => {
+    const plain = layoutErd(four, chain)
+    const clustered = layoutErd(four, chain, { clusters: { a: 'g1', c: 'g1', b: 'g2', d: 'g2' } })
+    // a·c 는 사슬에서 떨어져 있어 묶음이 없으면 세로로 벌어진다 → 묶으면 그 벌어짐이 줄어든다.
+    expect(spread(clustered, ['a', 'c'])).toBeLessThanOrEqual(spread(plain, ['a', 'c']))
+    // 모든 노드에 좌표가 그대로 붙는다(묶음 노드가 결과에 새지 않는다).
+    expect(Object.keys(clustered).sort()).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('묶음에 없는 노드가 섞여 있어도, 없는 노드를 가리켜도 안 터진다', () => {
+    const pos = layoutErd(four, chain, { clusters: { a: 'g1', nope: 'g1' } })
+    expect(Object.keys(pos).sort()).toEqual(['a', 'b', 'c', 'd'])
+  })
+})
 
 describe('layoutErd', () => {
   it('모든 노드에 좌표를 배정한다', () => {

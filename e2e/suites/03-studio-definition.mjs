@@ -131,10 +131,16 @@ export async function run(ctx) {
   await page.waitForTimeout(500)
   const afterN = await page.locator('.react-flow__node[data-id]').count()
   check('Studio › Diagram: 테이블 추가 → 노드 증가', afterN === beforeN + 1)
-  // 노드 선택 → 편집 패널(컬럼/관계) 등장
-  await page.locator('.react-flow__node[data-id]').last().click()
-  await page.waitForTimeout(300)
-  check('Studio › Diagram: 노드 선택 → 편집 패널', (await body()).includes('관계(FK)'))
+  // CASE-studio-064 — 노드 선택 → 아래 상세 서랍이 **설계 편집 폼(Definition 화면)** 을 그대로 연다.
+  await page.locator('.react-flow__node:not([data-id^="grp:"])').last().click()
+  await page.waitForTimeout(400)
+  check(
+    'Studio › Diagram: 노드 선택 → 상세 서랍이 설계 편집 폼을 연다',
+    (await page.locator('[data-diagram-drawer="open"]').count()) > 0 &&
+      (await page.locator('[data-diagram-drawer="open"]').innerText()).includes('제약')
+  )
+  await page.locator('[data-drawer-toggle]').first().click() // 접어서 캔버스 자리를 돌려준다
+  await page.waitForTimeout(250)
   // 드래그 → 설계 스코프(design:commerce-core) 위치 저장
   {
     // ⚠ 오버레이(미니맵·컨트롤·툴바)에 덮인 노드를 잡으면 mousedown 이 그쪽으로 가서 드래그가
@@ -183,5 +189,86 @@ export async function run(ctx) {
       .first()
       .evaluate((el) => el.style.transform)
     check('Studio › Diagram: 뷰 왕복 후 드래그 위치 복원', restoredTf === draggedTf)
+  }
+
+  // ⭐ CASE-studio-063 — 그룹은 **설계 스코프**로 저장된다(Console 과 같은 코드, 다른 스코프).
+  {
+    await page.locator('[data-side-tab="groups"]').first().click()
+    await page.waitForTimeout(200)
+    await page.locator('[data-group-create]').first().click()
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+    const rows = page.locator('[data-group-member] select')
+    if ((await rows.count()) > 0) {
+      await rows.first().selectOption('g1')
+      await page.waitForTimeout(250)
+    }
+    check('Studio › Diagram: 그룹 만들기 → 캔버스에 영역', (await page.locator('[data-erd-group="그룹 1"]').count()) > 0)
+
+    // 뷰를 떠났다 와도 남는다 + 저장 스코프가 설계 키다.
+    await click('button:has-text("Definition")')
+    await page.waitForTimeout(400)
+    await click('button:has-text("Diagram")')
+    await page.waitForSelector('.react-flow__node[data-id]', { timeout: 10_000 })
+    await page.waitForTimeout(500)
+    const savedGroups = await page.evaluate(async () => {
+      const l = await window.rockury.diagram.getLayout('design:commerce-core')
+      return (l?.groups ?? []).map((g) => g.name)
+    })
+    check('Studio › Diagram: 그룹이 설계 스코프에 저장·복원된다', savedGroups.includes('그룹 1'))
+    check(
+      'Studio › Diagram: 화면 왕복 후에도 그룹 영역이 그대로',
+      (await page.locator('[data-erd-group="그룹 1"]').count()) > 0
+    )
+    // CASE-studio-103 — 설계부에서만: 그룹과 소속 테이블을 **함께** 지운다(확인 문구 입력).
+    //   지울 대상은 앞에서 추가한 새 테이블(`new_table_*`) 로 고른다 — 시드 설계 테이블을 지우면
+    //   뒤 스위트(시드·버전)가 통째로 깨진다.
+    {
+      // 화면 왕복으로 좌측 패널이 다시 그려지면서 탭이 `테이블` 로 돌아왔다 — 그룹 탭으로 되돌린다.
+      await page.locator('[data-side-tab="groups"]').first().click()
+      await page.waitForTimeout(250)
+      await page.locator('[data-group-create]').first().click()
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(300)
+      const victimRow = page.locator('[data-group-member^="new_table_"]').first()
+      const victimName = (await victimRow.count()) > 0 ? await victimRow.getAttribute('data-group-member') : null
+      check('Studio › Diagram: 지울 대상(새 테이블) 확보', !!victimName)
+      if (victimName) {
+        await victimRow.locator('select').first().selectOption('g2')
+        await page.waitForTimeout(400)
+        await page.locator('[data-group-delete="그룹 2"]').first().click()
+        await page.waitForTimeout(400)
+        check(
+          'Studio › Diagram: 지우기 → 확인 창에 테이블 동반 삭제 선택지',
+          (await page.locator('[data-group-delete-dialog="그룹 2"]').count()) === 1 &&
+            (await page.locator('[data-group-delete-with-tables]').count()) === 1
+        )
+        await page.locator('[data-group-delete-with-tables]').first().click()
+        await page.waitForTimeout(300)
+        const confirmBtn = page.locator('[data-group-delete-confirm]').first()
+        check('Studio › Diagram: 문구 입력 전에는 지우기가 잠겨 있다', await confirmBtn.isDisabled())
+        await page.locator('[data-group-delete-phrase]').first().fill('테이블 지워줘')
+        await page.waitForTimeout(250)
+        check('Studio › Diagram: 틀린 문구로는 안 열린다', await confirmBtn.isDisabled())
+        await page.locator('[data-group-delete-phrase]').first().fill('1개 테이블도 함께 삭제합니다')
+        await page.waitForTimeout(250)
+        check('Studio › Diagram: 문구가 맞으면 지우기가 열린다', !(await confirmBtn.isDisabled()))
+        await confirmBtn.click()
+        await page.waitForTimeout(800)
+        check(
+          'Studio › Diagram: 그룹과 소속 테이블이 설계에서 사라진다',
+          (await page.locator('[data-group-row="그룹 2"]').count()) === 0
+        )
+        await page.locator('[data-side-tab="tables"]').first().click()
+        await page.waitForTimeout(300)
+        check(
+          'Studio › Diagram: 지운 테이블이 목록에도 없다',
+          (await page.locator(`[data-table-row="${victimName}"]`).count()) === 0
+        )
+      }
+    }
+
+    await page.locator('[data-side-tab="tables"]').first().click()
+    await page.waitForTimeout(150)
   }
 }

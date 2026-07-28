@@ -248,11 +248,13 @@ export const dbMigration: ServiceMigration = {
       PRIMARY KEY (env_id, name)
     );
 
-    -- Console 실 ERD(2e) 레이아웃 — 연결별 노드 위치/뷰포트(JSON). 노드 키는 t:<테이블명>.
+    -- ERD 레이아웃 — 스코프별 노드 위치/뷰포트/그룹(JSON). 노드 키는 t:<테이블명>.
+    -- 스코프 키: Console = 연결 id, Studio = design:<설계 id>.
     CREATE TABLE IF NOT EXISTS diagram_layouts (
       connection_id TEXT PRIMARY KEY,
       positions     TEXT NOT NULL DEFAULT '{}',
       viewport      TEXT,
+      groups        TEXT NOT NULL DEFAULT '[]',
       updated_at    TEXT NOT NULL
     );
   `,
@@ -293,5 +295,9 @@ export const dbMigration: ServiceMigration = {
     // tables.view_sql — 설계부에서 선언한 뷰의 본문 SELECT(`CREATE VIEW … AS` 뒷부분).
     // is_view 만으로는 뷰를 실 DB 에 만들 수 없다 — 본문이 있어야 DDL 이 성립한다.
     addColumnIfMissing(d, 'tables', 'view_sql', `TEXT NOT NULL DEFAULT ''`)
+
+    // diagram_layouts.groups — 다이어그램 그룹(레이어): 이름·색·소속 테이블·접힘.
+    // 배치와 같은 행에 둔다 — 스코프(연결/설계)가 같고 언제나 함께 읽고 쓰기 때문.
+    addColumnIfMissing(d, 'diagram_layouts', 'groups', `TEXT NOT NULL DEFAULT '[]'`)
   }
 }

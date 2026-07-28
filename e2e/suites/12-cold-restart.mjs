@@ -18,6 +18,24 @@ export async function run(ctx) {
   await page.waitForSelector('text=E2E-mysql', { timeout: 8_000 })
   check('콜드 재시작 후 연결 잔존(SQLite 영속)', (await body()).includes('E2E-mysql'))
 
+  // ⭐ CASE-console-04H — 다이어그램 배치·그룹도 콜드 재시작을 넘긴다.
+  //    (07 에서 만든 `그룹 1`(users·user_roles)이 그대로 있어야 한다.)
+  {
+    const saved = await page.evaluate(async () => {
+      const cid = (await window.rockury.connections.list())[0].id
+      const l = await window.rockury.diagram.getLayout(cid)
+      return {
+        positions: l ? Object.keys(l.positions).length : 0,
+        groups: (l?.groups ?? []).map((g) => ({ name: g.name, n: g.tableIds.length }))
+      }
+    })
+    check('콜드 재시작 후 다이어그램 배치 잔존', saved.positions > 0)
+    check(
+      '콜드 재시작 후 다이어그램 그룹 잔존(이름·소속)',
+      saved.groups.some((g) => g.name === '그룹 1' && g.n === 2)
+    )
+  }
+
   // 시드 세트도 콜드 재시작을 넘긴다 — CASE-studio-044(선언·행 잔존).
   await click('button:has-text("Design")')
   await click('[role="menuitem"]:has-text("commerce-core")')
