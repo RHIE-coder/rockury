@@ -15,7 +15,12 @@
 - **CASE-iarch-012** 부모가 다른 노드끼리의 간선도 겹 구조를 깨지 않고 이어진다. (design.canvas AC-5)
 - **CASE-iarch-013** 노드 0개·간선 0개·고립 노드에서도 좌표를 낸다(빈 화면 크래시 금지).
 
-## Scenario S3 — 짝짓기 (순수 로직) → `services/infra/reconcile/match.test.ts`
+> **대조 순수 로직의 자리가 옮겨졌다**(2026-07-29): `match`·`diff` 는 이제
+> `src/shared/infra/reconcile/` 에 있고 테스트도 그 옆에 있다. 메인(MCP)과 렌더러(화면)가
+> **같은 함수**를 부르기 위해서다 — 규칙을 두 벌 들면 두 곳이 다른 답을 말한다.
+> 렌더러의 `reconcile/{match,diff,types}.ts` 는 화면 쪽 import 경로를 지키는 통과 지점이다.
+
+## Scenario S3 — 짝짓기 (순수 로직) → `src/shared/infra/reconcile/match.test.ts`
 - **CASE-iarch-020** 태그(`rockury:node=<id>`)가 있으면 그것으로 짝짓고 근거를 `태그` 로 남긴다. (reconcile.match AC-1/AC-4)
 - **CASE-iarch-021** 태그가 없으면 이름으로 짝짓고 근거를 `이름` 으로 남긴다. (reconcile.match AC-2/AC-4)
 - **CASE-iarch-022** 태그 짝이 있으면 이름 짝은 보지 않는다(1순위 우선). (reconcile.match AC-2)
@@ -23,7 +28,7 @@
 - **CASE-iarch-024** 없어진 설계 노드를 가리키는 태그는 미등록으로 떨어진다(짝짓기 실패가 예외가 되지 않는다).
 - **CASE-iarch-025** 같은 이름의 설계 노드가 둘이면 이름 짝짓기를 포기하고 그 이름을 보고한다. (reconcile.match AC-5)
 
-## Scenario S4 — 대조 판정 (순수 로직) → `services/infra/reconcile/diff.test.ts`
+## Scenario S4 — 대조 판정 (순수 로직) → `src/shared/infra/reconcile/diff.test.ts`
 - **CASE-iarch-030** 설계에만 있으면 **미구축**. (reconcile.result AC-1)
 - **CASE-iarch-031** 실물에만 있으면 **미등록**. (reconcile.result AC-1)
 - **CASE-iarch-032** 둘 다 있고 비교 필드가 다르면 **어긋남** — **어느 필드가 어떻게** 다른지 항목으로 낸다. (reconcile.result AC-2)
@@ -115,7 +120,12 @@
 - **CASE-iarch-091**(앱) 대조 배지를 켜면 노드에 판정이 붙고, 끄면 사라진다.
   **실물을 안 읽은 상태에서는 '미구축'이 하나도 없고 전부 '대조 안 함'** 이며 그 사실을 화면이 알린다. (reconcile.result AC-3)
 - **CASE-iarch-075** 콜드 재시작 후 설계본·노드 문서가 남아 있다(이 스위트 안에서 `ctx.relaunch()`).
-- **CASE-iarch-076** MCP: infra 읽기 도구 3종만 노출되고 실행·쓰기 도구가 없다. (node-doc.mcp AC-2)
+- **CASE-iarch-076** MCP: infra 읽기 도구 **4종**만 노출되고 실행·쓰기 도구가 없다. (node-doc.mcp AC-2)
+- **CASE-iarch-095**(앱, 15번 스위트) MCP `infra_get_reconcile` — 대조 결과가 나오고,
+  **언제 기준인지**가 함께 오며, 판정에 사람이 읽는 이름이 붙고, 어긋남은 **필드 단위**로 나가며,
+  판정 종류가 화면과 같다(규칙을 두 벌 들지 않는다). (node-doc.mcp AC-4)
+- **CASE-iarch-096**(앱, 15번 스위트) 대조 결과를 열었어도 **실행·쓰기 도구는 여전히 없고**,
+  **원본 스냅샷을 통째로 주는 도구도 없다**(판정을 거친 결과만 나간다). (node-doc.mcp AC-4)
 - **CASE-iarch-053** MCP 로 나가는 노드에 **영향·의존**이 실린다. 설명이 빈 노드는 비었다고 표시된다. (node-doc.mcp AC-3)
 
 ## Scenario S9 — 앱 구동 흐름 · 실물/대조 (e2e/suites/15-infra-reconcile, `meta.needsDb: true`)

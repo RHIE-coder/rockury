@@ -9,17 +9,12 @@
 /** 이 앱이 읽을 수 있는 카탈로그 **형식** 버전. 파일이 이보다 높으면 통째로 거부한다. */
 export const APP_SCHEMA_VERSION = 1
 
-/** 탐침이 읽어 온 원본 상태 문자열을 옮겨 담을 다섯 칸. */
-export type NodeStatus = 'ok' | 'warn' | 'stopped' | 'gone' | 'unknown'
-
-/** 화면 표기 — 코드 식별자는 영어, 사용자가 보는 말은 한국어. */
-export const STATUS_LABEL: Record<NodeStatus, string> = {
-  ok: '정상',
-  warn: '주의',
-  stopped: '멈춤',
-  gone: '없어짐',
-  unknown: '모름'
-}
+/**
+ * 상태 다섯 칸과 그 표기는 **공용 정본**(`@shared/infra/types`)에 있다 —
+ * 대조 계산이 메인에서도 돌아야 해서 올렸다. 여기서 다시 정의하면 두 사전이 갈린다.
+ */
+export { STATUS_LABEL, type NodeStatus } from '@shared/infra/types'
+import type { NodeStatus } from '@shared/infra/types'
 
 export const STATUS_VALUES: NodeStatus[] = ['ok', 'warn', 'stopped', 'gone', 'unknown']
 
@@ -162,8 +157,9 @@ export const DOC_FIELDS: { key: keyof Omit<NodeDoc, 'links'>; label: string; hin
 
 // ---------- 종류·카탈로그 ----------
 
-/** 대조에서 무엇을 비교할지. 지정 안 하면 상태만 본다. */
-export type CompareField = 'status' | 'parent' | 'type'
+/** 대조에서 무엇을 비교할지. 지정 안 하면 상태만 본다. (공용 정본) */
+export type { CompareField } from '@shared/infra/types'
+import type { CompareField } from '@shared/infra/types'
 
 export interface NodeTypeDef {
   id: string

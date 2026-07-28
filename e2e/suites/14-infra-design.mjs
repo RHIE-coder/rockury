@@ -141,7 +141,11 @@ export async function run(ctx) {
     const names = (await (await post({ jsonrpc: '2.0', id: 91, method: 'tools/list' }, sid)).json())
       .result.tools.map((t) => t.name)
     const infraTools = names.filter((n) => n.startsWith('infra_'))
-    check('MCP: infra 읽기 도구 3종이 노출된다', infraTools.length === 3)
+    check('MCP: infra 읽기 도구 4종이 노출된다', infraTools.length === 4)
+    check(
+      'CASE-iarch-095 대조 결과 읽기 도구가 노출된다',
+      infraTools.includes('infra_get_reconcile')
+    )
     check(
       'MCP: 실행·쓰기 도구가 없다 — 앱이 원격 셸이 되지 않는다',
       !infraTools.some((n) => /run|save|delete|probe|exec/.test(n))

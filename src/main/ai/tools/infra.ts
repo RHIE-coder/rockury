@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { listDesigns, listEdges, listNodes } from '../../ipc/infra/store'
+import { listDesigns, listEdges, listNodes, listProviders } from '../../ipc/infra/store'
+import { reconcileSummary } from '../../ipc/infra/reconcileMain'
 
 /**
  * Infra 서비스가 MCP 로 여는 도구 — **읽기 전용.**
@@ -124,6 +125,40 @@ export const infraToolDefs: InfraToolDef[] = [
         ...doc,
         documented: documented(doc)
       }
+    }
+  },
+  {
+    name: 'infra_get_reconcile',
+    description:
+      '설계본과 **마지막으로 읽어 온 실물**을 견준 결과를 반환한다 — 미구축(설계에만 있음) · ' +
+      '미등록(실물에만 있음) · 어긋남(둘 다 있는데 다름) · 대조 안 함(안 읽어서 판정 불가). ' +
+      '어긋남은 **어느 필드가 어떻게 다른지** 필드 단위로 담긴다. ' +
+      '언제 기준인지(snapshotTakenAt)가 함께 오므로 오래된 값을 방금 것으로 오해하지 마라. ' +
+      '**Rockury 는 인프라를 구축하지 않는다** — 이 결과를 근거로 고치는 일은 밖에서 해야 하고, ' +
+      '이 도구로는 아무것도 바뀌지 않는다. 실물을 안 읽었으면 미구축이 아니라 "대조 안 함"으로 나온다.',
+    inputSchema: {
+      designId: z.string().describe('설계본 id (infra_list_designs 로 확인)'),
+      providerId: z
+        .string()
+        .optional()
+        .describe('공급자 연결 id. 없으면 연결이 하나일 때만 그것으로 견준다')
+    },
+    handler: (args) => {
+      const designId = String(args.designId ?? '')
+      if (!listDesigns().some((d) => d.id === designId)) {
+        throw new Error(`설계본을 찾을 수 없습니다: ${designId}`)
+      }
+      const providers = listProviders()
+      const given = args.providerId ? String(args.providerId) : ''
+      if (!given && providers.length !== 1) {
+        // 연결이 여럿인데 아무거나 고르면 엉뚱한 인프라와 견준 답을 내놓게 된다 — 그건 틀린 답이다.
+        throw new Error(
+          providers.length === 0
+            ? '공급자 연결이 없습니다 — 견줄 실물이 없습니다.'
+            : `공급자 연결이 ${providers.length}개입니다. providerId 를 지정하세요.`
+        )
+      }
+      return reconcileSummary(designId, given || providers[0].id)
     }
   }
 ]

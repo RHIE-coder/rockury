@@ -22,13 +22,19 @@ export const infraCoverage: ServiceCoverage = {
   tools: {
     infra_list_designs: ['infra:listDesigns'],
     infra_get_design: ['infra:getGraph'],
-    infra_get_node_doc: []
+    infra_get_node_doc: [],
+    // 대조 결과 읽기. 계산은 화면과 **같은 공용 함수**(`@shared/infra/reconcile/diff`)가 하고,
+    // 이 도구는 그것을 부르기만 한다 — 규칙을 두 벌 들면 화면과 에이전트가 다른 답을 말한다.
+    // 창구를 새로 열지 않고 저장소를 직접 읽는다(그래서 대응 채널이 없다).
+    infra_get_reconcile: []
   },
   excluded: {
     'infra:listCatalogs': '읽기. 에이전트가 알아야 할 것은 설계본이지 카탈로그 형식이 아니다.',
     'infra:listRuns': '읽기. 실행 이력은 사람이 감사하는 기록 — 에이전트에게 줄 이유가 없다.',
     'infra:latestSnapshot':
-      '읽기. 대조 결과 노출(spec node-doc.mcp 의 infra:getReconcile)과 함께 열 후보 — 지금은 보류.',
+      '읽기지만 **원본 스냅샷**은 안 연다. 에이전트가 알아야 할 것은 "설계와 무엇이 어긋났나"이고 ' +
+      '그건 `infra_get_reconcile` 이 판정을 거쳐 내보낸다 — 원본을 통째로 주면 판정 규칙 없이 ' +
+      '에이전트가 스스로 해석하게 되고, 그 해석이 화면과 갈린다.',
     'infra:saveSnapshot':
       '쓰기. 스냅샷은 탐침이 실제로 읽어 온 것만 담아야 한다 — 밖에서 지어낸 값이 들어오면 대조가 거짓말을 한다.',
     'infra:listProviders':

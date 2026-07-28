@@ -160,6 +160,73 @@ export async function run(ctx) {
     const missing = await page.locator('[data-reconcile-row="missing"]').count()
     check('CASE-iarch-085 설계에만 있는 노드가 미구축으로 뜬다', missing > 0)
 
+    // ── MCP: 대조 결과가 판정을 거쳐 나간다(원본 스냅샷은 안 연다) ──────────
+    {
+      const st = await page.evaluate(() => window.rockury.ai.status())
+      const hdrs = {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${st.token}`
+      }
+      const post = (bodyObj, sid) =>
+        fetch(st.url, {
+          method: 'POST',
+          headers: { ...hdrs, ...(sid ? { 'mcp-session-id': sid } : {}) },
+          body: JSON.stringify(bodyObj)
+        })
+      const init = await post({
+        jsonrpc: '2.0', id: 70, method: 'initialize',
+        params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke-recon', version: '0' } }
+      })
+      const sid = init.headers.get('mcp-session-id')
+      await post({ jsonrpc: '2.0', method: 'notifications/initialized' }, sid)
+      const call = async (name, args, id) => {
+        const r = (await (await post({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } }, sid)).json()).result
+        if (r?.isError) throw new Error(r.content?.[0]?.text ?? '도구 오류')
+        return JSON.parse(r.content[0].text)
+      }
+
+      const designs = await call('infra_list_designs', {}, 71)
+      const provs = await page.evaluate(() => window.rockury.infra.listProviders())
+      const docker = provs.find((p) => p.name === 'e2e-docker') ?? provs[0]
+      const rec = await call(
+        'infra_get_reconcile',
+        { designId: designs[0].id, providerId: docker.id },
+        72
+      )
+      check('CASE-iarch-095 MCP 로 대조 결과가 나온다', Array.isArray(rec.rows) && rec.rows.length > 0)
+      check(
+        'CASE-iarch-095 언제 기준인지가 함께 온다 — 오래된 값을 방금 것으로 오해하지 않게',
+        typeof rec.snapshotTakenAt === 'string' && rec.snapshotTakenAt.length > 0
+      )
+      check(
+        'CASE-iarch-095 판정에 사람이 읽는 이름이 붙는다',
+        rec.rows.every((r) => typeof r.verdictLabel === 'string' && r.verdictLabel.length > 0)
+      )
+      check(
+        'CASE-iarch-095 어긋남은 필드 단위로 나간다 — "다름" 한 단어로 뭉개지 않는다',
+        rec.rows.filter((r) => r.verdict === 'drift').every((r) => r.differences.length > 0)
+      )
+      check(
+        'CASE-iarch-095 화면과 같은 판정 종류만 나온다(규칙을 두 벌 들지 않는다)',
+        rec.rows.every((r) =>
+          ['missing', 'unregistered', 'drift', 'ok', 'not-checked'].includes(r.verdict)
+        )
+      )
+      const names = (await (await post({ jsonrpc: '2.0', id: 73, method: 'tools/list' }, sid)).json())
+        .result.tools.map((t) => t.name)
+        .filter((n) => n.startsWith('infra_'))
+      check(
+        'CASE-iarch-096 대조 결과를 열었어도 실행·쓰기 도구는 여전히 없다',
+        names.length > 0 && !names.some((n) => /run|save|delete|probe|exec|action/.test(n))
+      )
+      // 원본 스냅샷은 열지 않는다 — 판정을 거친 결과만 나간다(판정 규칙이 갈리지 않게).
+      check(
+        'CASE-iarch-096 원본 스냅샷을 통째로 주는 도구는 없다',
+        !names.some((n) => /snapshot/.test(n))
+      )
+    }
+
     // ── ⭐ 실물 불변 — 이 서비스의 공통 불변식을 실측으로 못 박는다 ─────────
     const after = containerStates()
     check(

@@ -1,39 +1,20 @@
 import { describe, it, expect } from 'vitest'
 import { reconcile } from './diff'
-import type { LiveResource } from './types'
-import { EMPTY_DOC, type NodeTypeDef } from '../catalog/types'
-import type { DesignNode } from '../design/types'
+import type { LiveResource, ReconNode, ReconType } from '../types'
 
-const types: Record<string, NodeTypeDef> = {
-  'docker.container': {
-    id: 'docker.container',
-    label: '컨테이너',
-    icon: 'phosphor:cube',
-    compareFields: ['status']
-  },
-  'docker.network': {
-    id: 'docker.network',
-    label: '네트워크',
-    icon: 'phosphor:network',
-    canContain: ['docker.container']
-  },
-  'aws.ec2': {
-    id: 'aws.ec2',
-    label: 'EC2',
-    icon: 'phosphor:hard-drives',
-    compareFields: ['status', 'type']
-  }
+/**
+ * 대조가 종류에서 보는 것은 **비교 필드뿐**이다(`ReconType`).
+ * 아이콘·라벨은 화면 쪽 일이라 여기 오지 않는다 — 그래서 메인도 같은 함수를 부를 수 있다.
+ */
+const types: Record<string, ReconType> = {
+  'docker.container': { compareFields: ['status'] },
+  'docker.network': {},
+  'aws.ec2': { compareFields: ['status', 'type'] }
 }
 
-const node = (p: Partial<DesignNode> & { id: string; name: string }): DesignNode => ({
-  designId: 'd1',
+const node = (p: Partial<ReconNode> & { id: string; name: string }): ReconNode => ({
   typeId: 'docker.container',
   parentId: null,
-  x: 0,
-  y: 0,
-  w: 200,
-  h: 60,
-  doc: { ...EMPTY_DOC },
   ...p
 })
 

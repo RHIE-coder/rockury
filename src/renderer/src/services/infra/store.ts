@@ -586,12 +586,16 @@ function toSummary(snap: {
   }
 }
 
-/** 지금 설계본과 최신 스냅샷으로 대조 결과를 낸다 — 화면 둘이 같은 계산을 본다. */
+/**
+ * 지금 설계본과 최신 스냅샷으로 대조 결과를 낸다 — 화면 둘이 같은 계산을 본다.
+ * 반환형이 `DiffRow<DesignNode>` 인 것이 요점이다: 넘긴 노드가 **그대로 실려 나와야**
+ * 화면이 문서 유무(`설명 없음`)를 이어서 볼 수 있다.
+ */
 export function reconcileRows(state: {
   nodes: DesignNode[]
   catalogs: StoredCatalog[]
   snapshot: SnapshotSummary | null
-}): DiffRow[] {
+}): DiffRow<DesignNode>[] {
   return reconcile({
     nodes: state.nodes,
     resources: state.snapshot?.resources ?? [],

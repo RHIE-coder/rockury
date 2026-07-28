@@ -1,20 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { matchResources } from './match'
-import type { LiveResource } from './types'
-import { EMPTY_DOC } from '../catalog/types'
-import type { DesignNode } from '../design/types'
+import type { LiveResource, ReconNode } from '../types'
 
-const node = (id: string, name: string, typeId: string | null = 'docker.container'): DesignNode => ({
+const node = (id: string, name: string, typeId: string | null = 'docker.container'): ReconNode => ({
   id,
-  designId: 'd1',
   typeId,
   name,
-  parentId: null,
-  x: 0,
-  y: 0,
-  w: 200,
-  h: 60,
-  doc: { ...EMPTY_DOC }
+  parentId: null
 })
 
 const live = (p: Partial<LiveResource> & { externalId: string }): LiveResource => ({
