@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { envelope } from '../envelope'
 import { decrypt, encrypt } from '../../infra/crypto'
-import { prepareCommand, runCli } from './command'
+import { prepareCommand, redactSecrets, runCli } from './command'
 import type { ProviderPublic, RunOutcome } from './contract'
 import {
   appendRun,
@@ -88,11 +88,20 @@ export interface RunProbeInput {
  * 이력에는 **치환 전** 인자만 남긴다(자격증명이 이력에 눌러앉지 않게).
  */
 async function runProbe(input: RunProbeInput): Promise<RunOutcome> {
+  const cred = credentialsOf(input.providerId)
   const prepared = prepareCommand(
     { cmd: input.cmd, args: input.args },
-    { cred: credentialsOf(input.providerId), arg: input.vars, node: input.vars }
+    { cred, arg: input.vars, node: input.vars }
   )
-  const result = await runCli(prepared, { timeoutMs: input.timeoutMs })
+  const raw = await runCli(prepared, { timeoutMs: input.timeoutMs })
+  // 상대가 자기 오류에 자격증명을 실어 돌려보내는 길을 여기서 끊는다 — **경계를 넘기 전에.**
+  // 이걸 렌더러에서 하면 평문이 이미 프로세스를 건넌 뒤라 늦다.
+  const result = {
+    ...raw,
+    stdout: redactSecrets(raw.stdout, cred),
+    stderr: redactSecrets(raw.stderr, cred),
+    error: raw.error ? redactSecrets(raw.error, cred) : raw.error
+  }
   appendRun({
     providerId: input.providerId ?? null,
     kind: 'probe',

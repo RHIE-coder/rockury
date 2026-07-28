@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { BUILTIN_CATALOGS } from './catalog/builtin'
 import { parseCatalog, serializeCatalog } from './catalog/schema'
 import { cloneAsMine, newUserCatalog, upsertNodeType } from './catalog/userCatalog'
+import { promoteSeed, type PromoteSeed } from './catalog/presets'
 import type { Catalog, CatalogSource, NodeTypeDef } from './catalog/types'
 import { extractNodes, parseResponse } from './catalog/extract'
 import { docFromTemplate, normalizeDoc } from './design/nodeDoc'
@@ -78,6 +79,15 @@ interface InfraState {
   syncing: boolean
   /** 흡수 직전 설계본 — 되돌리기용. null 이면 되돌릴 것이 없다. */
   beforeAbsorb: DesignNode[] | null
+
+  /**
+   * 승격 중인 프리셋의 모양. 노드 종류 목록에서 시작해 **탐침 편집기가 이어받는다** —
+   * 화면 이동은 사용자가 하므로(공용 nav 를 건드리지 않는다) 그 사이를 이 값이 잇는다.
+   */
+  promoting: PromoteSeed | null
+  /** 탐침 없는 종류만 승격 대상이다. 아니면 아무 일도 하지 않는다. */
+  startPromotion: (type: NodeTypeDef) => void
+  clearPromotion: () => void
 
   init: () => Promise<void>
   reloadCatalogs: () => Promise<void>
@@ -158,6 +168,13 @@ export const useInfraStore = create<InfraState>()((set, get) => ({
   snapshot: null,
   syncing: false,
   beforeAbsorb: null,
+  promoting: null,
+
+  startPromotion: (type) => {
+    const seed = promoteSeed(type)
+    if (seed) set({ promoting: seed })
+  },
+  clearPromotion: () => set({ promoting: null }),
 
   init: async () => {
     await Promise.all([get().reloadCatalogs(), get().reloadProviders()])

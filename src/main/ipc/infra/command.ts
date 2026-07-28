@@ -63,6 +63,32 @@ export function prepareCommand(
   }
 }
 
+/**
+ * 공급자가 **되뱉은** 자격증명을 참조 표기(`{{cred.<id>}}`)로 바꾼다.
+ *
+ * 왜 필요한가: 우리는 명령을 만들 때 비밀을 화면·이력에서 빼 두지만(`display`), 그건 우리가
+ * 만든 문자열에만 통한다. **상대편이 자기 오류 메시지에 값을 실어 돌려보내면 그 길로 샌다** —
+ * 실측: AWS CLI 는 `The config profile (<값>) could not be found` 라고 답한다.
+ * 그러면 "실패 사유를 그대로 보인다"(providers.credentials AC-4)와
+ * "평문은 어디에도 안 나온다"(AC-3)가 부딪힌다. 답은 **가리되 자리는 남기는 것**이다 —
+ * 통째로 지우면 무엇이 틀렸는지 못 읽고, 그대로 두면 비밀이 샌다.
+ *
+ * 프로세스 경계를 **넘기 전에**(메인에서) 지운다. 렌더러는 평문을 아예 받지 못한다.
+ * 표준 출력에도 적용한다 — 응답 본문에 값이 섞여 오는 경우까지 덮기 위해서다.
+ * 그 대가로 응답에 자격증명과 똑같은 문자열이 있으면 그것도 가려지는데,
+ * **덜 가려 새는 쪽보다 더 가려 눈에 띄는 쪽이 낫다.**
+ */
+export function redactSecrets(text: string, creds: Record<string, string>): string {
+  if (!text) return text
+  // 긴 값부터 — 짧은 값이 긴 값의 일부일 때 반쪽만 가려지는 것을 막는다.
+  const entries = Object.entries(creds)
+    .filter(([, v]) => v)
+    .sort((a, b) => b[1].length - a[1].length)
+  let out = text
+  for (const [id, value] of entries) out = out.split(value).join(`{{cred.${id}}}`)
+  return out
+}
+
 export interface RunResult {
   ok: boolean
   stdout: string

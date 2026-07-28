@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '@renderer/lib/utils'
 import { InfraIcon } from '../catalog/iconMap'
+import { VERDICT_LABEL, type Verdict } from '../reconcile/types'
 
 /**
  * 다이어그램 노드 하나.
@@ -17,6 +18,20 @@ export interface InfraNodeData extends Record<string, unknown> {
   undocumented: boolean
   /** 카탈로그에서 사라진 종류를 가리키나. */
   unknownType: boolean
+  /** 대조 배지를 켰을 때의 판정. 안 켰으면 없다. */
+  verdict?: Verdict
+}
+
+/**
+ * 판정 배지 색 — 대조 뷰의 표와 **같은 색**을 쓴다.
+ * 표에서 빨강이던 것이 그림에서 노랑이면 사용자는 둘을 같은 것으로 못 읽는다.
+ */
+const verdictTone: Record<Verdict, string> = {
+  missing: 'bg-violet-100 text-violet-900',
+  unregistered: 'bg-amber-100 text-amber-900',
+  drift: 'bg-rose-100 text-rose-900',
+  ok: 'bg-emerald-100 text-emerald-800',
+  'not-checked': 'bg-neutral-200 text-neutral-700'
 }
 
 export function InfraNode({ data, selected }: NodeProps): React.JSX.Element {
@@ -41,6 +56,15 @@ export function InfraNode({ data, selected }: NodeProps): React.JSX.Element {
           <InfraIcon icon={d.icon} size={16} />
         </span>
         <span className="min-w-0 flex-1 truncate font-medium">{d.label}</span>
+        {d.verdict && (
+          <span
+            className={cn('shrink-0 rounded px-1 text-[9px]', verdictTone[d.verdict])}
+            data-verdict={d.verdict}
+            title="대조 판정 — 자세한 차이는 Live › 대조 표에서 봅니다."
+          >
+            {VERDICT_LABEL[d.verdict]}
+          </span>
+        )}
         {d.unknownType && (
           <span
             className="shrink-0 rounded bg-amber-100 px-1 text-[9px] text-amber-800"

@@ -42,6 +42,20 @@
 - **CASE-iarch-047** 상태 어긋남은 흡수 대상이 아니다 — 접을 것은 구조(종류·부모)뿐. (reconcile.absorb AC-6)
 - **CASE-iarch-048** 고른 것만 흡수한다 — 전부 접지 않는다. (reconcile.absorb AC-1)
 
+## Scenario S5b — 내보내기·검색·배지 (순수 로직)
+> → `services/infra/design/export.test.ts` · `search.test.ts` · `reconcile/overlay.test.ts`
+
+- **CASE-iarch-074** 내보내기 계산 — 파일 이름(안전 문자·빈 이름 폴백) · 사각형 합집합 ·
+  **중첩을 절대 좌표로 펴서** 경계를 잰다(상대 좌표 그대로 재면 자식이 원점 근처로 잡혀 캔버스에 빈 곳이 생긴다) ·
+  자식이 부모 밖으로 삐져나가면 그만큼 넓힌다. (design.canvas AC-6)
+- **CASE-iarch-090** 노드 검색 — 이름·종류 이름·종류 id 로 찾고, **이름이 맞은 것이 먼저** 온다.
+  검색어가 비면 빈 배열(전부 주면 소음). 포커싱은 중첩된 노드의 **절대** 중심을 주고
+  **확대 상한(1.2)을 지키되 이미 축소해 놓았으면 그 배율은 건드리지 않는다.** 없는 노드면 `null`. (design.canvas AC-7)
+- **CASE-iarch-091** 대조 배지 지도 — 설계 노드가 있는 줄만 배지 대상이고(미등록 실물은 그릴 자리가 없다),
+  '일치'와 '대조 안 함'도 각자의 배지로 남는다(미구축과 섞으면 사용자가 지우러 간다). (reconcile.result AC-3)
+- **CASE-iarch-092** 채울 순서 — 문서가 빈 노드만, **담는 상자 → 자식 많은 것 → 이름 순.**
+  부모 참조가 끊겨 있어도 죽지 않고, 전부 채워졌으면 빈 목록(잔소리하지 않는다). (reconcile.bootstrap AC-2)
+
 ## Scenario S6 — 노드 문서 (순수 로직) → `services/infra/design/nodeDoc.test.ts`
 - **CASE-iarch-050** 정해진 칸 다섯 + 자유 서술이 함께 저장·복원된다. (node-doc.fields AC-1/AC-2)
 - **CASE-iarch-051** 종류의 기본 문서 틀이 새 노드에 미리 채워진다. (node-doc.fields AC-3)
@@ -63,7 +77,12 @@
 - **CASE-iarch-071** 노드를 놓고 이름을 주고 저장 → 재진입 시 좌표까지 남아 있다. (design.canvas AC-1)
 - **CASE-iarch-072** 허용된 부모 안에 노드를 넣으면 중첩되고, 허용 안 되는 조합은 **이유가 뜬다**. (design.canvas AC-3)
 - **CASE-iarch-073** 노드 문서 다섯 칸을 채우고 저장 → 다이어그램의 `설명 없음` 표식이 사라진다. (node-doc.fields AC-1/AC-5)
-- **CASE-iarch-074** PNG 내보내기가 파일을 만든다. (design.canvas AC-6)
+- **CASE-iarch-074**(앱) PNG·SVG 내보내기가 **캔버스 캡처에 성공한다**(`data-export-status=ok`).
+  내려받기 자체는 브라우저 계층이라 여기서 파일까지 확인하지 않는다 — 확인하는 것을 그대로 적는다. (design.canvas AC-6)
+- **CASE-iarch-090**(앱) 놓인 노드를 이름으로 찾아 고르면 **화면이 그 노드로 옮겨가고** 검색칸이 비워진다.
+  못 찾으면 못 찾았다고 말한다. (design.canvas AC-7)
+- **CASE-iarch-091**(앱) 대조 배지를 켜면 노드에 판정이 붙고, 끄면 사라진다.
+  **실물을 안 읽은 상태에서는 '미구축'이 하나도 없고 전부 '대조 안 함'** 이며 그 사실을 화면이 알린다. (reconcile.result AC-3)
 - **CASE-iarch-075** 콜드 재시작 후 설계본·노드 문서가 남아 있다(이 스위트 안에서 `ctx.relaunch()`).
 - **CASE-iarch-076** MCP: infra 읽기 도구 3종만 노출되고 실행·쓰기 도구가 없다. (node-doc.mcp AC-2)
 - **CASE-iarch-053** MCP 로 나가는 노드에 **영향·의존**이 실린다. 설명이 빈 노드는 비었다고 표시된다. (node-doc.mcp AC-3)
@@ -75,7 +94,9 @@
 - **CASE-iarch-080** 도커 공급자 새로고침 → 컨테이너가 실물 지도에 뜨고 상태 색이 칠해진다. (live.sync AC-1)
 - **CASE-iarch-081** 화면에 **"○분 전 기준"** 이 표시된다. (live.sync AC-2)
 - **CASE-iarch-082** 설계본이 빈 상태에서 대조 → 전부 **미등록**으로 뜬다. (reconcile.result AC-1)
-- **CASE-iarch-083** 통째 흡수 → 설계본에 노드가 생기고 전부 `설명 없음`. (reconcile.bootstrap AC-1/AC-2)
+- **CASE-iarch-083** 통째 흡수 → 설계본에 노드가 생기고 전부 `설명 없음`. (reconcile.bootstrap AC-1)
+- **CASE-iarch-092**(앱) 흡수 뒤 **무엇부터 채울지 목록**이 뜨고, 항목을 누르면 그 노드가 골라지며
+  목록은 그대로 남는다(연달아 채울 수 있다). (reconcile.bootstrap AC-2)
 - **CASE-iarch-084** 다시 대조 → 어긋남 0. 컨테이너 하나를 멈추면 **어긋남**으로 뜨고 상태 필드가 다르다고 나온다. (reconcile.result AC-2)
 - **CASE-iarch-085** 설계에만 있는 노드를 하나 추가 → **미구축**으로 뜬다. (reconcile.result AC-1)
 - **CASE-iarch-086** 흡수를 되돌리면 설계본이 이전 상태로 돌아온다. (reconcile.absorb AC-4)

@@ -1,7 +1,18 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
+import { cn } from '@renderer/lib/utils'
 import { useInfraStore } from '../store'
+import { describeTestFailure, pickTestProbe } from './connectionTest'
+import { extractNodes, parseResponse } from './extract'
+
+/** 연결 시험 한 번의 결과 — 성공/실패와 사람이 읽을 한 줄. */
+interface TestResult {
+  ok: boolean
+  message: string
+  /** 실제로 돌린 명령. 자격증명은 참조 그대로라 보여도 된다. */
+  command: string
+}
 
 /**
  * 공급자 연결 — 카탈로그가 선언한 자격증명 칸을 채우는 화면.
@@ -16,6 +27,8 @@ export function ProvidersView(): React.JSX.Element {
   const [readOnly, setReadOnly] = useState(true)
   const [creds, setCreds] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
+  const [testing, setTesting] = useState<string | null>(null)
+  const [results, setResults] = useState<Record<string, TestResult>>({})
 
   // 자격증명이 없는 공급자도 연결 대상이다 — 로컬 도커가 그렇다.
   // 프리셋(모양만 모아 둔 카탈로그)은 읽을 것이 없으므로 제외한다.
@@ -25,6 +38,68 @@ export function ProvidersView(): React.JSX.Element {
   )
   const chosen = store.catalogs.find((c) => c.id === catalogId)
   const slots = chosen?.catalog.credentials ?? []
+
+  /**
+   * 연결 시험 — 탐침 **하나**를 실제로 돌려 본다.
+   * 전부 돌리면 느리고, 하나도 안 돌리면 "저장은 됐는데 붙는지는 모름"이 된다.
+   * 실패하면 종료 코드와 표준 오류를 **그대로** 보인다(뭉개지 않는다).
+   */
+  const test = async (providerId: string, catalogId: string): Promise<void> => {
+    const cat = store.catalogs.find((c) => c.id === catalogId)
+    const probe = cat ? pickTestProbe(cat.catalog) : null
+    if (!probe || probe.discover.call.type !== 'cli') return
+    setTesting(providerId)
+    try {
+      const out = await window.rockury.infra.runProbe({
+        providerId,
+        cmd: probe.discover.call.cmd,
+        args: probe.discover.call.args
+      })
+      if (!out.ok) {
+        setResults((r) => ({
+          ...r,
+          [providerId]: {
+            ok: false,
+            command: out.displayCommand,
+            message: describeTestFailure({
+              timedOut: out.timedOut,
+              exitCode: out.exitCode,
+              stderr: out.stderr,
+              error: out.error ?? ''
+            })
+          }
+        }))
+        return
+      }
+      // 명령이 돌았다고 끝이 아니다 — 우리가 그 응답을 **읽을 수 있어야** 연결된 것이다.
+      const parsed = parseResponse(out.stdout, probe.discover.format)
+      if (parsed.error) {
+        setResults((r) => ({
+          ...r,
+          [providerId]: { ok: false, command: out.displayCommand, message: parsed.error as string }
+        }))
+        return
+      }
+      const got = extractNodes(probe.discover, parsed.data)
+      setResults((r) => ({
+        ...r,
+        [providerId]: got.error
+          ? { ok: false, command: out.displayCommand, message: got.error }
+          : {
+              ok: true,
+              command: out.displayCommand,
+              message: `${probe.label} ${got.nodes.length}건을 읽었습니다.`
+            }
+      }))
+    } catch (e) {
+      setResults((r) => ({
+        ...r,
+        [providerId]: { ok: false, command: '', message: e instanceof Error ? e.message : String(e) }
+      }))
+    } finally {
+      setTesting(null)
+    }
+  }
 
   const submit = async (): Promise<void> => {
     setError(null)
@@ -51,33 +126,63 @@ export function ProvidersView(): React.JSX.Element {
           {store.providers.length === 0 && (
             <p className="p-4 text-xs text-muted-foreground">아직 연결이 없습니다.</p>
           )}
-          {store.providers.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs last:border-b-0"
-              data-provider-row={p.id}
-            >
-              <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-              <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                {p.hasCredentials ? '자격증명 있음' : '자격증명 없음'}
-              </span>
-              {p.readOnly && (
-                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-800">
-                  읽기 전용 표시
-                </span>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={async () => {
-                  await window.rockury.infra.deleteProvider(p.id)
-                  await store.reloadProviders()
-                }}
-              >
-                삭제
-              </Button>
-            </div>
-          ))}
+          {store.providers.map((p) => {
+            const cat = store.catalogs.find((c) => c.id === p.catalogId)
+            const probe = cat ? pickTestProbe(cat.catalog) : null
+            const result = results[p.id]
+            return (
+              <div key={p.id} className="border-b border-border last:border-b-0" data-provider-row={p.id}>
+                <div className="flex items-center gap-2 px-3 py-2 text-xs">
+                  <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                  <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {p.hasCredentials ? '자격증명 있음' : '자격증명 없음'}
+                  </span>
+                  {p.readOnly && (
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-800">
+                      읽기 전용 표시
+                    </span>
+                  )}
+                  {probe && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={testing === p.id}
+                      onClick={() => void test(p.id, p.catalogId)}
+                      data-provider-test={p.id}
+                      title={`'${probe.label}' 탐침을 한 번 돌려 봅니다.`}
+                    >
+                      {testing === p.id ? '시험 중…' : '연결 시험'}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      await window.rockury.infra.deleteProvider(p.id)
+                      await store.reloadProviders()
+                    }}
+                  >
+                    삭제
+                  </Button>
+                </div>
+                {result && (
+                  <div
+                    className={cn(
+                      'mx-3 mb-2 rounded p-2 text-[11px]',
+                      result.ok ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'
+                    )}
+                    data-provider-test-result={result.ok ? 'ok' : 'fail'}
+                  >
+                    <span className="font-medium">{result.ok ? '연결됨' : '연결 실패'}</span> —{' '}
+                    {result.message}
+                    {result.command && (
+                      <p className="mt-0.5 font-mono text-[10px] opacity-70">{result.command}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
           연결을 지워도 <strong>설계본은 그대로</strong> 남습니다 — 설계는 실물과 독립입니다.

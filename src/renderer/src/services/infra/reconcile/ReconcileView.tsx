@@ -4,6 +4,7 @@ import { cn } from '@renderer/lib/utils'
 import { InfraIcon } from '../catalog/iconMap'
 import { isDocEmpty } from '../design/nodeDoc'
 import { reconcileRows, typesOf, useInfraStore } from '../store'
+import { docQueue } from './overlay'
 import { BASIS_LABEL, VERDICT_LABEL, type Verdict } from './types'
 import { agoLabel } from './LiveView'
 
@@ -38,6 +39,9 @@ export function ReconcileView(): React.JSX.Element {
   }, {})
 
   const absorbable = rows.filter((r) => r.verdict === 'unregistered' || r.verdict === 'drift')
+  // 흡수 뒤 무엇부터 채우면 되나. 흡수한 적이 있을 때만 보인다 —
+  // 손으로 그리는 중인 사람에게 "설명 채우세요" 목록을 들이밀면 잔소리가 된다.
+  const toDocument = store.beforeAbsorb ? docQueue(store.nodes) : []
   const keyOf = (r: (typeof rows)[number]): string =>
     r.verdict === 'unregistered' ? (r.resources[0]?.externalId ?? '') : (r.designNode?.id ?? '')
 
@@ -92,6 +96,34 @@ export function ReconcileView(): React.JSX.Element {
         <strong>흡수는 설계본만 고칩니다.</strong> 실물은 이 화면에서 바뀌지 않습니다 — 구축·수정은 밖에서
         하고, 여기서는 그 결과를 다시 읽어 확인합니다.
       </p>
+
+      {toDocument.length > 0 && (
+        <div className="mb-2 rounded-md border border-sky-200 bg-sky-50 p-2" data-absorb-todo>
+          <p className="text-[11px] text-sky-900">
+            흡수로 만든 노드는 <strong>설명이 비어 있습니다</strong> — 담는 것부터 차례로 채우면 안쪽이
+            쉬워집니다. 남은 <span data-absorb-todo-count>{toDocument.length}</span>개:
+          </p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {toDocument.slice(0, 12).map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                className="cursor-pointer rounded bg-white px-1.5 py-0.5 text-[10px] text-sky-900 ring-1 ring-sky-200 hover:bg-sky-100"
+                onClick={() => store.select(n.id)}
+                data-absorb-todo-item={n.id}
+              >
+                {n.name}
+              </button>
+            ))}
+            {toDocument.length > 12 && (
+              <span className="px-1 py-0.5 text-[10px] text-sky-900">외 {toDocument.length - 12}개</span>
+            )}
+          </div>
+          <p className="mt-1 text-[10px] text-sky-800">
+            고른 노드는 <strong>Design › 노드 문서</strong>에서 채웁니다.
+          </p>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
         <table className="w-full text-xs">

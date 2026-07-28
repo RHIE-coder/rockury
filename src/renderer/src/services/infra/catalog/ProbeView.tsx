@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { JsonPicker, type Path } from './JsonPicker'
 import { extractNodes, parseResponse, pathToExpr } from './extract'
+import { mergePromotion } from './presets'
 import {
   STATUS_LABEL,
   type Discover,
@@ -71,6 +72,14 @@ export function ProbeView(): React.JSX.Element {
   const [typeLabel, setTypeLabel] = useState('')
   const [newProviderId, setNewProviderId] = useState('')
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
+
+  // 노드 종류 목록에서 '승격'을 눌러 왔으면 그 프리셋의 모양을 이어받는다.
+  const promoting = store.promoting
+  useEffect(() => {
+    if (!promoting) return
+    setTypeId(promoting.id)
+    setTypeLabel(promoting.label)
+  }, [promoting])
 
   const run = async (): Promise<void> => {
     setRunning(true)
@@ -147,12 +156,16 @@ export function ProbeView(): React.JSX.Element {
       setSaveMsg('목록과 id 를 먼저 고르세요.')
       return
     }
-    const type: NodeTypeDef = {
-      id: typeId.trim(),
-      label: typeLabel.trim() || typeId.trim(),
-      icon: 'phosphor:cube',
-      discover
-    }
+    // 승격이면 프리셋의 모양(아이콘·색·담길 곳·문서 틀)을 그대로 이어받는다 —
+    // 여기서 새로 만들면 이미 그려 둔 노드가 모양을 잃는다.
+    const type: NodeTypeDef = promoting
+      ? mergePromotion({ ...promoting, label: typeLabel.trim() || promoting.label }, discover)
+      : {
+          id: typeId.trim(),
+          label: typeLabel.trim() || typeId.trim(),
+          icon: 'phosphor:cube',
+          discover
+        }
     if (!type.id) {
       setSaveMsg('종류 id 를 입력하세요.')
       return
@@ -164,7 +177,12 @@ export function ProbeView(): React.JSX.Element {
         providerLabel: newProviderId.trim() || type.id.split('.')[0],
         type
       })
-      setSaveMsg(`저장했습니다 — '${type.label}' 이 노드 종류 목록에 들어갔습니다.`)
+      setSaveMsg(
+        promoting
+          ? `승격했습니다 — '${type.label}' 에 읽어 오는 법이 붙었습니다(종류 id 는 그대로라 그려 둔 노드는 남아 있습니다).`
+          : `저장했습니다 — '${type.label}' 이 노드 종류 목록에 들어갔습니다.`
+      )
+      if (promoting) store.clearPromotion()
     } catch (e) {
       setSaveMsg(e instanceof Error ? e.message : String(e))
     }
@@ -288,7 +306,13 @@ export function ProbeView(): React.JSX.Element {
           {/* 저장 — 여기서 편집기의 결과물이 실제 노드 종류가 된다.
               이게 없으면 편집기는 메모장이고, "지원 안 하는 클라우드를 붙인다"가 끝나지 않는다. */}
           <div className="mt-1 flex flex-col gap-1.5 border-t border-border pt-2">
-            <h3 className="text-xs font-medium">노드 종류로 저장</h3>
+            <h3 className="text-xs font-medium">{promoting ? '프리셋 승격' : '노드 종류로 저장'}</h3>
+            {promoting && (
+              <p className="rounded bg-sky-50 p-1.5 text-[11px] text-sky-900" data-probe-promoting={promoting.id}>
+                &lsquo;{promoting.label}&rsquo; 에 읽어 오는 법을 붙입니다. <strong>종류 id 는 그대로</strong>
+                이므로 이미 그려 둔 노드는 남습니다.
+              </p>
+            )}
             <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
               어느 카탈로그에
               <select
@@ -319,6 +343,7 @@ export function ProbeView(): React.JSX.Element {
               placeholder="종류 id (예: ktcloud.server)"
               value={typeId}
               onChange={(e) => setTypeId(e.target.value)}
+              disabled={Boolean(promoting)}
               data-probe-type-id
             />
             <Input

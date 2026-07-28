@@ -117,6 +117,19 @@ export async function run(ctx) {
     const unregAfter = await page.locator('[data-reconcile-row="unregistered"]').count()
     check('CASE-iarch-083 흡수하면 미등록이 줄어든다', unregAfter < unreg)
 
+    // 흡수 초안은 전부 설명이 비어 있다 — 어디부터 채우면 되는지 알려 준다.
+    await page.waitForSelector('[data-absorb-todo]', { timeout: 5_000 })
+    const todoCount = Number(await page.locator('[data-absorb-todo-count]').innerText())
+    check('CASE-iarch-092 흡수 뒤 무엇부터 채울지 목록이 뜬다', todoCount > 0)
+    check(
+      'CASE-iarch-092 목록의 항목을 누르면 그 노드가 골라진다',
+      (await page.locator('[data-absorb-todo-item]').count()) > 0
+    )
+    await page.locator('[data-absorb-todo-item]').first().click()
+    await page.waitForTimeout(200)
+    const picked = await page.evaluate(() => document.querySelectorAll('[data-absorb-todo-item]').length)
+    check('CASE-iarch-092 고른 뒤에도 목록이 살아 있다(연달아 채울 수 있다)', picked > 0)
+
     // 흡수한 컨테이너 중 멈춘 것은 이제 '어긋남'으로 뜬다(설계는 떠 있어야 한다는 뜻).
     const driftRows = await page.locator('[data-reconcile-row="drift"]').count()
     check('CASE-iarch-084 멈춘 컨테이너가 어긋남으로 뜬다', driftRows > 0)

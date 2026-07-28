@@ -40,6 +40,18 @@
 - **CASE-icat-031** 모르는 접두어·없는 이름은 **기본 아이콘으로 떨어지고 경고를 남긴다**(예외를 던져 그림을 깨뜨리지 않는다). (types.icons AC-2)
 - **CASE-icat-032** 빌드용 수집기: 카탈로그·프리셋을 훑어 실제 쓰인 아이콘 이름만 모은다(중복 제거·미사용 제외). (types.icons AC-4)
 
+## Scenario S1c — 프리셋 만들기·승격 (순수 로직) → `services/infra/catalog/presets.test.ts`
+- **CASE-icat-110** 탐침 없이 **모양만** 있는 종류를 만들 수 있고, 만든 것은 카탈로그 검증을 그대로 통과한다.
+  종류 id 가 비거나 공백이 섞이면 거부한다(표현식·저장 키·설계 노드 참조로 쓰이는 값). (types.presets AC-3)
+- **CASE-icat-111** 승격 — 탐침 없는 종류에만 붙고, **종류 id 를 그대로 이어받는다.**
+  모양(아이콘·색·담길 곳·문서 틀)도 따라온다. 이게 깨지면 이미 그려 둔 노드가 '알 수 없는 종류'로 떨어진다. (types.presets AC-4)
+
+## Scenario S1d — 연결 시험 (순수 로직) → `services/infra/catalog/connectionTest.test.ts`
+- **CASE-icat-100** 시험에 쓸 탐침은 **지금 실제로 돌릴 수 있는 것(cli)** 만 고른다. 프리셋·http·builtin 은 건너뛴다.
+  고를 것이 없으면 `null` — 화면은 버튼을 감춘다. (providers.credentials AC-4)
+- **CASE-icat-101** 실패 이유를 뭉개지 않는다 — 시간 초과 · 종료 코드 · 표준 오류를 그대로 옮기고,
+  단서가 하나도 없으면 **지어내지 않고 모른다고 말한다.** (providers.credentials AC-4 · probe.editor AC-5)
+
 ## Scenario S5 — 명령 조립 (순수 로직) → `src/main/ipc/infra/command.test.ts`
 - **CASE-icat-040** `{{cred.*}}`·`{{node.*}}` 치환이 **인자 배열의 한 칸 안에서만** 일어난다. (probe.execution AC-1)
 - **CASE-icat-041** 치환값에 공백·따옴표·세미콜론·`&&` 가 있어도 인자가 쪼개지거나 명령이 추가로 실행되지 않는다. (probe.execution AC-1)
@@ -47,6 +59,24 @@
 - **CASE-icat-043** 실행 이력 레코드에 치환 **후** 값(자격증명)이 남지 않는다 — 치환 전 형태로 기록. (probe.execution AC-3)
 - **CASE-icat-044** 우리 것이 아닌 `{{…}}`(도커 출력 서식)는 손대지 않고 흘려보낸다. (probe.shape AC-8)
 - **CASE-icat-045** 우리 이름공간(`cred`·`node`·`arg`)이면 값이 없을 때 반드시 던진다. (probe.shape AC-8)
+- **CASE-icat-102** **상대가 되뱉은 자격증명을 가린다** — 표준 출력·표준 오류·실행 오류에서 자격증명 값을
+  참조 표기(`{{cred.<id>}}`)로 바꾼다. **가리되 자리는 남긴다**(통째로 지우면 무엇이 틀렸는지 못 읽는다).
+  긴 값 먼저 · 정규식 특수문자 안전 · 비밀 없는 공급자(도커)의 오류는 손대지 않는다. (providers.credentials AC-6)
+
+## Scenario S5b — AWS 탐침 고정 표본 (순수 로직) → `services/infra/catalog/builtin/aws.test.ts`
+> 실 계정 없이 검증하는 자리. 표본(`awsSamples.json`)의 **구조와 키 이름은 실제 CLI 출력 그대로**이고
+> 값만 지어냈다. 여기를 편하게 고치면 테스트가 우리 상상을 검증하게 된다.
+> **덮지 못하는 것**: 명령줄이 맞는지(옵션·리전) · 권한 · 응답 페이지 나눔 → 실 계정(M3)의 몫.
+
+- **CASE-icat-120** VPC — 이름은 `Tags[?Key=='Name']`(배열 속 조건부 값), `rockury:node` 태그가 대조 근거로 실린다.
+  태그가 없는 VPC 도 버리지 않는다.
+- **CASE-icat-121** 서브넷 — 부모(`VpcId`)가 실려 중첩이 서고, `pending` 은 정상이 아니라 주의다.
+- **CASE-icat-122** EC2 — `Reservations[].Instances[]`(목록 안 목록)를 평평하게 펴고, 상태는
+  `State.Name`(숫자 `State.Code` 가 아니라)에서 온다. 사전에 없는 상태가 0건이어야 한다.
+- **CASE-icat-123** RDS 는 `DBSubnetGroup.VpcId` 에 부모가 중첩돼 있고, ALB 의 상태는 `State.Code` 다
+  (EC2 와 키 이름이 같은데 뜻이 다르다).
+- **CASE-icat-124** 여러 탐침 결과를 합치면 VPC > 서브넷 > EC2 3겹이 선다. **한 탐침만 돌리면 부모가 끊긴다** —
+  그래서 뽑기 단계에서 부모를 지우면 안 된다(끊긴 것은 버리지 않고 최상위로 올리며 보고한다).
 
 ## Scenario S6 — 저장 계층 (임시 SQLite) → `src/main/ipc/infra/store.test.ts`
 - **CASE-icat-050** 카탈로그 CRUD: 출처(내장/내가 만듦/가져옴) 보존, 내장은 갱신 거부. (registry.sources AC-3)
@@ -75,3 +105,10 @@
 - **CASE-icat-082** 카탈로그 목록: 내장은 삭제 대신 복제만. 내보낸 JSON 에 자격증명 값 없음. (registry.sources AC-3 · export AC-1)
 - **CASE-icat-080** 앱을 껐다 켠 뒤 사용자 카탈로그·공급자 연결이 남아 있다(콜드 재시작 영속).
   ※ `12-cold-restart` 는 DB 서비스 흐름이라 건드리지 않고, **이 스위트 안에서 `ctx.relaunch()` 로** 확인한다.
+- **CASE-icat-100/101**(앱) 연결 시험을 눌러 **실제로 한 번 돌린다.** 이 기계에 그 CLI 가 있든 없든
+  **성공/실패 중 하나를 분명히 말해야** 하고, 실패면 사유가 남고, **결과 어디에도 평문 자격증명이 없다.**
+  (이 마지막 체크가 2026-07-29 에 실제 누출을 잡았다 → `CASE-icat-102` 신설.)
+- **CASE-icat-110**(앱) `새 프리셋` 으로 탐침 없는 종류를 만들면 목록에 `모양만` · `내가 만듦` 으로 뜬다.
+- **CASE-icat-111**(앱) 프리셋 `승격` → 안내 띠 → 탐침 편집기가 이어받음(**id 칸 잠김**) → 저장 →
+  **같은 id 에 탐침이 붙고 종류가 늘지 않는다**(덮어썼지 새로 만들지 않았다).
+  ※ 뷰를 옮기면 편집기 화면 상태는 초기화된다(영속 대상이 아니다) — 스위트가 탐침을 다시 짠다.

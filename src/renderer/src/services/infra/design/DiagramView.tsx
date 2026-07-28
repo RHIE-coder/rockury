@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   Controls,
@@ -6,22 +6,30 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
   type NodeChange
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { toPng, toSvg } from 'html-to-image'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { InfraIcon } from '../catalog/iconMap'
 import { isDocEmpty } from './nodeDoc'
 import { InfraNode, type InfraNodeData } from './InfraNode'
-import { growParents, typesOf, useInfraStore } from '../store'
+import { contentBounds, exportFileName, exportViewport } from './export'
+import { focusTarget, searchNodes } from './search'
+import { verdictByNode } from '../reconcile/overlay'
+import { growParents, reconcileRows, typesOf, useInfraStore } from '../store'
 import type { DesignNode } from './types'
 
 const nodeTypes = { infra: InfraNode }
+
+/** 내보내기 이미지의 사방 여백(px). 콘텐츠가 테두리에 붙어 잘려 보이지 않을 만큼만. */
+const EXPORT_PAD = 48
 
 /**
  * 설계본 캔버스.
@@ -50,15 +58,28 @@ function orderParentsFirst(nodes: DesignNode[]): DesignNode[] {
 
 function DiagramInner(): React.JSX.Element {
   const store = useInfraStore()
+  const rf = useReactFlow()
+  const wrapRef = useRef<HTMLDivElement>(null)
   const types = useMemo(() => typesOf(store.catalogs), [store.catalogs])
   const [notice, setNotice] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
+  const [nodeQuery, setNodeQuery] = useState('')
+  const [showVerdicts, setShowVerdicts] = useState(false)
+  const [exportStatus, setExportStatus] = useState<'idle' | 'ok' | 'err'>('idle')
 
   useEffect(() => {
     if (!notice) return
     const t = setTimeout(() => setNotice(null), 4000)
     return () => clearTimeout(t)
   }, [notice])
+
+  // 대조 배지 — 표(대조 뷰)와 **같은 계산**을 본다. 여기서 다시 계산하면 두 화면이 다른 답을 말한다.
+  const verdicts = useMemo(() => {
+    if (!showVerdicts) return {}
+    return verdictByNode(
+      reconcileRows({ nodes: store.nodes, catalogs: store.catalogs, snapshot: store.snapshot })
+    )
+  }, [showVerdicts, store.nodes, store.catalogs, store.snapshot])
 
   const flowNodes: Node[] = useMemo(
     () =>
@@ -71,7 +92,8 @@ function DiagramInner(): React.JSX.Element {
           color: type?.color,
           isBox: hasKids || Boolean(type?.canContain?.length),
           undocumented: isDocEmpty(n.doc),
-          unknownType: Boolean(n.typeId && !type)
+          unknownType: Boolean(n.typeId && !type),
+          verdict: verdicts[n.id]
         }
         return {
           id: n.id,
@@ -84,7 +106,7 @@ function DiagramInner(): React.JSX.Element {
           ...(n.parentId ? { parentId: n.parentId, extent: 'parent' as const } : {})
         }
       }),
-    [store.nodes, store.selectedNodeId, types]
+    [store.nodes, store.selectedNodeId, types, verdicts]
   )
 
   const flowEdges: Edge[] = useMemo(
@@ -124,6 +146,60 @@ function DiagramInner(): React.JSX.Element {
       (t) => !q || t.label.toLowerCase().includes(q) || t.id.toLowerCase().includes(q)
     )
   }, [types, filter])
+
+  /** 이미 놓인 노드 찾기 — 왼쪽 팔레트의 '종류 검색'(놓을 것 고르기)과 다른 일이다. */
+  const hits = useMemo(
+    () => searchNodes(store.nodes, types, nodeQuery).slice(0, 8),
+    [store.nodes, types, nodeQuery]
+  )
+
+  const focus = useCallback(
+    (nodeId: string) => {
+      const t = focusTarget(store.nodes, nodeId, rf.getZoom())
+      if (!t) return
+      rf.setCenter(t.x, t.y, { zoom: t.zoom, duration: 300 })
+      store.select(nodeId)
+      setNodeQuery('')
+    },
+    [rf, store]
+  )
+
+  /**
+   * PNG/SVG 내보내기 — 그려진 것 전체를 담는 캔버스로 `.react-flow__viewport` 를 캡처한다.
+   * 저장된 설계본 좌표(절대값으로 편 것)로 경계를 재므로, 지금 화면이 어디를 보고 있든 결과가 같다.
+   */
+  const doExport = useCallback(
+    async (format: 'png' | 'svg') => {
+      try {
+        if (store.nodes.length === 0) return
+        const el = wrapRef.current?.querySelector('.react-flow__viewport') as HTMLElement | null
+        if (!el) return
+        const { width, height, x, y, zoom } = exportViewport(contentBounds(store.nodes), EXPORT_PAD)
+        const dataUrl = await (format === 'png' ? toPng : toSvg)(el, {
+          backgroundColor: '#ffffff',
+          width,
+          height,
+          style: {
+            width: `${width}px`,
+            height: `${height}px`,
+            transform: `translate(${x}px, ${y}px) scale(${zoom})`
+          }
+        })
+        const name = store.designs.find((d) => d.id === store.activeDesignId)?.name ?? ''
+        const a = document.createElement('a')
+        a.href = dataUrl
+        a.download = exportFileName(name, format, new Date())
+        // 일부 환경은 DOM 에 붙어 있어야 내려받기가 시작된다 → 붙였다 뗀다.
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        setExportStatus('ok')
+      } catch {
+        setExportStatus('err')
+      }
+    },
+    [store.nodes, store.designs, store.activeDesignId]
+  )
 
   const selected = store.nodes.find((n) => n.id === store.selectedNodeId) ?? null
 
@@ -183,7 +259,7 @@ function DiagramInner(): React.JSX.Element {
         </div>
       </aside>
 
-      <div className="relative min-w-0 flex-1">
+      <div className="relative min-w-0 flex-1" ref={wrapRef}>
         <ReactFlow
           nodes={flowNodes}
           edges={flowEdges}
@@ -197,19 +273,106 @@ function DiagramInner(): React.JSX.Element {
           <Background />
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable />
-          <Panel position="top-right" className="flex gap-1.5">
+
+          <Panel position="top-left" className="w-56">
+            <Input
+              className="h-8 bg-background text-xs"
+              placeholder="놓인 노드 찾기"
+              value={nodeQuery}
+              onChange={(e) => setNodeQuery(e.target.value)}
+              data-infra-node-search
+            />
+            {nodeQuery.trim() !== '' && (
+              <div
+                className="mt-1 overflow-hidden rounded-md border border-border bg-background shadow-sm"
+                data-infra-search-results
+              >
+                {hits.length === 0 && (
+                  <p className="px-2 py-1.5 text-[11px] text-muted-foreground">찾는 노드가 없습니다.</p>
+                )}
+                {hits.map((n) => {
+                  const t = n.typeId ? types[n.typeId] : undefined
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className="flex w-full cursor-pointer items-center gap-1.5 px-2 py-1 text-left text-xs hover:bg-secondary"
+                      onClick={() => focus(n.id)}
+                      data-infra-search-hit={n.id}
+                    >
+                      <span style={{ color: t?.color }}>
+                        <InfraIcon icon={t?.icon ?? 'phosphor:cube'} size={13} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{n.name}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {t?.label ?? '맨 노드'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </Panel>
+
+          <Panel position="top-right" className="flex flex-wrap items-center justify-end gap-1.5">
+            <Button
+              size="sm"
+              variant={showVerdicts ? 'default' : 'outline'}
+              onClick={() => setShowVerdicts((v) => !v)}
+              data-infra-verdict-toggle={showVerdicts ? 'on' : 'off'}
+              title={
+                store.snapshot
+                  ? '대조 판정을 노드 위에 겹쳐 봅니다.'
+                  : '실물을 아직 읽지 않았습니다 — 켜면 전부 "대조 안 함"으로 보입니다.'
+              }
+            >
+              대조 배지
+            </Button>
             <Button size="sm" variant="outline" onClick={() => store.autoLayout()} data-infra-autolayout>
               자동 배치
             </Button>
             <Button
               size="sm"
-              onClick={() => void store.save()}
-              disabled={!store.dirty}
-              data-infra-save
+              variant="outline"
+              onClick={() => void doExport('png')}
+              disabled={store.nodes.length === 0}
+              data-infra-export="png"
             >
+              PNG
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void doExport('svg')}
+              disabled={store.nodes.length === 0}
+              data-infra-export="svg"
+            >
+              SVG
+            </Button>
+            <Button size="sm" onClick={() => void store.save()} disabled={!store.dirty} data-infra-save>
               {store.dirty ? '저장' : '저장됨'}
             </Button>
+            {exportStatus !== 'idle' && (
+              <span
+                className={cn(
+                  'rounded px-1.5 py-0.5 text-[10px]',
+                  exportStatus === 'ok' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-900'
+                )}
+                data-export-status={exportStatus}
+              >
+                {exportStatus === 'ok' ? '내보냈습니다' : '내보내기 실패'}
+              </span>
+            )}
           </Panel>
+
+          {showVerdicts && !store.snapshot && (
+            <Panel position="bottom-center">
+              <div className="rounded-md border border-border bg-background px-3 py-1.5 text-[11px] text-muted-foreground">
+                실물을 아직 읽지 않았습니다 — <strong>Live › 실물 지도</strong>에서 새로고침하면 배지가 채워집니다.
+              </div>
+            </Panel>
+          )}
+
           {notice && (
             <Panel position="top-center">
               <div

@@ -1,0 +1,203 @@
+{
+  "_note": "실제 AWS CLI(--output json)가 뱉는 응답의 모양을 고정해 둔 표본이다. 계정 없이도 aws.json 의 탐침이 이 모양에서 무엇을 뽑는지 검증한다. 값은 지어냈지만 **구조와 키 이름은 실제 그대로**여야 한다 — 여기를 편하게 고치면 테스트가 우리 상상을 검증하게 된다.",
+
+  "describe-vpcs": {
+    "Vpcs": [
+      {
+        "CidrBlock": "10.0.0.0/16",
+        "DhcpOptionsId": "dopt-0a1b2c3d",
+        "State": "available",
+        "VpcId": "vpc-0abc123def456",
+        "OwnerId": "123456789012",
+        "InstanceTenancy": "default",
+        "CidrBlockAssociationSet": [
+          {
+            "AssociationId": "vpc-cidr-assoc-0a1b",
+            "CidrBlock": "10.0.0.0/16",
+            "CidrBlockState": { "State": "associated" }
+          }
+        ],
+        "IsDefault": false,
+        "Tags": [
+          { "Key": "Name", "Value": "prod-vpc" },
+          { "Key": "rockury:node", "Value": "n-design-vpc" },
+          { "Key": "env", "Value": "prod" }
+        ]
+      },
+      {
+        "CidrBlock": "172.31.0.0/16",
+        "State": "available",
+        "VpcId": "vpc-0default999",
+        "OwnerId": "123456789012",
+        "InstanceTenancy": "default",
+        "IsDefault": true
+      }
+    ]
+  },
+
+  "describe-subnets": {
+    "Subnets": [
+      {
+        "AvailabilityZone": "ap-northeast-2a",
+        "AvailabilityZoneId": "apne2-az1",
+        "AvailableIpAddressCount": 250,
+        "CidrBlock": "10.0.1.0/24",
+        "DefaultForAz": false,
+        "MapPublicIpOnLaunch": true,
+        "State": "available",
+        "SubnetId": "subnet-0aaa111",
+        "VpcId": "vpc-0abc123def456",
+        "OwnerId": "123456789012",
+        "SubnetArn": "arn:aws:ec2:ap-northeast-2:123456789012:subnet/subnet-0aaa111",
+        "Tags": [{ "Key": "Name", "Value": "prod-public-a" }]
+      },
+      {
+        "AvailabilityZone": "ap-northeast-2c",
+        "CidrBlock": "10.0.2.0/24",
+        "State": "pending",
+        "SubnetId": "subnet-0bbb222",
+        "VpcId": "vpc-0abc123def456",
+        "OwnerId": "123456789012",
+        "Tags": [{ "Key": "Name", "Value": "prod-private-c" }]
+      }
+    ]
+  },
+
+  "describe-instances": {
+    "Reservations": [
+      {
+        "Groups": [],
+        "OwnerId": "123456789012",
+        "ReservationId": "r-0111aaa",
+        "Instances": [
+          {
+            "AmiLaunchIndex": 0,
+            "ImageId": "ami-0abcdef1234567890",
+            "InstanceId": "i-0aaa111bbb222",
+            "InstanceType": "t3.medium",
+            "LaunchTime": "2026-07-01T02:11:00+00:00",
+            "Monitoring": { "State": "disabled" },
+            "Placement": { "AvailabilityZone": "ap-northeast-2a", "Tenancy": "default" },
+            "PrivateDnsName": "ip-10-0-1-15.ap-northeast-2.compute.internal",
+            "PrivateIpAddress": "10.0.1.15",
+            "State": { "Code": 16, "Name": "running" },
+            "StateTransitionReason": "",
+            "SubnetId": "subnet-0aaa111",
+            "VpcId": "vpc-0abc123def456",
+            "Architecture": "x86_64",
+            "Tags": [
+              { "Key": "Name", "Value": "payment-api-1" },
+              { "Key": "rockury:node", "Value": "n-design-api" }
+            ]
+          },
+          {
+            "InstanceId": "i-0ccc333ddd444",
+            "InstanceType": "t3.small",
+            "State": { "Code": 80, "Name": "stopped" },
+            "StateTransitionReason": "User initiated (2026-07-20 04:00:00 GMT)",
+            "SubnetId": "subnet-0bbb222",
+            "VpcId": "vpc-0abc123def456",
+            "Tags": [{ "Key": "Name", "Value": "batch-worker" }]
+          }
+        ]
+      },
+      {
+        "OwnerId": "123456789012",
+        "ReservationId": "r-0222bbb",
+        "Instances": [
+          {
+            "InstanceId": "i-0eee555fff666",
+            "InstanceType": "t3.micro",
+            "State": { "Code": 48, "Name": "terminated" },
+            "SubnetId": "subnet-0aaa111",
+            "VpcId": "vpc-0abc123def456"
+          }
+        ]
+      }
+    ]
+  },
+
+  "describe-db-instances": {
+    "DBInstances": [
+      {
+        "DBInstanceIdentifier": "prod-mysql",
+        "DBInstanceClass": "db.t3.medium",
+        "Engine": "mysql",
+        "DBInstanceStatus": "available",
+        "MasterUsername": "admin",
+        "Endpoint": {
+          "Address": "prod-mysql.abcdefghij.ap-northeast-2.rds.amazonaws.com",
+          "Port": 3306,
+          "HostedZoneId": "ZABCDEFGHIJKL"
+        },
+        "AllocatedStorage": 100,
+        "DBSubnetGroup": {
+          "DBSubnetGroupName": "prod-subnet-group",
+          "SubnetGroupStatus": "Complete",
+          "Subnets": [
+            {
+              "SubnetIdentifier": "subnet-0aaa111",
+              "SubnetAvailabilityZone": { "Name": "ap-northeast-2a" },
+              "SubnetStatus": "Active"
+            }
+          ],
+          "VpcId": "vpc-0abc123def456"
+        },
+        "MultiAZ": false,
+        "EngineVersion": "8.0.35"
+      },
+      {
+        "DBInstanceIdentifier": "analytics-pg",
+        "Engine": "postgres",
+        "DBInstanceStatus": "backing-up",
+        "DBSubnetGroup": { "DBSubnetGroupName": "analytics-sg", "VpcId": "vpc-0abc123def456" }
+      }
+    ]
+  },
+
+  "describe-load-balancers": {
+    "LoadBalancers": [
+      {
+        "LoadBalancerArn": "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/prod-alb/0a1b2c3d4e5f",
+        "DNSName": "prod-alb-1234567890.ap-northeast-2.elb.amazonaws.com",
+        "CanonicalHostedZoneId": "ZWKZPGTI48KDX",
+        "CreatedTime": "2026-05-02T01:00:00.000000+00:00",
+        "LoadBalancerName": "prod-alb",
+        "Scheme": "internet-facing",
+        "VpcId": "vpc-0abc123def456",
+        "State": { "Code": "active" },
+        "Type": "application",
+        "AvailabilityZones": [{ "ZoneName": "ap-northeast-2a", "SubnetId": "subnet-0aaa111" }],
+        "SecurityGroups": ["sg-0aaa111"],
+        "IpAddressType": "ipv4"
+      }
+    ]
+  },
+
+  "list-functions": {
+    "Functions": [
+      {
+        "FunctionName": "image-resizer",
+        "FunctionArn": "arn:aws:lambda:ap-northeast-2:123456789012:function:image-resizer",
+        "Runtime": "nodejs22.x",
+        "Role": "arn:aws:iam::123456789012:role/lambda-basic",
+        "Handler": "index.handler",
+        "CodeSize": 41234,
+        "Timeout": 30,
+        "MemorySize": 512,
+        "LastModified": "2026-07-10T05:00:00.000+0000",
+        "PackageType": "Zip"
+      }
+    ]
+  },
+
+  "list-buckets": {
+    "Buckets": [
+      { "Name": "prod-assets", "CreationDate": "2025-11-02T00:00:00+00:00" },
+      { "Name": "prod-backups", "CreationDate": "2026-01-15T00:00:00+00:00" }
+    ],
+    "Owner": { "DisplayName": "acme", "ID": "abcdef0123456789" }
+  },
+
+  "access-denied-stderr": "An error occurred (UnauthorizedOperation) when calling the DescribeInstances operation: You are not authorized to perform this operation."
+}

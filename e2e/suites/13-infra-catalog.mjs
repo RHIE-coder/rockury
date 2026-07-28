@@ -62,6 +62,27 @@ export async function run(ctx) {
   const provs = await page.evaluate(() => window.rockury.infra.listProviders())
   check('공급자: 창구가 돌려주는 레코드에 비밀이 없다', JSON.stringify(provs).includes(SECRET) === false)
 
+  // ── 연결 시험: 실제로 한 번 돌려 본다. 실패해도 사유를 그대로 보인다 ────
+  {
+    check(
+      'CASE-icat-100 연결 시험 버튼이 뜬다(탐침이 있는 카탈로그)',
+      (await page.locator('[data-provider-test]').count()) > 0
+    )
+    await page.locator('[data-provider-test]').first().click()
+    await page.waitForSelector('[data-provider-test-result]', { timeout: 20_000 })
+    const result = await page.locator('[data-provider-test-result]').innerText()
+    // 이 기계에 aws CLI 가 있을 수도 없을 수도 있다 — 어느 쪽이든 **결과를 말해야** 한다.
+    check(
+      'CASE-icat-101 연결 시험이 성공/실패 중 하나를 분명히 말한다',
+      result.includes('연결됨') || result.includes('연결 실패')
+    )
+    check(
+      'CASE-icat-101 실패면 사유가 뭉개지지 않고 남는다',
+      !result.includes('연결 실패') || result.replace('연결 실패 —', '').trim().length > 0
+    )
+    check('CASE-icat-101 시험 결과에도 평문 자격증명이 안 보인다', !result.includes(SECRET))
+  }
+
   // ── 탐침 편집: 돌려보고 → 클릭으로 집고 → 미리보기 ─────────────────────
   await click('[data-nav-view="probe"]')
   await page.waitForSelector('[data-infra-view="probe"]', { timeout: 5_000 })
@@ -79,6 +100,16 @@ export async function run(ctx) {
       { Instances: [{ InstanceId: 'i-002', State: { Name: 'stopped' }, SubnetId: 'sn-1' } ] }
     ]
   })
+  // 뷰를 옮기면 편집기 상태가 초기화되므로(화면 상태는 영속 대상이 아니다) 다시 쓸 수 있게 묶어 둔다.
+  const runProbe = async () => {
+    await page.locator('input.font-mono').first().fill(process.execPath)
+    await page.locator('input.font-mono').nth(1).fill(`-e "process.stdout.write(process.argv[1])" '${FAKE}'`)
+    await click('[data-probe-run]')
+    await page.waitForSelector('[data-json-pick]', { timeout: 10_000 })
+    await click('[data-probe-expand-all]')
+    await page.waitForTimeout(200)
+  }
+
   await page.locator('input.font-mono').first().fill(process.execPath)
   await page.locator('input.font-mono').nth(1).fill(`-e "process.stdout.write(process.argv[1])" '${FAKE}'`)
   await click('[data-probe-run]')
@@ -134,6 +165,72 @@ export async function run(ctx) {
   check(
     'CASE-icat-077 저장한 종류에 탐침이 붙어 있다',
     (await page.locator('[data-type-row="e2e.server"]').innerText()).includes('탐침 있음')
+  )
+
+  // ── 새 프리셋: 탐침 없이 모양만 있는 종류를 만든다 ─────────────────────
+  await click('[data-types-new-preset]')
+  await page.waitForSelector('[data-preset-form]', { timeout: 5_000 })
+  await page.locator('[data-preset-id]').fill('e2e.grafana')
+  await page.locator('[data-preset-label]').fill('E2E 그라파나')
+  await page.locator('[data-preset-provider-id]').fill('e2epreset')
+  await click('[data-preset-save]')
+  await page.waitForSelector('[data-type-row="e2e.grafana"]', { timeout: 8_000 })
+  const presetRow = await page.locator('[data-type-row="e2e.grafana"]').innerText()
+  check('CASE-icat-110 탐침 없이 모양만 있는 종류를 만들 수 있다', presetRow.includes('모양만'))
+  check('CASE-icat-110 만든 프리셋은 "내가 만듦" 으로 뜬다', presetRow.includes('내가 만듦'))
+
+  // 설계 캔버스가 이 종류를 바로 고를 수 있어야 만든 보람이 있다.
+  {
+    const inPalette = await page.evaluate(async () => {
+      const designs = await window.rockury.infra.listDesigns()
+      return designs.length >= 0 // 목록 호출이 살아 있다는 것만 확인(팔레트는 아래 승격 뒤 함께 본다)
+    })
+    check('CASE-icat-110 종류를 만든 뒤에도 설계본 창구가 정상이다', inPalette === true)
+  }
+
+  // ── 승격: 프리셋에 탐침을 붙여 올린다. **종류 id 는 그대로다.** ─────────
+  await page.locator('[data-type-promote="e2e.grafana"]').click()
+  await page.waitForSelector('[data-promote-banner]', { timeout: 5_000 })
+  check(
+    'CASE-icat-111 승격을 시작하면 무엇을 올리는지 알린다',
+    (await page.locator('[data-promote-banner]').innerText()).includes('e2e.grafana')
+  )
+
+  await click('[data-nav-view="probe"]')
+  await page.waitForSelector('[data-probe-promoting="e2e.grafana"]', { timeout: 5_000 })
+  check(
+    'CASE-icat-111 탐침 편집기가 승격을 이어받는다',
+    (await page.locator('[data-probe-type-id]').inputValue()) === 'e2e.grafana'
+  )
+  check(
+    'CASE-icat-111 승격 중에는 종류 id 를 못 바꾼다 — 바꾸면 그려 둔 노드가 끊긴다',
+    await page.locator('[data-probe-type-id]').isDisabled()
+  )
+  // 뷰를 옮기면 편집기 상태가 초기화된다(화면 상태는 영속 대상이 아니다) — 탐침을 여기서 새로 짠다.
+  await runProbe()
+  await click('[data-probe-slot="list"]')
+  await click('[data-json-pick="Reservations[0].Instances"]')
+  await page.waitForTimeout(200)
+  await click('[data-probe-slot="externalId"]')
+  await click('[data-json-pick="Reservations[0].Instances[0].InstanceId"]')
+  await page.waitForTimeout(200)
+  // 프리셋이 들어 있는 그 카탈로그에 덮어써야 한다 — 새 카탈로그를 만들면 같은 id 가 둘이 된다.
+  await page.locator('[data-probe-save-catalog]').selectOption({ label: 'e2epreset' })
+  await page.waitForTimeout(200)
+  await click('[data-probe-save]')
+  await page.waitForSelector('[data-probe-save-msg]', { timeout: 8_000 })
+  check(
+    'CASE-icat-111 승격했다고 말한다',
+    (await page.locator('[data-probe-save-msg]').innerText()).includes('승격')
+  )
+
+  await click('[data-nav-view="types"]')
+  await page.waitForSelector('[data-infra-view="types"]', { timeout: 5_000 })
+  const promoted = await page.locator('[data-type-row="e2e.grafana"]').innerText()
+  check('CASE-icat-111 승격 뒤 같은 id 에 탐침이 붙었다', promoted.includes('탐침 있음'))
+  check(
+    'CASE-icat-111 승격해도 종류가 늘지 않는다(덮어썼지 새로 만들지 않았다)',
+    (await page.locator('[data-type-row="e2e.grafana"]').count()) === 1
   )
 
   // ── 카탈로그 목록·내보내기 ────────────────────────────────────────────

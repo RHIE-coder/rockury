@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { prepareCommand, runCli } from './command'
+import { prepareCommand, redactSecrets, runCli } from './command'
 
 const call = (args: string[]): { type: 'cli'; cmd: string; args: string[] } => ({
   type: 'cli',
@@ -109,5 +109,47 @@ describe('runCli — 실행', () => {
     expect(r.exitCode).toBe(3)
     expect(r.ok).toBe(false)
     expect(r.durationMs).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('redactSecrets — 공급자가 되뱉은 자격증명을 가린다', () => {
+  const creds = { profile: 'SUPER-SECRET-PROFILE', token: 'tok_abcdef' }
+
+  it('CASE-icat-102 오류 메시지에 되돌아온 자격증명 값을 참조 표기로 바꾼다', () => {
+    // 실측: AWS CLI 가 "The config profile (<값>) could not be found" 라고 답한다.
+    const out = redactSecrets('The config profile (SUPER-SECRET-PROFILE) could not be found', creds)
+    expect(out).not.toContain('SUPER-SECRET-PROFILE')
+    expect(out).toBe('The config profile ({{cred.profile}}) could not be found')
+  })
+
+  it('CASE-icat-102 가리되 **어디에 나왔는지는 남긴다** — 통째로 지우면 무엇이 틀렸는지 못 읽는다', () => {
+    expect(redactSecrets('bad token tok_abcdef at line 3', creds)).toBe(
+      'bad token {{cred.token}} at line 3'
+    )
+  })
+
+  it('같은 값이 여러 번 나와도 전부 가린다', () => {
+    const out = redactSecrets('tok_abcdef / tok_abcdef', creds)
+    expect(out).toBe('{{cred.token}} / {{cred.token}}')
+  })
+
+  it('긴 값을 먼저 가린다 — 짧은 값이 긴 값 안에 들어 있어도 반쪽만 가려지지 않는다', () => {
+    const nested = { short: 'abc', long: 'abcdef' }
+    expect(redactSecrets('abcdef', nested)).toBe('{{cred.long}}')
+  })
+
+  it('자격증명이 없으면 원문 그대로 — 도커처럼 비밀 없는 공급자의 오류를 건드리지 않는다', () => {
+    expect(redactSecrets('permission denied', {})).toBe('permission denied')
+    expect(redactSecrets('permission denied', { empty: '' })).toBe('permission denied')
+  })
+
+  it('정규식 특수문자가 든 자격증명도 안전하게 가린다', () => {
+    expect(redactSecrets('key a+b.c* here', { k: 'a+b.c*' })).toBe('key {{cred.k}} here')
+  })
+
+  it('빈 문자열·긴 본문에서도 죽지 않는다', () => {
+    expect(redactSecrets('', creds)).toBe('')
+    const big = `${'x'.repeat(10_000)}tok_abcdef`
+    expect(redactSecrets(big, creds)).not.toContain('tok_abcdef')
   })
 })

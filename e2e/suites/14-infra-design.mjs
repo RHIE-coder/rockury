@@ -176,4 +176,76 @@ export async function run(ctx) {
     '자동 배치: 자식이 부모 박스 밖으로 나가지 않는다',
     !!kid && !!box && kid.x >= 0 && kid.y >= 0 && kid.x + kid.w <= box.w && kid.y + kid.h <= box.h
   )
+
+  // ── 내보내기 — 그려진 것을 그림 파일로 ─────────────────────────────────
+  await click('[data-infra-export="png"]')
+  await page.waitForSelector('[data-export-status]', { timeout: 10_000 })
+  check(
+    'CASE-iarch-074 PNG 내보내기가 캔버스를 캡처한다',
+    (await page.locator('[data-export-status="ok"]').count()) > 0
+  )
+  await click('[data-infra-export="svg"]')
+  await page.waitForTimeout(600)
+  check(
+    'CASE-iarch-074 SVG 내보내기도 캡처한다',
+    (await page.locator('[data-export-status="ok"]').count()) > 0
+  )
+
+  // ── 노드 검색·포커싱 — 놓인 노드를 이름으로 찾는다 ─────────────────────
+  {
+    const search = page.locator('[data-infra-node-search]')
+    await search.fill('없는이름zzz')
+    await page.waitForTimeout(250)
+    const emptyText = await page.locator('[data-infra-search-results]').innerText()
+    check('CASE-iarch-090 못 찾으면 못 찾았다고 말한다', emptyText.includes('찾는 노드가 없습니다'))
+
+    // 노드 문서를 채운 그 노드의 이름으로 찾는다(이름은 종류 라벨 그대로 'EC2 인스턴스').
+    await search.fill('EC2')
+    await page.waitForTimeout(250)
+    const hits = await page.locator('[data-infra-search-hit]').count()
+    check('CASE-iarch-090 이름·종류로 노드를 찾는다', hits > 0)
+
+    const before = await page.evaluate(() => {
+      const vp = document.querySelector('.react-flow__viewport')
+      return vp ? vp.getAttribute('style') : null
+    })
+    await page.locator('[data-infra-search-hit]').first().click()
+    await page.waitForTimeout(700) // setCenter 는 300ms 애니메이션
+    const after = await page.evaluate(() => {
+      const vp = document.querySelector('.react-flow__viewport')
+      return vp ? vp.getAttribute('style') : null
+    })
+    check('CASE-iarch-090 고르면 화면이 그 노드로 옮겨간다', !!after && after !== before)
+    check(
+      'CASE-iarch-090 고른 뒤 검색칸이 비워진다(다음 검색을 막지 않는다)',
+      (await search.inputValue()) === ''
+    )
+  }
+
+  // ── 대조 배지 — 실물을 안 읽었으면 안 읽었다고 말한다 ───────────────────
+  {
+    await click('[data-infra-verdict-toggle="off"]')
+    await page.waitForTimeout(400)
+    check(
+      'CASE-iarch-091 대조 배지를 켜면 노드에 판정이 붙는다',
+      (await page.locator('.react-flow__node [data-verdict]').count()) > 0
+    )
+    // 이 스위트는 실물을 읽지 않았다 — 그러면 '미구축'이 아니라 '대조 안 함'이어야 한다.
+    check(
+      'CASE-iarch-091 안 읽었을 때는 미구축이 아니라 "대조 안 함"이다',
+      (await page.locator('[data-verdict="not-checked"]').count()) > 0 &&
+        (await page.locator('[data-verdict="missing"]').count()) === 0
+    )
+    const bodyText = await body()
+    check(
+      'CASE-iarch-091 실물을 안 읽었다는 사실을 화면이 알린다',
+      bodyText.includes('실물을 아직 읽지 않았습니다')
+    )
+    await click('[data-infra-verdict-toggle="on"]')
+    await page.waitForTimeout(300)
+    check(
+      'CASE-iarch-091 끄면 배지가 사라진다',
+      (await page.locator('.react-flow__node [data-verdict]').count()) === 0
+    )
+  }
 }
