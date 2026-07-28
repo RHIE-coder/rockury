@@ -1,14 +1,27 @@
+import { BrowserWindow } from 'electron'
+import { registerApiSpecIpc } from './specs'
+import { registerApiOpsIpc } from './ops'
+import { registerApiContractIpc } from './contract'
+import { registerApiTransferIpc } from './transfer'
+import { setApiChangeNotifier } from '../../ai/apiTools'
+
 /**
- * API 서비스의 IPC 채널 — **아직 없다.**
+ * API 서비스의 IPC 채널.
  *
- * 이 폴더는 API 에이전트의 자리다. 메인 프로세스 능력이 필요해지면:
- *   1. 여기에 `<주제>.ts` 를 만들고 `ipcMain.handle('api:<동작>', …)` 로 채널을 연다
- *      (채널 접두어는 서비스 id — AGENTS.md 네임스페이스 규칙)
- *   2. 아래 `registerApiIpc()` 에서 호출한다
- *   3. `src/main/ai/coverage/api.ts` 에 노출 또는 제외 사유를 등재한다(안 하면 `npm test` 실패)
- *   4. 렌더러에서 쓰려면 `src/preload/services/api.ts` 에 창구를 연다
- * `src/main/index.ts` 나 다른 서비스 폴더는 건드리지 않는다.
+ * 새 채널을 만들 때는 이 폴더 안에서만 움직인다 — `src/main/index.ts` 나 다른 서비스
+ * 폴더는 건드리지 않는다(AGENTS.md 병렬 개발 파일 소유권).
+ * 새 채널은 `src/main/ai/coverage/api.ts` 에 노출 또는 제외로 등재해야 `npm test` 를 통과한다.
  */
 export function registerApiIpc(): void {
-  // 아직 채널 없음.
+  registerApiSpecIpc()
+  registerApiOpsIpc()
+  registerApiContractIpc()
+  registerApiTransferIpc()
+
+  // MCP 쓰기 → 열린 화면이 따라오게 한다(spec api-mcp tools.write AC-8).
+  // 창 전파를 공용 진입점(main/index.ts)이 아니라 여기서 거는 이유: 그 파일은 새 서비스를
+  // 만들 때만 바뀌는 공용 파일이다. 등록 시점에 우리 쪽에서 주입하면 손댈 일이 없다.
+  setApiChangeNotifier((e) => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('api:changed', e)
+  })
 }

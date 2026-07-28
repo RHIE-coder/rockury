@@ -11,6 +11,7 @@ import { UIUX_TOOL_DEFS } from './uiuxTools'
 import { assertCleanText } from './textGuard'
 // 서비스별 도구는 자기 파일에 산다 — 여기서는 이어 붙이기만 한다(공용 파일 편집 최소화).
 import { infraToolDefs } from './tools/infra'
+import { API_TOOL_DEFS } from './apiTools'
 
 /**
  * MCP 도구 정의 — AI 에이전트에게 노출되는 Rockury 능력의 단일 목록.
@@ -22,7 +23,7 @@ import { infraToolDefs } from './tools/infra'
  * 앱에 새 IPC 채널이 생기면 여기(도구) 또는 제외 지도에 등재될 때까지 npm test 가 실패한다.
  */
 
-interface ToolDef {
+export interface ToolDef {
   name: string
   description: string
   /** zod raw shape — SDK 가 JSON Schema 로 변환해 에이전트에 노출. */
@@ -402,6 +403,7 @@ export const TOOL_DEFS: ToolDef[] = [
 // 새 서비스는 자기 `tools/<서비스>.ts` 를 만들고 여기 한 줄만 더한다.
 TOOL_DEFS.push(...UIUX_TOOL_DEFS)
 TOOL_DEFS.push(...(infraToolDefs as ToolDef[]))
+TOOL_DEFS.push(...API_TOOL_DEFS)
 
 export const TOOL_NAMES = TOOL_DEFS.map((t) => t.name)
 

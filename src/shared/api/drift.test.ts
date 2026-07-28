@@ -1,0 +1,250 @@
+import { describe, expect, it } from 'vitest'
+import { driftFromObservations, driftUnavailable, hasBlockingGap, summarizeDrift } from './drift'
+import type { FieldDef, RequestDef, RunRecord, SpecDef } from './types'
+
+/**
+ * 판정 엔진 — `docs/qa/api-contract.md` S1~S3.
+ *
+ * 이 모듈이 지키는 한 문장: **모르는 것을 안다고 말하지 않는다.**
+ *  · 안 쏴 본 요청은 일치가 아니라 **미관측**
+ *  · 필수여부 `모름` 은 판정에서 빠지고 **몇 개 뺐는지** 남는다
+ *  · JSON 이 아니어서 모양을 못 뽑은 것도 통과가 아니라 **판정 불가**
+ */
+
+const f = (name: string, type: FieldDef['type'], requiredness: FieldDef['requiredness']): FieldDef => ({
+  name,
+  type,
+  requiredness
+})
+
+const req = (name: string, responses: RequestDef['responses'] = []): RequestDef => ({
+  id: name,
+  name,
+  folder: '',
+  shape: 'unary',
+  params: [],
+  request: { method: 'GET', path: `/${name}` },
+  responses,
+  docs: ''
+})
+
+const spec = (requests: RequestDef[], kind: SpecDef['kind'] = 'rest'): SpecDef => ({
+  id: 's1',
+  name: 'S',
+  description: '',
+  kind,
+  requests
+})
+
+const run = (requestName: string, body: string, over: Partial<RunRecord> = {}): RunRecord => ({
+  id: `run_${requestName}_${body.length}`,
+  specId: 's1',
+  requestName,
+  environmentId: 'e1',
+  environmentName: 'DEV',
+  baseVersion: null,
+  status: 'ok',
+  httpStatus: 200,
+  durationMs: 1,
+  createdAt: '2026-07-28T00:00:00.000Z',
+  request: { method: 'GET', url: '/x', headers: {}, body: '' },
+  response: { status: 200, headers: {}, body, size: body.length },
+  error: null,
+  ...over
+})
+
+const drift = (s: SpecDef, runs: RunRecord[]) =>
+  driftFromObservations({ spec: s, runs, environmentName: 'DEV' })
+
+// ── 커버리지 정직 ─────────────────────────────────────────────────────────
+
+describe('CASE-apicontract-010~013 커버리지를 속이지 않는다', () => {
+  it('안 쏴 본 요청은 미관측으로 세고 이름을 남긴다', () => {
+    const d = drift(spec([req('a'), req('b'), req('c')]), [run('a', '{}')])
+    expect(d.coverage).toEqual({ total: 3, observed: 1, unobserved: ['b', 'c'], unparsable: [] })
+  })
+
+  it('미관측을 일치로 세지 않는다 — 어긋남 0 이어도 커버리지가 붙는다', () => {
+    const d = drift(spec([req('a', [{ status: '200', fields: [] }]), req('b')]), [run('a', '{}')])
+    expect(d.findings).toEqual([])
+    expect(summarizeDrift(d)).toMatch(/1\s*\/\s*2/)
+    expect(summarizeDrift(d)).not.toBe('이상 없음')
+  })
+
+  it('"전부 관측됨" 은 미관측이 0일 때만이다', () => {
+    expect(drift(spec([req('a')]), [run('a', '{}')]).coverage.unobserved).toEqual([])
+    expect(drift(spec([req('a'), req('b')]), [run('a', '{}')]).coverage.unobserved).toEqual(['b'])
+  })
+
+  it('JSON 이 아니면 통과가 아니라 판정 불가로 따로 센다', () => {
+    const d = drift(spec([req('a')]), [run('a', '<html>오류</html>')])
+    expect(d.coverage.unparsable).toEqual(['a'])
+    expect(d.coverage.observed).toBe(0)
+  })
+
+  it('응답이 없는 실행(연결 실패)은 관측으로 세지 않는다', () => {
+    const failed = run('a', '', { status: 'connect-failed', response: null, httpStatus: null })
+    const d = drift(spec([req('a')]), [failed])
+    expect(d.coverage.observed).toBe(0)
+    expect(d.coverage.unobserved).toEqual(['a'])
+  })
+})
+
+describe('CASE-apicontract-014~015 어떤 관측을 기준으로 삼나', () => {
+  // 상태 200 을 선언해 둔다 — 선언이 없으면 필드가 아니라 **상태 단위**로 잡히는 게 맞다.
+  const withStatus = (): RequestDef => req('a', [{ status: '200', fields: [] }])
+
+  it('가장 최근 성공 실행을 기준으로 한다', () => {
+    const older = run('a', '{"old":1}', { createdAt: '2026-07-01T00:00:00.000Z' })
+    const newer = run('a', '{"fresh":1}', { createdAt: '2026-07-28T00:00:00.000Z' })
+    const d = drift(spec([withStatus()]), [older, newer])
+    expect(d.findings.map((x) => x.path)).toEqual(['a.200.fresh'])
+  })
+
+  it('과거 관측과 응답 모양이 달랐으면 그 사실을 알린다', () => {
+    const d = drift(spec([req('a')]), [
+      run('a', '{"x":1}', { createdAt: '2026-07-01T00:00:00.000Z' }),
+      run('a', '{"y":1}', { createdAt: '2026-07-28T00:00:00.000Z' })
+    ])
+    expect(d.unstable).toEqual(['a'])
+  })
+
+  it('기준 버전이 다른 관측은 섞지 않는다', () => {
+    const d = driftFromObservations({
+      spec: spec([withStatus()]),
+      runs: [run('a', '{"x":1}', { baseVersion: 'v0.1.0' }), run('a', '{"y":1}', { baseVersion: 'v0.2.0' })],
+      environmentName: 'DEV',
+      baseVersion: 'v0.2.0'
+    })
+    expect(d.baseVersion).toBe('v0.2.0')
+    expect(d.findings.map((x) => x.path)).toEqual(['a.200.y'])
+  })
+})
+
+// ── 결과 3종 ─────────────────────────────────────────────────────────────
+
+describe('CASE-apicontract-020~021 결과 3종 분류', () => {
+  const declared = (fields: FieldDef[]): RequestDef => req('a', [{ status: '200', fields }])
+
+  it('서버에만 있음 — 명세가 뒤처졌다', () => {
+    const d = drift(spec([declared([f('id', 'string', 'required')])]), [run('a', '{"id":"x","extra":1}')])
+    expect(d.findings).toEqual([
+      expect.objectContaining({ kind: 'server-only', path: 'a.200.extra' })
+    ])
+  })
+
+  it('명세에만 있음 — 필수라고 선언했는데 응답에 없다', () => {
+    const d = drift(spec([declared([f('id', 'string', 'required')])]), [run('a', '{}')])
+    expect(d.findings[0]).toMatchObject({ kind: 'spec-only', path: 'a.200.id' })
+  })
+
+  it('nullable 로 선언한 필드가 이번 응답에 없는 것은 어긋남이 아니다', () => {
+    const d = drift(spec([declared([f('memo', 'string', 'nullable')])]), [run('a', '{}')])
+    expect(d.findings).toEqual([])
+  })
+
+  it('양쪽 있는데 타입이 다르다', () => {
+    const d = drift(spec([declared([f('n', 'number', 'required')])]), [run('a', '{"n":"열"}')])
+    expect(d.findings[0]).toMatchObject({
+      kind: 'different',
+      path: 'a.200.n',
+      declared: 'number',
+      actual: 'string'
+    })
+  })
+
+  it('선언에 없는 상태를 받으면 상태 단위로 잡는다', () => {
+    const d = drift(spec([declared([])]), [run('a', '{}', { httpStatus: 404, response: { status: 404, headers: {}, body: '{}', size: 2 } })])
+    expect(d.findings[0]).toMatchObject({ kind: 'server-only', path: 'a.404' })
+  })
+
+  it('중첩 필드도 경로와 함께 잡는다', () => {
+    const nested: FieldDef = {
+      name: 'user',
+      type: 'object',
+      requiredness: 'required',
+      fields: [f('email', 'string', 'required')]
+    }
+    const d = drift(spec([declared([nested])]), [run('a', '{"user":{"email":1}}')])
+    expect(d.findings[0]).toMatchObject({ kind: 'different', path: 'a.200.user.email' })
+  })
+
+  it('넷째 갈래를 만들지 않는다', () => {
+    const d = drift(spec([declared([f('id', 'string', 'required')])]), [run('a', '{"other":true}')])
+    for (const x of d.findings) expect(['server-only', 'spec-only', 'different']).toContain(x.kind)
+  })
+})
+
+// ── 모름 제외 ────────────────────────────────────────────────────────────
+
+describe('CASE-apicontract-022 모름은 빼고, 뺐다는 사실을 남긴다', () => {
+  it('필수여부 모름인 필드가 응답에 없어도 어긋남이 아니고 제외로 센다', () => {
+    const d = drift(spec([req('a', [{ status: '200', fields: [f('x', 'string', 'unknown')] }])]), [run('a', '{}')])
+    expect(d.findings).toEqual([])
+    expect(d.skippedUnknown).toBe(1)
+  })
+
+  it('모름이어도 타입이 다른 건 여전히 어긋남이다', () => {
+    const d = drift(spec([req('a', [{ status: '200', fields: [f('x', 'string', 'unknown')] }])]), [
+      run('a', '{"x":1}')
+    ])
+    expect(d.findings[0]).toMatchObject({ kind: 'different' })
+  })
+
+  it('모름을 안전으로 세면 제외 개수가 0이 된다 — 그러면 이 케이스가 실패한다', () => {
+    const two = [f('a', 'string', 'unknown'), f('b', 'string', 'unknown')]
+    const d = drift(spec([req('a', [{ status: '200', fields: two }])]), [run('a', '{}')])
+    expect(d.skippedUnknown).toBe(2)
+  })
+})
+
+// ── 등급 ─────────────────────────────────────────────────────────────────
+
+describe('CASE-apicontract-001~004 판정 등급', () => {
+  it('관측 판정은 등급이 observed 다', () => {
+    expect(drift(spec([req('a')]), []).grade).toBe('observed')
+  })
+
+  it('등급 없는 결과를 만들 수 없다 — 모든 결과에 등급과 커버리지가 있다', () => {
+    const d = drift(spec([]), [])
+    expect(d.grade).toBeTruthy()
+    expect(d.coverage).toBeTruthy()
+  })
+
+  it('완전 판정 불가는 사유를 갈라 담고, 관측 결과로 조용히 내려가지 않는다', () => {
+    const d = driftUnavailable('feature-off', 'introspection 이 꺼져 있습니다.', 'DEV')
+    expect(d.grade).toBe('complete')
+    expect(d.unavailable?.reason).toBe('feature-off')
+    expect(d.findings).toEqual([])
+    expect(d.coverage.observed).toBe(0)
+    expect(summarizeDrift(d)).toMatch(/판정 불가/)
+  })
+
+  it('불가 사유 갈래가 서로 구분된다', () => {
+    for (const r of ['feature-off', 'no-permission', 'connect-failed', 'not-implemented'] as const) {
+      expect(driftUnavailable(r, 'x', 'DEV').unavailable?.reason).toBe(r)
+    }
+  })
+})
+
+// ── 요약 문구 ────────────────────────────────────────────────────────────
+
+describe('CASE-apicontract-013 요약에는 늘 커버리지가 붙는다', () => {
+  it('어긋남이 있으면 건수와 커버리지를 함께 말한다', () => {
+    const d = drift(spec([req('a', [{ status: '200', fields: [f('id', 'string', 'required')] }]), req('b')]), [
+      run('a', '{}')
+    ])
+    const s = summarizeDrift(d)
+    expect(s).toMatch(/1건/)
+    expect(s).toMatch(/1\s*\/\s*2/)
+  })
+
+  it('고칠 것이 있는지 한 줄로 판정한다 (흡수만 남았으면 막지 않는다)', () => {
+    const serverOnly = drift(spec([req('a', [{ status: '200', fields: [] }])]), [run('a', '{"new":1}')])
+    const specOnly = drift(spec([req('a', [{ status: '200', fields: [f('id', 'string', 'required')] }])]), [
+      run('a', '{}')
+    ])
+    expect(hasBlockingGap(serverOnly)).toBe(false)
+    expect(hasBlockingGap(specOnly)).toBe(true)
+  })
+})
