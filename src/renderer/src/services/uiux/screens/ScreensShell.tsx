@@ -11,8 +11,9 @@ import { useActiveProject, useSpecStore } from '../store'
  *
  * Spec 과 Canvas 는 **가운데만 다르다**(구조 트리 ↔ 미리보기). 뷰를 바꿔도 위계와 속성이
  * 그대로 남아야 "같은 것을 다른 방식으로 본다"가 성립한다 — 셸을 각자 두면 곧 미묘하게 갈린다.
+ * Review 는 오른쪽도 바꾼다(속성 → 의견 목록) — 거기선 고르는 목적이 "무엇을 고칠까"라서.
  */
-export function ScreensShell({ children }: { children: ReactNode }) {
+export function ScreensShell({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   const project = useActiveProject()
   const openDialog = useSpecStore((s) => s.openDialog)
   const error = useSpecStore((s) => s.error)
@@ -67,7 +68,7 @@ export function ScreensShell({ children }: { children: ReactNode }) {
           <div className="flex h-full">
             <div className="min-w-0 flex-1">{children}</div>
             <div className="w-[300px] shrink-0 border-l border-line bg-panel">
-              <Inspector />
+              {aside ?? <Inspector />}
             </div>
           </div>
         </WorkspacePanels>

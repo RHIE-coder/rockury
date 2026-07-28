@@ -4,8 +4,11 @@ import {
   findByAddress,
   getSurface,
   getTree,
+  listNotes,
+  listOpenNotes,
   listProjects,
   saveSurfaceContent,
+  setNoteResolved,
   setSurfaceStatus,
   type SpecLevel
 } from '../store/uiuxSpecs'
@@ -228,6 +231,55 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
       }
       saveSurfaceContent(hit.surfaceId as string, JSON.stringify(content))
       return { address: String(address), sectionCount: value.sections.length }
+    }
+  },
+
+  {
+    name: 'list_ui_notes',
+    description:
+      '화면에 남긴 **의견(요청)** 을 반환한다 — 사람이 미리보기 위 요소를 짚어 "이걸 이렇게 고쳐달라"고 남긴 것. 좌표가 아니라 요소에 붙어 있어 어느 요소에 대한 말인지 정확히 알 수 있다. 화면을 고치기 전에 읽고, 반영한 뒤 resolve_ui_note 로 넘긴다. address 를 주면 그 화면만, project 를 주면 프로젝트 전체의 **미해결** 의견을 준다.',
+    inputSchema: {
+      address: z.string().optional().describe('화면 주소 — 그 화면의 의견 전부(해결된 것 포함)'),
+      project: z.string().optional().describe('프로젝트 주소 조각 — 전체의 미해결 의견만')
+    },
+    handler: ({ address, project }) => {
+      if (address) {
+        const hit = requireAddress(address, 'surface')
+        return listNotes(hit.surfaceId as string).map((n) => ({
+          id: n.id,
+          target: n.target ? `${String(address)}#${n.target}` : String(address),
+          body: n.body,
+          author: n.author || null,
+          resolved: n.resolved === 1,
+          createdAt: n.created_at
+        }))
+      }
+      if (project) {
+        const hit = requireAddress(project, 'project')
+        return listOpenNotes(hit.projectId).map((n) => ({
+          id: n.id,
+          surface: n.surface_key,
+          target: n.target || null,
+          body: n.body,
+          author: n.author || null,
+          createdAt: n.created_at
+        }))
+      }
+      throw new Error('address(화면) 또는 project(프로젝트) 중 하나를 주세요.')
+    }
+  },
+
+  {
+    name: 'resolve_ui_note',
+    description:
+      '의견을 반영했다고 표시한다(지우지 않는다 — 무엇을 왜 고쳤는지가 이력으로 남아야 한다). 실제로 고친 뒤에만 넘긴다: 넘겨 놓고 안 고치면 사람은 반영된 줄 알고 다시 안 본다.',
+    inputSchema: {
+      id: z.string().describe('의견 id (list_ui_notes 로 확인)'),
+      resolved: z.boolean().optional().describe('기본 true. false 면 다시 열어 둔다')
+    },
+    handler: ({ id, resolved }) => {
+      setNoteResolved(String(id), resolved === undefined ? true : Boolean(resolved))
+      return { id: String(id), resolved: resolved === undefined ? true : Boolean(resolved) }
     }
   },
 

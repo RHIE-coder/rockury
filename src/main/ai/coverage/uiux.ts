@@ -23,13 +23,20 @@ export const uiuxCoverage: ServiceCoverage = {
     create_ui_node: ['uiux:createNode'],
     set_ui_surface: ['uiux:saveSurface'],
     // 이 서비스의 핵심 — 판정은 에이전트가 하고 앱은 받아 적는다(§8).
-    set_ui_surface_status: ['uiux:setSurfaceStatus']
+    set_ui_surface_status: ['uiux:setSurfaceStatus'],
+    // ── 의견(핀) — 사람이 화면에 남긴 요청을 에이전트가 읽고, 반영한 뒤 해결로 넘긴다 ──
+    list_ui_notes: ['uiux:listNotes'],
+    resolve_ui_note: ['uiux:setNoteResolved']
   },
   excluded: {
     // 이름·주소 고치기는 주소를 흔든다 — 흐름·규칙·의견이 전부 그 주소에 걸려 있어, 에이전트가
     // 무심코 바꾸면 가리키던 것들이 조용히 끊긴다. 사람이 앱에서 뜻을 알고 바꾼다.
     'uiux:updateNode': '주소를 흔드는 조작 — 흐름·규칙·의견이 그 주소에 걸려 있어 사람이 앱에서만',
     // 파괴적 조작은 DB 서비스와 같은 규율로 사람이 앱에서만 한다(연쇄 삭제라 되돌릴 수 없다).
-    'uiux:deleteNode': '연쇄 삭제 — 파괴적 조작은 사람이 앱에서만'
+    'uiux:deleteNode': '연쇄 삭제 — 파괴적 조작은 사람이 앱에서만',
+    // 의견은 사람이 에이전트에게 보내는 요청이다 — 에이전트가 스스로 만들면 방향이 뒤집힌다.
+    // (반영 결과는 상태 칸(set_ui_surface_status)의 근거로 적는다.)
+    'uiux:createNote': '의견은 사람 → 에이전트 방향의 요청 — 에이전트가 스스로 만들지 않는다',
+    'uiux:deleteNote': '지우기 — 무엇을 왜 고쳤는지가 이력으로 남아야 해서 사람이 앱에서만'
   }
 }

@@ -15,6 +15,7 @@ export type SpecApplicationRow = SpecTree['applications'][number]
 export type SpecServiceRow = SpecTree['services'][number]
 export type SpecSurfaceRow = SpecTree['surfaces'][number]
 export type SpecLevel = Parameters<Api['createNode']>[0]
+export type SpecNoteRow = Awaited<ReturnType<Api['listNotes']>>[number]
 
 /**
  * UI/UX 설계 상태 — 명세 정본 `docs/spec/uiux-ia.md` §7.
@@ -41,6 +42,9 @@ export interface SpecState {
   content: SurfaceContent | null
   /** 화면 안에서 고른 조각(섹션 또는 컴포넌트) id. */
   selectedNodeId: string | null
+
+  /** 고른 화면에 달린 의견(핀). 화면을 바꾸면 함께 다시 읽는다. */
+  notes: SpecNoteRow[]
 
   /** 마지막 오류 — 저장소가 거절한 이유를 그대로 보인다(주소 중복 등). */
   error: string | null
@@ -78,6 +82,11 @@ export interface SpecState {
 
   /** 화면 내용 편집 — `tree.ts` 순수 함수를 넘겨 부른다. 먼저 반영하고 저장한다. */
   editContent: (fn: (content: SurfaceContent) => SurfaceContent) => Promise<void>
+
+  loadNotes: (surfaceId: string | null) => Promise<void>
+  addNote: (target: string, body: string) => Promise<void>
+  toggleNote: (id: string, resolved: boolean) => Promise<void>
+  removeNote: (id: string) => Promise<void>
 }
 
 const EMPTY_TREE: SpecTree = { applications: [], services: [], surfaces: [] }
@@ -95,6 +104,7 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
   selectedSurfaceId: null,
   content: null,
   selectedNodeId: null,
+  notes: [],
   error: null,
   dialog: null,
 
@@ -127,15 +137,17 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
 
   selectSurface: (surfaceId) => {
     if (!surfaceId) {
-      set({ selectedSurfaceId: null, content: null, selectedNodeId: null })
+      set({ selectedSurfaceId: null, content: null, selectedNodeId: null, notes: [] })
       return
     }
     const row = get().tree?.surfaces.find((s) => s.id === surfaceId)
     set({
       selectedSurfaceId: surfaceId,
       content: row ? parseContent(row.content) : null,
-      selectedNodeId: null
+      selectedNodeId: null,
+      notes: []
     })
+    void get().loadNotes(surfaceId)
   },
 
   selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
@@ -184,6 +196,47 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
         if (get().selectedSurfaceId === id) get().selectSurface(null)
         await get().loadTree(activeProjectId())
       }
+    } catch (e) {
+      set({ error: message(e) })
+    }
+  },
+
+  loadNotes: async (surfaceId) => {
+    if (!surfaceId) {
+      set({ notes: [] })
+      return
+    }
+    try {
+      set({ notes: await window.rockury.uiux.listNotes(surfaceId) })
+    } catch (e) {
+      set({ error: message(e) })
+    }
+  },
+
+  addNote: async (target, body) => {
+    const surfaceId = get().selectedSurfaceId
+    if (!surfaceId || !body.trim()) return
+    try {
+      await window.rockury.uiux.createNote({ surfaceId, target, body })
+      await get().loadNotes(surfaceId)
+    } catch (e) {
+      set({ error: message(e) })
+    }
+  },
+
+  toggleNote: async (id, resolved) => {
+    try {
+      await window.rockury.uiux.setNoteResolved(id, resolved)
+      await get().loadNotes(get().selectedSurfaceId)
+    } catch (e) {
+      set({ error: message(e) })
+    }
+  },
+
+  removeNote: async (id) => {
+    try {
+      await window.rockury.uiux.deleteNote(id)
+      await get().loadNotes(get().selectedSurfaceId)
     } catch (e) {
       set({ error: message(e) })
     }

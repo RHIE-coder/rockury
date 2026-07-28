@@ -5,7 +5,7 @@
 export const meta = {
   name: '13-uiux-spec',
   needsDb: false,
-  desc: 'UI/UX — 위계·구조 편집 · 미리보기 · 끌어놓기 · MCP 읽기/상태 기록 · 능력 인덱스'
+  desc: 'UI/UX — 위계·구조 편집 · 미리보기 · 끌어놓기 · 의견(핀) · MCP 한 바퀴 · 능력 인덱스'
 }
 
 /**
@@ -190,6 +190,25 @@ export async function run(ctx) {
   await page.waitForTimeout(300)
   check('Spec: 요소를 지우면 그것만 사라진다', (await page.locator('[data-spec-component]').count()) === 1)
 
+  // ── Review — 화면 위 요소에 의견을 남긴다 (스크린샷 + 화살표를 대신하는 자리) ──
+  await click('[data-nav-view="review"]')
+  await page.waitForSelector('[data-uiux-review]', { timeout: 5_000 })
+  await page.waitForTimeout(400)
+  check('Review: 고른 화면이 미리보기로 뜬다', (await page.locator('[data-uiux-review] input').count()) === 1)
+
+  // 요소를 눌러 고른 뒤 그 요소에 의견을 남긴다.
+  {
+    const box = await page.locator('[data-uiux-node="input"]').boundingBox()
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    await page.waitForTimeout(250)
+    check('Review: 요소를 고르면 어디에 남기는지 알려준다', (await body()).includes('에 남깁니다'))
+    await page.fill('[data-uiux-note-input]', '이 입력칸 라벨을 "이메일 주소"로 바꿔 주세요')
+    await click('button:text-is("남기기")')
+    await page.waitForSelector('[data-uiux-note]', { timeout: 5_000 })
+    check('Review: 의견이 목록에 쌓인다', (await page.locator('[data-uiux-note]').count()) === 1)
+    check('Review: 의견이 붙은 요소를 미리보기에 표시한다', (await page.locator('[data-uiux-node="input"]').evaluate((el) => getComputedStyle(el).outlineStyle)) === 'dashed')
+  }
+
   // ── MCP — 에이전트가 읽고 확인 결과를 되돌려 적는다 (이 서비스의 목적, §8) ──
   // 사람이 만들고 → 에이전트가 읽고 판정하고 → 앱이 보여주는 한 바퀴를 통째로 확인한다.
   const mcp = await page.evaluate(async () => {
@@ -227,7 +246,10 @@ export async function run(ctx) {
       5
     )
     const missing = await call('get_ui_surface', { address: 'coupang.없는.주소.임' }, 6)
-    return { names, tree, surface, wrote, missing }
+    const notes = JSON.parse((await call('list_ui_notes', { project: 'coupang' }, 7)).content[0].text)
+    const resolved = await call('resolve_ui_note', { id: notes[0]?.id }, 8)
+    const afterResolve = JSON.parse((await call('list_ui_notes', { project: 'coupang' }, 9)).content[0].text)
+    return { names, tree, surface, wrote, missing, notes, resolved, afterResolve }
   })
 
   check(
@@ -247,6 +269,12 @@ export async function run(ctx) {
     'MCP: 없는 주소는 프로토콜 오류가 아니라 안내로 돌려준다',
     mcp.missing?.isError === true && mcp.missing.content[0].text.includes('get_ui_tree')
   )
+
+  check(
+    'MCP: 사람이 남긴 의견을 에이전트가 읽는다 (좌표가 아니라 요소에 붙어 온다)',
+    mcp.notes.length === 1 && mcp.notes[0].target === 'input' && mcp.notes[0].body.includes('이메일 주소')
+  )
+  check('MCP: 반영한 의견을 해결로 넘긴다', mcp.resolved?.isError !== true && mcp.afterResolve.length === 0)
 
   // ── Features — 에이전트가 적은 것이 능력 인덱스에 나타난다 (한 바퀴 완성) ──
   await click('[data-nav-module="features"]')

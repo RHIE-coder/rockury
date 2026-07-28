@@ -1,10 +1,14 @@
 import { ipcMain } from 'electron'
 import {
   createNode,
+  createNote,
   deleteNode,
+  deleteNote,
   getTree,
+  listNotes,
   listProjects,
   saveSurfaceContent,
+  setNoteResolved,
   setSurfaceStatus,
   updateNode,
   type NodeInput,
@@ -36,4 +40,13 @@ export function registerUiuxSpecsIpc(): void {
   ipcMain.handle('uiux:setSurfaceStatus', (_e, id: string, status: string, by: string, note: string) =>
     setSurfaceStatus(id, status, by, note)
   )
+
+  // 의견(핀) — 화면 위 요소에 붙는 메모. 스크린샷에 화살표를 그려 보내던 일을 대신한다.
+  ipcMain.handle('uiux:listNotes', (_e, surfaceId: string) => listNotes(surfaceId))
+  ipcMain.handle(
+    'uiux:createNote',
+    (_e, input: { surfaceId: string; target?: string; body: string; author?: string }) => createNote(input)
+  )
+  ipcMain.handle('uiux:setNoteResolved', (_e, id: string, resolved: boolean) => setNoteResolved(id, resolved))
+  ipcMain.handle('uiux:deleteNote', (_e, id: string) => deleteNote(id))
 }

@@ -27,6 +27,9 @@ export interface RenderOptions {
   selectedId?: string | null
   /** 끌고 있는 요소 — 흐리게 해 "지금 이걸 옮기는 중"을 보인다. */
   draggingId?: string | null
+  /** 의견(핀)이 달린 요소 — 점선으로 표시한다. **개수·내용은 옆 목록에서 본다** — 미리보기 위에
+   *  말풍선을 띄우면 화면이 가려져 무엇을 고치라는 건지 되레 안 보인다. */
+  pinnedIds?: string[]
 }
 
 /** 조각을 마크업과 스타일로 가른다. `<style>` 이 없으면 스타일은 빈 문자열. */
@@ -110,7 +113,13 @@ export function renderSurface(content: SurfaceContent, options: RenderOptions = 
       : '',
     options.draggingId
       ? `[data-uiux-node="${cssQuote(options.draggingId)}"]{opacity:0.4}`
-      : ''
+      : '',
+    (options.pinnedIds ?? [])
+      .map(
+        (id) =>
+          `[data-uiux-node="${cssQuote(id)}"]{outline:2px dashed var(--t-color-danger);outline-offset:2px}`
+      )
+      .join('\n')
   ].join('\n')
 
   return {

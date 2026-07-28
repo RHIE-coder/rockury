@@ -48,6 +48,9 @@ const CanvasWorkspace = withSuspense(() =>
 const FeaturesWorkspace = withSuspense(() =>
   import('./screens/FeaturesWorkspace').then((m) => ({ default: m.FeaturesWorkspace }))
 )
+const ReviewWorkspace = withSuspense(() =>
+  import('./screens/ReviewWorkspace').then((m) => ({ default: m.ReviewWorkspace }))
+)
 const NodeDialog = withSuspense(() =>
   import('./screens/NodeDialog').then((m) => ({ default: m.NodeDialog }))
 )
@@ -141,17 +144,7 @@ export const uiuxService: Service = {
       views: [
         { id: 'canvas', label: 'Canvas', icon: PenTool, workspace: CanvasWorkspace },
         { id: 'spec', label: 'Spec', icon: ListTree, workspace: SpecWorkspace },
-        {
-          id: 'review',
-          label: 'Review',
-          icon: MessageSquare,
-          workspace: view(
-            MessageSquare,
-            'depth 3 · Screens › Review',
-            'Review',
-            '화면 위에 찍은 핀 코멘트를 모아 본다 — 스크린샷 대신 화면 요소에 직접 붙는 의견.'
-          )
-        }
+        { id: 'review', label: 'Review', icon: MessageSquare, workspace: ReviewWorkspace }
       ]
     },
     {

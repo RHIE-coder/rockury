@@ -211,6 +211,10 @@ export function deleteNode(level: SpecLevel, id: string): void {
 function deleteSubtree(level: SpecLevel, ids: string[]): void {
   if (ids.length === 0) return
   const d = getDb()
+  // 화면에 붙은 의견도 함께 지운다 — 화면이 사라지면 그 의견은 가리킬 곳이 없어 유령이 된다.
+  if (level === 'surface') {
+    d.prepare(`DELETE FROM uiux_notes WHERE surface_id IN (${ids.map(() => '?').join(',')})`).run(...ids)
+  }
   const child = CHILD[level]
   if (child) {
     const ct = TABLE[child]
@@ -303,6 +307,70 @@ export function setSurfaceStatus(
       'UPDATE uiux_surfaces SET status = ?, checked_at = ?, checked_by = ?, checked_note = ? WHERE id = ?'
     )
     .run(status, new Date().toISOString(), by, note, id)
+}
+
+// ── 의견(핀) ────────────────────────────────────────────────────────
+
+export interface SpecNoteRow {
+  id: string
+  surface_id: string
+  /** 요소 id. 빈 값이면 화면 전체에 붙은 의견. */
+  target: string
+  body: string
+  author: string
+  resolved: number
+  created_at: string
+}
+
+/** 화면 하나의 의견. 미해결이 먼저, 그 안에서는 오래된 것부터(대화 순서). */
+export function listNotes(surfaceId: string): SpecNoteRow[] {
+  return getDb()
+    .prepare(
+      `SELECT id, surface_id, target, body, author, resolved, created_at FROM uiux_notes
+       WHERE surface_id = ? ORDER BY resolved ASC, created_at ASC`
+    )
+    .all(surfaceId) as unknown as SpecNoteRow[]
+}
+
+/** 프로젝트 전체의 **미해결** 의견 — 에이전트가 "지금 무엇을 고쳐야 하나"를 한 번에 받는다. */
+export function listOpenNotes(projectId: string): (SpecNoteRow & { surface_key: string })[] {
+  return getDb()
+    .prepare(
+      `SELECT n.id, n.surface_id, n.target, n.body, n.author, n.resolved, n.created_at, s.key AS surface_key
+       FROM uiux_notes n
+       JOIN uiux_surfaces s ON s.id = n.surface_id
+       JOIN uiux_services sv ON sv.id = s.service_id
+       JOIN uiux_applications a ON a.id = sv.application_id
+       WHERE a.project_id = ? AND n.resolved = 0
+       ORDER BY n.created_at ASC`
+    )
+    .all(projectId) as unknown as (SpecNoteRow & { surface_key: string })[]
+}
+
+export function createNote(input: {
+  surfaceId: string
+  target?: string
+  body: string
+  author?: string
+}): { id: string } {
+  const body = input.body.trim()
+  if (!body) throw new Error('빈 의견은 남길 수 없습니다.')
+  const id = randomUUID()
+  getDb()
+    .prepare(
+      'INSERT INTO uiux_notes (id, surface_id, target, body, author, resolved, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
+    )
+    .run(id, input.surfaceId, input.target ?? '', body, input.author ?? '', new Date().toISOString())
+  return { id }
+}
+
+/** 해결/미해결 토글. 지우지 않고 표시만 바꾸는 이유: 무엇을 왜 고쳤는지가 이력으로 남아야 한다. */
+export function setNoteResolved(id: string, resolved: boolean): void {
+  getDb().prepare('UPDATE uiux_notes SET resolved = ? WHERE id = ?').run(resolved ? 1 : 0, id)
+}
+
+export function deleteNote(id: string): void {
+  getDb().prepare('DELETE FROM uiux_notes WHERE id = ?').run(id)
 }
 
 function assertKey(key: string): void {

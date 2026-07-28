@@ -14,7 +14,14 @@ import type { ServiceMigration } from './types'
  */
 export const uiuxMigration: ServiceMigration = {
   service: 'uiux',
-  tables: ['uiux_projects', 'uiux_applications', 'uiux_services', 'uiux_surfaces', 'uiux_versions'],
+  tables: [
+    'uiux_projects',
+    'uiux_applications',
+    'uiux_services',
+    'uiux_surfaces',
+    'uiux_versions',
+    'uiux_notes'
+  ],
 
   schema: `
     CREATE TABLE IF NOT EXISTS uiux_projects (
@@ -65,6 +72,20 @@ export const uiuxMigration: ServiceMigration = {
       updated_at   TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_uiux_surfaces_key ON uiux_surfaces(service_id, key);
+
+    -- 화면 위에 남기는 의견(핀). target 은 **요소 id**(빈 값이면 화면 전체)다 — 좌표를 쓰지 않는
+    -- 이유는 배치가 바뀌면 좌표가 떠내려가기 때문. 요소에 붙으면 화면이 어떻게 접히든 따라간다.
+    -- 스크린샷에 화살표를 그려 보내던 일을 대신하는 자리다.
+    CREATE TABLE IF NOT EXISTS uiux_notes (
+      id         TEXT PRIMARY KEY,
+      surface_id TEXT NOT NULL,
+      target     TEXT NOT NULL DEFAULT '',
+      body       TEXT NOT NULL,
+      author     TEXT NOT NULL DEFAULT '',
+      resolved   INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_uiux_notes_surface ON uiux_notes(surface_id);
 
     CREATE TABLE IF NOT EXISTS uiux_versions (
       id         TEXT PRIMARY KEY,

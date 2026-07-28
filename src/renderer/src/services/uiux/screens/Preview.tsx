@@ -18,6 +18,8 @@ export interface PreviewProps {
   content: SurfaceContent
   viewport: Viewport
   selectedId?: string | null
+  /** 의견이 달린 요소 — 점선으로 표시한다. */
+  pinnedIds?: string[]
   /** 요소를 누르면 부른다. 없으면 고르기가 없는 읽기 전용. */
   onSelect?: (id: string | null) => void
   /** 끌어 옮기면 부른다. 없으면 드래그가 아예 시작되지 않는다. */
@@ -55,7 +57,7 @@ function measure(shadow: ShadowRoot): Measured {
   return { sections, nodes }
 }
 
-export function Preview({ content, viewport, selectedId, onSelect, onMove }: PreviewProps) {
+export function Preview({ content, viewport, selectedId, pinnedIds, onSelect, onMove }: PreviewProps) {
   const holderRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const shadowRef = useRef<ShadowRoot | null>(null)
@@ -74,9 +76,10 @@ export function Preview({ content, viewport, selectedId, onSelect, onMove }: Pre
     if (!host) return
     // 그림자 뿌리는 한 번만 만든다 — 두 번 부르면 던진다(개발 모드의 이중 실행 대비).
     if (!shadowRef.current) shadowRef.current = host.attachShadow({ mode: 'open' })
-    const { html, css } = renderSurface(content, { selectedId, draggingId: dragging })
+    const { html, css } = renderSurface(content, { selectedId, draggingId: dragging, pinnedIds })
     shadowRef.current.innerHTML = `<style>${css}</style>${html}`
-  }, [content, selectedId, dragging])
+    // pinnedIds 는 배열이라 참조가 매번 바뀔 수 있어 내용으로 비교한다(불필요한 재렌더 방지).
+  }, [content, selectedId, dragging, (pinnedIds ?? []).join(',')])
 
   // 자리 폭에 맞춰 줄인다. 키우지는 않는다(1배가 실제 크기라 그보다 크게 보이면 눈이 속는다).
   useLayoutEffect(() => {
