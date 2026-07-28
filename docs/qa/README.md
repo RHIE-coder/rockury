@@ -1,7 +1,7 @@
 # docs/qa — 테스트 정의 정본 (steward)
 
 steward `spec` 단계가 관리하는 **테스트 정의**가 자라는 곳이다
-(위계: TestPlan > TestScenario > TestSuite > TestCase). 지금은 비어 있고,
+(위계: TestPlan > TestScenario > TestSuite > TestCase).
 새/변경 동작을 다룰 때 점진적으로 채워진다.
 
 - **정의(무엇을 검증하나)**는 여기.

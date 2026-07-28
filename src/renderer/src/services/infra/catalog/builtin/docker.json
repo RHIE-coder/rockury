@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026.07.1",
+  "provider": { "id": "docker", "label": "Docker (로컬)" },
+  "nodeTypes": [
+    {
+      "id": "docker.network",
+      "label": "도커 네트워크",
+      "icon": "phosphor:network",
+      "color": "#2563eb",
+      "canContain": ["docker.container"],
+      "docTemplate": { "role": "이 네트워크로 묶이는 것들" },
+      "discover": {
+        "call": { "type": "cli", "cmd": "docker", "args": ["network", "ls", "--format", "{{json .}}"] },
+        "format": "ndjson",
+        "list": "[]",
+        "map": { "externalId": "ID", "name": "Name" }
+      }
+    },
+    {
+      "id": "docker.container",
+      "label": "컨테이너",
+      "icon": "phosphor:cube",
+      "color": "#0891b2",
+      "canNestIn": ["docker.network"],
+      "canLinkTo": ["docker.container", "docker.volume"],
+      "docTemplate": {
+        "role": "",
+        "impact": "이 컨테이너가 멈추면 무엇이 끊기나",
+        "beforeTouch": "재시작 전 확인할 것"
+      },
+      "compareFields": ["status"],
+      "discover": {
+        "call": { "type": "cli", "cmd": "docker", "args": ["ps", "--all", "--format", "{{json .}}"] },
+        "format": "ndjson",
+        "list": "[]",
+        "map": { "externalId": "ID", "name": "Names", "status": "State" },
+        "statusMap": {
+          "running": "ok",
+          "restarting": "warn",
+          "paused": "warn",
+          "created": "stopped",
+          "exited": "stopped",
+          "removing": "gone",
+          "dead": "gone"
+        }
+      }
+    },
+    {
+      "id": "docker.image",
+      "label": "이미지",
+      "icon": "phosphor:package",
+      "color": "#16a34a",
+      "discover": {
+        "call": { "type": "cli", "cmd": "docker", "args": ["images", "--format", "{{json .}}"] },
+        "format": "ndjson",
+        "list": "[]",
+        "map": { "externalId": "ID", "name": "Repository" }
+      }
+    },
+    {
+      "id": "docker.volume",
+      "label": "볼륨",
+      "icon": "phosphor:database",
+      "color": "#7c3aed",
+      "discover": {
+        "call": { "type": "cli", "cmd": "docker", "args": ["volume", "ls", "--format", "{{json .}}"] },
+        "format": "ndjson",
+        "list": "[]",
+        "map": { "externalId": "Name", "name": "Name" }
+      }
+    }
+  ]
+}

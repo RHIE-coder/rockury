@@ -56,11 +56,32 @@ function tableNames(d: DatabaseSync): string[] {
 }
 
 describe('서비스별 마이그레이션 분할', () => {
+  /**
+   * 분할 전 테이블이 **하나도 빠지지 않았는지** 본다.
+   * 서비스가 자기 테이블을 새로 더하는 것은 정상이므로 정확히 같음이 아니라 포함으로 본다 —
+   * 이 검사의 목적은 "늘었나"가 아니라 "사용자 데이터가 갈 곳을 잃었나"다.
+   */
+  function expectNoTableLost(d: DatabaseSync): void {
+    const actual = new Set(tableNames(d))
+    for (const t of TABLES_BEFORE_SPLIT) expect(actual.has(t), `테이블 '${t}' 가 사라졌다`).toBe(true)
+  }
+
   it('CASE-pdev-020 모든 서비스 마이그레이션을 적용하면 분할 전 테이블이 전수 생성된다', () => {
     const d = new DatabaseSync(tempDbFile())
     applyMigrations(d)
-    expect(tableNames(d)).toEqual(expect.arrayContaining(TABLES_BEFORE_SPLIT))
+    expectNoTableLost(d)
     d.close()
+  })
+
+  it('서비스가 더한 테이블은 전부 자기 서비스 접두어를 쓴다 (네임스페이스 규칙)', () => {
+    // 접두어가 없으면 두 서비스가 같은 이름을 고를 확률이 생기고, 그 충돌은 앱이 안 켜지는 것으로 나타난다.
+    const before = new Set(TABLES_BEFORE_SPLIT)
+    for (const m of MIGRATIONS) {
+      for (const t of m.tables) {
+        if (before.has(t)) continue // 분할 전부터 있던 이름은 레거시 예외
+        expect(t.startsWith(`${m.service}_`), `'${t}' 는 '${m.service}_' 로 시작해야 한다`).toBe(true)
+      }
+    }
   })
 
   it('CASE-pdev-021 이미 쓰던 DB 를 다시 열어도 데이터가 보존된다 (사용자 로컬 무손상)', () => {
@@ -80,7 +101,7 @@ describe('서비스별 마이그레이션 분할', () => {
       name: string
     }[]
     expect(rows).toEqual([{ id: 'keep-me', name: '보존 확인' }])
-    expect(tableNames(second)).toEqual(expect.arrayContaining(TABLES_BEFORE_SPLIT))
+    expectNoTableLost(second)
     second.close()
   })
 

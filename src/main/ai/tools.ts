@@ -9,6 +9,8 @@ import { formatVersion, nextVersion, parseVersion } from '../../shared/versionNu
 import { applyOperations, assertTablesConsistent, patchOpSchema } from './patch'
 import { UIUX_TOOL_DEFS } from './uiuxTools'
 import { assertCleanText } from './textGuard'
+// 서비스별 도구는 자기 파일에 산다 — 여기서는 이어 붙이기만 한다(공용 파일 편집 최소화).
+import { infraToolDefs } from './tools/infra'
 
 /**
  * MCP 도구 정의 — AI 에이전트에게 노출되는 Rockury 능력의 단일 목록.
@@ -395,9 +397,11 @@ export const TOOL_DEFS: ToolDef[] = [
   }
 ]
 
-// 서비스별 도구는 자기 파일에서 정의해 여기서 펼친다 — 다섯 서비스가 한 배열에 줄을 더하면
-// 매번 충돌한다(coverage 도 같은 이유로 서비스별 파일이다).
+// 서비스별 도구는 **자기 파일**에서 정의해 여기서 펼친다 — 다섯 서비스가 한 배열에 줄을 더하면
+// 매번 충돌한다(coverage·migrations·preload 도 같은 이유로 서비스별 파일이다).
+// 새 서비스는 자기 `tools/<서비스>.ts` 를 만들고 여기 한 줄만 더한다.
 TOOL_DEFS.push(...UIUX_TOOL_DEFS)
+TOOL_DEFS.push(...(infraToolDefs as ToolDef[]))
 
 export const TOOL_NAMES = TOOL_DEFS.map((t) => t.name)
 

@@ -1,7 +1,7 @@
 # docs/spec — 살아있는 기획 정본 (steward)
 
 steward `spec` 단계가 관리하는 **정책·화면 명세 정본 트리**가 자라는 곳이다
-(위계: Application > Service > Surface > Section > Component). 지금은 비어 있고,
+(위계: Application > Service > Surface > Section > Component).
 **기능을 `spec` 단계로 다룰 때 그 부분부터 점진적으로 채워진다** — 한 번에 대이동하지 않는다.
 
 ## 흡수 원칙 (원문 보존 · 점진 링크)

@@ -116,8 +116,11 @@ const METHODS_BEFORE_SPLIT: Record<string, string[]> = {
 describe('preload 서비스 분할', () => {
   const api = assembleApi()
 
-  it('CASE-pdev-030 조립된 표면에 분할 전 최상위 키가 전부 있다', () => {
-    expect(Object.keys(api).sort()).toEqual(expect.arrayContaining(KEYS_BEFORE_SPLIT))
+  it('CASE-pdev-030 분할 전 최상위 키가 하나도 빠지지 않았다', () => {
+    // 분할이 무엇을 **잃지 않았는지**를 본다. 서비스가 새 창구를 여는 것은 정상이므로
+    // 정확히 같음이 아니라 포함으로 본다(안 그러면 서비스가 자랄 때마다 이 목록을 손봐야 한다).
+    const keys = new Set(Object.keys(api))
+    for (const k of KEYS_BEFORE_SPLIT) expect(keys.has(k), `창구 '${k}' 가 사라졌다`).toBe(true)
   })
 
   it('CASE-pdev-031 각 그룹의 함수 이름이 분할 전과 같다 — 조용히 빠진 메서드 0', () => {
@@ -157,11 +160,28 @@ describe('preload 서비스 분할', () => {
   })
 
   it('빈 서비스는 표면에 아무 키도 더하지 않는다 (window.rockury 오염 금지)', () => {
-    // uiux 는 2026-07-28 설계 저장소 창구를 열어 목록에서 빠졌다. 아직 빈 자리인 서비스만 남긴다.
+    // 아직 메인 프로세스 능력이 없는 서비스만 남긴다. 창구를 열면 이 목록에서 빼고,
+    // 위 CASE-pdev-031 처럼 자기 함수 목록을 지키는 검사를 대신 더한다.
+    // (uiux 는 2026-07-28 설계 저장소 창구를, infra 는 M1 에서 각각 열었다.)
     for (const s of SERVICE_APIS) {
-      if (['api', 'infra'].includes(s.service)) {
+      if (['api'].includes(s.service)) {
         expect(Object.keys(s.api), `${s.service} 는 아직 창구가 없어야 한다`).toEqual([])
       }
+    }
+  })
+
+  it('infra 창구는 최상위 키 하나(`infra`)만 차지한다 — 표면 오염 없이 자란다', () => {
+    const infra = SERVICE_APIS.find((s) => s.service === 'infra')
+    expect(Object.keys(infra?.api ?? {})).toEqual(['infra'])
+    for (const [name, fn] of Object.entries((api.infra ?? {}) as Record<string, unknown>)) {
+      expect(typeof fn, `infra.${name} 이 함수가 아니다`).toBe('function')
+    }
+  })
+
+  it('자격증명을 렌더러로 되돌려 주는 창구가 없다 (평문이 화면으로 새는 길 차단)', () => {
+    const names = Object.keys((api.infra ?? {}) as Record<string, unknown>)
+    for (const n of names) {
+      expect(n, `의심스러운 창구 이름: infra.${n}`).not.toMatch(/reveal|getCred|readCred|password/i)
     }
   })
 })

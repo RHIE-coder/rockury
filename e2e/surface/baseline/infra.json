@@ -1,44 +1,114 @@
 [
   {
     "check": "contrast",
-    "formFactor": "infra/overview",
+    "formFactor": "infra/design/diagram",
     "role": "text",
-    "text": "depth 2 · Infra › Overview",
+    "text": "운영",
     "bounds": {
-      "x": 762.09375,
-      "y": 533.4375,
-      "w": 163.8125,
-      "h": 20.5
+      "x": 187.859375,
+      "y": 50.25,
+      "w": 30.90625,
+      "h": 19
     },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
     "severity": "block"
   },
   {
     "check": "contrast",
-    "formFactor": "infra/containers",
+    "formFactor": "infra/design/document",
     "role": "text",
-    "text": "depth 2 · Infra › Containers",
+    "text": "운영",
     "bounds": {
-      "x": 757.671875,
-      "y": 533.4375,
-      "w": 172.6484375,
-      "h": 20.5
+      "x": 187.859375,
+      "y": 50.25,
+      "w": 30.90625,
+      "h": 19
     },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
     "severity": "block"
   },
   {
     "check": "contrast",
-    "formFactor": "infra/cloud",
+    "formFactor": "infra/live/map",
     "role": "text",
-    "text": "depth 2 · Infra › Cloud",
+    "text": "운영",
     "bounds": {
-      "x": 771.8125,
-      "y": 533.4375,
-      "w": 144.375,
-      "h": 20.5
+      "x": 187.859375,
+      "y": 50.25,
+      "w": 30.90625,
+      "h": 19
     },
-    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "infra/live/reconcile",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 187.859375,
+      "y": 50.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "infra/catalog/catalogs",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 187.859375,
+      "y": 50.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "infra/catalog/providers",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 187.859375,
+      "y": 50.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "infra/catalog/types",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 187.859375,
+      "y": 50.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "infra/catalog/probe",
+    "role": "text",
+    "text": "운영",
+    "bounds": {
+      "x": 187.859375,
+      "y": 50.25,
+      "w": 30.90625,
+      "h": 19
+    },
+    "detail": "대비 3.73 < 4.5 (fg 176,97,63 / bg 246,230,221)",
     "severity": "block"
   }
 ]

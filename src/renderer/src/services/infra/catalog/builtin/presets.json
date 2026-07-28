@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026.07.1",
+  "provider": { "id": "preset", "label": "프리셋" },
+  "nodeTypes": [
+    {
+      "id": "preset.grafana",
+      "label": "Grafana",
+      "icon": "phosphor:chart-line",
+      "color": "#f59e0b",
+      "docTemplate": { "role": "지표 대시보드", "deps": "프로메테우스 등 데이터 소스" }
+    },
+    {
+      "id": "preset.prometheus",
+      "label": "Prometheus",
+      "icon": "phosphor:flame",
+      "color": "#e11d48",
+      "docTemplate": { "role": "지표 수집·저장", "impact": "멈추면 경보가 안 울린다" }
+    },
+    {
+      "id": "preset.loki",
+      "label": "Loki",
+      "icon": "phosphor:files",
+      "color": "#0891b2",
+      "docTemplate": { "role": "로그 수집·저장" }
+    },
+    {
+      "id": "preset.jaeger",
+      "label": "Jaeger",
+      "icon": "phosphor:path",
+      "color": "#7c3aed",
+      "docTemplate": { "role": "분산 추적" }
+    },
+
+    {
+      "id": "preset.redis",
+      "label": "Redis",
+      "icon": "phosphor:lightning",
+      "color": "#dc2626",
+      "docTemplate": {
+        "role": "캐시 또는 세션 저장소",
+        "impact": "비면 원본 저장소로 부하가 몰린다",
+        "beforeTouch": "비우기 전 어떤 키가 원본 없이 존재하는지 확인"
+      }
+    },
+    {
+      "id": "preset.kafka",
+      "label": "Kafka",
+      "icon": "phosphor:queue",
+      "color": "#171717",
+      "docTemplate": { "role": "이벤트 스트림", "impact": "멈추면 소비자들이 밀린다" }
+    },
+    {
+      "id": "preset.rabbitmq",
+      "label": "RabbitMQ",
+      "icon": "phosphor:broadcast",
+      "color": "#ea580c",
+      "docTemplate": { "role": "작업 큐" }
+    },
+    {
+      "id": "preset.mqtt",
+      "label": "MQTT 브로커",
+      "icon": "phosphor:wifi-high",
+      "color": "#16a34a",
+      "docTemplate": { "role": "기기 메시지 브로커" }
+    },
+
+    {
+      "id": "preset.nginx",
+      "label": "Nginx",
+      "icon": "phosphor:funnel",
+      "color": "#16a34a",
+      "docTemplate": { "role": "리버스 프록시 / 정적 파일" }
+    },
+    {
+      "id": "preset.traefik",
+      "label": "Traefik",
+      "icon": "phosphor:signpost",
+      "color": "#0891b2",
+      "docTemplate": { "role": "동적 라우팅 게이트웨이" }
+    },
+    {
+      "id": "preset.kong",
+      "label": "Kong",
+      "icon": "phosphor:shield-check",
+      "color": "#2563eb",
+      "docTemplate": { "role": "API 게이트웨이" }
+    },
+
+    {
+      "id": "preset.docker",
+      "canContain": ["*"],
+      "label": "Docker 호스트",
+      "icon": "phosphor:cube",
+      "color": "#2563eb",
+      "docTemplate": { "role": "컨테이너 실행 호스트" }
+    },
+    {
+      "id": "preset.kubernetes",
+      "canContain": ["*"],
+      "label": "Kubernetes",
+      "icon": "phosphor:tree-structure",
+      "color": "#2563eb",
+      "docTemplate": { "role": "컨테이너 오케스트레이션" }
+    },
+    {
+      "id": "preset.pm2",
+      "label": "PM2",
+      "icon": "phosphor:gear-six",
+      "color": "#16a34a",
+      "docTemplate": { "role": "Node 프로세스 관리자" }
+    },
+
+    {
+      "id": "preset.github-actions",
+      "label": "GitHub Actions",
+      "icon": "phosphor:git-branch",
+      "color": "#171717",
+      "docTemplate": { "role": "CI/CD 파이프라인" }
+    },
+    {
+      "id": "preset.jenkins",
+      "label": "Jenkins",
+      "icon": "phosphor:robot",
+      "color": "#dc2626",
+      "docTemplate": { "role": "CI 빌드 서버" }
+    },
+
+    {
+      "id": "preset.server",
+      "canContain": ["*"],
+      "label": "서버",
+      "icon": "phosphor:hard-drive",
+      "color": "#525252",
+      "docTemplate": { "role": "" }
+    },
+    {
+      "id": "preset.group",
+      "canContain": ["*"],
+      "label": "묶음 상자",
+      "icon": "phosphor:rectangle",
+      "color": "#525252",
+      "docTemplate": { "role": "이 상자가 무엇을 묶는가" }
+    },
+    {
+      "id": "preset.users",
+      "label": "사용자",
+      "icon": "phosphor:users",
+      "color": "#525252"
+    },
+    {
+      "id": "preset.internet",
+      "label": "인터넷",
+      "icon": "phosphor:globe",
+      "color": "#525252"
+    }
+  ]
+}

@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026.07.1",
+  "provider": { "id": "aws", "label": "AWS" },
+  "credentials": [
+    {
+      "id": "profile",
+      "label": "AWS 프로필",
+      "hint": "~/.aws/config 의 프로필 이름. 키를 여기 넣지 않고 이미 로그인한 프로필을 그대로 씁니다."
+    }
+  ],
+  "nodeTypes": [
+    {
+      "id": "aws.vpc",
+      "label": "VPC",
+      "icon": "phosphor:cloud",
+      "color": "#7c3aed",
+      "docTemplate": { "role": "이 VPC 가 담는 시스템의 경계" },
+      "compareFields": ["status"],
+      "discover": {
+        "call": {
+          "type": "cli",
+          "cmd": "aws",
+          "args": ["ec2", "describe-vpcs", "--profile", "{{cred.profile}}", "--output", "json"]
+        },
+        "list": "Vpcs[]",
+        "map": {
+          "externalId": "VpcId",
+          "name": "Tags[?Key=='Name'].Value | [0]",
+          "status": "State",
+          "designNodeRef": "Tags[?Key=='rockury:node'].Value | [0]"
+        },
+        "statusMap": { "available": "ok", "pending": "warn" }
+      }
+    },
+    {
+      "id": "aws.subnet",
+      "label": "서브넷",
+      "icon": "phosphor:rectangle",
+      "color": "#2563eb",
+      "canNestIn": ["aws.vpc"],
+      "compareFields": ["status", "parent"],
+      "discover": {
+        "call": {
+          "type": "cli",
+          "cmd": "aws",
+          "args": ["ec2", "describe-subnets", "--profile", "{{cred.profile}}", "--output", "json"]
+        },
+        "list": "Subnets[]",
+        "map": {
+          "externalId": "SubnetId",
+          "name": "Tags[?Key=='Name'].Value | [0]",
+          "status": "State",
+          "parentExternalId": "VpcId",
+          "designNodeRef": "Tags[?Key=='rockury:node'].Value | [0]"
+        },
+        "statusMap": { "available": "ok", "pending": "warn" }
+      }
+    },
+    {
+      "id": "aws.ec2",
+      "label": "EC2 인스턴스",
+      "icon": "phosphor:hard-drives",
+      "color": "#ea580c",
+      "canNestIn": ["aws.subnet"],
+      "canLinkTo": ["aws.rds", "aws.s3", "aws.lambda", "aws.alb"],
+      "docTemplate": {
+        "role": "",
+        "impact": "이 인스턴스가 멈추면 무엇이 끊기나",
+        "beforeTouch": "재시작 전 확인할 것"
+      },
+      "compareFields": ["status", "parent"],
+      "discover": {
+        "call": {
+          "type": "cli",
+          "cmd": "aws",
+          "args": [
+            "ec2",
+            "describe-instances",
+            "--profile",
+            "{{cred.profile}}",
+            "--output",
+            "json"
+          ]
+        },
+        "list": "Reservations[].Instances[]",
+        "map": {
+          "externalId": "InstanceId",
+          "name": "Tags[?Key=='Name'].Value | [0]",
+          "status": "State.Name",
+          "parentExternalId": "SubnetId",
+          "designNodeRef": "Tags[?Key=='rockury:node'].Value | [0]"
+        },
+        "statusMap": {
+          "running": "ok",
+          "pending": "warn",
+          "stopping": "warn",
+          "shutting-down": "warn",
+          "stopped": "stopped",
+          "terminated": "gone"
+        }
+      },
+      "actions": [
+        {
+          "id": "reboot",
+          "label": "재시작",
+          "danger": true,
+          "call": {
+            "type": "cli",
+            "cmd": "aws",
+            "args": [
+              "ec2",
+              "reboot-instances",
+              "--profile",
+              "{{cred.profile}}",
+              "--instance-ids",
+              "{{node.externalId}}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "aws.rds",
+      "label": "RDS 인스턴스",
+      "icon": "phosphor:database",
+      "color": "#0891b2",
+      "canNestIn": ["aws.vpc", "aws.subnet"],
+      "compareFields": ["status"],
+      "discover": {
+        "call": {
+          "type": "cli",
+          "cmd": "aws",
+          "args": [
+            "rds",
+            "describe-db-instances",
+            "--profile",
+            "{{cred.profile}}",
+            "--output",
+            "json"
+          ]
+        },
+        "list": "DBInstances[]",
+        "map": {
+          "externalId": "DBInstanceIdentifier",
+          "name": "DBInstanceIdentifier",
+          "status": "DBInstanceStatus",
+          "parentExternalId": "DBSubnetGroup.VpcId"
+        },
+        "statusMap": {
+          "available": "ok",
+          "creating": "warn",
+          "modifying": "warn",
+          "backing-up": "warn",
+          "stopped": "stopped",
+          "deleting": "gone",
+          "failed": "warn"
+        }
+      }
+    },
+    {
+      "id": "aws.alb",
+      "label": "로드밸런서",
+      "icon": "phosphor:network",
+      "color": "#9333ea",
+      "canNestIn": ["aws.vpc"],
+      "canLinkTo": ["aws.ec2", "aws.ecs"],
+      "compareFields": ["status"],
+      "discover": {
+        "call": {
+          "type": "cli",
+          "cmd": "aws",
+          "args": [
+            "elbv2",
+            "describe-load-balancers",
+            "--profile",
+            "{{cred.profile}}",
+            "--output",
+            "json"
+          ]
+        },
+        "list": "LoadBalancers[]",
+        "map": {
+          "externalId": "LoadBalancerArn",
+          "name": "LoadBalancerName",
+          "status": "State.Code",
+          "parentExternalId": "VpcId"
+        },
+        "statusMap": { "active": "ok", "provisioning": "warn", "failed": "warn" }
+      }
+    },
+    {
+      "id": "aws.lambda",
+      "label": "Lambda 함수",
+      "icon": "phosphor:lightning",
+      "color": "#f59e0b",
+      "canLinkTo": ["aws.rds", "aws.s3"],
+      "discover": {
+        "call": {
+          "type": "cli",
+          "cmd": "aws",
+          "args": ["lambda", "list-functions", "--profile", "{{cred.profile}}", "--output", "json"]
+        },
+        "list": "Functions[]",
+        "map": { "externalId": "FunctionArn", "name": "FunctionName" }
+      }
+    },
+    {
+      "id": "aws.s3",
+      "label": "S3 버킷",
+      "icon": "phosphor:package",
+      "color": "#16a34a",
+      "discover": {
+        "call": {
+          "type": "cli",
+          "cmd": "aws",
+          "args": ["s3api", "list-buckets", "--profile", "{{cred.profile}}", "--output", "json"]
+        },
+        "list": "Buckets[]",
+        "map": { "externalId": "Name", "name": "Name" }
+      }
+    },
+    {
+      "id": "aws.ecs",
+      "label": "ECS 서비스",
+      "icon": "phosphor:cube",
+      "color": "#dc2626",
+      "canNestIn": ["aws.vpc", "aws.subnet"],
+      "canLinkTo": ["aws.rds", "aws.s3"]
+    }
+  ]
+}
