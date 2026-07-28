@@ -1,13 +1,13 @@
 [
   {
     "check": "contrast",
-    "formFactor": "uiux/canvas",
+    "formFactor": "uiux/features",
     "role": "text",
-    "text": "depth 2 · UI/UX › Canvas",
+    "text": "depth 2 · UI/UX › Features",
     "bounds": {
-      "x": 764.71875,
-      "y": 533.4375,
-      "w": 158.5546875,
+      "x": 670.53125,
+      "y": 497.4375,
+      "w": 166.9296875,
       "h": 20.5
     },
     "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
@@ -15,13 +15,125 @@
   },
   {
     "check": "contrast",
-    "formFactor": "uiux/components",
+    "formFactor": "uiux/screens/canvas",
     "role": "text",
-    "text": "depth 2 · UI/UX › Components",
+    "text": "depth 3 · Screens › Canvas",
     "bounds": {
-      "x": 749.6484375,
-      "y": 533.4375,
-      "w": 188.703125,
+      "x": 668.1171875,
+      "y": 508.125,
+      "w": 171.765625,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/screens/spec",
+    "role": "text",
+    "text": "depth 3 · Screens › Spec",
+    "bounds": {
+      "x": 674.4296875,
+      "y": 518.6875,
+      "w": 159.140625,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/screens/review",
+    "role": "text",
+    "text": "depth 3 · Screens › Review",
+    "bounds": {
+      "x": 668.6328125,
+      "y": 518.6875,
+      "w": 170.7265625,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/flows",
+    "role": "text",
+    "text": "depth 2 · UI/UX › Flows",
+    "bounds": {
+      "x": 679.0625,
+      "y": 486.875,
+      "w": 149.875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/rules",
+    "role": "text",
+    "text": "depth 2 · UI/UX › Rules",
+    "bounds": {
+      "x": 679.6015625,
+      "y": 497.4375,
+      "w": 148.7890625,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/style/tokens",
+    "role": "text",
+    "text": "depth 3 · Style › Tokens",
+    "bounds": {
+      "x": 677.09375,
+      "y": 518.6875,
+      "w": 153.8046875,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/style/components",
+    "role": "text",
+    "text": "depth 3 · Style › Components",
+    "bounds": {
+      "x": 661.4296875,
+      "y": 518.6875,
+      "w": 185.140625,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/versions/timeline",
+    "role": "text",
+    "text": "depth 3 · Versions › Timeline",
+    "bounds": {
+      "x": 663.1953125,
+      "y": 518.6875,
+      "w": 181.609375,
+      "h": 20.5
+    },
+    "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",
+    "severity": "block"
+  },
+  {
+    "check": "contrast",
+    "formFactor": "uiux/versions/diff",
+    "role": "text",
+    "text": "depth 3 · Versions › Diff",
+    "bounds": {
+      "x": 676.640625,
+      "y": 518.6875,
+      "w": 154.71875,
       "h": 20.5
     },
     "detail": "대비 4.35 < 4.5 (fg 100,112,124 / bg 236,238,241)",

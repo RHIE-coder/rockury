@@ -7,6 +7,7 @@ import { createVersion, listVersions } from '../store/versions'
 import { DIALECT_IDS, DIALECT_META } from '../../shared/dialects'
 import { formatVersion, nextVersion, parseVersion } from '../../shared/versionNumber'
 import { applyOperations, assertTablesConsistent, patchOpSchema } from './patch'
+import { UIUX_TOOL_DEFS } from './uiuxTools'
 import { assertCleanText } from './textGuard'
 
 /**
@@ -393,6 +394,10 @@ export const TOOL_DEFS: ToolDef[] = [
     }
   }
 ]
+
+// 서비스별 도구는 자기 파일에서 정의해 여기서 펼친다 — 다섯 서비스가 한 배열에 줄을 더하면
+// 매번 충돌한다(coverage 도 같은 이유로 서비스별 파일이다).
+TOOL_DEFS.push(...UIUX_TOOL_DEFS)
 
 export const TOOL_NAMES = TOOL_DEFS.map((t) => t.name)
 

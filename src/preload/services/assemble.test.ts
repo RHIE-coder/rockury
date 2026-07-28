@@ -19,6 +19,10 @@ const { assembleApi, SERVICE_APIS } = await import('./index')
 /**
  * 분할 **전** `window.rockury` 의 최상위 키 전수(17개).
  * 손으로 적어 둔 대조 기준 — 하나라도 사라지면 그 그룹을 쓰던 화면이 런타임에 죽는다.
+ *
+ * **줄었는지만 본다(포함 검사).** 서비스가 자기 창구를 여는 건 정상이므로 "정확히 일치"로 보면
+ * 창구를 열 때마다 이 공용 테스트가 깨져 병렬 개발 규칙("창구는 자기 서비스 파일에만 더한다")과
+ * 충돌한다. 키 충돌은 아래 CASE-pdev-032 가, 빈 값은 CASE-pdev-031 이 따로 막는다.
  */
 const KEYS_BEFORE_SPLIT = [
   'ai',
@@ -112,8 +116,8 @@ const METHODS_BEFORE_SPLIT: Record<string, string[]> = {
 describe('preload 서비스 분할', () => {
   const api = assembleApi()
 
-  it('CASE-pdev-030 조립된 표면의 최상위 키가 분할 전과 같다', () => {
-    expect(Object.keys(api).sort()).toEqual(KEYS_BEFORE_SPLIT)
+  it('CASE-pdev-030 조립된 표면에 분할 전 최상위 키가 전부 있다', () => {
+    expect(Object.keys(api).sort()).toEqual(expect.arrayContaining(KEYS_BEFORE_SPLIT))
   })
 
   it('CASE-pdev-031 각 그룹의 함수 이름이 분할 전과 같다 — 조용히 빠진 메서드 0', () => {
@@ -124,7 +128,8 @@ describe('preload 서비스 분할', () => {
   })
 
   it('CASE-pdev-031 모든 창구가 실제로 함수다 (타입만 맞고 값이 빈 상태 방지)', () => {
-    for (const group of KEYS_BEFORE_SPLIT) {
+    // 분할 전 목록이 아니라 **지금 조립된 전부**를 본다 — 나중에 열린 창구도 같은 검사를 받아야 한다.
+    for (const group of Object.keys(api)) {
       for (const [name, fn] of Object.entries(api[group] as Record<string, unknown>)) {
         expect(typeof fn, `${group}.${name} 이 함수가 아니다`).toBe('function')
       }
@@ -152,8 +157,9 @@ describe('preload 서비스 분할', () => {
   })
 
   it('빈 서비스는 표면에 아무 키도 더하지 않는다 (window.rockury 오염 금지)', () => {
+    // uiux 는 2026-07-28 설계 저장소 창구를 열어 목록에서 빠졌다. 아직 빈 자리인 서비스만 남긴다.
     for (const s of SERVICE_APIS) {
-      if (['uiux', 'api', 'infra'].includes(s.service)) {
+      if (['api', 'infra'].includes(s.service)) {
         expect(Object.keys(s.api), `${s.service} 는 아직 창구가 없어야 한다`).toEqual([])
       }
     }

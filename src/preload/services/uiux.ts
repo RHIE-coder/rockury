@@ -1,13 +1,39 @@
+import { ipcRenderer } from 'electron'
+import type {
+  NodeInput,
+  SpecLevel,
+  SpecProjectRow,
+  SpecTree
+} from '../../main/store/uiuxSpecs'
+
+// 메인 프로세스 타입을 렌더러 쪽으로 그대로 통과시킨다 — 화면이 main 을 직접 import 하지 않게.
+export type { NodeInput, SpecLevel, SpecProjectRow, SpecTree }
+
 /**
- * UI/UX 서비스가 렌더러에 여는 창구 — **아직 없다.**
+ * UI/UX 서비스가 렌더러에 여는 창구.
  *
- * 이 파일은 UI/UX 서비스 에이전트의 자리다. 메인 프로세스 능력이 필요해지면:
- *   1. `src/main/ipc/uiux/` 에 채널을 열고
- *   2. 여기에 그 채널을 부르는 창구를 더한다 (최상위 키는 다른 서비스와 겹치면 안 된다 —
- *      겹치면 조립이 실패한다)
- *   3. 화면에서는 `window.rockury.<키>.<함수>()` 로 부른다
- * `src/preload/index.ts` 나 다른 서비스 파일은 건드리지 않는다.
- *
- * 창구가 없는 동안은 빈 객체다 — `window.rockury` 에 아무 키도 더하지 않는다.
+ * 최상위 키를 **서비스 id 그대로**(`uiux`) 쓴다 — 다른 서비스와 겹칠 수 없는 유일한 이름이고,
+ * 화면에서 `window.rockury.uiux.…` 를 보면 어느 서비스 창구인지 즉시 읽힌다.
+ * 설계부 채널이라 봉투(Envelope)를 쓰지 않는다 — 실패하면 그대로 reject 된다.
  */
-export const uiuxApi = {}
+export const uiuxApi = {
+  uiux: {
+    listProjects: (): Promise<SpecProjectRow[]> => ipcRenderer.invoke('uiux:listProjects'),
+    getTree: (projectId: string): Promise<SpecTree> => ipcRenderer.invoke('uiux:getTree', projectId),
+
+    createNode: (level: SpecLevel, parentId: string | null, input: NodeInput): Promise<{ id: string }> =>
+      ipcRenderer.invoke('uiux:createNode', level, parentId, input),
+    updateNode: (
+      level: SpecLevel,
+      id: string,
+      patch: { name?: string; description?: string; kind?: string; key?: string }
+    ): Promise<void> => ipcRenderer.invoke('uiux:updateNode', level, id, patch),
+    deleteNode: (level: SpecLevel, id: string): Promise<void> =>
+      ipcRenderer.invoke('uiux:deleteNode', level, id),
+
+    saveSurface: (id: string, content: string): Promise<void> =>
+      ipcRenderer.invoke('uiux:saveSurface', id, content),
+    setSurfaceStatus: (id: string, status: string, by: string, note: string): Promise<void> =>
+      ipcRenderer.invoke('uiux:setSurfaceStatus', id, status, by, note)
+  }
+}

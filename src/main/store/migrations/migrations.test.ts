@@ -16,6 +16,10 @@ import { MIGRATIONS, applyMigrations, declaredTables, type ServiceMigration } fr
 /**
  * 분할 **전** `db.ts migrate()` 가 만들던 테이블 전수(17개).
  * 이 목록이 줄면 사용자의 로컬 데이터가 갈 곳을 잃는다 — 손으로 적어 둔 대조 기준이다.
+ *
+ * **줄었는지만 본다(포함 검사).** 서비스가 자기 테이블을 더하는 건 정상이므로 "정확히 일치"로
+ * 보면 테이블을 더할 때마다 이 공용 테스트가 깨져 병렬 개발 규칙("테이블은 자기 서비스 파일에만
+ * 더한다")과 충돌한다. 유령·누락 검사는 아래 CASE-pdev-022(선언 ↔ 실제 대조)가 따로 맡는다.
  */
 const TABLES_BEFORE_SPLIT = [
   'collection_folders',
@@ -55,7 +59,7 @@ describe('서비스별 마이그레이션 분할', () => {
   it('CASE-pdev-020 모든 서비스 마이그레이션을 적용하면 분할 전 테이블이 전수 생성된다', () => {
     const d = new DatabaseSync(tempDbFile())
     applyMigrations(d)
-    expect(tableNames(d)).toEqual(TABLES_BEFORE_SPLIT)
+    expect(tableNames(d)).toEqual(expect.arrayContaining(TABLES_BEFORE_SPLIT))
     d.close()
   })
 
@@ -76,7 +80,7 @@ describe('서비스별 마이그레이션 분할', () => {
       name: string
     }[]
     expect(rows).toEqual([{ id: 'keep-me', name: '보존 확인' }])
-    expect(tableNames(second)).toEqual(TABLES_BEFORE_SPLIT)
+    expect(tableNames(second)).toEqual(expect.arrayContaining(TABLES_BEFORE_SPLIT))
     second.close()
   })
 
