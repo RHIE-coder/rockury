@@ -18,9 +18,7 @@ import {
   Workflow
 } from 'lucide-react'
 import { Suspense, lazy } from 'react'
-import type { LucideIcon } from 'lucide-react'
 import type { Service } from '@renderer/nav/types'
-import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 
 /**
  * 화면·스토어는 **지연 로드**한다. 서비스 선언 파일이 스토어를 정적으로 끌면 그 스토어가
@@ -51,6 +49,17 @@ const FeaturesWorkspace = withSuspense(() =>
 const FlowsWorkspace = withSuspense(() =>
   import('./screens/FlowsWorkspace').then((m) => ({ default: m.FlowsWorkspace }))
 )
+const TimelineView = withSuspense(() =>
+  import('./screens/VersionsWorkspace').then((m) => ({
+    default: () => <m.VersionsWorkspace view="timeline" />
+  }))
+)
+const DiffView = withSuspense(() =>
+  import('./screens/VersionsWorkspace').then((m) => ({ default: () => <m.VersionsWorkspace view="diff" /> }))
+)
+const RulesWorkspace = withSuspense(() =>
+  import('./screens/RulesWorkspace').then((m) => ({ default: m.RulesWorkspace }))
+)
 const ReviewWorkspace = withSuspense(() =>
   import('./screens/ReviewWorkspace').then((m) => ({ default: m.ReviewWorkspace }))
 )
@@ -75,7 +84,7 @@ const openProjectDialog = (): void => {
 }
 
 /**
- * UI/UX 서비스 IA (골격). 명세 정본은 `docs/spec/uiux-ia.md`.
+ * UI/UX 서비스 IA. 명세 정본은 `docs/spec/uiux-ia.md`.
  *
  * 제품의 화면과 그 규칙을 설계하는 자리. 코드를 만들지도, 구현이 설계대로인지 판정하지도 않는다 —
  * 판정은 코드를 아는 주체(에이전트)가 하고 이 서비스는 그 결과를 받아 적는다.
@@ -85,11 +94,7 @@ const openProjectDialog = (): void => {
  * 여기서 "Service" 는 좌측 레일의 rockury 서비스(uiux·api·db…)가 아니라 설계 대상의 3층
  * (로그인 서비스·상품 관리 서비스…)이다. 주소 체계도 둘로 나뉜다 — 이 서비스 자신의 화면은
  * `uiux.<모듈>[.<뷰>]`, 설계 대상 화면은 `<project>.<application>.<service>.<surface>`.
- *
- * 화면은 아직 placeholder(경로 배지만)다.
  */
-const view = (icon: LucideIcon, depth: string, title: string, subtitle: string) => () =>
-  <PlaceholderView icon={icon} depth={depth} title={title} subtitle={subtitle} />
 
 export const uiuxService: Service = {
   id: 'uiux',
@@ -169,12 +174,7 @@ export const uiuxService: Service = {
       id: 'rules',
       label: 'Rules',
       icon: ShieldCheck,
-      workspace: view(
-        ShieldCheck,
-        'depth 2 · UI/UX › Rules',
-        'Rules',
-        '값 제약·검증 피드백·활성 조건과, 그 규칙이 어느 계층에서 흘러왔는지.'
-      )
+      workspace: RulesWorkspace
     },
     {
       id: 'style',
@@ -190,28 +190,8 @@ export const uiuxService: Service = {
       label: 'Versions',
       icon: History,
       views: [
-        {
-          id: 'timeline',
-          label: 'Timeline',
-          icon: Milestone,
-          workspace: view(
-            Milestone,
-            'depth 3 · Versions › Timeline',
-            'Timeline',
-            '설계 스냅샷의 흐름 — 언제 무엇이 컷됐나.'
-          )
-        },
-        {
-          id: 'diff',
-          label: 'Diff',
-          icon: GitCompare,
-          workspace: view(
-            GitCompare,
-            'depth 3 · Versions › Diff',
-            'Diff',
-            '두 버전의 차이 — 화면·흐름·규칙·토큰 단위로.'
-          )
-        }
+        { id: 'timeline', label: 'Timeline', icon: Milestone, workspace: TimelineView },
+        { id: 'diff', label: 'Diff', icon: GitCompare, workspace: DiffView }
       ]
     }
   ]

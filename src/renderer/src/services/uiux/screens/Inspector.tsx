@@ -4,7 +4,8 @@ import { COMPONENT_KINDS, STATUS_LABEL, kindLabel, surfaceKindLabel } from '../c
 import { specAddress } from '../address'
 import { findComponent, findNav, findSection, patchComponent, patchSection, setNav } from '../tree'
 import { useActiveProject, useSpecStore, useTree } from '../store'
-import type { Layout, NavKind, SurfaceContent } from '../types'
+import { describeRule } from '../rules'
+import type { Layout, NavKind, Rule, SurfaceContent } from '../types'
 
 /**
  * 속성 — 지금 고른 조각(화면·영역·요소) 하나를 고친다. 명세 정본 `docs/spec/uiux-ia.md` §6.
@@ -59,6 +60,10 @@ export function Inspector() {
           </select>
         </Field>
         <NavField content={content} componentId={component.id} onChange={edit} />
+        <RuleField
+          rule={component.rule}
+          onChange={(rule) => edit((c) => patchComponent(c, component.id, { rule }))}
+        />
         <Meta label="주소 조각" value={component.id} hint="흐름·규칙이 이 이름으로 가리켜요." />
       </Panel>
     )
@@ -121,6 +126,96 @@ export function Inspector() {
         적습니다.
       </p>
     </Panel>
+  )
+}
+
+/**
+ * 규칙 — 어떤 값이 유효하고 언제 켜지나. **구조로 저장하고 문장으로 보인다**(§3).
+ * 구조 그대로 보이면 비개발자는 못 읽고 개발자도 한눈에 안 들어온다.
+ */
+function RuleField({ rule, onChange }: { rule?: Rule; onChange: (rule: Rule | undefined) => void }) {
+  const lines = describeRule(rule)
+  const patch = (part: Partial<Rule>): void => {
+    const next: Rule = { ...rule, ...part }
+    // 아무것도 안 말하는 규칙은 아예 지운다 — 빈 껍데기가 목록을 채우면 "규칙이 많다"는 착시가 생긴다.
+    onChange(describeRule(next).length > 0 ? next : undefined)
+  }
+
+  return (
+    <Field label="규칙">
+      <div className="flex flex-col gap-1.5" data-uiux-rule-field>
+        <div className="flex gap-1.5">
+          <select
+            data-uiux-rule-format
+            className="h-8 min-w-0 flex-1 rounded-md border border-line bg-canvas px-2 text-[13px]"
+            value={rule?.constraints?.format ?? ''}
+            onChange={(e) =>
+              patch({ constraints: { ...rule?.constraints, format: e.target.value || undefined } })
+            }
+          >
+            <option value="">형식 제한 없음</option>
+            <option value="email">이메일</option>
+            <option value="url">주소(URL)</option>
+            <option value="number">숫자</option>
+            <option value="tel">전화번호</option>
+            <option value="date">날짜</option>
+          </select>
+          <Input
+            className="h-8 w-20"
+            type="number"
+            min={1}
+            placeholder="최대"
+            value={rule?.constraints?.maxLength ?? ''}
+            onChange={(e) =>
+              patch({
+                constraints: {
+                  ...rule?.constraints,
+                  maxLength: e.target.value ? Number(e.target.value) : undefined
+                }
+              })
+            }
+          />
+        </div>
+
+        <select
+          className="h-8 w-full rounded-md border border-line bg-canvas px-2 text-[13px]"
+          value={rule?.enabled?.requires === 'all-required' ? 'all-required' : ''}
+          onChange={(e) =>
+            patch({
+              enabled: e.target.value
+                ? { ...rule?.enabled, default: 'disabled', requires: 'all-required' }
+                : undefined
+            })
+          }
+        >
+          <option value="">항상 켜져 있음</option>
+          <option value="all-required">필수 칸이 다 채워지면 켜짐</option>
+        </select>
+
+        <Input
+          className="h-8"
+          placeholder="어긋나면 보일 문구"
+          value={rule?.validation?.message ?? ''}
+          onChange={(e) =>
+            patch({
+              validation: e.target.value
+                ? { on: rule?.validation?.on ?? 'blur', message: e.target.value }
+                : undefined
+            })
+          }
+        />
+
+        {lines.length > 0 && (
+          <ul className="rounded border border-line bg-canvas p-2">
+            {lines.map((line, i) => (
+              <li key={i} className="text-[12px] leading-relaxed text-muted">
+                · {line}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Field>
   )
 }
 

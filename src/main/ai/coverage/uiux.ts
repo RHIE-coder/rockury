@@ -29,7 +29,10 @@ export const uiuxCoverage: ServiceCoverage = {
     resolve_ui_note: ['uiux:setNoteResolved'],
     // ── 디자인 토큰 — 에이전트가 색·간격을 읽어 실제 코드의 토큰과 맞춘다 ──
     get_ui_tokens: ['uiux:getTokens'],
-    set_ui_tokens: ['uiux:setTokens']
+    set_ui_tokens: ['uiux:setTokens'],
+    // ── 버전 — 에이전트가 "언제 무엇이 바뀌었나"를 읽는다 ──
+    list_ui_versions: ['uiux:listVersions'],
+    get_ui_version: ['uiux:getVersion']
   },
   excluded: {
     // 이름·주소 고치기는 주소를 흔든다 — 흐름·규칙·의견이 전부 그 주소에 걸려 있어, 에이전트가
@@ -40,6 +43,9 @@ export const uiuxCoverage: ServiceCoverage = {
     // 의견은 사람이 에이전트에게 보내는 요청이다 — 에이전트가 스스로 만들면 방향이 뒤집힌다.
     // (반영 결과는 상태 칸(set_ui_surface_status)의 근거로 적는다.)
     'uiux:createNote': '의견은 사람 → 에이전트 방향의 요청 — 에이전트가 스스로 만들지 않는다',
-    'uiux:deleteNote': '지우기 — 무엇을 왜 고쳤는지가 이력으로 남아야 해서 사람이 앱에서만'
+    'uiux:deleteNote': '지우기 — 무엇을 왜 고쳤는지가 이력으로 남아야 해서 사람이 앱에서만',
+    // 버전 컷은 "여기까지가 한 덩어리"라는 **사람의 판단**이다 — 에이전트가 임의로 끊으면 그 뜻이 없어진다.
+    'uiux:createVersion': '버전 컷은 사람의 판단 — 에이전트가 임의로 끊으면 경계의 뜻이 사라진다',
+    'uiux:deleteVersion': '지우기 — 이력은 사람이 앱에서만 정리한다'
   }
 }

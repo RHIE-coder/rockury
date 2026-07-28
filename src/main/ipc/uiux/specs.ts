@@ -2,12 +2,16 @@ import { ipcMain } from 'electron'
 import {
   createNode,
   createNote,
+  createVersion,
   deleteNode,
   deleteNote,
+  deleteVersion,
   getProjectTokens,
   getTree,
+  getVersion,
   listNotes,
   listProjects,
+  listVersions,
   saveSurfaceContent,
   setNoteResolved,
   setProjectTokens,
@@ -57,4 +61,14 @@ export function registerUiuxSpecsIpc(): void {
   ipcMain.handle('uiux:setTokens', (_e, projectId: string, tokens: Record<string, string>) =>
     setProjectTokens(projectId, tokens)
   )
+
+  // 버전 — 지금 설계를 통째로 굳힌 스냅샷.
+  ipcMain.handle('uiux:listVersions', (_e, projectId: string) => listVersions(projectId))
+  ipcMain.handle('uiux:getVersion', (_e, id: string) => getVersion(id))
+  ipcMain.handle(
+    'uiux:createVersion',
+    (_e, input: { projectId: string; number: string; note?: string; snapshot: string }) =>
+      createVersion(input)
+  )
+  ipcMain.handle('uiux:deleteVersion', (_e, id: string) => deleteVersion(id))
 }

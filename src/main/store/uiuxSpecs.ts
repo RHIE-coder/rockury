@@ -309,6 +309,53 @@ export function setSurfaceStatus(
     .run(status, new Date().toISOString(), by, note, id)
 }
 
+// ── 버전(스냅샷) ────────────────────────────────────────────────────
+
+export interface SpecVersionRow {
+  id: string
+  project_id: string
+  number: string
+  note: string
+  snapshot: string
+  locked: number
+  created_at: string
+}
+
+/** 최신 버전이 먼저 — 목록에서 방금 컷한 것이 맨 위에 보여야 한다. */
+export function listVersions(projectId: string): Omit<SpecVersionRow, 'snapshot'>[] {
+  return getDb()
+    .prepare(
+      `SELECT id, project_id, number, note, locked, created_at FROM uiux_versions
+       WHERE project_id = ? ORDER BY created_at DESC`
+    )
+    .all(projectId) as unknown as Omit<SpecVersionRow, 'snapshot'>[]
+}
+
+export function getVersion(id: string): SpecVersionRow | null {
+  return (getDb()
+    .prepare('SELECT id, project_id, number, note, snapshot, locked, created_at FROM uiux_versions WHERE id = ?')
+    .get(id) ?? null) as unknown as SpecVersionRow | null
+}
+
+export function createVersion(input: {
+  projectId: string
+  number: string
+  note?: string
+  snapshot: string
+}): { id: string } {
+  const id = randomUUID()
+  getDb()
+    .prepare(
+      'INSERT INTO uiux_versions (id, project_id, number, note, snapshot, locked, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
+    )
+    .run(id, input.projectId, input.number, input.note ?? '', input.snapshot, new Date().toISOString())
+  return { id }
+}
+
+export function deleteVersion(id: string): void {
+  getDb().prepare('DELETE FROM uiux_versions WHERE id = ?').run(id)
+}
+
 // ── 디자인 토큰 ─────────────────────────────────────────────────────
 
 /**

@@ -5,7 +5,7 @@
 export const meta = {
   name: '13-uiux-spec',
   needsDb: false,
-  desc: 'UI/UX — 위계·구조 · 미리보기 · 끌어놓기 · 흐름 · 토큰 · 의견(핀) · MCP 한 바퀴 · 능력 인덱스'
+  desc: 'UI/UX 전 모듈 — 위계·구조 · 미리보기 · 끌어놓기 · 규칙 · 흐름 · 토큰 · 의견 · 버전 · MCP · 능력 인덱스'
 }
 
 /**
@@ -190,6 +190,22 @@ export async function run(ctx) {
   await page.waitForTimeout(300)
   check('Spec: 요소를 지우면 그것만 사라진다', (await page.locator('[data-spec-component]').count()) === 1)
 
+  // ── Rules — 요소에 규칙을 붙이면 사람 말로 읽힌다 ──
+  await click('[data-spec-component="input"]')
+  await page.waitForTimeout(250)
+  await page.selectOption('[data-uiux-rule-format]', 'email')
+  await page.waitForTimeout(400)
+  check('Rules: 규칙을 붙이면 그 자리에서 문장으로 보인다', (await body()).includes('이메일 주소 형식이어야 해요'))
+
+  await click('[data-nav-module="rules"]')
+  await page.waitForTimeout(400)
+  check('Rules: 프로젝트 전체 규칙이 모인다', (await page.locator('[data-uiux-rule-count="1"]').count()) === 1)
+  check('Rules: 사람 말로 보인다', (await body()).includes('이메일 주소 형식이어야 해요'))
+
+  await click('[data-nav-module="screens"]')
+  await click('[data-nav-view="spec"]')
+  await page.waitForTimeout(400)
+
   // ── Flows — 요소에 "누르면 어디로" 를 붙이면 그래프에 화살표가 생긴다 ──
   // 화살표가 생기려면 갈 곳이 있어야 한다 — 화면을 하나 더 만든다.
   await click('button[title="화면 추가"]')
@@ -255,6 +271,38 @@ export async function run(ctx) {
     check('Review: 의견이 붙은 요소를 미리보기에 표시한다', (await page.locator('[data-uiux-node="input"]').evaluate((el) => getComputedStyle(el).outlineStyle)) === 'dashed')
   }
 
+  // ── Versions — 지금 설계를 굳히고, 고친 뒤 무엇이 달라졌는지 본다 ──
+  await click('[data-nav-module="versions"]')
+  await click('[data-nav-view="timeline"]')
+  await page.waitForSelector('[data-uiux-version-note]', { timeout: 5_000 })
+  await page.fill('[data-uiux-version-note]', '첫 굳히기')
+  await click('button:text-is("굳히기")')
+  await page.waitForSelector('[data-uiux-version="v0.1.0"]', { timeout: 5_000 })
+  check('Versions: 지금 설계를 굳히면 목록에 쌓인다', (await page.locator('[data-uiux-version-count="1"]').count()) === 1)
+
+  // 굳힌 뒤 화면 이름을 고쳐서 차이를 만든다.
+  await click('[data-nav-module="screens"]')
+  await click('[data-nav-view="spec"]')
+  await page.waitForTimeout(400)
+  await page.locator('button[title="이름·주소 고치기"]').last().click()
+  await page.waitForSelector('[data-node-field="name"]', { timeout: 5_000 })
+  await page.fill('[data-node-field="name"]', '홈 화면(고침)')
+  await page.click('[role="dialog"] button:text-is("저장")')
+  await settle(page)
+
+  await click('[data-nav-module="versions"]')
+  await click('[data-nav-view="diff"]')
+  await page.waitForSelector('[data-uiux-diff-pick]', { timeout: 5_000 })
+  await page.selectOption('[data-uiux-diff-pick]', { label: 'v0.1.0' })
+  await page.waitForSelector('[data-uiux-diff]', { timeout: 5_000 })
+  await page.waitForTimeout(300)
+  check('Versions: 굳힌 버전과 지금 설계를 비교한다', (await page.locator('[data-uiux-diff-row]').count()) >= 2)
+  check('Versions: 바뀐 것을 사람 말로 짚는다', (await body()).includes('이름 홈 화면 → 홈 화면(고침)'))
+  check(
+    'Versions: 볼 필요가 있는 것이 위로 온다',
+    (await page.locator('[data-uiux-diff-row]').first().getAttribute('data-uiux-diff-row')) === 'changed'
+  )
+
   // ── MCP — 에이전트가 읽고 확인 결과를 되돌려 적는다 (이 서비스의 목적, §8) ──
   // 사람이 만들고 → 에이전트가 읽고 판정하고 → 앱이 보여주는 한 바퀴를 통째로 확인한다.
   const mcp = await page.evaluate(async () => {
@@ -292,6 +340,8 @@ export async function run(ctx) {
       5
     )
     const missing = await call('get_ui_surface', { address: 'coupang.없는.주소.임' }, 6)
+    const vers = JSON.parse((await call('list_ui_versions', { project: 'coupang' }, 12)).content[0].text)
+    const ver = JSON.parse((await call('get_ui_version', { id: vers[0]?.id }, 13)).content[0].text)
     const tokens = JSON.parse((await call('get_ui_tokens', { project: 'coupang' }, 10)).content[0].text)
     const setTokens = JSON.parse(
       (await call('set_ui_tokens', { project: 'coupang', tokens: { 'space.md': '20px' } }, 11)).content[0].text
@@ -299,7 +349,7 @@ export async function run(ctx) {
     const notes = JSON.parse((await call('list_ui_notes', { project: 'coupang' }, 7)).content[0].text)
     const resolved = await call('resolve_ui_note', { id: notes[0]?.id }, 8)
     const afterResolve = JSON.parse((await call('list_ui_notes', { project: 'coupang' }, 9)).content[0].text)
-    return { names, tree, surface, wrote, missing, notes, resolved, afterResolve, tokens, setTokens }
+    return { names, tree, surface, wrote, missing, notes, resolved, afterResolve, tokens, setTokens, vers, ver }
   })
 
   check(
@@ -320,6 +370,11 @@ export async function run(ctx) {
     mcp.missing?.isError === true && mcp.missing.content[0].text.includes('get_ui_tree')
   )
 
+  check(
+    'MCP: 굳힌 버전을 에이전트가 읽는다 ("언제 무엇이 바뀌었나")',
+    mcp.vers.length === 1 && mcp.vers[0].number === 'v0.1.0' && Array.isArray(mcp.ver.snapshot.surfaces)
+  )
+  check('MCP: 버전 컷·삭제는 열지 않는다 (경계를 끊는 건 사람의 판단)', mcp.names.every((n) => !/^(create|delete)_ui_version/.test(n)))
   check(
     'MCP: 사람이 바꾼 토큰을 에이전트가 읽는다 (실제 코드의 토큰과 맞추라고)',
     mcp.tokens.overrides['color.primary'] === '#0f766e'

@@ -16,6 +16,7 @@ export type SpecServiceRow = SpecTree['services'][number]
 export type SpecSurfaceRow = SpecTree['surfaces'][number]
 export type SpecLevel = Parameters<Api['createNode']>[0]
 export type SpecNoteRow = Awaited<ReturnType<Api['listNotes']>>[number]
+export type SpecVersionRow = Awaited<ReturnType<Api['listVersions']>>[number]
 
 /**
  * UI/UX 설계 상태 — 명세 정본 `docs/spec/uiux-ia.md` §7.
@@ -48,6 +49,9 @@ export interface SpecState {
 
   /** 이 프로젝트가 **덮어쓴** 토큰만(전부가 아니라 차이만 — 기본값이 바뀌면 따라오게). */
   tokens: Record<string, string>
+
+  /** 설계 스냅샷 이력(최신순, 본문 제외). */
+  versions: SpecVersionRow[]
 
   /** 마지막 오류 — 저장소가 거절한 이유를 그대로 보인다(주소 중복 등). */
   error: string | null
@@ -86,6 +90,10 @@ export interface SpecState {
   /** 화면 내용 편집 — `tree.ts` 순수 함수를 넘겨 부른다. 먼저 반영하고 저장한다. */
   editContent: (fn: (content: SurfaceContent) => SurfaceContent) => Promise<void>
 
+  loadVersions: (projectId: string | null) => Promise<void>
+  /** 지금 설계를 통째로 굳힌다. 만들어진 번호를 돌려준다. */
+  cutVersion: (note: string) => Promise<string | null>
+
   loadTokens: (projectId: string | null) => Promise<void>
   /** 토큰 하나를 바꾼다. 빈 값이면 기본으로 되돌린다(지우기와 같은 뜻). */
   setToken: (path: string, value: string) => Promise<void>
@@ -113,6 +121,7 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
   selectedNodeId: null,
   notes: [],
   tokens: {},
+  versions: [],
   error: null,
   dialog: null,
 
@@ -136,6 +145,7 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
       const tree = await window.rockury.uiux.getTree(projectId)
       set({ tree, treeLoading: false })
       void get().loadTokens(projectId)
+      void get().loadVersions(projectId)
       // 고른 화면이 이 프로젝트에 없으면 선택을 놓는다(다른 프로젝트의 화면을 계속 열어 두지 않는다).
       const still = tree.surfaces.some((s) => s.id === get().selectedSurfaceId)
       if (!still) get().selectSurface(null)
@@ -207,6 +217,39 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
       }
     } catch (e) {
       set({ error: message(e) })
+    }
+  },
+
+  loadVersions: async (projectId) => {
+    if (!projectId) {
+      set({ versions: [] })
+      return
+    }
+    try {
+      set({ versions: await window.rockury.uiux.listVersions(projectId) })
+    } catch (e) {
+      set({ error: message(e) })
+    }
+  },
+
+  cutVersion: async (note) => {
+    const projectId = activeProjectId()
+    const tree = get().tree
+    if (!projectId || !tree) return null
+    const { nextVersionNumber, takeSnapshot } = await import('./versions')
+    const number = nextVersionNumber(get().versions.map((v) => v.number))
+    try {
+      await window.rockury.uiux.createVersion({
+        projectId,
+        number,
+        note,
+        snapshot: JSON.stringify(takeSnapshot(tree))
+      })
+      await get().loadVersions(projectId)
+      return number
+    } catch (e) {
+      set({ error: message(e) })
+      return null
     }
   },
 

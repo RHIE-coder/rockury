@@ -5,9 +5,11 @@ import {
   getProjectTokens,
   getSurface,
   getTree,
+  getVersion,
   listNotes,
   listOpenNotes,
   listProjects,
+  listVersions,
   saveSurfaceContent,
   setNoteResolved,
   setProjectTokens,
@@ -233,6 +235,40 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
       }
       saveSurfaceContent(hit.surfaceId as string, JSON.stringify(content))
       return { address: String(address), sectionCount: value.sections.length }
+    }
+  },
+
+  {
+    name: 'list_ui_versions',
+    description:
+      '설계 스냅샷(버전) 이력을 반환한다 — 번호·메모·컷한 시각(최신순, 스냅샷 본문 제외). 본문은 get_ui_version 으로.',
+    inputSchema: { project: z.string().describe('프로젝트 주소 조각') },
+    handler: ({ project }) => {
+      const hit = requireAddress(project, 'project')
+      return listVersions(hit.projectId).map((v) => ({
+        id: v.id,
+        number: v.number,
+        note: v.note,
+        createdAt: v.created_at
+      }))
+    }
+  },
+
+  {
+    name: 'get_ui_version',
+    description:
+      '특정 버전의 스냅샷 전체(그 시점의 앱·서비스·화면과 내용)를 반환한다. 지금 설계와 비교해 "언제 무엇이 바뀌었나"를 볼 때.',
+    inputSchema: { id: z.string().describe('버전 id (list_ui_versions 로 확인)') },
+    handler: ({ id }) => {
+      const row = getVersion(String(id))
+      if (!row) throw new Error(`버전 "${String(id)}" 가 없습니다 — list_ui_versions 로 확인하세요.`)
+      let snapshot: unknown
+      try {
+        snapshot = JSON.parse(row.snapshot)
+      } catch {
+        snapshot = { _error: '저장된 스냅샷이 올바른 JSON 이 아닙니다.' }
+      }
+      return { id: row.id, number: row.number, note: row.note, createdAt: row.created_at, snapshot }
     }
   },
 

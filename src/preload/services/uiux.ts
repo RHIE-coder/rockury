@@ -4,11 +4,12 @@ import type {
   SpecLevel,
   SpecNoteRow,
   SpecProjectRow,
-  SpecTree
+  SpecTree,
+  SpecVersionRow
 } from '../../main/store/uiuxSpecs'
 
 // 메인 프로세스 타입을 렌더러 쪽으로 그대로 통과시킨다 — 화면이 main 을 직접 import 하지 않게.
-export type { NodeInput, SpecLevel, SpecNoteRow, SpecProjectRow, SpecTree }
+export type { NodeInput, SpecLevel, SpecNoteRow, SpecProjectRow, SpecTree, SpecVersionRow }
 
 /**
  * UI/UX 서비스가 렌더러에 여는 창구.
@@ -52,6 +53,17 @@ export const uiuxApi = {
     getTokens: (projectId: string): Promise<Record<string, string>> =>
       ipcRenderer.invoke('uiux:getTokens', projectId),
     setTokens: (projectId: string, tokens: Record<string, string>): Promise<void> =>
-      ipcRenderer.invoke('uiux:setTokens', projectId, tokens)
+      ipcRenderer.invoke('uiux:setTokens', projectId, tokens),
+
+    listVersions: (projectId: string): Promise<Omit<SpecVersionRow, 'snapshot'>[]> =>
+      ipcRenderer.invoke('uiux:listVersions', projectId),
+    getVersion: (id: string): Promise<SpecVersionRow | null> => ipcRenderer.invoke('uiux:getVersion', id),
+    createVersion: (input: {
+      projectId: string
+      number: string
+      note?: string
+      snapshot: string
+    }): Promise<{ id: string }> => ipcRenderer.invoke('uiux:createVersion', input),
+    deleteVersion: (id: string): Promise<void> => ipcRenderer.invoke('uiux:deleteVersion', id)
   }
 }
