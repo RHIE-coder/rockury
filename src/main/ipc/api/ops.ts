@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { getSpec } from '../../store/apiSpecs'
+import { getSpec, versionMatchingDraft } from '../../store/apiSpecs'
 import {
   appendRun,
   deleteEnvironment,
@@ -99,7 +99,9 @@ export function registerApiOpsIpc(): void {
       requestName: request.name,
       environmentId: env.id,
       environmentName: env.name,
-      baseVersion: input.baseVersion ?? null,
+      // 호출자가 안 정했으면 Draft 가 어느 버전과 똑같은지로 정한다 — 최신 번호를
+      // 그냥 붙이면 컷 이후 고친 Draft 의 관측이 그 버전 것으로 둔갑한다.
+      baseVersion: input.baseVersion ?? versionMatchingDraft(spec.id),
       status: result.status,
       httpStatus: result.httpStatus,
       durationMs: result.durationMs,

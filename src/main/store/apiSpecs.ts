@@ -242,22 +242,50 @@ export function replaceRequests(specId: string, requests: RequestDef[]): void {
 export interface VersionRecord {
   number: string
   note: string
+  /**
+   * 이 버전을 기준으로 삼은 관측이 있는가.
+   * **저장된 값이 아니라 파생값**이다 — 기록이 가리키는 순간 잠기고, 그 사실이 흔들릴 수 없다
+   * (spec versions.timeline AC-3).
+   */
   locked: boolean
+  /** 이 버전을 기준으로 남은 실행 기록 수. 잠금의 근거를 화면이 그대로 보인다. */
+  runCount: number
   createdAt: string
   snapshot: SpecDef
 }
 
 export function listVersions(specId: string): VersionRecord[] {
-  const rows = getDb()
-    .prepare('SELECT number, note, locked, created_at, snapshot FROM api_versions WHERE spec_id = ? ORDER BY created_at DESC')
-    .all(specId) as unknown as { number: string; note: string; locked: number; created_at: string; snapshot: string }[]
-  return rows.map((r) => ({
-    number: r.number,
-    note: r.note,
-    locked: r.locked === 1,
-    createdAt: r.created_at,
-    snapshot: JSON.parse(r.snapshot)
-  }))
+  const d = getDb()
+  const rows = d
+    .prepare('SELECT number, note, created_at, snapshot FROM api_versions WHERE spec_id = ? ORDER BY created_at DESC')
+    .all(specId) as unknown as { number: string; note: string; created_at: string; snapshot: string }[]
+
+  return rows.map((r) => {
+    const { c } = d
+      .prepare('SELECT COUNT(*) AS c FROM api_runs WHERE spec_id = ? AND base_version = ?')
+      .get(specId, r.number) as unknown as { c: number }
+    return {
+      number: r.number,
+      note: r.note,
+      locked: c > 0,
+      runCount: c,
+      createdAt: r.created_at,
+      snapshot: JSON.parse(r.snapshot)
+    }
+  })
+}
+
+/**
+ * 지금 Draft 와 **똑같은** 스냅샷을 가진 버전 번호. 없으면 null(=Draft 관측).
+ *
+ * 실행 기록이 "어느 버전 기준인가"를 이렇게 정한다 — 최신 버전 번호를 그냥 붙이면,
+ * 컷 이후 Draft 를 고친 뒤의 관측까지 그 버전 것으로 둔갑한다. 그러면 판정 기준이 거짓이 된다.
+ */
+export function versionMatchingDraft(specId: string): string | null {
+  const draft = getSpec(specId)
+  if (!draft) return null
+  const key = JSON.stringify(draft.requests)
+  return listVersions(specId).find((v) => JSON.stringify(v.snapshot.requests) === key)?.number ?? null
 }
 
 /**
@@ -277,5 +305,5 @@ export function createVersion(specId: string, number: string, note = ''): Versio
   d.prepare(
     'INSERT INTO api_versions (id, spec_id, number, note, snapshot, locked, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
   ).run(`${specId}@${num}`, specId, num, note.trim(), JSON.stringify(snapshot), createdAt)
-  return { number: num, note: note.trim(), locked: false, createdAt, snapshot }
+  return { number: num, note: note.trim(), locked: false, runCount: 0, createdAt, snapshot }
 }

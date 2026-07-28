@@ -27,6 +27,8 @@ import { TransferDialog } from './specs/TransferDialog'
 import { EnvironmentsView } from './ops/EnvironmentsView'
 import { SendView } from './runner/SendView'
 import { HistoryView } from './runner/HistoryView'
+import { TimelineView } from './versions/TimelineView'
+import { DiffView } from './versions/DiffView'
 import { DriftView } from './contract/DriftView'
 import { AcceptView } from './contract/AcceptView'
 import { LogsView } from './contract/LogsView'
@@ -40,9 +42,10 @@ import './rehydration' // 에이전트(MCP) 쓰기 → api:changed → 스코프
  *   설계부(design) : 명세를 짓고 버전을 컷한다. 환경 무관.
  *   운영부(ops)    : active 환경에 대고 쏘고, 그 기록으로 판정한다.
  *
- * 지금 구현된 것: Studio(Requests·Docs) · Environments · Runner(Send·History) ·
- * Contract(Drift·Accept·Logs). 남은 자리(Mocking·Versions·Stream·Inbox)는 비워 두지 않고
- * 자리표시자로 둔다 — 비우면 IA 가 다시 흔들리고, 자리가 있으면 무엇이 남았는지 화면이 말해 준다.
+ * 지금 구현된 것: Studio(Requests·Docs) · Versions(Timeline·Diff) · Environments ·
+ * Runner(Send·History) · Contract(Drift·Accept·Logs).
+ * 남은 자리(Mocking·Stream·Inbox)는 비워 두지 않고 자리표시자로 둔다 — 비우면 IA 가 다시
+ * 흔들리고, 자리가 있으면 무엇이 남았는지 화면이 말해 준다.
  */
 
 const soon = (
@@ -126,28 +129,8 @@ export const apiService: Service = {
       icon: Milestone,
       area: 'design',
       views: [
-        {
-          id: 'timeline',
-          label: 'Timeline',
-          icon: Milestone,
-          workspace: soon(
-            Milestone,
-            'depth 3 · API › Versions › Timeline',
-            'Timeline',
-            '명세를 불변 스냅샷으로 컷합니다. 깨지는 변경이 있으면 사람 승인 게이트가 뜹니다. (후속)'
-          )
-        },
-        {
-          id: 'diff',
-          label: 'Diff',
-          icon: GitCompare,
-          workspace: soon(
-            GitCompare,
-            'depth 3 · API › Versions › Diff',
-            'Diff',
-            '두 버전을 비교합니다 — 요청은 더 요구하면, 응답은 덜 주면 깨집니다. (후속)'
-          )
-        }
+        { id: 'timeline', label: 'Timeline', icon: Milestone, workspace: TimelineView },
+        { id: 'diff', label: 'Diff', icon: GitCompare, workspace: DiffView }
       ]
     },
     {
