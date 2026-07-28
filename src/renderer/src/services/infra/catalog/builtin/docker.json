@@ -44,7 +44,50 @@
           "removing": "gone",
           "dead": "gone"
         }
-      }
+      },
+      "actions": [
+        {
+          "id": "logs",
+          "label": "로그 보기",
+          "call": {
+            "type": "cli",
+            "cmd": "docker",
+            "args": ["logs", "--tail", "{{arg.tail}}", "{{node.externalId}}"]
+          },
+          "args": [
+            { "id": "tail", "label": "마지막 줄 수", "required": true, "placeholder": "100" }
+          ]
+        },
+        {
+          "id": "inspect",
+          "label": "자세히 보기",
+          "call": {
+            "type": "cli",
+            "cmd": "docker",
+            "args": ["inspect", "{{node.externalId}}"]
+          }
+        },
+        {
+          "id": "restart",
+          "label": "재시작",
+          "danger": true,
+          "call": {
+            "type": "cli",
+            "cmd": "docker",
+            "args": ["restart", "{{node.externalId}}"]
+          }
+        },
+        {
+          "id": "stop",
+          "label": "멈추기",
+          "danger": true,
+          "call": {
+            "type": "cli",
+            "cmd": "docker",
+            "args": ["stop", "{{node.externalId}}"]
+          }
+        }
+      ]
     },
     {
       "id": "docker.image",

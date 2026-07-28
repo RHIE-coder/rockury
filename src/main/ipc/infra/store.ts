@@ -596,3 +596,116 @@ export function listRuns(limit = 50): RunRow[] {
     ranAt: r.ran_at
   }))
 }
+
+// ---------- 미들웨어 접속 (M5) ----------
+
+/**
+ * 미들웨어 접속 한 벌. **비밀은 암호문 컬럼에만 있다** — 공급자 연결과 같은 규칙이다.
+ * 화면으로 나갈 때는 `MwConnectionPublic` 으로 걸러 비밀을 뺀다.
+ */
+export interface MwConnectionRow {
+  id: string
+  kind: string
+  name: string
+  host: string
+  port: number
+  username: string
+  secretEncrypted: string
+  options: string
+}
+
+/** 렌더러로 나가는 형태 — 암호문도 평문도 담지 않는다. */
+export interface MwConnectionPublic {
+  id: string
+  kind: string
+  name: string
+  host: string
+  port: number
+  username: string
+  /** 비밀이 채워져 있나(값은 주지 않는다). */
+  hasSecret: boolean
+  options: string
+}
+
+const mwRow = (r: {
+  id: string
+  kind: string
+  name: string
+  host: string
+  port: number
+  username: string
+  secret_encrypted: string
+  options: string
+}): MwConnectionRow => ({
+  id: r.id,
+  kind: r.kind,
+  name: r.name,
+  host: r.host,
+  port: r.port,
+  username: r.username,
+  secretEncrypted: r.secret_encrypted,
+  options: r.options
+})
+
+export function listMwConnections(): MwConnectionRow[] {
+  const rows = getDb()
+    .prepare(`SELECT * FROM infra_mw_connections ORDER BY kind, name`)
+    .all() as unknown as Parameters<typeof mwRow>[0][]
+  return rows.map(mwRow)
+}
+
+export function getMwConnection(id: string): MwConnectionRow | null {
+  const r = getDb()
+    .prepare(`SELECT * FROM infra_mw_connections WHERE id = ?`)
+    .get(id) as unknown as Parameters<typeof mwRow>[0] | undefined
+  return r ? mwRow(r) : null
+}
+
+export function saveMwConnection(input: {
+  id?: string
+  kind: string
+  name: string
+  host: string
+  port: number
+  username?: string
+  /** 이미 암호화된 비밀. 빈 문자열이면 **기존 값을 지우지 않고 그대로 둔다**(수정 시 재입력 강요 금지). */
+  secretEncrypted?: string
+  options?: string
+}): MwConnectionRow {
+  const id = input.id ?? randomUUID()
+  const stamp = now()
+  const prev = input.id ? getMwConnection(input.id) : null
+  const secret = input.secretEncrypted || prev?.secretEncrypted || ''
+  getDb()
+    .prepare(
+      `INSERT INTO infra_mw_connections
+         (id, kind, name, host, port, username, secret_encrypted, options, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         kind = excluded.kind,
+         name = excluded.name,
+         host = excluded.host,
+         port = excluded.port,
+         username = excluded.username,
+         secret_encrypted = excluded.secret_encrypted,
+         options = excluded.options,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      id,
+      input.kind,
+      input.name,
+      input.host,
+      input.port,
+      input.username ?? '',
+      secret,
+      input.options ?? '{}',
+      stamp,
+      stamp
+    )
+  return getMwConnection(id) as MwConnectionRow
+}
+
+export function deleteMwConnection(id: string): void {
+  getDb().prepare(`DELETE FROM infra_mw_connections WHERE id = ?`).run(id)
+}

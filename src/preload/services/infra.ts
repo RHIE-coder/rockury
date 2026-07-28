@@ -1,11 +1,18 @@
 import { ipcRenderer } from 'electron'
 import { unwrap } from '../envelope'
 import type { CatalogSource, ProviderPublic, RunOutcome } from '../../main/ipc/infra/contract'
-import type { RunProbeInput } from '../../main/ipc/infra'
+import type {
+  RunActionInput,
+  RunMwInput,
+  RunMwResult,
+  RunProbeInput,
+  SaveMwInput
+} from '../../main/ipc/infra'
 import type {
   CatalogRow,
   DesignRow,
   EdgeRow,
+  MwConnectionPublic,
   NodeRow,
   ProbeOutcomeRow,
   ResourceRow,
@@ -26,6 +33,11 @@ export type {
   RunRow,
   SaveCatalogInput,
   RunProbeInput,
+  RunActionInput,
+  MwConnectionPublic,
+  SaveMwInput,
+  RunMwInput,
+  RunMwResult,
   ProbeOutcomeRow,
   ResourceRow,
   SnapshotRow
@@ -85,10 +97,24 @@ export const infraApi = {
     latestSnapshot: (providerId: string): Promise<SnapshotRow | null> =>
       unwrap(ipcRenderer.invoke('infra:latestSnapshot', providerId)),
 
-    // 탐침 실행·이력
+    // 탐침·액션 실행·이력
     runProbe: (input: RunProbeInput): Promise<RunOutcome> =>
       unwrap(ipcRenderer.invoke('infra:runProbe', input)),
+    /** 실물을 바꾸는 유일한 통로 — 잠금은 메인이 다시 강제한다. */
+    runAction: (input: RunActionInput): Promise<RunOutcome> =>
+      unwrap(ipcRenderer.invoke('infra:runAction', input)),
     listRuns: (limit?: number): Promise<RunRow[]> =>
-      unwrap(ipcRenderer.invoke('infra:listRuns', limit))
+      unwrap(ipcRenderer.invoke('infra:listRuns', limit)),
+
+    // 미들웨어 접속·콘솔 (M5)
+    listMwConnections: (): Promise<MwConnectionPublic[]> =>
+      unwrap(ipcRenderer.invoke('infra:listMwConnections')),
+    /** 비밀은 넣는 길만 있다 — 꺼내는 채널을 만들지 않았다(공급자 연결과 같은 규칙). */
+    saveMwConnection: (input: SaveMwInput): Promise<MwConnectionPublic> =>
+      unwrap(ipcRenderer.invoke('infra:saveMwConnection', input)),
+    deleteMwConnection: (id: string): Promise<void> =>
+      unwrap(ipcRenderer.invoke('infra:deleteMwConnection', id)),
+    runMw: (input: RunMwInput): Promise<RunMwResult> =>
+      unwrap(ipcRenderer.invoke('infra:runMw', input))
   }
 }

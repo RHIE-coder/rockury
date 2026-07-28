@@ -22,6 +22,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot'
 import { ShieldCheckIcon } from '@phosphor-icons/react/dist/csr/ShieldCheck'
 import { SignpostIcon } from '@phosphor-icons/react/dist/csr/Signpost'
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure'
+import { TriangleIcon } from '@phosphor-icons/react/dist/csr/Triangle'
 import { UsersIcon } from '@phosphor-icons/react/dist/csr/Users'
 import { WifiHighIcon } from '@phosphor-icons/react/dist/csr/WifiHigh'
 import { FALLBACK_ICON, parseIconRef } from './icon'
@@ -62,6 +63,7 @@ export const PHOSPHOR_ICONS: Record<string, PhosphorIcon> = {
   'shield-check': ShieldCheckIcon,
   signpost: SignpostIcon,
   'tree-structure': TreeStructureIcon,
+  triangle: TriangleIcon,
   users: UsersIcon,
   'wifi-high': WifiHighIcon
 }

@@ -20,7 +20,8 @@ export const infraMigration: ServiceMigration = {
     'infra_runs',
     'infra_snapshots',
     'infra_snapshot_probes',
-    'infra_resources'
+    'infra_resources',
+    'infra_mw_connections'
   ],
 
   schema: `
@@ -143,5 +144,21 @@ export const infraMigration: ServiceMigration = {
       design_node_ref     TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_infra_resources_snapshot ON infra_resources(snapshot_id);
+
+    -- 미들웨어 접속(M5). DB 서비스의 Connections 패턴을 빌린다 — 새로 발명하지 않는다.
+    -- secret_encrypted 는 비밀번호·토큰의 OS 키체인 암호문. **평문 컬럼은 없다**(공급자 연결과 같은 규칙).
+    CREATE TABLE IF NOT EXISTS infra_mw_connections (
+      id               TEXT PRIMARY KEY,
+      kind             TEXT NOT NULL,              -- redis | rabbitmq | kafka | mqtt
+      name             TEXT NOT NULL,
+      host             TEXT NOT NULL,
+      port             INTEGER NOT NULL,
+      username         TEXT NOT NULL DEFAULT '',
+      secret_encrypted TEXT NOT NULL DEFAULT '',
+      options          TEXT NOT NULL DEFAULT '{}', -- 종류별 자잘한 설정(db 번호 등)
+      created_at       TEXT NOT NULL,
+      updated_at       TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_infra_mw_kind ON infra_mw_connections(kind);
   `
 }

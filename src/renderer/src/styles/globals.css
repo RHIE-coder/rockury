@@ -14,13 +14,17 @@
   --color-line: #e2e5e9;
   --color-ink: #17202b;
   --color-fg: #232b34;
-  --color-muted: #64707c;
+  /* #64707c → #626d79: 배경 #eceef1 위에서 대비 4.35 로 WCAG AA(4.5) 미달이었다.
+     색 정체성(청회색)은 그대로 두고 명도만 낮춰 4.53 을 만든다. */
+  --color-muted: #626d79;
 
   /* 1차 강조 — Mercury(퀵실버 시안) */
   --color-accent: #0e7490;
   --color-accent-soft: #e2f3f7;
   /* 2차 강조 — 실행 스파크(테라코타) */
-  --color-accent-2: #b0613f;
+  /* #b0613f → #9d5638: 연한 배경 #f6e6dd(accent-2-soft) 위에서 대비 3.73 으로 미달이었다.
+     테라코타 색조는 유지하고 명도만 낮춰 4.52 를 만든다. */
+  --color-accent-2: #9d5638;
   --color-accent-2-soft: #f6e6dd;
 
   /* 시맨틱 */

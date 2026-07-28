@@ -78,6 +78,23 @@
 - **CASE-icat-124** 여러 탐침 결과를 합치면 VPC > 서브넷 > EC2 3겹이 선다. **한 탐침만 돌리면 부모가 끊긴다** —
   그래서 뽑기 단계에서 부모를 지우면 안 된다(끊긴 것은 버리지 않고 최상위로 올리며 보고한다).
 
+## Scenario S5c — 액션 (순수 로직) → `services/infra/catalog/actions.test.ts`
+- **CASE-icat-130** 인자 검사 — 필수가 비면(공백만 넣은 것도 빈 것으로 본다) 무엇이 빠졌는지 낸다.
+  **스키마에 없는 값은 버린다**(카탈로그가 선언한 것만 명령에 들어간다). 선택 인자는 빈 문자열로 채운다. (actions.definition AC-2)
+- **CASE-icat-131** 잠금 판정 — 읽기 전용 연결에서 `danger` 액션만 잠긴다. 연결이 없으면 아무것도 못 돈다. (actions.definition AC-3)
+- **CASE-icat-132** 치환값 — 실물 값은 `node`, 폼 값은 `arg` 로 **분리**된다.
+  겹치는 이름을 써도 서로 덮지 않는다(덮으면 엉뚱한 대상에 명령이 나간다). (actions.definition AC-6)
+- **CASE-icat-133** 실행 전 미리보기 — 사람이 읽을 명령 한 줄을 만들고, cli 가 아닌 호출도 무엇인지 말한다. (actions.definition AC-5)
+
+## Scenario S5d — 내장 카탈로그 액션 가드 → `services/infra/catalog/builtin/builtin.test.ts`
+- **CASE-icat-138** **바꾸는 동사면 반드시 `danger`, 읽기만 하는 동사면 `danger` 아님.**
+  모르는 동사는 통과시키지 않는다 — 새 동사를 넣는 사람이 어느 쪽인지 밝히게 만든다.
+  하이픈 동사(`reboot-instances`)도 앞부분을 떼어 본다.
+  ※ M1 때 이 가드는 "내장 액션은 **전부** danger"였는데, 그건 액션이 하나뿐이라 우연히 맞았을 뿐이고
+  M4 에서 로그·자세히 보기가 들어오자 바로 깨졌다. 진짜 불변식으로 바꿨다.
+- **CASE-icat-139** 액션의 인자는 명령에 **실제로 쓰인다**(`{{arg.<id>}}` 가 명령줄에 있다) —
+  받아 놓고 안 쓰는 칸을 만들지 않는다.
+
 ## Scenario S6 — 저장 계층 (임시 SQLite) → `src/main/ipc/infra/store.test.ts`
 - **CASE-icat-050** 카탈로그 CRUD: 출처(내장/내가 만듦/가져옴) 보존, 내장은 갱신 거부. (registry.sources AC-3)
 - **CASE-icat-051** 공급자 연결 저장 시 자격증명이 암호문으로 들어가고 평문 컬럼이 없다. (providers.credentials AC-2)
@@ -87,6 +104,24 @@
 ## Scenario S7 — MCP 노출 지도 (기존 강제 테스트에 편승) → `src/main/ai/coverage/coverage.test.ts`
 - **CASE-icat-060** `infra:*` 채널이 전부 등재돼 있다(미등재 시 `npm test` 실패). (mcp AC-1)
 - **CASE-icat-061** `infra:runAction` · `infra:runProbe` · 자격증명 채널은 **제외**로 등재되고 사유가 적혀 있다. (mcp AC-2/AC-3)
+
+## Scenario S9 — 앱 구동 흐름 · 액션 (e2e/suites/16-infra-actions, `meta.needsDb: true`)
+> **15 와 따로 두는 이유**: 15 는 `CASE-iarch-087`("대조 전후로 컨테이너가 하나도 안 변한다")을 못박고,
+> 여기서는 반대로 **액션이 실물을 실제로 바꾸는지**를 봐야 한다. 한 스위트에 두면 서로의 전제를 깬다.
+> 자기 pid 이름의 **일회용 컨테이너**를 `docker create`(실행 없이 만들기만)로 세우고 끝나면 지운다 —
+> 남의 컨테이너는 건드리지 않는다.
+
+- **CASE-icat-130**(앱) 인자 폼이 카탈로그 스키마대로 뜨고, 필수를 비우고 누르면 **안 돌고** 무엇이 빠졌는지 뜬다.
+- **CASE-icat-131**(앱) 읽기 전용 연결에서 `재시작`은 잠기고 **왜 잠겼는지** 뜬다. `자세히 보기`는 열려 있다.
+  읽기 전용이 아닌 연결에서는 `재시작`이 열린다.
+- **CASE-icat-133**(앱) 실행 전에 돌아갈 명령이 보인다.
+- **CASE-icat-134**(앱) 출력 패널에 **종료 코드**와 표준 출력이 그대로 남고, 읽기 액션은 실물을 바꾸지 않았다.
+- **CASE-icat-135**(앱) ⭐ **창구를 직접 불러도**(화면을 우회해도) 읽기 전용 연결의 위험 액션은 거부된다 —
+  화면에서만 막으면 잠금이 아니라 권유다.
+- **CASE-icat-136**(앱) ⭐ 위험 액션은 표시가 붙고 **한 번 더 묻고**, 확인 전에는 실물이 그대로이며,
+  확인하면 **실물이 실제로 바뀐다**(멈춤 → 실행 중). Rockury 가 실물에 닿는 유일한 통로임을 실측한다.
+- **CASE-icat-137**(앱) 액션 실행이 이력에 `kind=action` 으로 남고, **이력에는 치환 전 명령**이 남아
+  실물 식별자도 자격증명도 눌러앉지 않는다.
 
 ## Scenario S8 — 앱 구동 흐름 (e2e/suites/13-infra-catalog, CSS/text 로케이터만)
 > ⚠ 접근성 쿼리(`getByRole` 등)는 이 Electron 창을 크래시시킨다 → CSS/text 로케이터만.

@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { InfraIcon } from '../catalog/iconMap'
 import { STATUS_LABEL, type NodeStatus } from '../catalog/types'
 import { typesOf, useInfraStore } from '../store'
+import { ActionPanel } from './ActionPanel'
 
 /**
  * 실물 지도 — 공급자에 붙어 읽어 온 것을 그대로 보여 준다.
@@ -39,6 +40,8 @@ export function LiveView(): React.JSX.Element {
   const types = useMemo(() => typesOf(store.catalogs), [store.catalogs])
   const provider =
     store.providers.find((p) => p.id === store.activeProviderId) ?? store.providers[0] ?? null
+  /** 액션을 돌릴 대상 — 실물 하나를 골라야 `{{node.*}}` 가 채워진다. */
+  const [pickedId, setPickedId] = useState<string | null>(null)
 
   useEffect(() => {
     if (provider && !store.snapshot && !store.syncing) void store.loadSnapshot(provider.id)
@@ -56,6 +59,7 @@ export function LiveView(): React.JSX.Element {
 
   const snap = store.snapshot
   const failed = (snap?.probes ?? []).filter((p) => !p.ok)
+  const picked = (snap?.resources ?? []).find((r) => r.externalId === pickedId) ?? null
 
   return (
     <div className="flex h-full min-h-0 flex-col p-4" data-infra-view="live">
@@ -63,7 +67,12 @@ export function LiveView(): React.JSX.Element {
         <select
           className="h-9 rounded-md border border-input bg-background px-2 text-sm"
           value={provider.id}
-          onChange={(e) => void store.loadSnapshot(e.target.value)}
+          onChange={(e) => {
+            // 고른 실물은 **그 공급자의 스냅샷에 속한다** — 연결을 바꾸면 선택을 놓는다.
+            // 안 놓으면 액션 패널이 남의 연결에 대고 명령을 만든다.
+            setPickedId(null)
+            void store.loadSnapshot(e.target.value)
+          }}
           data-live-provider
         >
           {store.providers.map((p) => (
@@ -104,6 +113,7 @@ export function LiveView(): React.JSX.Element {
         </div>
       )}
 
+      <div className="flex min-h-0 flex-1 gap-3">
       <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-secondary/60 text-left">
@@ -119,7 +129,16 @@ export function LiveView(): React.JSX.Element {
             {(snap?.resources ?? []).map((r) => {
               const t = types[r.typeId]
               return (
-                <tr key={`${r.typeId}:${r.externalId}`} className="border-t border-border" data-live-row>
+                <tr
+                  key={`${r.typeId}:${r.externalId}`}
+                  className={cn(
+                    'cursor-pointer border-t border-border hover:bg-secondary/40',
+                    pickedId === r.externalId && 'bg-primary/5'
+                  )}
+                  onClick={() => setPickedId(pickedId === r.externalId ? null : r.externalId)}
+                  data-live-row
+                  data-live-pick={r.externalId}
+                >
                   <td className="px-3 py-1.5">
                     <span className="flex items-center gap-1.5">
                       <span style={{ color: t?.color }}>
@@ -158,6 +177,23 @@ export function LiveView(): React.JSX.Element {
             `새로고침` 을 누르면 이 연결의 탐침을 돌려 실물을 읽어 옵니다.
           </p>
         )}
+      </div>
+
+      {/* 액션 — 실물 하나를 골라야 열린다. 대상 없이 도는 명령을 만들지 않기 위해서다. */}
+      <aside className="flex w-[340px] shrink-0 flex-col overflow-auto rounded-md border border-border">
+        <header className="border-b border-border px-3 py-2 text-xs font-medium">액션</header>
+        {picked ? (
+          <ActionPanel
+            actions={types[picked.typeId]?.actions ?? []}
+            target={{ externalId: picked.externalId, name: picked.name, typeId: picked.typeId }}
+            provider={provider}
+          />
+        ) : (
+          <p className="p-3 text-[11px] text-muted-foreground" data-action-hint>
+            왼쪽 표에서 실물을 하나 고르면 그 종류에 정의된 액션이 여기 뜹니다.
+          </p>
+        )}
+      </aside>
       </div>
     </div>
   )

@@ -82,12 +82,56 @@ describe('내장 카탈로그', () => {
     }
   })
 
-  it('실물을 바꾸는 액션은 전부 danger 로 표시돼 있다', () => {
+  /**
+   * 실물을 바꾸는 동사와 읽기만 하는 동사.
+   *
+   * M1 때 이 가드는 "내장 액션은 **전부** danger" 였는데, 그건 그때 액션이 재시작 하나뿐이라
+   * 우연히 맞았을 뿐이다 — M4 에서 로그·자세히 보기가 들어오자 바로 깨졌다.
+   * 그래서 진짜 불변식으로 바꿨다: **바꾸는 동사면 반드시 danger, 안 바꾸는 동사면 danger 아님.**
+   * 모르는 동사는 통과시키지 않는다 — 새 동사를 넣는 사람이 어느 쪽인지 여기서 밝히게 만든다.
+   */
+  const MUTATING = new Set([
+    'restart', 'stop', 'start', 'rm', 'remove', 'delete', 'kill', 'reboot', 'terminate',
+    'scale', 'deploy', 'destroy', 'apply', 'create', 'update', 'exec', 'prune', 'run'
+  ])
+  const READ_ONLY = new Set([
+    'logs', 'inspect', 'ls', 'ps', 'describe', 'get', 'list', 'top', 'stats', 'status',
+    'images', 'version', 'info', 'show', 'history'
+  ])
+
+  it('실물을 바꾸는 액션은 반드시 danger 이고, 읽기만 하는 액션은 danger 가 아니다', () => {
     for (const c of ok) {
       for (const t of c.catalog.nodeTypes) {
         for (const a of t.actions ?? []) {
-          // M1 의 내장 액션은 재시작뿐이고, 그건 실물을 건드린다.
-          expect(a.danger, `${t.id}.${a.id}`).toBe(true)
+          if (a.call.type !== 'cli') continue
+          // 하위 명령(`docker restart`)과 하이픈 동사(`aws ec2 reboot-instances`)를 함께 본다 —
+          // AWS CLI 는 `동사-명사` 꼴이라 하이픈 앞을 떼어 내야 동사가 보인다.
+          const verbs = [a.call.cmd, ...a.call.args].flatMap((s) => {
+            const low = s.toLowerCase()
+            return [low, low.split('-')[0]]
+          })
+          const mutates = verbs.some((v) => MUTATING.has(v))
+          const reads = verbs.some((v) => READ_ONLY.has(v))
+          expect(
+            mutates || reads,
+            `${t.id}.${a.id}: 아는 동사가 없다 — 바꾸는 것인지 읽는 것인지 이 목록에 밝혀라`
+          ).toBe(true)
+          if (mutates) expect(a.danger, `${t.id}.${a.id} 는 실물을 바꾼다`).toBe(true)
+          else expect(a.danger ?? false, `${t.id}.${a.id} 는 읽기만 한다`).toBe(false)
+        }
+      }
+    }
+  })
+
+  it('액션의 필수 인자는 자리표시자로 명령에 실제로 쓰인다 — 받아 놓고 안 쓰는 칸을 만들지 않는다', () => {
+    for (const c of ok) {
+      for (const t of c.catalog.nodeTypes) {
+        for (const a of t.actions ?? []) {
+          if (a.call.type !== 'cli') continue
+          const line = [a.call.cmd, ...a.call.args].join(' ')
+          for (const arg of a.args ?? []) {
+            expect(line, `${t.id}.${a.id}.${arg.id}`).toContain(`{{arg.${arg.id}}}`)
+          }
         }
       }
     }

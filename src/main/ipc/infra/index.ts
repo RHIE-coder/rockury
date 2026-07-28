@@ -8,26 +8,33 @@ import {
   createDesign,
   deleteCatalog,
   deleteDesign,
+  deleteMwConnection,
   deleteProvider,
+  getMwConnection,
   getProvider,
   latestSnapshot,
   listCatalogs,
   listDesigns,
   listEdges,
+  listMwConnections,
   listNodes,
   listProviders,
   listRuns,
   replaceGraph,
   saveCatalog,
+  saveMwConnection,
   saveProvider,
   saveSnapshot,
   updateDesign,
   type EdgeRow,
+  type MwConnectionPublic,
   type NodeRow,
   type ProbeOutcomeRow,
   type ResourceRow,
   type SaveCatalogInput
 } from './store'
+import { redisRun } from './middleware/redis'
+import { flattenReply, isRespError, type RespValue } from './middleware/resp'
 
 /**
  * Infra 서비스의 IPC 채널.
@@ -115,6 +122,156 @@ async function runProbe(input: RunProbeInput): Promise<RunOutcome> {
   return { ...result, displayCommand: [prepared.cmd, ...prepared.display].join(' ') }
 }
 
+export interface RunActionInput {
+  providerId: string
+  cmd: string
+  args: string[]
+  /** 실물에서 온 값(`{{node.*}}`). */
+  node?: Record<string, string>
+  /** 사용자가 폼에 채운 값(`{{arg.*}}`). */
+  arg?: Record<string, string>
+  /** 실물을 바꾸는 액션인가 — 읽기 전용 연결에서 막을 근거. */
+  danger?: boolean
+  timeoutMs?: number
+}
+
+/**
+ * 액션 하나를 실행한다 — **Rockury 가 실물을 바꾸는 유일한 통로**(D1).
+ *
+ * 그래서 잠금을 여기서 **다시** 강제한다. 화면에서만 막으면 그건 잠금이 아니라 권유다 —
+ * 창구는 렌더러가 부르는 것이고, 렌더러 코드가 바뀌면(또는 버그가 나면) 그대로 열린다.
+ * 읽기 전용 표시는 보조선이지만, 보조선조차 우회되면 표시가 거짓말이 된다.
+ */
+async function runAction(input: RunActionInput): Promise<RunOutcome> {
+  const provider = getProvider(input.providerId)
+  if (!provider) throw new Error('공급자 연결을 찾을 수 없습니다.')
+  if (input.danger && provider.readOnly) {
+    throw new Error('이 연결은 읽기 전용으로 표시돼 있어 실물을 바꾸는 액션을 돌릴 수 없습니다.')
+  }
+  const cred = credentialsOf(input.providerId)
+  const prepared = prepareCommand(
+    { cmd: input.cmd, args: input.args },
+    { cred, node: input.node, arg: input.arg }
+  )
+  const raw = await runCli(prepared, { timeoutMs: input.timeoutMs })
+  const result = {
+    ...raw,
+    stdout: redactSecrets(raw.stdout, cred),
+    stderr: redactSecrets(raw.stderr, cred),
+    error: raw.error ? redactSecrets(raw.error, cred) : raw.error
+  }
+  appendRun({
+    providerId: input.providerId,
+    kind: 'action',
+    cmd: prepared.cmd,
+    displayArgs: prepared.display,
+    ok: result.ok,
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    error: result.error ?? result.stderr.slice(0, 500)
+  })
+  return { ...result, displayCommand: [prepared.cmd, ...prepared.display].join(' ') }
+}
+
+// ---------- 미들웨어 (M5) ----------
+
+/** 화면으로 나가는 접속 — 암호문도 평문도 담지 않는다. */
+const toMwPublic = (r: {
+  id: string
+  kind: string
+  name: string
+  host: string
+  port: number
+  username: string
+  secretEncrypted: string
+  options: string
+}): MwConnectionPublic => ({
+  id: r.id,
+  kind: r.kind,
+  name: r.name,
+  host: r.host,
+  port: r.port,
+  username: r.username,
+  hasSecret: r.secretEncrypted !== '',
+  options: r.options
+})
+
+export interface SaveMwInput {
+  id?: string
+  kind: string
+  name: string
+  host: string
+  port: number
+  username?: string
+  /** 평문. **여기서 즉시 암호화하고 저장 뒤에는 어디에도 남기지 않는다.** */
+  secret?: string
+  options?: string
+}
+
+export interface RunMwInput {
+  connectionId: string
+  /** 명령 한 줄씩. 인자는 배열이라 값에 공백·줄바꿈이 있어도 명령이 쪼개지지 않는다. */
+  commands: string[][]
+  timeoutMs?: number
+}
+
+export interface RunMwResult {
+  ok: boolean
+  /** 화면 콘솔에 뿌릴 한 덩어리(명령별). */
+  outputs: string[]
+  /** 서버가 거절한 명령이 있었나 — 못 붙은 것(`error`)과 구분한다. */
+  hadCommandError: boolean
+  error?: string
+  durationMs: number
+}
+
+/**
+ * 미들웨어 명령을 돌린다 — 지금은 Redis 만.
+ *
+ * 접속을 들고 있지 않고 **한 번 붙어 돌리고 끊는다**(`middleware/redis.ts` 주석의 근거).
+ * 못 붙은 것과 서버가 거절한 것을 구분해 돌려준다 — 뭉개면 "주소가 틀렸다"와 "명령이 틀렸다"를
+ * 사용자가 못 가른다.
+ */
+async function runMw(input: RunMwInput): Promise<RunMwResult> {
+  const conn = getMwConnection(input.connectionId)
+  if (!conn) throw new Error('미들웨어 접속을 찾을 수 없습니다.')
+  if (conn.kind !== 'redis') {
+    throw new Error(`아직 Redis 만 지원합니다(이 접속은 '${conn.kind}').`)
+  }
+  const secret = conn.secretEncrypted ? decrypt(conn.secretEncrypted) : undefined
+  const opts = JSON.parse(conn.options || '{}') as { db?: number }
+  const r = await redisRun(
+    {
+      host: conn.host,
+      port: conn.port,
+      username: conn.username || undefined,
+      password: secret,
+      db: opts.db,
+      timeoutMs: input.timeoutMs
+    },
+    input.commands
+  )
+  appendRun({
+    providerId: null,
+    kind: 'middleware',
+    cmd: `${conn.kind}:${conn.name}`,
+    // 명령 이름만 남긴다 — 값(키·비밀)을 이력에 눌러앉히지 않는다.
+    displayArgs: input.commands.map((c) => c[0] ?? ''),
+    ok: r.ok,
+    exitCode: null,
+    durationMs: r.durationMs,
+    error: r.error ?? ''
+  })
+  const replies: RespValue[] = r.replies
+  return {
+    ok: r.ok,
+    outputs: replies.map((v) => flattenReply(v)),
+    hadCommandError: replies.some(isRespError),
+    error: r.error,
+    durationMs: r.durationMs
+  }
+}
+
 export function registerInfraIpc(): void {
   // --- 카탈로그 ---
   ipcMain.handle('infra:listCatalogs', () => envelope(() => listCatalogs()))
@@ -182,5 +339,26 @@ export function registerInfraIpc(): void {
 
   // --- 탐침 실행·이력 ---
   ipcMain.handle('infra:runProbe', (_e, input: RunProbeInput) => envelope(() => runProbe(input)))
+  ipcMain.handle('infra:runAction', (_e, input: RunActionInput) => envelope(() => runAction(input)))
   ipcMain.handle('infra:listRuns', (_e, limit?: number) => envelope(() => listRuns(limit)))
+
+  // --- 미들웨어 접속·콘솔 (M5) ---
+  ipcMain.handle('infra:listMwConnections', () =>
+    envelope(() => listMwConnections().map(toMwPublic))
+  )
+  ipcMain.handle('infra:saveMwConnection', (_e, input: SaveMwInput) =>
+    envelope(() =>
+      toMwPublic(
+        saveMwConnection({
+          ...input,
+          // 평문은 여기서 즉시 암호문으로 바뀌고, 그 뒤로는 어디에도 남지 않는다.
+          secretEncrypted: input.secret ? encrypt(input.secret) : undefined
+        })
+      )
+    )
+  )
+  ipcMain.handle('infra:deleteMwConnection', (_e, id: string) =>
+    envelope(() => deleteMwConnection(id))
+  )
+  ipcMain.handle('infra:runMw', (_e, input: RunMwInput) => envelope(() => runMw(input)))
 }

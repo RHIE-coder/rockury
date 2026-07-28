@@ -127,6 +127,37 @@
     },
 
     {
+      "id": "preset.vercel",
+      "label": "Vercel 프로젝트",
+      "icon": "phosphor:triangle",
+      "color": "#111827",
+      "docTemplate": {
+        "role": "어떤 프런트엔드를 여기 올렸나",
+        "impact": "죽으면 어느 화면이 안 뜨나",
+        "beforeTouch": "배포·롤백은 vercel CLI 액션으로 — 이 앱이 실물을 만들지는 않는다"
+      }
+    },
+    {
+      "id": "preset.supabase",
+      "label": "Supabase 프로젝트",
+      "icon": "phosphor:lightning",
+      "color": "#16a34a",
+      "docTemplate": {
+        "role": "무엇의 데이터·인증을 맡나",
+        "impact": "죽으면 무엇이 로그인·조회를 못 하나"
+      }
+    },
+    {
+      "id": "preset.cloudflare",
+      "label": "Cloudflare Worker/Pages",
+      "icon": "phosphor:cloud",
+      "color": "#f38020",
+      "docTemplate": {
+        "role": "어떤 요청을 여기서 받나",
+        "impact": "죽으면 어느 경로가 끊기나"
+      }
+    },
+    {
       "id": "preset.server",
       "canContain": ["*"],
       "label": "서버",

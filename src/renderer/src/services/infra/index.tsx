@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Boxes, Cloud, FileText, Layers, Network, Radar, Server, Terminal } from 'lucide-react'
+import { Boxes, Cloud, FileText, Layers, Network, Radar, Server, Share2, Terminal } from 'lucide-react'
 import type { Service } from '@renderer/nav/types'
 import { DiagramWorkspace } from './design/DiagramView'
 import { NodeDocWorkspace } from './design/NodeDocView'
@@ -7,6 +7,7 @@ import { ProbeView } from './catalog/ProbeView'
 import { LiveView } from './reconcile/LiveView'
 import { ReconcileView } from './reconcile/ReconcileView'
 import { CatalogsView } from './catalog/CatalogsView'
+import { MiddlewareView } from './middleware/MiddlewareView'
 import { ProvidersView } from './catalog/ProvidersView'
 import { TypesView } from './catalog/TypesView'
 import { useInfraStore } from './store'
@@ -57,6 +58,13 @@ export const infraService: Service = {
         { id: 'map', label: '실물 지도', icon: Cloud, workspace: LiveView },
         { id: 'reconcile', label: '대조', icon: Network, workspace: ReconcileView }
       ]
+    },
+    {
+      id: 'middleware',
+      label: 'Middleware',
+      icon: Share2,
+      area: 'ops',
+      views: [{ id: 'console', label: '접속·콘솔', icon: Terminal, workspace: MiddlewareView }]
     },
     {
       id: 'catalog',

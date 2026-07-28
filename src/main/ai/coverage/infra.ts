@@ -45,7 +45,17 @@ export const infraCoverage: ServiceCoverage = {
 
     // 실행·비밀 — 앞으로도 열지 않는다.
     'infra:runProbe': '임의 명령 실행. 에이전트에게 이 문을 열면 앱이 곧 원격 셸이 된다 — 영구 제외.',
+    'infra:runAction':
+      '실물 조작. Rockury 가 실물을 바꾸는 유일한 통로이고 **사용자가 직접 누를 때만** 열린다(D1) — 영구 제외.',
     'infra:saveProvider': '자격증명 취급 경로 — 영구 제외.',
-    'infra:deleteProvider': '자격증명 취급 경로 — 영구 제외.'
+    'infra:deleteProvider': '자격증명 취급 경로 — 영구 제외.',
+
+    // 미들웨어(M5) — 접속처와 임의 명령. 읽기라도 열 이유가 없다.
+    'infra:listMwConnections':
+      '읽기지만 접속처 목록(주소·포트) 자체가 정찰 정보다. 에이전트에게 줄 이유가 없다.',
+    'infra:saveMwConnection': '비밀(비밀번호·토큰) 취급 경로 — 영구 제외.',
+    'infra:deleteMwConnection': '쓰기·파괴적.',
+    'infra:runMw':
+      '미들웨어에 임의 명령 실행. `runProbe`·`runAction` 과 같은 급이다 — 열면 앱이 곧 원격 셸이 된다. 영구 제외.'
   }
 }
