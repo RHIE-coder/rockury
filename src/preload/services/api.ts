@@ -6,6 +6,11 @@ import type {
   SaveEnvironmentInput
 } from '../../main/store/apiOps'
 import type { SendRequestInput, SendRequestResult } from '../../main/ipc/api/ops'
+import type {
+  OpenStreamInput,
+  OpenStreamResult,
+  StreamEndedEvent
+} from '../../main/ipc/api/stream'
 import type { ContractLog } from '../../main/store/apiContract'
 import type { ImportPreview, ImportSourceKind } from '../../main/ipc/api/transfer'
 import type { ApiChangedEvent } from '../../main/ai/apiTools'
@@ -13,7 +18,8 @@ import type { PatchOp } from '../../shared/api/patch'
 import type { AbsorbPreview } from '../../shared/api/absorb'
 import type { DriftResult } from '../../shared/api/drift'
 import type { ExportFormat, ExportResult } from '../../shared/api/exportSpec'
-import type { EnvironmentDef, RequestDef, RunRecord, SpecDef } from '../../shared/api/types'
+import type { SessionEvent } from '../../main/api/streamSession'
+import type { EnvironmentDef, RequestDef, RunRecord, SpecDef, StreamMessage } from '../../shared/api/types'
 
 // 메인 프로세스 타입을 렌더러 쪽으로 그대로 통과시킨다 — 화면이 main 을 직접 import 하지 않게.
 export type {
@@ -26,6 +32,10 @@ export type {
   SendRequestInput,
   SendRequestResult,
   ListRunsFilter,
+  OpenStreamInput,
+  OpenStreamResult,
+  SessionEvent,
+  StreamEndedEvent,
   ContractLog,
   AbsorbPreview,
   DriftResult,
@@ -92,6 +102,34 @@ export const apiApi = {
       ipcRenderer.invoke('api:listRuns', specId, filter),
     getRun: (specId: string, runId: string): Promise<RunRecord | null> =>
       ipcRenderer.invoke('api:getRun', specId, runId)
+  },
+
+  /**
+   * 스트림 세션 — 오래 살고 스스로 끝날 수도 있어서 **응답이 아니라 이벤트**로 온다.
+   * 세션은 메인이 들고 있으므로 화면을 나갔다 와도 안 끊긴다.
+   */
+  apiStream: {
+    open: (input: OpenStreamInput): Promise<OpenStreamResult> =>
+      ipcRenderer.invoke('api:openStream', input),
+    /** 양방향 세션에만 있다. 보낸 글자의 `{{변수}}` 는 메인이 실값으로 바꿔 내보낸다. */
+    send: (sessionId: string, text: string): Promise<StreamMessage> =>
+      ipcRenderer.invoke('api:sendStream', sessionId, text),
+    close: (sessionId: string): Promise<void> => ipcRenderer.invoke('api:closeStream', sessionId),
+    /** 남은 세션 전부 정리 — 렌더러가 새로 뜰 때 부른다(주인 없는 소켓을 남기지 않는다). */
+    closeAll: (): Promise<void> => ipcRenderer.invoke('api:closeAllStreams'),
+
+    /** 상태 변화·새 메시지. 해지 함수를 돌려준다. */
+    onEvent: (fn: (e: SessionEvent) => void): (() => void) => {
+      const listener = (_e: unknown, payload: SessionEvent): void => fn(payload)
+      ipcRenderer.on('api:stream', listener)
+      return () => ipcRenderer.removeListener('api:stream', listener)
+    },
+    /** 세션이 끝나 Run 으로 굳었을 때. 사용자가 껐든 서버가 끊었든 여기로 온다. */
+    onEnded: (fn: (e: StreamEndedEvent) => void): (() => void) => {
+      const listener = (_e: unknown, payload: StreamEndedEvent): void => fn(payload)
+      ipcRenderer.on('api:streamEnded', listener)
+      return () => ipcRenderer.removeListener('api:streamEnded', listener)
+    }
   },
 
   /** 판정 — 선언한 명세와 실제 서버가 어긋났는지. 흡수는 사람이 수락해야 반영된다. */

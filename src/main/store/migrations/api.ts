@@ -1,4 +1,4 @@
-import type { ServiceMigration } from './types'
+import { addColumnIfMissing, type ServiceMigration } from './types'
 
 /**
  * API 서비스의 로컬 저장소 스키마 — `docs/spec/api-service.md` §2 도메인 모델.
@@ -71,6 +71,10 @@ export const apiMigration: ServiceMigration = {
 
     -- 실행 기록. **불변**이다 — 명세가 바뀌어도 지나간 관측은 그대로여야 판정의 기준이 된다.
     -- 비밀 표식 값은 여기 들어오기 전에 이미 가려져 있다(가린 뒤 저장, 저장 후 가리기 아님).
+    --
+    -- 단발 실행과 스트림 세션이 **같은 표**에 사는 이유: 둘 다 "한 번 관측한 것"이고,
+    -- 판정·기록 열람·MCP 가 한 목록으로 읽어야 한다(spec stream.session AC-6).
+    -- 대신 shape 칸으로 갈라 둔다 — 이게 없으면 판정이 메시지 목록을 응답 본문으로 오독한다.
     CREATE TABLE IF NOT EXISTS api_runs (
       id             TEXT PRIMARY KEY,
       spec_id        TEXT NOT NULL,
@@ -78,12 +82,15 @@ export const apiMigration: ServiceMigration = {
       environment_id TEXT NOT NULL,
       environment_name TEXT NOT NULL,
       base_version   TEXT,
+      shape          TEXT NOT NULL DEFAULT 'unary',
       status         TEXT NOT NULL,
       http_status    INTEGER,
       duration_ms    INTEGER NOT NULL DEFAULT 0,
       created_at     TEXT NOT NULL,
       request_json   TEXT NOT NULL,
       response_json  TEXT,
+      messages_json  TEXT,
+      message_count  INTEGER,
       error          TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_api_runs_spec ON api_runs (spec_id, created_at DESC);
@@ -102,5 +109,18 @@ export const apiMigration: ServiceMigration = {
       created_at       TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_api_contract_logs_spec ON api_contract_logs (spec_id, created_at DESC);
-  `
+  `,
+
+  /**
+   * 구 스키마 보정 — `CREATE TABLE IF NOT EXISTS` 는 이미 있는 표에 칸을 못 더한다.
+   * 스트림 세션이 생기기 전에 만들어진 로컬 DB 는 `shape`·`messages_json` 이 없어서
+   * 앱을 켜자마자 기록 조회가 터진다. 지나간 기록은 전부 단발 실행이므로 기본값이 맞다.
+   */
+  alter: (d) => {
+    addColumnIfMissing(d, 'api_runs', 'shape', "TEXT NOT NULL DEFAULT 'unary'")
+    addColumnIfMissing(d, 'api_runs', 'messages_json', 'TEXT')
+    // 목록 조회가 메시지 본문을 안 읽으려면 건수만 따로 있어야 한다(본문 5,000건을 매번
+    // 파싱하면 메인 프로세스가 초 단위로 멈춘다 — 실측).
+    addColumnIfMissing(d, 'api_runs', 'message_count', 'INTEGER')
+  }
 }

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { driftFromObservations, driftUnavailable, hasBlockingGap, summarizeDrift } from './drift'
+import {
+  driftFromObservations,
+  driftFromSchema,
+  driftUnavailable,
+  hasBlockingGap,
+  normalizeDrift,
+  summarizeDrift,
+  type DriftResult
+} from './drift'
 import type { FieldDef, RequestDef, RunRecord, SpecDef } from './types'
 
 /**
@@ -43,12 +51,15 @@ const run = (requestName: string, body: string, over: Partial<RunRecord> = {}): 
   environmentId: 'e1',
   environmentName: 'DEV',
   baseVersion: null,
+  shape: 'unary',
   status: 'ok',
   httpStatus: 200,
   durationMs: 1,
   createdAt: '2026-07-28T00:00:00.000Z',
   request: { method: 'GET', url: '/x', headers: {}, body: '' },
   response: { status: 200, headers: {}, body, size: body.length },
+  messages: null,
+  messageCount: null,
   error: null,
   ...over
 })
@@ -61,7 +72,13 @@ const drift = (s: SpecDef, runs: RunRecord[]) =>
 describe('CASE-apicontract-010~013 커버리지를 속이지 않는다', () => {
   it('안 쏴 본 요청은 미관측으로 세고 이름을 남긴다', () => {
     const d = drift(spec([req('a'), req('b'), req('c')]), [run('a', '{}')])
-    expect(d.coverage).toEqual({ total: 3, observed: 1, unobserved: ['b', 'c'], unparsable: [] })
+    expect(d.coverage).toEqual({
+      total: 3,
+      observed: 1,
+      unobserved: ['b', 'c'],
+      unparsable: [],
+      unjudged: []
+    })
   })
 
   it('미관측을 일치로 세지 않는다 — 어긋남 0 이어도 커버리지가 붙는다', () => {
@@ -87,6 +104,162 @@ describe('CASE-apicontract-010~013 커버리지를 속이지 않는다', () => {
     const d = drift(spec([req('a')]), [failed])
     expect(d.coverage.observed).toBe(0)
     expect(d.coverage.unobserved).toEqual(['a'])
+  })
+})
+
+// ── 스트림·수신은 판정 규칙이 없다 ─────────────────────────────────────────
+// 세션 하나가 Run 하나로 쌓이는데, 그 Run 의 관측 내용은 응답 본문이 아니라 메시지 목록이다.
+// 여기서 조용히 넘어가면 "쏴 봤는데 이상 없음" 이라는 **없는 판정**이 만들어진다.
+
+describe('CASE-apicontract-011c 스트림 관측은 통과도 미관측도 아니다', () => {
+  const stream = (name: string): RequestDef => ({ ...req(name), shape: 'server-stream' })
+  const session = (name: string): RunRecord =>
+    run(name, '', {
+      shape: 'server-stream',
+      response: null,
+      httpStatus: null,
+      messages: [{ seq: 1, at: '2026-07-28T00:00:00.000Z', direction: 'in', event: '', data: 'a' }]
+    })
+
+  it('세션을 쌓은 요청은 미관측이 아니라 **판정 규칙 없음**으로 따로 센다', () => {
+    const d = drift(spec([stream('ticker')]), [session('ticker')])
+    expect(d.coverage.unjudged).toEqual(['ticker'])
+    expect(d.coverage.unobserved).toEqual([])
+    // 관측했다고 세지도 않는다 — 대조한 것이 없다.
+    expect(d.coverage.observed).toBe(0)
+  })
+
+  it('한 번도 안 붙어 본 스트림 요청은 그냥 미관측이다 — 두 사실을 뭉치지 않는다', () => {
+    const d = drift(spec([stream('ticker')]), [])
+    expect(d.coverage.unobserved).toEqual(['ticker'])
+    expect(d.coverage.unjudged).toEqual([])
+  })
+
+  it('메시지 목록을 응답 본문으로 오독해 어긋남을 만들지 않는다', () => {
+    const d = drift(spec([stream('ticker')]), [session('ticker')])
+    expect(d.findings).toEqual([])
+  })
+
+  it('요약에 판정 규칙 없음 건수가 드러난다 — "이상 없음" 으로 끝나지 않는다', () => {
+    const d = drift(spec([stream('ticker')]), [session('ticker')])
+    expect(summarizeDrift(d)).toContain('판정 규칙 없음 1개')
+  })
+
+  it('**붙지 못한 세션은 관측이 아니다** — 미관측으로 센다', () => {
+    // 접속 실패도 Run 으로 남는다. "행이 있나"로 세면 한 번도 못 붙은 요청이
+    // "세션은 쌓였지만 대조 규칙이 없다"로 뜬다 — 그건 미관측이다.
+    const failed = run('ticker', '', {
+      shape: 'server-stream',
+      response: null,
+      status: 'connect-failed',
+      httpStatus: null,
+      // 목록 조회는 본문을 안 읽으므로 판정도 본문에 의존하지 않는다 — 상태로 가린다.
+      messages: null,
+      messageCount: 1
+    })
+    const d = drift(spec([stream('ticker')]), [failed])
+    expect(d.coverage.unobserved).toEqual(['ticker'])
+    expect(d.coverage.unjudged).toEqual([])
+  })
+
+  it('기준 버전이 다른 세션은 이 버전의 관측이 아니다', () => {
+    const d = driftFromObservations({
+      spec: spec([stream('ticker')]),
+      runs: [{ ...session('ticker'), baseVersion: 'v0.1.0' }],
+      environmentName: 'DEV',
+      baseVersion: 'v0.2.0'
+    })
+    expect(d.coverage.unobserved).toEqual(['ticker'])
+    expect(d.coverage.unjudged).toEqual([])
+  })
+
+  it('**모양이 아니라 실행이 무엇이었는지로 가른다** — duplex 선언 요청을 단발로 쏜 관측은 계속 판정된다', () => {
+    // 선언 모양으로 가르면 그 findings 가 통째로 사라지고 "판정 규칙 없음" 만 남는다.
+    const declaredDuplex: RequestDef = {
+      ...req('probe', [{ status: '200', fields: [f('id', 'string', 'required')] }]),
+      shape: 'duplex'
+    }
+    const d = drift(spec([declaredDuplex]), [run('probe', '{"id":"x","extra":1}')])
+    expect(d.coverage.observed).toBe(1)
+    expect(d.findings.map((x) => x.path)).toEqual(['probe.200.extra'])
+  })
+})
+
+// ── 완전 판정도 같은 규칙을 쓴다 ───────────────────────────────────────────
+
+describe('CASE-apicontract-011c 완전 판정에서도 스트리밍은 대조하지 않는다', () => {
+  const subscription: RequestDef = { ...req('messageAdded'), shape: 'server-stream' }
+
+  it('GraphQL subscription 을 "명세에만 있음" 으로 잘못 잡지 않는다', () => {
+    // introspection 에는 subscription 루트가 없다 — 없다고 "내 요청이 깨진다"로 적으면
+    // 멀쩡한 서버를 두고 코드를 고치라고 말하는 셈이다.
+    const d = driftFromSchema({
+      spec: spec([subscription], 'graphql'),
+      schema: { rootFields: {} },
+      environmentName: 'DEV',
+      rootOf: { messageAdded: 'messageAdded' },
+      runs: []
+    })
+    expect(d.findings).toEqual([])
+    expect(d.coverage.unobserved).toEqual(['messageAdded'])
+  })
+
+  it('세션 관측이 있으면 판정 규칙 없음으로 센다', () => {
+    const d = driftFromSchema({
+      spec: spec([subscription], 'graphql'),
+      schema: { rootFields: {} },
+      environmentName: 'DEV',
+      rootOf: { messageAdded: 'messageAdded' },
+      runs: [
+        run('messageAdded', '', {
+          shape: 'server-stream',
+          response: null,
+          messages: [
+            { seq: 1, at: '2026-07-28T00:00:00.000Z', direction: 'in', event: '', data: 'a' }
+          ]
+        })
+      ]
+    })
+    expect(d.coverage.unjudged).toEqual(['messageAdded'])
+    expect(d.findings).toEqual([])
+  })
+})
+
+// ── 저장돼 있던 옛 판정 기록 ───────────────────────────────────────────────
+
+describe('옛 판정 기록을 읽어도 화면이 죽지 않는다', () => {
+  it('커버리지 칸이 없던 기록에 빈 목록을 채워 준다', () => {
+    // `DriftResult` 는 `api_contract_logs.payload` 에 JSON 통째로 저장된다 — 칸을 더하면
+    // 그 전 기록에는 없고, 화면이 `.length` 를 부르는 순간 터져 판정 화면이 백지가 된다
+    // (error boundary 가 없어 재판정 버튼까지 사라진다).
+    const old = {
+      grade: 'observed',
+      unavailable: null,
+      environmentName: 'DEV',
+      baseVersion: null,
+      coverage: { total: 2, observed: 1, unobserved: ['b'], unparsable: [] },
+      findings: [],
+      skippedUnknown: 0,
+      unstable: []
+    } as unknown as DriftResult
+
+    const fixed = normalizeDrift(old)
+    expect(fixed.coverage.unjudged).toEqual([])
+    expect(() => summarizeDrift(fixed)).not.toThrow()
+    // 있던 값은 그대로 둔다.
+    expect(fixed.coverage.unobserved).toEqual(['b'])
+  })
+
+  it('커버리지가 통째로 없어도 터지지 않는다', () => {
+    const fixed = normalizeDrift({ grade: 'observed' } as unknown as DriftResult)
+    expect(fixed.coverage).toEqual({
+      total: 0,
+      observed: 0,
+      unobserved: [],
+      unparsable: [],
+      unjudged: []
+    })
+    expect(() => summarizeDrift(fixed)).not.toThrow()
   })
 })
 

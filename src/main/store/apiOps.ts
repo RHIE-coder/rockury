@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from './db'
-import type { EnvironmentDef, EnvValue, RunRecord, RunStatus } from '../../shared/api/types'
+import type {
+  EnvironmentDef,
+  EnvValue,
+  InteractionShape,
+  RunRecord,
+  RunStatus,
+  StreamMessage
+} from '../../shared/api/types'
 
 /**
  * 운영부 저장소 — 환경과 실행 기록. `docs/spec/api-runner.md`.
@@ -133,14 +140,29 @@ interface RunRow {
   environment_id: string
   environment_name: string
   base_version: string | null
+  shape: string | null
   status: string
   http_status: number | null
   duration_ms: number
   created_at: string
   request_json: string
   response_json: string | null
+  message_count: number | null
+  /** 목록 조회에서는 **안 읽는다**(undefined). 상세 조회에서만 채워진다. */
+  messages_json?: string | null
   error: string | null
 }
+
+/**
+ * 목록 조회가 읽는 칸. **`messages_json` 이 빠져 있다.**
+ *
+ * 세션 하나가 메시지 5,000건까지 들 수 있어서, 200건 목록을 읽으면 그걸 전부 SQLite 에서
+ * 꺼내 `JSON.parse` 한다 — 실측 1.6초 동안 **메인 프로세스가 멈춘다**(메인은 다섯 서비스의
+ * IPC 를 다 처리하므로 DB·Infra 화면까지 같이 선다). 목록 화면은 본문을 안 쓴다.
+ */
+const LIST_COLUMNS =
+  'id, spec_id, request_name, environment_id, environment_name, base_version, shape, status, ' +
+  'http_status, duration_ms, created_at, request_json, response_json, message_count, error'
 
 const toRun = (r: RunRow): RunRecord => ({
   id: r.id,
@@ -149,26 +171,39 @@ const toRun = (r: RunRow): RunRecord => ({
   environmentId: r.environment_id,
   environmentName: r.environment_name,
   baseVersion: r.base_version,
+  // 스트림 이전에 쌓인 기록은 전부 단발이다(칸이 생기기 전이라 null 일 수 있다).
+  shape: (r.shape ?? 'unary') as InteractionShape,
   status: r.status as RunStatus,
   httpStatus: r.http_status,
   durationMs: r.duration_ms,
   createdAt: r.created_at,
   request: JSON.parse(r.request_json),
   response: r.response_json ? JSON.parse(r.response_json) : null,
+  // 세 가지가 다른 뜻이다: `null` = 스트림이 아님 · `[]` = 세션은 열렸는데 0건 ·
+  // 목록 조회에서는 아예 안 읽으므로 `messageCount` 로 몇 건인지만 알린다.
+  messages:
+    r.messages_json === undefined
+      ? null
+      : r.messages_json
+        ? (JSON.parse(r.messages_json) as StreamMessage[])
+        : null,
+  messageCount: r.message_count,
   error: r.error
 })
 
-export type AppendRunInput = Omit<RunRecord, 'id' | 'createdAt'>
+export type AppendRunInput = Omit<RunRecord, 'id' | 'createdAt' | 'messageCount'>
 
 export function appendRun(input: AppendRunInput): RunRecord {
   const record: RunRecord = {
     ...input,
     id: `run_${randomUUID().replace(/-/g, '').slice(0, 12)}`,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    // 목록 화면이 본문 없이도 "몇 건이었나"를 말할 수 있게 세어 둔다.
+    messageCount: input.messages ? input.messages.length : null
   }
   getDb()
     .prepare(
-      'INSERT INTO api_runs (id, spec_id, request_name, environment_id, environment_name, base_version, status, http_status, duration_ms, created_at, request_json, response_json, error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      'INSERT INTO api_runs (id, spec_id, request_name, environment_id, environment_name, base_version, shape, status, http_status, duration_ms, created_at, request_json, response_json, messages_json, message_count, error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     )
     .run(
       record.id,
@@ -177,15 +212,29 @@ export function appendRun(input: AppendRunInput): RunRecord {
       record.environmentId,
       record.environmentName,
       record.baseVersion,
+      record.shape,
       record.status,
       record.httpStatus,
       record.durationMs,
       record.createdAt,
       JSON.stringify(record.request),
       record.response ? JSON.stringify(record.response) : null,
+      record.messages ? JSON.stringify(record.messages) : null,
+      record.messageCount,
       record.error
     )
   return record
+}
+
+/**
+ * 기록 하나를 **본문까지** 읽는다. 목록에서 빠진 메시지를 여기서 꺼낸다 —
+ * 예전엔 목록 1,000건을 읽어 `.find()` 로 골랐다(같은 자리에서 메시지도 전부 파싱했다).
+ */
+export function getRun(specId: string, runId: string): RunRecord | null {
+  const r = getDb()
+    .prepare(`SELECT ${LIST_COLUMNS}, messages_json FROM api_runs WHERE spec_id = ? AND id = ?`)
+    .get(specId, runId) as unknown as RunRow | undefined
+  return r ? toRun(r) : null
 }
 
 export interface ListRunsFilter {
@@ -214,11 +263,18 @@ export function listRuns(specId: string, filter: ListRunsFilter = {}): RunRecord
   return (
     getDb()
       .prepare(
-        `SELECT * FROM api_runs WHERE ${where.join(' AND ')} ORDER BY created_at DESC, rowid DESC LIMIT ?`
+        `SELECT ${LIST_COLUMNS} FROM api_runs WHERE ${where.join(' AND ')} ORDER BY created_at DESC, rowid DESC LIMIT ?`
       )
       .all(...(args as never[])) as unknown as RunRow[]
   ).map(toRun)
 }
+
+/**
+ * 명세당 실행 기록 보관 상한. **여기가 유일한 자리다** — 단발 전송과 스트림 세션이 같은
+ * 표를 자르므로, 숫자가 두 파일에 흩어지면 실효 보관량이 "마지막에 어느 경로가 돌았나"에
+ * 따라 흔들린다.
+ */
+export const RUN_KEEP = 500
 
 export interface PruneResult {
   /** 상한을 넘겨 지운 건수. **조용히 사라지면 안 되므로** 세어서 돌려준다. */

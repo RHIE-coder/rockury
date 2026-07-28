@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from './db'
+import { normalizeDrift } from '../../shared/api/drift'
 import type { DriftGrade, DriftResult } from '../../shared/api/drift'
 import type { AbsorbChange } from '../../shared/api/absorb'
 
@@ -38,17 +39,26 @@ interface Row {
   created_at: string
 }
 
-const toLog = (r: Row): ContractLog => ({
-  id: r.id,
-  specId: r.spec_id,
-  kind: r.kind as ContractLogKind,
-  environmentId: r.environment_id,
-  environmentName: r.environment_name,
-  grade: (r.grade as DriftGrade | null) ?? null,
-  summary: r.summary,
-  createdAt: r.created_at,
-  payload: JSON.parse(r.payload)
-})
+const toLog = (r: Row): ContractLog => {
+  const kind = r.kind as ContractLogKind
+  const payload = JSON.parse(r.payload)
+  return {
+    id: r.id,
+    specId: r.spec_id,
+    kind,
+    environmentId: r.environment_id,
+    environmentName: r.environment_name,
+    grade: (r.grade as DriftGrade | null) ?? null,
+    summary: r.summary,
+    createdAt: r.created_at,
+    // **판정 결과는 JSON 통째로 저장된다** — 커버리지에 칸을 더하면 그 전에 쌓인 기록에는
+    // 그 칸이 없다. 화면이 `.length` 를 부르는 순간 터지고, 렌더러에 error boundary 가
+    // 없어 판정 화면이 백지가 된다(재판정 버튼까지 사라져 스스로 복구가 안 된다).
+    // `api_runs` 는 컬럼 ALTER 로 막았지만 JSON 페이로드엔 마이그레이션이 닿지 않으므로
+    // **읽는 자리에서** 맞춰 준다.
+    payload: kind === 'drift' ? normalizeDrift(payload as DriftResult) : (payload as AbsorbChange[])
+  }
+}
 
 export interface AppendLogInput {
   specId: string

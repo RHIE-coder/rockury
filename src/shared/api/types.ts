@@ -253,6 +253,46 @@ export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
   cancelled: '취소'
 }
 
+// ── 스트림 세션 ───────────────────────────────────────────────────────────
+
+/** 세션 상태. `error` 는 끊긴 것과 다르다 — 왜 끊겼는지가 화면에 남아야 한다(stream.session AC-1). */
+export const STREAM_STATES = ['idle', 'connecting', 'open', 'closed', 'error'] as const
+export type StreamState = (typeof STREAM_STATES)[number]
+
+export const STREAM_STATE_LABEL: Record<StreamState, string> = {
+  idle: '대기',
+  connecting: '접속 중',
+  open: '연결됨',
+  closed: '끊김',
+  error: '오류'
+}
+
+/**
+ * 타임라인 항목의 방향. `system` 은 우리가 만든 항목(접속·끊김·재접속 시도)이다 —
+ * 주고받은 메시지와 **같은 줄에 섞되 방향으로 갈라 보인다**(stream.session AC-2/AC-4).
+ */
+export const STREAM_DIRECTIONS = ['out', 'in', 'system'] as const
+export type StreamDirection = (typeof STREAM_DIRECTIONS)[number]
+
+export const STREAM_DIRECTION_LABEL: Record<StreamDirection, string> = {
+  out: '보냄',
+  in: '받음',
+  system: '기록'
+}
+
+/** 세션에서 오간 한 줄. `seq` 는 같은 밀리초에 여러 개가 와도 순서를 잃지 않게 한다. */
+export interface StreamMessage {
+  seq: number
+  at: string
+  direction: StreamDirection
+  /** SSE `event:` 이름 · 시스템 항목 종류(`connect`·`close`·`reconnect`·`error`). 없으면 ''. */
+  event: string
+  /** 원문 그대로. 화면이 접어 보여도 여기 값은 안 바뀐다(내보내기가 원문을 보존해야 한다). */
+  data: string
+}
+
+// ── 실행 기록 ─────────────────────────────────────────────────────────────
+
 /**
  * 한 번 쏜 것. **불변**이다 — 나중에 명세가 바뀌어도 지나간 관측은 안 바뀐다.
  * 비밀 표식 값은 여기 들어올 때 이미 가려져 있다(spec send.observe AC-3).
@@ -265,12 +305,26 @@ export interface RunRecord {
   environmentName: string
   /** 어느 버전 기준의 관측인가. Draft 상태면 null — 판정이 버전을 가르는 데 쓴다. */
   baseVersion: string | null
+  /**
+   * 어떤 상호작용을 관측한 기록인가. **선택 필드가 아니다** — 단발 응답과 스트림 세션은
+   * 관측 내용의 모양 자체가 달라서, 이 칸이 없으면 판정이 메시지 목록을 응답 본문으로
+   * 오독한다(spec api-contract drift.observed AC-6).
+   */
+  shape: InteractionShape
   status: RunStatus
   httpStatus: number | null
   durationMs: number
   createdAt: string
   request: { method: string; url: string; headers: Record<string, string>; body: string }
   response: { status: number; headers: Record<string, string>; body: string; size: number } | null
+  /**
+   * 스트림 세션의 관측 내용. 단발 실행이면 null(빈 배열이 아니다 — "없음"과 "0건"은 다르다).
+   * **목록 조회에서는 안 실린다**(본문이 커서 메인 프로세스가 멈춘다) — 그때는 `messageCount`
+   * 만 보고, 본문이 필요하면 `getRun` 으로 하나만 읽는다.
+   */
+  messages: StreamMessage[] | null
+  /** 메시지 몇 건이었나. 단발 실행이면 null — 본문을 안 읽고도 "몇 건"을 말할 수 있게. */
+  messageCount: number | null
   error: string | null
 }
 

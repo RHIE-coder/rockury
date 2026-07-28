@@ -19,7 +19,23 @@ describe('지울 대상 고르기', () => {
           { name: 't', value: 'public-tenant', secret: false }
         )
       )
-    ).toEqual(['SECRET-VALUE'])
+    ).toContain('SECRET-VALUE')
+  })
+
+  it('같은 비밀의 **다른 표기**도 지울 목록에 든다 — 서버가 그 형태로 되돌려준다', () => {
+    // 쿼리에 실었으면 URL 인코딩되어 오고, `{{base64(key)}}` 로 보냈으면 base64 로 에코된다.
+    const got = secretValues(vals({ name: 'k', value: 'AB+cd/ef=ghij', secret: true }))
+    expect(got).toContain('AB+cd/ef=ghij')
+    expect(got).toContain('AB%2Bcd%2Fef%3Dghij')
+    expect(got).toContain(btoa('AB+cd/ef=ghij'))
+    // 대소문자만 바꿔 되돌려주는 서버도 있다.
+    expect(got).toContain('ab+cd/ef=ghij')
+  })
+
+  it('해시·서명은 못 지운다 — 되돌릴 수 없어 만들 수가 없다(한계를 분명히 둔다)', () => {
+    // 이 한계 때문에 MCP 에는 본문을 아예 주지 않고 모양까지만 준다.
+    const got = secretValues(vals({ name: 'k', value: 'SECRET-VALUE', secret: true }))
+    expect(got.every((v) => !/^[0-9a-f]{32}$/.test(v))).toBe(true)
   })
 
   it('너무 짧은 값은 안 지운다 — 본문이 걸레가 되어 읽을 수 없게 된다', () => {
@@ -34,7 +50,10 @@ describe('지울 대상 고르기', () => {
         { name: 'b', value: 'TOKEN-LONGER', secret: true }
       )
     )
-    expect(got).toEqual(['TOKEN-LONGER', 'TOKEN'])
+    // 표기 변형이 섞여도 **길이 내림차순**이 지켜져야 한다 — 짧은 값이 긴 값을 잘라 먹으면
+    // 긴 값이 통째로 안 지워진다.
+    expect(got).toEqual([...got].sort((a, b) => b.length - a.length))
+    expect(got.indexOf('TOKEN-LONGER')).toBeLessThan(got.indexOf('TOKEN'))
     expect(redactText('TOKEN-LONGER', got)).toBe(MASK)
   })
 })

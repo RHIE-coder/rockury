@@ -5,9 +5,11 @@ import {
   deleteEnvironment,
   duplicateEnvironment,
   getEnvironment,
+  getRun,
   listEnvironments,
   listRuns,
   pruneRuns,
+  RUN_KEEP,
   saveEnvironment,
   type ListRunsFilter,
   type SaveEnvironmentInput
@@ -17,9 +19,6 @@ import { composeRequest } from '../../../shared/api/compose'
 import { redactHeaders, redactText, secretValues } from '../../../shared/api/redact'
 import { nodeFunctionEnv } from '../../../shared/api/nodeFunctionEnv'
 import type { RunRecord } from '../../../shared/api/types'
-
-/** 명세당 실행 기록 보관 상한. 넘치면 오래된 것부터 지우고 **몇 건 지웠는지 알린다**. */
-const RUN_KEEP = 500
 
 export interface SendRequestInput {
   specId: string
@@ -53,9 +52,9 @@ export function registerApiOpsIpc(): void {
   ipcMain.handle('api:listRuns', (_e, specId: string, filter?: ListRunsFilter) =>
     listRuns(specId, filter ?? {})
   )
-  ipcMain.handle('api:getRun', (_e, specId: string, runId: string) =>
-    listRuns(specId, { limit: 1000 }).find((r) => r.id === runId) ?? null
-  )
+  // 상세는 **본문까지** 읽는다(스트림 세션의 메시지 목록이 여기서 나온다). 목록 1,000건을
+  // 읽어 `.find()` 하던 예전 방식은 같은 자리에서 메시지를 전부 파싱해 초 단위로 멈췄다.
+  ipcMain.handle('api:getRun', (_e, specId: string, runId: string) => getRun(specId, runId))
 
   ipcMain.handle('api:send', async (_e, input: SendRequestInput): Promise<SendRequestResult> => {
     const spec = getSpec(input.specId)
@@ -102,12 +101,14 @@ export function registerApiOpsIpc(): void {
       // 호출자가 안 정했으면 Draft 가 어느 버전과 똑같은지로 정한다 — 최신 번호를
       // 그냥 붙이면 컷 이후 고친 Draft 의 관측이 그 버전 것으로 둔갑한다.
       baseVersion: input.baseVersion ?? versionMatchingDraft(spec.id),
+      shape: request.shape,
       status: result.status,
       httpStatus: result.httpStatus,
       durationMs: result.durationMs,
       // 가린 조립본을 저장한다 — 저장소·기록·MCP 어디에도 실값이 안 남는다.
       request: { method: masked.method, url: masked.url, headers: masked.headers, body: masked.body },
       response,
+      messages: null, // 단발 실행 — 스트림 세션이 아니다("없음"이지 "0건"이 아니다).
       error: result.error ? redactText(result.error, secrets) : null
     })
 

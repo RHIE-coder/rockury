@@ -1,11 +1,79 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { History } from 'lucide-react'
 import { Input } from '@renderer/ui/input'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { cn } from '@renderer/lib/utils'
-import { RUN_STATUSES, RUN_STATUS_LABEL, type RunRecord, type RunStatus } from '@shared/api/types'
+import { exportTimeline } from '@shared/api/stream'
+import {
+  RUN_STATUSES,
+  RUN_STATUS_LABEL,
+  STREAM_DIRECTION_LABEL,
+  type RunRecord,
+  type RunStatus
+} from '@shared/api/types'
+import { Button } from '@renderer/ui/button'
 import { useApiStore } from '../store'
 import { useOpsStore, useOpsSync } from '../ops/store'
+
+/**
+ * 스트림 세션 기록의 관측 내용 — **메시지 목록**이다(spec stream.session AC-6).
+ *
+ * 목록 조회는 본문을 안 읽으므로(5,000건을 매번 파싱하면 메인이 멈춘다) 펼칠 때 하나만
+ * 따로 읽는다. 이 화면이 없으면 "세션이 기록으로 남았습니다 — 메시지 12건" 이라고 알린 뒤
+ * **그 12건을 앱 어디서도 다시 볼 수 없다.**
+ */
+function SessionMessages({ run }: { run: RunRecord }) {
+  const [full, setFull] = useState<RunRecord | null>(null)
+  useEffect(() => {
+    let alive = true
+    void window.rockury.apiOps.getRun(run.specId, run.id).then((r) => {
+      if (alive) setFull(r)
+    })
+    return () => {
+      alive = false
+    }
+  }, [run.specId, run.id])
+
+  const messages = full?.messages ?? null
+  return (
+    <div className="flex flex-col gap-1.5" data-api-run-messages>
+      <div className="flex items-center gap-2">
+        <span className="text-muted">주고받은 메시지 {run.messageCount ?? 0}건</span>
+        {messages && messages.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 px-1.5 text-[10.5px]"
+            data-api-run-export
+            onClick={() => void navigator.clipboard.writeText(exportTimeline(messages))}
+          >
+            전체 내보내기
+          </Button>
+        )}
+      </div>
+      {messages === null ? (
+        <span className="text-muted">불러오는 중…</span>
+      ) : messages.length === 0 ? (
+        <span className="text-muted">세션은 열렸지만 오간 메시지가 없습니다.</span>
+      ) : (
+        <div className="max-h-56 overflow-auto rounded-md border border-line bg-canvas">
+          {messages.map((m) => (
+            <div
+              key={m.seq}
+              data-api-run-msg={m.direction}
+              className="flex items-start gap-2 border-b border-line px-2 py-1 font-mono text-[11px] last:border-b-0"
+            >
+              <span className="w-10 shrink-0 text-muted">{STREAM_DIRECTION_LABEL[m.direction]}</span>
+              <span className="w-16 shrink-0 tabular-nums text-muted">{m.at.slice(11, 19)}</span>
+              {m.event && <span className="shrink-0 text-muted">{m.event}</span>}
+              <span className="min-w-0 flex-1 break-all whitespace-pre-wrap text-fg">{m.data}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /**
  * Runner › History — `docs/spec/api-runner.md` § history.
@@ -58,7 +126,14 @@ function RunRow({ run, open, onToggle }: { run: RunRecord; open: boolean; onTogg
               ))}
             </div>
           )}
-          {run.error && <div className="text-danger">{run.error}</div>}
+          {/**
+            * 스트림 세션은 정상 종료도 이 칸에 이유를 적는다("사용자가 끊었습니다") —
+            * 실패 여부는 `status` 가 가른다. 있으면 빨갛게 칠하면 성공한 세션이 실패처럼 보인다.
+            */}
+          {run.error && (
+            <div className={run.status === 'ok' ? 'text-muted' : 'text-danger'}>{run.error}</div>
+          )}
+          {run.shape !== 'unary' && <SessionMessages run={run} />}
           {run.response && (
             <pre className="max-h-56 overflow-auto rounded-md border border-line bg-canvas px-2.5 py-2 font-mono text-fg">
               {run.response.body || '(본문 없음)'}

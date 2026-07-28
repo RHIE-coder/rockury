@@ -15,7 +15,9 @@
 - **CASE-apicontract-010 (불변식 ①)** **관측 커버리지 집계**: 요청 12개 중 Run 이 있는 것이 7개면 결과가 `7 관측 / 5 미관측` 이다. 미관측 5개를 일치로 세면 실패. (drift.observed AC-2) → `api/contract/coverage.test.ts`
 - **CASE-apicontract-011** 미관측 목록: 무엇을 아직 안 쏴 봤는지 이름 목록이 결과에 담긴다. 개수만 있고 목록이 없으면 실패. (drift.observed AC-3)
 - **CASE-apicontract-011b** 판정 불가와 통과를 가른다: 응답이 JSON 이 아니어서 모양을 못 뽑은 요청은 관측으로 세지 않고 `unparsable` 목록에 남는다. 응답이 없는 실행(연결 실패)도 관측이 아니다. (drift.observed AC-3b)
-- **CASE-apicontract-012** "전부 관측됨" 조건: 미관측이 **0일 때만** 그 문구가 나온다. 1개라도 남으면 안 나온다. (drift.observed AC-2)
+- **CASE-apicontract-011c (판정 규칙 없음)** 스트림·수신 요청은 세션이 쌓여도 대조를 못 한다 — 미관측이 아니라 `unjudged` 목록으로 따로 세고, 요약·리포트에 건수가 실린다. 한 번도 안 붙어 본 것은 그냥 미관측이다(두 사실을 뭉치면 실패). 메시지 목록을 응답 본문으로 오독해 **없는 어긋남을 만들면 실패**. (drift.observed AC-6)
+- **CASE-apicontract-011d (형제 경로·옛 기록)** **완전 판정도 스트리밍은 대조하지 않는다** — GraphQL introspection 에 subscription 루트가 없어서, 규칙을 관측 판정에만 두면 멀쩡한 서버의 subscription 이 "명세에만 있음(내 요청이 깨진다)"으로 잡힌다. 또한 **선언 모양이 아니라 그 실행이 무엇이었는지로 가른다** — 스트리밍으로 선언한 요청을 단발로 쏜 관측은 계속 판정된다. 커버리지 칸이 없던 **옛 판정 기록**을 읽어도 화면이 죽지 않는다(읽는 자리에서 맞춘다). (drift.observed AC-6/AC-7)
+- **CASE-apicontract-012** "전부 관측됨" 조건: 미관측이 **0일 때만** 그 문구가 나온다. 1개라도 남으면 안 나온다. 판정 규칙 없음이 1개라도 있으면 그 문구가 안 나온다. (drift.observed AC-2/AC-6)
 - **CASE-apicontract-013** 이상 없음 + 커버리지 동반: 어긋남 0 이어도 결과 문구에 커버리지가 붙는다. **커버리지 없는 "이상 없음"을 만들 수 없다.** (drift.result AC-5)
 - **CASE-apicontract-014** 기준 버전 분리: 기준 버전이 다른 Run 은 같은 판정에 섞이지 않는다. 결과에 어느 버전 기준인지 실린다. (drift.observed AC-5)
 - **CASE-apicontract-015** 최근 성공 Run 선택: 같은 요청에 Run 이 여럿이면 가장 최근 성공 Run 이 기준이 되고, 과거 Run 과 응답 모양이 달랐으면 그 사실이 표시된다. (drift.observed AC-4)
@@ -55,3 +57,6 @@
 - **gRPC 완전 판정** — 구현 순서상 GraphQL 다음이다(`drift.complete` AC-5).
   GraphQL 로 S1·S6 를 먼저 세우고, gRPC 케이스는 같은 시나리오에 항목으로 더한다.
 - **SOAP/WSDL** — 후순위. 케이스 없음.
+- **스트림·수신 관측의 대조 규칙** — 세션 Run 은 쌓이지만 메시지 목록을 선언한 응답 모양과
+  대조하는 규칙이 없다. 지금은 `unjudged` 로 **드러내는 것까지**가 구현이다(011c).
+  규칙을 만들면 그때 대조 케이스를 여기 더한다.

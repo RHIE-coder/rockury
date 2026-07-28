@@ -56,7 +56,15 @@ async function completeDrift(specId: string, environmentId: string): Promise<Dri
 
   const rootOf: Record<string, string | null> = {}
   for (const r of spec.requests) rootOf[r.name] = rootFieldOf(r.request.graphqlQuery ?? '')
-  return driftFromSchema({ spec, schema: outcome.schema, environmentName: env.name, rootOf })
+  return driftFromSchema({
+    spec,
+    schema: outcome.schema,
+    environmentName: env.name,
+    rootOf,
+    // 스트리밍 요청(subscription)은 서버 스키마에 루트가 없어 대조 대상이 아니다 —
+    // 세션 관측이 있었는지만 가려 커버리지에 정직하게 싣는다.
+    runs: listRuns(spec.id, { environmentId: env.id, limit: 1000 })
+  })
 }
 
 export function registerApiContractIpc(): void {

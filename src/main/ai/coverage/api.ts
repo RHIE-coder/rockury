@@ -39,6 +39,14 @@ export const apiCoverage: ServiceCoverage = {
     'api:send':
       '실행은 사람이 앱에서만 — AI 는 터미널에서 더 잘 쏘고, 실행을 안 주면 자격증명 문제 자체가 ' +
       '생기지 않는다(spec api-mcp tools.absent AC-1).',
+    'api:openStream':
+      '실행이다 — `api:send` 와 같은 선. 게다가 세션은 오래 살아서, 도구로 열면 누가 언제 ' +
+      '닫는지가 흐려진다(앱을 닫아도 남는 소켓이 생긴다). 쌓인 세션 기록은 api_get_runs 로 읽힌다.',
+    'api:sendStream': '위와 같음 — 열린 세션에 글자를 밀어 넣는 것도 실행이다.',
+    'api:closeStream': '위와 같음. 열지 못하므로 닫을 것도 없다.',
+    'api:closeAllStreams':
+      '화면이 새로 뜰 때 주인 없는 소켓을 정리하는 내부 청소 창구다 — 에이전트가 부를 일이 ' +
+      '없고, 열 수 없는 것을 남이 닫게 하는 도구를 두면 사람이 보던 세션을 끊을 수 있다.',
     'api:listEnvironments':
       '환경은 서버 주소·자격증명을 든다. 실행 도구가 없으므로 AI 가 이 값을 알 이유가 없다.',
     'api:saveEnvironment': '위와 같음 — 값을 쓰는 경로도 열지 않는다.',

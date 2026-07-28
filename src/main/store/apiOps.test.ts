@@ -28,6 +28,8 @@ const run = (over: Partial<AppendRunInput> & Pick<AppendRunInput, 'specId' | 'en
   requestName: 'getUser',
   environmentName: 'DEV',
   baseVersion: null,
+  shape: 'unary',
+  messages: null,
   status: 'ok',
   httpStatus: 200,
   durationMs: 12,

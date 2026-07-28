@@ -51,6 +51,12 @@ export interface DriftCoverage {
   unobserved: string[]
   /** 관측은 했지만 JSON 이 아니라 모양을 못 뽑은 요청. 통과가 아니다. */
   unparsable: string[]
+  /**
+   * 관측은 쌓였지만 **이 상호작용 모양의 판정 규칙이 아직 없는** 요청(스트림 세션·웹훅 수신).
+   * 미관측과 갈라 두는 이유: 미관측은 *쏴 보면* 풀리고, 이쪽은 *우리가 규칙을 만들어야* 풀린다.
+   * 어느 쪽도 통과가 아니다.
+   */
+  unjudged: string[]
 }
 
 export interface DriftResult {
@@ -146,13 +152,89 @@ function compareFields(ctx: Ctx, base: string, declared: FieldDef[], actual: Fie
 
 // ── 관측 판정 ─────────────────────────────────────────────────────────────
 
-/** 응답이 있는 실행만 관측으로 친다. 못 붙은 실행은 서버 모양에 대해 아무것도 안 알려 준다. */
+/**
+ * 응답이 있는 **단발** 실행만 관측으로 친다.
+ *
+ * `shape` 는 요청에 선언된 것이 아니라 **그 실행이 실제로 무엇이었는지**를 본다 —
+ * duplex 로 선언된 요청을 Send 로 한 번 쏴 볼 수도 있고(막지 않는다), 그 관측은
+ * 여전히 응답 본문 대조 대상이다. 선언으로 가르면 그 findings 가 통째로 사라진다.
+ */
 function observationsFor(runs: readonly RunRecord[], name: string, baseVersion?: string | null): RunRecord[] {
   return runs
-    .filter((r) => r.requestName === name && r.response !== null)
+    .filter((r) => r.requestName === name && r.shape === 'unary' && r.response !== null)
     .filter((r) => (baseVersion == null ? true : r.baseVersion === baseVersion))
     .slice()
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+}
+
+/**
+ * 스트림·수신 관측이 **실제로 있었나.**
+ *
+ * "행이 있나"로 세면 안 된다 — 접속 실패한 세션도 Run 으로 남기 때문에, 한 번도 못 붙은
+ * 요청이 "세션은 쌓였지만 대조 규칙이 없다"로 뜬다. 그건 미관측이다.
+ *
+ * `status === 'ok'` 를 조건으로 쓰는 이유: 스트림 상태 판정(`stream.ts` streamRunStatus)에서
+ * `ok` 는 **붙은 뒤 끝난 세션에만** 나온다(못 붙으면 connect-failed·timeout, 붙기 전에 끄면
+ * cancelled, 스트림을 안 주면 http-error). 메시지 본문을 안 보는 것도 의도다 —
+ * 목록 조회는 본문을 안 읽으므로(그러면 메인이 멈춘다) 본문에 의존하면 판정이 조용히
+ * "관측 없음"으로 뒤집힌다.
+ */
+function hasStreamObservation(
+  runs: readonly RunRecord[],
+  name: string,
+  baseVersion?: string | null
+): boolean {
+  return runs.some(
+    (r) =>
+      r.requestName === name &&
+      r.shape !== 'unary' &&
+      r.status === 'ok' &&
+      (baseVersion == null ? true : r.baseVersion === baseVersion)
+  )
+}
+
+/**
+ * 옛 판정 기록을 지금 타입으로 맞춘다.
+ *
+ * `DriftResult` 는 `api_contract_logs.payload` 에 **JSON 통째로** 저장된다. 커버리지에 칸을
+ * 더하면 그 전에 쌓인 기록은 그 칸이 없는 채로 돌아오고, 화면·요약이 `.length` 를 부르는
+ * 순간 터진다 — 렌더러에 error boundary 가 없어 판정 화면이 백지가 되고, 재판정 버튼까지
+ * 사라져 스스로 복구할 길이 없어진다(`api_runs` 는 컬럼 ALTER 로 막았는데 이쪽은 JSON 이라
+ * 마이그레이션이 닿지 않는다 — 읽는 자리에서 맞춰 준다).
+ */
+export function normalizeDrift(raw: DriftResult): DriftResult {
+  const c = (raw.coverage ?? {}) as Partial<DriftCoverage>
+  return {
+    ...raw,
+    coverage: {
+      total: c.total ?? 0,
+      observed: c.observed ?? 0,
+      unobserved: c.unobserved ?? [],
+      unparsable: c.unparsable ?? [],
+      unjudged: c.unjudged ?? []
+    },
+    findings: raw.findings ?? [],
+    unstable: raw.unstable ?? [],
+    skippedUnknown: raw.skippedUnknown ?? 0
+  }
+}
+
+/**
+ * 대조할 단발 관측이 없을 때, 그 요청을 어느 통에 넣나.
+ *
+ * 스트림·수신 세션이 있었으면 **판정 규칙 없음**(대조 규칙을 우리가 아직 안 만들었다),
+ * 아무것도 없으면 **미관측**(쏴 보면 풀린다). 통과는 어느 쪽도 아니다.
+ * 완전 판정·관측 판정 **양쪽**이 같은 이 함수를 쓴다 — 한쪽만 고치면 형제 경로가
+ * "없는 어긋남"을 계속 만든다.
+ */
+function bucketUnobserved(
+  name: string,
+  runs: readonly RunRecord[],
+  baseVersion: string | null,
+  unjudged: string[],
+  unobserved: string[]
+): void {
+  ;(hasStreamObservation(runs, name, baseVersion) ? unjudged : unobserved).push(name)
 }
 
 export function driftFromObservations(input: ObservationInput): DriftResult {
@@ -160,13 +242,17 @@ export function driftFromObservations(input: ObservationInput): DriftResult {
   const ctx: Ctx = { findings: [], skippedUnknown: 0 }
   const unobserved: string[] = []
   const unparsable: string[] = []
+  const unjudged: string[] = []
   const unstable: string[] = []
   let observed = 0
 
   for (const request of spec.requests) {
+    // **선언 모양으로 먼저 가르지 않는다.** duplex 로 선언한 요청을 Send 로 한 번 쏴 볼 수도
+    // 있고(막지 않는다), 그 단발 관측은 여전히 응답 본문 대조 대상이다 — 선언으로 갈라
+    // 건너뛰면 그 findings 가 통째로 사라진다.
     const found = observationsFor(runs, request.name, baseVersion)
     if (found.length === 0) {
-      unobserved.push(request.name)
+      bucketUnobserved(request.name, runs, baseVersion, unjudged, unobserved)
       continue
     }
     const latest = found[0]
@@ -202,7 +288,7 @@ export function driftFromObservations(input: ObservationInput): DriftResult {
     unavailable: null,
     environmentName,
     baseVersion,
-    coverage: { total: spec.requests.length, observed, unobserved, unparsable },
+    coverage: { total: spec.requests.length, observed, unobserved, unparsable, unjudged },
     findings: ctx.findings,
     skippedUnknown: ctx.skippedUnknown,
     unstable
@@ -222,6 +308,12 @@ export interface SchemaDriftInput {
   environmentName: string
   /** 요청 이름 → 서버 루트 필드 이름. 못 읽은 요청은 여기 없다(그러면 판정에서 빠진다). */
   rootOf: Record<string, string | null>
+  /**
+   * 스트림 관측 유무를 가리는 데만 쓴다 — 완전 판정도 **스트리밍 요청은 대조하지 않는다**.
+   * GraphQL introspection 에는 subscription 루트가 없어서, 이걸 안 가리면 정상 서버의
+   * subscription 요청이 "명세에만 있음(내 요청이 깨진다)"으로 잘못 잡힌다.
+   */
+  runs?: readonly RunRecord[]
 }
 
 /**
@@ -229,12 +321,20 @@ export interface SchemaDriftInput {
  * 다만 우리 쪽에서 루트 이름을 못 읽은 요청은 여전히 판정 밖이고, 그 사실을 숨기지 않는다.
  */
 export function driftFromSchema(input: SchemaDriftInput): DriftResult {
-  const { spec, schema, environmentName, rootOf } = input
+  const { spec, schema, environmentName, rootOf, runs = [] } = input
   const ctx: Ctx = { findings: [], skippedUnknown: 0 }
   const unobserved: string[] = []
+  const unjudged: string[] = []
   let observed = 0
 
   for (const request of spec.requests) {
+    // 완전 판정에서는 **선언 모양으로 가르는 것이 맞다** — 서버 스키마에 스트리밍 루트가
+    // 아예 없어서(introspection 에 subscription 이 없다) 어떻게 쏴 봤든 대조할 것이 없다.
+    if (request.shape !== 'unary') {
+      bucketUnobserved(request.name, runs, null, unjudged, unobserved)
+      continue
+    }
+
     const root = rootOf[request.name] ?? null
     if (!root) {
       // 어느 루트 필드를 부르는지 못 읽었다 — 모르면 모른다고 둔다.
@@ -262,7 +362,7 @@ export function driftFromSchema(input: SchemaDriftInput): DriftResult {
     unavailable: null,
     environmentName,
     baseVersion: null,
-    coverage: { total: spec.requests.length, observed, unobserved, unparsable: [] },
+    coverage: { total: spec.requests.length, observed, unobserved, unparsable: [], unjudged },
     findings: ctx.findings,
     skippedUnknown: ctx.skippedUnknown,
     unstable: []
@@ -280,7 +380,7 @@ export function driftUnavailable(
     unavailable: { reason, message },
     environmentName,
     baseVersion: null,
-    coverage: { total: 0, observed: 0, unobserved: [], unparsable: [] },
+    coverage: { total: 0, observed: 0, unobserved: [], unparsable: [], unjudged: [] },
     findings: [],
     skippedUnknown: 0,
     unstable: []
@@ -299,8 +399,11 @@ export function summarizeDrift(d: DriftResult): string {
   const skipped = d.skippedUnknown > 0 ? ` · 모름 ${d.skippedUnknown}개 제외` : ''
   const unparsable =
     d.coverage.unparsable.length > 0 ? ` · 모양 못 읽음 ${d.coverage.unparsable.length}개` : ''
+  // 스트림·수신은 쌓아 놨어도 대조를 못 했다. 요약 한 줄만 보고 "이상 없음"으로 읽히면 안 된다.
+  const unjudged =
+    d.coverage.unjudged.length > 0 ? ` · 판정 규칙 없음 ${d.coverage.unjudged.length}개` : ''
   const head = d.findings.length === 0 ? '이상 없음' : `어긋남 ${d.findings.length}건`
-  return `${head} (${cov}${skipped}${unparsable})`
+  return `${head} (${cov}${skipped}${unparsable}${unjudged})`
 }
 
 /**

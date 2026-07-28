@@ -63,8 +63,8 @@ function GradeBadge({ drift }: { drift: DriftResult }) {
 }
 
 function Coverage({ drift }: { drift: DriftResult }) {
-  const { total, observed, unobserved, unparsable } = drift.coverage
-  const all = unobserved.length === 0 && unparsable.length === 0
+  const { total, observed, unobserved, unparsable, unjudged } = drift.coverage
+  const all = unobserved.length === 0 && unparsable.length === 0 && unjudged.length === 0
   return (
     <div className="flex flex-col gap-1.5" data-api-drift-coverage>
       <div className="flex items-center gap-2 text-[12px]">
@@ -75,6 +75,7 @@ function Coverage({ drift }: { drift: DriftResult }) {
           <span className="text-danger">
             · 미관측 {unobserved.length}개
             {unparsable.length > 0 && ` · 모양 못 읽음 ${unparsable.length}개`}
+            {unjudged.length > 0 && ` · 판정 규칙 없음 ${unjudged.length}개`}
           </span>
         )}
         {all && total > 0 && <span className="text-muted">· 전부 관측됨</span>}
@@ -94,6 +95,15 @@ function Coverage({ drift }: { drift: DriftResult }) {
       {unparsable.length > 0 && (
         <p className="rounded-md bg-panel px-2.5 py-1.5 text-[11.5px] text-muted">
           응답이 JSON 이 아니라 모양을 못 읽은 요청 — <span className="font-mono">{unparsable.join(', ')}</span>
+        </p>
+      )}
+      {unjudged.length > 0 && (
+        <p className="rounded-md bg-panel px-2.5 py-1.5 text-[11.5px] text-muted" data-api-drift-unjudged>
+          세션은 쌓였지만 <b>대조 규칙이 아직 없는</b> 요청 —{' '}
+          <span className="font-mono">{unjudged.join(', ')}</span>
+          <br />
+          스트림·웹훅의 관측 내용은 응답 본문이 아니라 메시지 목록이라, 지금 판정기가 못 읽습니다.
+          미관측과 달리 <b>더 쏴 본다고 풀리지 않습니다.</b>
         </p>
       )}
       {drift.unstable.length > 0 && (
@@ -259,7 +269,11 @@ export function DriftView() {
                   const lines = [
                     `# API 판정 리포트 — ${spec.name}`,
                     `등급: ${drift.grade === 'complete' ? '완전 판정(전량 대조)' : '관측 판정(쏴 본 것만)'}`,
-                    `커버리지: ${drift.coverage.observed}/${drift.coverage.total} 관측 · 미관측 ${drift.coverage.unobserved.length}개`,
+                    `커버리지: ${drift.coverage.observed}/${drift.coverage.total} 관측 · 미관측 ${drift.coverage.unobserved.length}개` +
+                      // 리포트가 코드 리뷰·이슈에 붙으므로, 못 본 자리는 붙여넣기에도 실려야 한다.
+                      (drift.coverage.unjudged.length > 0
+                        ? ` · 판정 규칙 없음 ${drift.coverage.unjudged.length}개(${drift.coverage.unjudged.join(', ')})`
+                        : ''),
                     `필수여부 모름으로 제외: ${drift.skippedUnknown}개`,
                     '',
                     ...drift.findings.map((f) => `- [${KIND_META[f.kind].label}] ${f.path} — ${f.detail}`)

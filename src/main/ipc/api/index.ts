@@ -1,6 +1,7 @@
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { registerApiSpecIpc } from './specs'
 import { registerApiOpsIpc } from './ops'
+import { registerApiStreamIpc, shutdownApiStreams } from './stream'
 import { registerApiContractIpc } from './contract'
 import { registerApiTransferIpc } from './transfer'
 import { setApiChangeNotifier } from '../../ai/apiTools'
@@ -15,8 +16,13 @@ import { setApiChangeNotifier } from '../../ai/apiTools'
 export function registerApiIpc(): void {
   registerApiSpecIpc()
   registerApiOpsIpc()
+  registerApiStreamIpc()
   registerApiContractIpc()
   registerApiTransferIpc()
+
+  // 열린 소켓을 앱 종료에 남기지 않는다. 여기서 거는 이유는 아래 알림 주입과 같다 —
+  // 공용 진입점(main/index.ts)을 안 건드리려고 우리 등록 시점에 붙인다.
+  app.on('before-quit', shutdownApiStreams)
 
   // MCP 쓰기 → 열린 화면이 따라오게 한다(spec api-mcp tools.write AC-8).
   // 창 전파를 공용 진입점(main/index.ts)이 아니라 여기서 거는 이유: 그 파일은 새 서비스를

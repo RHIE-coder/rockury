@@ -27,6 +27,7 @@ import { TransferDialog } from './specs/TransferDialog'
 import { EnvironmentsView } from './ops/EnvironmentsView'
 import { SendView } from './runner/SendView'
 import { HistoryView } from './runner/HistoryView'
+import { StreamView } from './runner/StreamView'
 import { TimelineView } from './versions/TimelineView'
 import { DiffView } from './versions/DiffView'
 import { DriftView } from './contract/DriftView'
@@ -43,8 +44,8 @@ import './rehydration' // 에이전트(MCP) 쓰기 → api:changed → 스코프
  *   운영부(ops)    : active 환경에 대고 쏘고, 그 기록으로 판정한다.
  *
  * 지금 구현된 것: Studio(Requests·Docs) · Versions(Timeline·Diff) · Environments ·
- * Runner(Send·History) · Contract(Drift·Accept·Logs).
- * 남은 자리(Mocking·Stream·Inbox)는 비워 두지 않고 자리표시자로 둔다 — 비우면 IA 가 다시
+ * Runner(Send·History·Stream) · Contract(Drift·Accept·Logs).
+ * 남은 자리(Mocking·Inbox)는 비워 두지 않고 자리표시자로 둔다 — 비우면 IA 가 다시
  * 흔들리고, 자리가 있으면 무엇이 남았는지 화면이 말해 준다.
  */
 
@@ -148,17 +149,7 @@ export const apiService: Service = {
       views: [
         { id: 'send', label: 'Send', icon: Send, workspace: SendView },
         { id: 'history', label: 'History', icon: HistoryIcon, workspace: HistoryView },
-        {
-          id: 'stream',
-          label: 'Stream',
-          icon: Waves,
-          workspace: soon(
-            Waves,
-            'depth 3 · API › Runner › Stream',
-            'Stream',
-            'WebSocket·SSE·gRPC 스트리밍의 메시지 타임라인. (후속)'
-          )
-        },
+        { id: 'stream', label: 'Stream', icon: Waves, workspace: StreamView },
         {
           id: 'inbox',
           label: 'Inbox',

@@ -191,6 +191,11 @@ AsyncAPI(= 이벤트 기반 시스템용 명세 표준) 형식 지원뿐이다.
 - **Overview · Reference 모듈** — 지금 IA 에 없다. DB 서비스는 뒀다. 필요해지면 추가.
 - **Mocking** — Studio 안에 자리만 두고 후속(`api-studio.md` § mocking).
 - **웹훅 외부 터널** — 1차는 로컬 전용. 진짜 외부 콜백을 받으려면 터널이 필요하다.
+- **gRPC 스트리밍 · GraphQL subscription 전송** — Stream 화면은 섰지만 전송이 WebSocket·SSE
+  둘뿐이다(`api-runner.md` § stream.session AC-7). gRPC 는 `@grpc/grpc-js` 도입이 선행되고,
+  그건 `main` 브랜치에서 한 명이 하는 일이라 사용자 합의가 먼저다.
+- **스트림 관측의 판정 규칙** — 세션이 Run 으로 쌓이지만 대조 규칙이 없어
+  `DriftCoverage.unjudged` 로 드러내고 있다(`api-contract.md` § drift.observed AC-6).
 - **MCP 도구 승격 스위치** — 자주 쓰는 요청을 전용 도구로 올릴지. 1차는
   `api_get_spec` 한 덩어리로 충분한지 보고 정한다.
 - **SOAP** — WSDL 덕에 완전 판정 대상이지만 수요가 낮아 후순위.

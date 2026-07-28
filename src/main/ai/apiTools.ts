@@ -209,17 +209,27 @@ export const API_TOOL_DEFS: ToolDef[] = [
       })
       return runs.map((r) => {
         const parsed = r.response ? shapeOfBody(r.response.body) : null
+        const stream = r.shape !== 'unary'
         return {
           requestName: r.requestName,
           environment: r.environmentName,
           baseVersion: r.baseVersion,
+          // **어떤 관측이었는지 밝힌다.** 안 밝히면 스트림 세션이 "성공했는데 응답 모양을
+          // 못 읽은 단발 실행" 처럼 보인다 — 있지도 않은 응답을 찾게 만드는 셈이다.
+          interaction: r.shape,
           status: r.status,
           httpStatus: r.httpStatus,
           durationMs: r.durationMs,
           observedAt: r.createdAt,
           // 모양까지만. 본문은 사람이 앱에서 본다(spec api-mcp tools.read AC-3).
           responseShape: parsed?.json ? parsed.shape : null,
-          responseIsJson: parsed?.json ?? null
+          responseIsJson: parsed?.json ?? null,
+          // 스트림 세션의 관측 내용은 메시지 목록이다. 본문은 안 주고 **건수만** 준다 —
+          // 응답 본문을 안 주는 것과 같은 선이고, 판정 규칙이 아직 없다는 사실도 함께 적는다.
+          messageCount: stream ? (r.messageCount ?? 0) : null,
+          note: stream
+            ? '스트림·수신 세션 관측 — 메시지 목록이 관측 내용이고, 아직 대조 규칙이 없어 판정에서 unjudged 로 빠집니다. 본문은 앱에서 봅니다.'
+            : undefined
         }
       })
     }

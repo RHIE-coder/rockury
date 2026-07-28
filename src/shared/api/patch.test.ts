@@ -58,6 +58,23 @@ describe('CASE-apimcp-035 연산 전종이 Draft 를 올바르게 바꾼다', ()
     expect(c.spec.requests).toEqual([])
   })
 
+  it('모양을 안 적으면 그 인터페이스의 첫 모양이 기본이다 — unary 로 박지 않는다', () => {
+    // 'unary' 로 박아 두면 SSE·WebSocket 명세에서 저장이 통째로 거부된다(그 종류에 없는 모양).
+    expect(applyPatch(base(), [{ op: 'add_request', name: 'x' }]).spec.requests[1].shape).toBe('unary')
+
+    const sse = { ...base(), kind: 'sse' as const, requests: [] }
+    expect(applyPatch(sse, [{ op: 'add_request', name: 'ticker' }]).spec.requests[0].shape).toBe('server-stream')
+
+    const ws = { ...base(), kind: 'websocket' as const, requests: [] }
+    expect(applyPatch(ws, [{ op: 'add_request', name: 'chat' }]).spec.requests[0].shape).toBe('duplex')
+  })
+
+  it('적은 모양은 그대로 존중한다', () => {
+    const grpc = { ...base(), kind: 'grpc' as const, requests: [] }
+    const r = applyPatch(grpc, [{ op: 'add_request', name: 'feed', shape: 'server-stream' }])
+    expect(r.spec.requests[0].shape).toBe('server-stream')
+  })
+
   it('set_docs 는 문서만 바꾼다', () => {
     const out = applyPatch(base(), [{ op: 'set_docs', request: 'getUser', docs: '새 문서' }])
     expect(out.spec.requests[0].docs).toBe('새 문서')

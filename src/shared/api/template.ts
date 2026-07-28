@@ -249,7 +249,20 @@ export function renderTemplate(text: string, ctx: RenderContext): RenderOutcome 
     } catch (e) {
       // 참조 이름은 실패한 조각에서도 기록해 둔다 — 화면이 "무엇을 쓰려 했나"를 보여야 한다.
       used.push(...localUsed.filter((u) => !used.some((x) => x.name === u.name)))
-      issues.push({ kind: kindOf(e), ref: seg.value, message: messageOf(e) })
+      // **실패 문구에도 값이 실린다.** 내장 함수의 오류는 받은 인자를 그대로 인용하므로
+      // (`base64 형식이 아닙니다: <값>`), 가림을 켜 놓고 여기만 원문을 내보내면
+      // 그 문구가 화면·오류 배너·throw 를 타고 그대로 샌다. 성공 경로와 같은 선을 긋는다.
+      const hidden = ctx.maskSecrets && localUsed.some((u) => u.secret)
+      issues.push({
+        kind: kindOf(e),
+        ref: seg.value,
+        message: hidden
+          ? `계산하지 못했습니다 — 비밀 표식 값이 섞여 있어 자세한 이유는 가립니다(${localUsed
+              .filter((u) => u.secret)
+              .map((u) => u.name)
+              .join(', ')}).`
+          : messageOf(e)
+      })
       out += `{{${seg.value}}}`
     }
   }

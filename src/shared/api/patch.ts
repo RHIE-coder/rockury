@@ -1,3 +1,4 @@
+import { interfaceMeta } from './types'
 import type { FieldDef, ParamDef, RequestDef, RequestFields, SpecDef } from './types'
 
 /**
@@ -91,7 +92,10 @@ export function applyPatch(
           id: newId(),
           name: raw.name,
           folder: raw.folder ?? '',
-          shape: raw.shape ?? 'unary',
+          // 모양을 안 적었으면 그 인터페이스의 **첫 모양**이 기본이다(화면이 새 요청을 만들 때와
+          // 같은 규칙). 'unary' 로 박아 두면 SSE·WebSocket 명세에서는 저장이 통째로 거부되고,
+          // 그 이유가 "모양을 안 적었다"가 아니라 "없는 모양이다"로 나와 헤매게 된다.
+          shape: raw.shape ?? interfaceMeta(spec.kind).shapes[0],
           params: raw.params ?? [],
           request: raw.request ?? {},
           responses: raw.responses ?? [],
