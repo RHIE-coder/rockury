@@ -2,9 +2,9 @@ import { Input } from '@renderer/ui/input'
 import { cx } from '@renderer/lib/cx'
 import { COMPONENT_KINDS, STATUS_LABEL, kindLabel, surfaceKindLabel } from '../catalog'
 import { specAddress } from '../address'
-import { findComponent, findSection, patchComponent, patchSection } from '../tree'
+import { findComponent, findNav, findSection, patchComponent, patchSection, setNav } from '../tree'
 import { useActiveProject, useSpecStore, useTree } from '../store'
-import type { Layout, SurfaceContent } from '../types'
+import type { Layout, NavKind, SurfaceContent } from '../types'
 
 /**
  * 속성 — 지금 고른 조각(화면·영역·요소) 하나를 고친다. 명세 정본 `docs/spec/uiux-ia.md` §6.
@@ -58,6 +58,7 @@ export function Inspector() {
             )}
           </select>
         </Field>
+        <NavField content={content} componentId={component.id} onChange={edit} />
         <Meta label="주소 조각" value={component.id} hint="흐름·규칙이 이 이름으로 가리켜요." />
       </Panel>
     )
@@ -120,6 +121,77 @@ export function Inspector() {
         적습니다.
       </p>
     </Panel>
+  )
+}
+
+/**
+ * 누르면 어디로 가나 — 여기서 붙인 전이가 Flows 그래프의 화살표가 된다.
+ * 대상은 **같은 프로젝트의 화면 목록**에서 고른다(주소를 손으로 적으면 오타가 조용히 끊긴다).
+ */
+function NavField({
+  content,
+  componentId,
+  onChange
+}: {
+  content: SurfaceContent
+  componentId: string
+  onChange: (fn: (c: SurfaceContent) => SurfaceContent) => void
+}) {
+  const tree = useTree()
+  const project = useActiveProject()
+  const nav = findNav(content, componentId)
+
+  const targets = tree.surfaces
+    .map((sf) => {
+      const svc = tree.services.find((s) => s.id === sf.service_id)
+      const app = svc && tree.applications.find((a) => a.id === svc.application_id)
+      if (!svc || !app || !project) return null
+      return { address: `${project.key}.${app.key}.${svc.key}.${sf.key}`, name: sf.name }
+    })
+    .filter((t): t is { address: string; name: string } => t !== null)
+
+  const kinds: { value: NavKind; label: string }[] = [
+    { value: 'navigate', label: '이동' },
+    { value: 'open', label: '열기' },
+    { value: 'close', label: '닫기' }
+  ]
+
+  return (
+    <Field label="누르면">
+      <select
+        data-uiux-nav-to
+        className="h-8 w-full rounded-md border border-line bg-canvas px-2 text-[13px]"
+        value={nav?.to ?? ''}
+        onChange={(e) =>
+          onChange((c) =>
+            setNav(c, componentId, e.target.value ? { to: e.target.value, kind: nav?.kind ?? 'navigate' } : null)
+          )
+        }
+      >
+        <option value="">아무 일도 안 함</option>
+        {targets.map((t) => (
+          <option key={t.address} value={t.address}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+      {nav && (
+        <div className="flex gap-1">
+          {kinds.map((k) => (
+            <button
+              key={k.value}
+              className={cx(
+                'flex-1 rounded border px-2 py-1 text-[12px]',
+                nav.kind === k.value ? 'border-accent text-accent' : 'border-line text-muted hover:text-fg'
+              )}
+              onClick={() => onChange((c) => setNav(c, componentId, { to: nav.to, kind: k.value }))}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </Field>
   )
 }
 

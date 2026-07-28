@@ -48,6 +48,9 @@ const CanvasWorkspace = withSuspense(() =>
 const FeaturesWorkspace = withSuspense(() =>
   import('./screens/FeaturesWorkspace').then((m) => ({ default: m.FeaturesWorkspace }))
 )
+const FlowsWorkspace = withSuspense(() =>
+  import('./screens/FlowsWorkspace').then((m) => ({ default: m.FlowsWorkspace }))
+)
 const ReviewWorkspace = withSuspense(() =>
   import('./screens/ReviewWorkspace').then((m) => ({ default: m.ReviewWorkspace }))
 )
@@ -160,12 +163,7 @@ export const uiuxService: Service = {
       id: 'flows',
       label: 'Flows',
       icon: Workflow,
-      workspace: view(
-        Workflow,
-        'depth 2 · UI/UX › Flows',
-        'Flows',
-        '누르면 무슨 일이 나는가 — 트리거 하나에 효과(화면 전이·데이터 변이) 여럿이 달린 그래프.'
-      )
+      workspace: FlowsWorkspace
     },
     {
       id: 'rules',

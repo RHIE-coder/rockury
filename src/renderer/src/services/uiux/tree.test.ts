@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   addComponent,
+  findNav,
+  setNav,
   addSection,
   allIds,
   findComponent,
@@ -153,5 +155,39 @@ describe('고치기', () => {
   it('CASE-uiux-047 없는 id 는 아무 일도 없다', () => {
     expect(patchSection(sample(), '없음', { name: 'x' })).toEqual(sample())
     expect(patchComponent(sample(), '없음', { label: 'x' })).toEqual(sample())
+  })
+})
+
+describe('흐름(전이) 붙이기', () => {
+  it('CASE-uiux-048 요소에 전이를 붙이고 되읽는다', () => {
+    const c = setNav(sample(), 'submit', { to: 'p.a.s.home', kind: 'navigate' })
+    expect(findNav(c, 'submit')).toEqual({ to: 'p.a.s.home', kind: 'navigate' })
+    expect(c.events).toHaveLength(1)
+  })
+
+  it('CASE-uiux-048 같은 요소의 전이는 갈아탄다 (한 요소에 하나 — v1)', () => {
+    const once = setNav(sample(), 'submit', { to: 'p.a.s.home', kind: 'navigate' })
+    const twice = setNav(once, 'submit', { to: 'p.a.s.detail', kind: 'open' })
+    expect(twice.events).toHaveLength(1)
+    expect(findNav(twice, 'submit')).toEqual({ to: 'p.a.s.detail', kind: 'open' })
+  })
+
+  it('CASE-uiux-048 떼면 그 요소 것만 사라지고, 남는 게 없으면 칸 자체를 지운다', () => {
+    const two = setNav(setNav(sample(), 'submit', { to: 'x.y.z.w', kind: 'navigate' }), 'email', {
+      to: 'x.y.z.v',
+      kind: 'open'
+    })
+    const one = setNav(two, 'submit', null)
+    expect(one.events).toHaveLength(1)
+    expect(findNav(one, 'submit')).toBeNull()
+    expect(setNav(one, 'email', null).events).toBeUndefined()
+  })
+
+  it('CASE-uiux-048 전이가 없으면 null, 입력을 고치지 않는다', () => {
+    const before = sample()
+    const snapshot = JSON.stringify(before)
+    expect(findNav(before, 'submit')).toBeNull()
+    setNav(before, 'submit', { to: 'a.b.c.d', kind: 'navigate' })
+    expect(JSON.stringify(before)).toBe(snapshot)
   })
 })

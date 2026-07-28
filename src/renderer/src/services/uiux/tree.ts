@@ -1,4 +1,4 @@
-import type { SpecComponent, SpecSection, SurfaceContent } from './types'
+import type { NavKind, SpecComponent, SpecSection, SurfaceContent, SurfaceEvent } from './types'
 
 /**
  * 화면 안 트리 조작 — 명세 정본 `docs/spec/uiux-ia.md` §6(구조가 데이터, 조작은 캔버스).
@@ -172,4 +172,36 @@ export function patchComponent(
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(Math.max(n, min), max)
+}
+
+// ── 흐름(이벤트) ────────────────────────────────────────────────────
+
+/**
+ * 이 요소가 누르면 어디로 가나. **한 요소에 전이는 하나로 본다(v1)** — 조건에 따라 갈리는
+ * 전이는 조건 어휘가 서고 나서 다룬다. 지금 여러 개를 허용하면 편집 화면이 먼저 복잡해진다.
+ */
+export function findNav(content: SurfaceContent, componentId: string): { to: string; kind: NavKind } | null {
+  const event = (content.events ?? []).find((e) => e.trigger?.component === componentId && e.nav?.to)
+  return event?.nav ? { to: event.nav.to, kind: event.nav.kind ?? 'navigate' } : null
+}
+
+/** 전이를 붙이거나(`nav`) 뗀다(`null`). 같은 요소의 기존 전이는 갈아탄다. */
+export function setNav(
+  content: SurfaceContent,
+  componentId: string,
+  nav: { to: string; kind: NavKind } | null
+): SurfaceContent {
+  const rest = (content.events ?? []).filter((e) => e.trigger?.component !== componentId)
+  if (!nav || !nav.to) {
+    // 남는 이벤트가 없으면 칸 자체를 지운다 — 빈 배열이 저장되면 diff 가 지저분해진다.
+    const next = { ...content }
+    if (rest.length > 0) next.events = rest
+    else delete next.events
+    return next
+  }
+  const event: SurfaceEvent = {
+    trigger: { component: componentId, event: 'click' },
+    nav: { kind: nav.kind, to: nav.to }
+  }
+  return { ...content, events: [...rest, event] }
 }

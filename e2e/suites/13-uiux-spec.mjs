@@ -5,7 +5,7 @@
 export const meta = {
   name: '13-uiux-spec',
   needsDb: false,
-  desc: 'UI/UX — 위계·구조 · 미리보기 · 끌어놓기 · 토큰 · 의견(핀) · MCP 한 바퀴 · 능력 인덱스'
+  desc: 'UI/UX — 위계·구조 · 미리보기 · 끌어놓기 · 흐름 · 토큰 · 의견(핀) · MCP 한 바퀴 · 능력 인덱스'
 }
 
 /**
@@ -190,6 +190,27 @@ export async function run(ctx) {
   await page.waitForTimeout(300)
   check('Spec: 요소를 지우면 그것만 사라진다', (await page.locator('[data-spec-component]').count()) === 1)
 
+  // ── Flows — 요소에 "누르면 어디로" 를 붙이면 그래프에 화살표가 생긴다 ──
+  // 화살표가 생기려면 갈 곳이 있어야 한다 — 화면을 하나 더 만든다.
+  await click('button[title="화면 추가"]')
+  await fillNode(page, { name: '홈 화면', key: 'home' })
+  await page.waitForTimeout(300)
+  await click('text=로그인 화면')
+  await page.waitForTimeout(300)
+  await click('[data-spec-component="input"]')
+  await page.waitForTimeout(250)
+  await page.selectOption('[data-uiux-nav-to]', { label: '홈 화면' })
+  await page.waitForTimeout(400)
+
+  await click('[data-nav-module="flows"]')
+  await page.waitForSelector('[data-uiux-flows]', { timeout: 5_000 })
+  await page.waitForTimeout(400)
+  check('Flows: 화면이 노드로 그려진다', (await page.locator('[data-uiux-flow-node]').count()) === 2)
+  check(
+    'Flows: 전이를 붙인 화면이 첫 줄, 도착 화면이 다음 줄',
+    (await page.locator('[data-uiux-flow-node]').first().getAttribute('transform'))?.includes('translate(24,') === true
+  )
+
   // ── Style — 토큰을 바꾸면 미리보기가 따라 바뀐다 (Style 이 있는 이유) ──
   await click('[data-nav-module="style"]')
   await click('[data-nav-view="tokens"]')
@@ -318,5 +339,6 @@ export async function run(ctx) {
   await page.waitForTimeout(600)
   check('Features: 제품 이름과 능력 인덱스가 보인다', (await body()).includes('쿠팡') && (await body()).includes('이용자 앱'))
   check('Features: 에이전트가 적은 확인이 집계에 반영된다', (await page.locator('[data-uiux-progress="1"]').count()) === 1)
-  check('Features: 화면 목록에서 설계로 건너뛸 수 있다', (await page.locator('[data-uiux-feature-surface]').count()) === 1)
+  // 화면 둘(로그인·홈) — Flows 검증에서 하나를 더 만들었다.
+  check('Features: 화면 목록에서 설계로 건너뛸 수 있다', (await page.locator('[data-uiux-feature-surface]').count()) === 2)
 }
