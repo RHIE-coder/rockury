@@ -868,12 +868,20 @@ export function RequestsWorkspace() {
 
   if (!active) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3" data-api-empty="no-spec">
-        <PlaceholderView
-          icon={Route}
-          title="명세를 먼저 고르세요"
-          subtitle="상단 컨텍스트 바에서 명세를 고르거나 새로 만들면 요청을 지을 수 있어요."
-        />
+      <div className="flex h-full flex-col items-center justify-center gap-4" data-api-empty="no-spec">
+        {/*
+          PlaceholderView 는 자기 혼자 화면을 채우도록 `h-full` 이다. 여기처럼 CTA 와 나란히
+          두면 그 높이 100% 가 세로를 통째로 먹어 버튼이 창 맨 밑으로 밀린다(실측 — 안내문과
+          버튼이 화면 반쯤 떨어져 보였다). 높이가 자동인 블록으로 한 겹 감싸면 100% 가
+          auto 로 풀려 안내문·버튼이 한 덩어리로 가운데 선다.
+        */}
+        <div>
+          <PlaceholderView
+            icon={Route}
+            title="명세를 먼저 고르세요"
+            subtitle="상단 컨텍스트 바에서 명세를 고르거나 새로 만들면 요청을 지을 수 있어요."
+          />
+        </div>
         <span className="flex items-center gap-2">
           <Button onClick={openCreate} data-api-create-spec>
             <Plus className="size-4" /> 새 API 명세

@@ -57,8 +57,10 @@ export const apiService: Service = {
   // 옵션은 store.ts 가 런타임에 밀어 넣는다.
   context: [
     {
+      // 라벨은 대상 이름(영문 고유명), placeholder 는 한국어 안내 — DB 의 Design/Connection 과 같은 규칙.
+      // 예전엔 라벨도 '명세' 라서 컨텍스트 바에 "명세 명세 선택" 으로 같은 말이 두 번 찍혔다.
       id: 'spec',
-      label: '명세',
+      label: 'Spec',
       icon: Plug,
       options: [],
       placeholder: '명세 선택',
@@ -81,7 +83,7 @@ export const apiService: Service = {
       // **기본 선택이 없다.** 고르기 전에는 실행이 막힌다 — PROD 오조작 방지(guard AC-1).
       // 서비스를 나갔다 오거나 명세를 바꾸면 다시 "선택 안 됨"으로 돌아간다.
       id: 'env',
-      label: '환경',
+      label: 'Env',
       icon: Server,
       options: [],
       placeholder: '환경 선택',
