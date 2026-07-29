@@ -7,7 +7,7 @@
 import { createServer } from 'node:http'
 
 export const meta = {
-  name: '15-api-contract',
+  name: '32-api-contract',
   needsDb: false,
   desc: 'API 판정 — 등급·커버리지 정직·결과 3종·흡수·이력'
 }

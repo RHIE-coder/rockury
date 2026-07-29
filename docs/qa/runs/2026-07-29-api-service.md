@@ -20,7 +20,7 @@
      importOpenapi 23 · importOther 23 · exportSpec 18 / main: apiSpecs 19 · apiOps 15 · httpSend 8)
   - build (`npm run build`): **PASS**
   - e2e (`npm run e2e`): **PASS** — ALL PASS, 16/16 스위트 · 311 체크. 신규 4스위트 100체크:
-    13-api-studio 22 · 14-api-runner 27 · 15-api-contract 26 · 16-api-transfer 25
+    30-api-studio 22 · 31-api-runner 27 · 32-api-contract 26 · 33-api-transfer 25
   - surface-verify (`npm run surface-verify`): **status=ok** · 차단 0 · 관찰(baseline) 120
 - drift:
   - 정본은 이번 작업에서 **신설**했고(spec 5 · qa 4), 구현 중 드러난 어긋남을 게이트에서 정렬했다:
@@ -41,7 +41,7 @@
     enum 편집·편집 중 미리보기·markdown 미리보기가 **정의는 있으나 미구현**임을 항목별로 적었다.
     (이전 문구는 "1차 로컬 전용" 같은 낡은 전제였다.)
   - 스테일 포인터 1건 수정: `docs/qa/api-mcp.md` S7 이 없는 스위트(`16-api-mcp`)를 가리키고 있었다
-    → 실제 자리(`13-api-studio` 안)와 그 이유로 교체.
+    → 실제 자리(`30-api-studio` 안)와 그 이유로 교체.
   - 공용 파일 영향: `src/main/ai/tools.ts` 2줄(도구 배열 합치기 + 타입 export) ·
     가드 테스트 3건을 **정확 일치 → 포함(superset)** 으로(무손실 의도는 유지, 서비스 성장 허용).
     그 외 공용 파일 미변경 — `main/index.ts`·`preload/index.ts`·각 registry 는 손대지 않았다.

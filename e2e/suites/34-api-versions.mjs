@@ -5,7 +5,7 @@
 // 13~16 이 만든 명세를 이어 쓴다(파일 이름 번호 = 상태 의존 순서).
 
 export const meta = {
-  name: '17-api-versions',
+  name: '34-api-versions',
   needsDb: false,
   desc: 'API Versions — 컷·불변 스냅샷·관측 잠금·깨지는 변경 승인 게이트·Diff 비대칭'
 }

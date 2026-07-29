@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 
 export const meta = {
-  name: '18-api-stream',
+  name: '35-api-stream',
   needsDb: false, // 도커 test-db 대신 스위트가 자기 SSE·WebSocket 서버를 띄운다
   desc: 'API Runner › Stream — SSE 서버 스트리밍 · WebSocket 양방향 · 세션→실행 기록'
 }

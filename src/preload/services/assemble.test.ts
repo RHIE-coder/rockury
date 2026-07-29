@@ -162,12 +162,23 @@ describe('preload 서비스 분할', () => {
   it('빈 서비스는 표면에 아무 키도 더하지 않는다 (window.rockury 오염 금지)', () => {
     // 아직 메인 프로세스 능력이 없는 서비스만 남긴다. 창구를 열면 이 목록에서 빼고,
     // 위 CASE-pdev-031 처럼 자기 함수 목록을 지키는 검사를 대신 더한다.
-    // (uiux 는 2026-07-28 설계 저장소 창구를, infra 는 M1 에서 각각 열었다.)
+    // (uiux 는 2026-07-28 설계 저장소 창구를, infra 는 M1 에서, api 는 2026-07-29 에 각각 열었다.)
+    const stillEmpty: string[] = []
     for (const s of SERVICE_APIS) {
-      if (['api'].includes(s.service)) {
+      if (stillEmpty.includes(s.service)) {
         expect(Object.keys(s.api), `${s.service} 는 아직 창구가 없어야 한다`).toEqual([])
       }
     }
+    // 목록이 비면 이 검사가 헛돈다 — 그 사실을 말해 둔다(다섯 서비스가 다 창구를 열었다).
+    expect(stillEmpty.length, '모든 서비스가 창구를 열었다면 이 검사는 역할이 끝났다').toBe(0)
+  })
+
+  it('api 창구는 자기 접두어 키만 차지한다 — 표면 오염 없이 자란다', () => {
+    const apiSvc = SERVICE_APIS.find((s) => s.service === 'api')
+    const keys = Object.keys(apiSvc?.api ?? {})
+    expect(keys.length).toBeGreaterThan(0)
+    // 남의 이름을 안 쓴다 — 겹치면 조립이 실패한다(CASE-pdev-032 가 따로 지킨다).
+    expect(keys.every((k) => k.startsWith('api'))).toBe(true)
   })
 
   it('infra 창구는 최상위 키 하나(`infra`)만 차지한다 — 표면 오염 없이 자란다', () => {

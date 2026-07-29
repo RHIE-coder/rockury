@@ -43,7 +43,7 @@
 - **CASE-apimcp-050** 성공 시에만 이벤트: 쓰기 성공이면 `api:changed` 를 보내고, `isError` 면 안 보낸다. DB 의 `store:changed` 를 빌려 쓰지 않는다. (tools.write AC-8)
 - **CASE-apimcp-051** 자기 메아리 금지: 렌더러발 저장은 이벤트를 유발하지 않고, 리하이드레이션으로 갱신된 상태가 다시 저장을 되쏘지 않는다(쓰기 1회당 저장 1회). (tools.write AC-8)
 
-## Scenario S7 — 앱 구동 흐름 (e2e/suites/13-api-studio 안, CSS/text 로케이터만)
+## Scenario S7 — 앱 구동 흐름 (e2e/suites/30-api-studio 안, CSS/text 로케이터만)
 > 별도 스위트를 두지 않았다 — MCP 쓰기 반영은 Studio 화면에서 확인해야 뜻이 있고, 그 화면 흐름이
 > 이미 13번에 있다. 16번은 가져오기·내보내기 스위트다.
 - **CASE-apimcp-060** MCP 로 `api_create_spec` → `api_patch_spec` 으로 요청 추가 → **열려 있던 Studio 화면에 즉시 보인다.** (tools.write AC-1/AC-4/AC-8)

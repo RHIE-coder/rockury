@@ -16,8 +16,8 @@
 - **CASE-apicontract-011** 미관측 목록: 무엇을 아직 안 쏴 봤는지 이름 목록이 결과에 담긴다. 개수만 있고 목록이 없으면 실패. (drift.observed AC-3)
 - **CASE-apicontract-011b** 판정 불가와 통과를 가른다: 응답이 JSON 이 아니어서 모양을 못 뽑은 요청은 관측으로 세지 않고 `unparsable` 목록에 남는다. 응답이 없는 실행(연결 실패)도 관측이 아니다. (drift.observed AC-3b)
 - **CASE-apicontract-011c (맞출 선언 없음)** 스트림·수신 관측을 어느 선언과도 못 맞추면 미관측이 아니라 `unjudged` 로 따로 세고, 요약·리포트에 건수가 실린다. 한 번도 안 붙어 본 것은 그냥 미관측이다(두 사실을 뭉치면 실패). 메시지 목록을 응답 본문으로 오독해 **없는 어긋남을 만들면 실패**. (drift.observed AC-6)
-- **CASE-apicontract-017 (스트림 대조)** 메시지의 **이벤트 이름이 선언을 고른다**(`status` 가 스트림에선 이벤트 종류). 어긋난 필드를 `요청.이벤트.필드` 경로로 잡고, 선언에 없는 이벤트는 단발의 "상태 선언 없음"과 같은 자리로 잡는다. **이름 없는 메시지는 하나뿐인 선언에 갖다 붙이지 않고** 못 맞춘 건수로 센다(한 소켓에 여러 종류가 흐르는 것이 보통이라 그 추측은 조용히 틀린다). JSON 이 아닌 메시지도 통과가 아니다. 보낸 메시지는 관측이 아니다. 일부만 맞춘 요청은 관측으로 세되 **못 맞춘 건수가 남는다**. (drift.observed AC-6) → `shared/api/drift.test.ts` · `e2e/suites/18-api-stream.mjs`
-- **CASE-apicontract-018 (수신 대조)** 받는 쪽 선언은 **기대 본문**이고, 받을 때 쓴 것과 **같은 함수**로 다시 본다. 선언이 없으면 통과가 아니라 못 맞춘 것이다. (drift.observed AC-6) → `shared/api/drift.test.ts` · `e2e/suites/19-api-inbox.mjs`
+- **CASE-apicontract-017 (스트림 대조)** 메시지의 **이벤트 이름이 선언을 고른다**(`status` 가 스트림에선 이벤트 종류). 어긋난 필드를 `요청.이벤트.필드` 경로로 잡고, 선언에 없는 이벤트는 단발의 "상태 선언 없음"과 같은 자리로 잡는다. **이름 없는 메시지는 하나뿐인 선언에 갖다 붙이지 않고** 못 맞춘 건수로 센다(한 소켓에 여러 종류가 흐르는 것이 보통이라 그 추측은 조용히 틀린다). JSON 이 아닌 메시지도 통과가 아니다. 보낸 메시지는 관측이 아니다. 일부만 맞춘 요청은 관측으로 세되 **못 맞춘 건수가 남는다**. (drift.observed AC-6) → `shared/api/drift.test.ts` · `e2e/suites/35-api-stream.mjs`
+- **CASE-apicontract-018 (수신 대조)** 받는 쪽 선언은 **기대 본문**이고, 받을 때 쓴 것과 **같은 함수**로 다시 본다. 선언이 없으면 통과가 아니라 못 맞춘 것이다. (drift.observed AC-6) → `shared/api/drift.test.ts` · `e2e/suites/36-api-inbox.mjs`
 - **CASE-apicontract-011d (형제 경로·옛 기록)** **완전 판정도 스트리밍은 대조하지 않는다** — GraphQL introspection 에 subscription 루트가 없어서, 규칙을 관측 판정에만 두면 멀쩡한 서버의 subscription 이 "명세에만 있음(내 요청이 깨진다)"으로 잡힌다. 또한 **선언 모양이 아니라 그 실행이 무엇이었는지로 가른다** — 스트리밍으로 선언한 요청을 단발로 쏜 관측은 계속 판정된다. 커버리지 칸이 없던 **옛 판정 기록**을 읽어도 화면이 죽지 않는다(읽는 자리에서 맞춘다). (drift.observed AC-6/AC-7)
 - **CASE-apicontract-012** "전부 관측됨" 조건: 미관측이 **0일 때만** 그 문구가 나온다. 1개라도 남으면 안 나온다. 판정 규칙 없음이 1개라도 있으면 그 문구가 안 나온다. (drift.observed AC-2/AC-6)
 - **CASE-apicontract-013** 이상 없음 + 커버리지 동반: 어긋남 0 이어도 결과 문구에 커버리지가 붙는다. **커버리지 없는 "이상 없음"을 만들 수 없다.** (drift.result AC-5)
@@ -47,7 +47,7 @@
 - **CASE-apicontract-042** 이력 비교: 두 판정을 비교해 "지난번엔 없던 어긋남"을 가려낸다. (logs.history AC-3)
 - **CASE-apicontract-043** 흡수 이력: 무엇을 언제 명세로 받아들였는지가 판정 이력과 **같은 타임라인**에 남는다. 흡수와 판정이 따로 놀면 "왜 이 필드가 명세에 있지"를 되짚을 수 없다. (logs.history AC-2)
 
-## Scenario S6 — 앱 구동 흐름 (e2e/suites/15-api-contract, CSS/text 로케이터만)
+## Scenario S6 — 앱 구동 흐름 (e2e/suites/32-api-contract, CSS/text 로케이터만)
 - **CASE-apicontract-050** GraphQL Spec 에서 Drift 실행 → 결과에 **`완전 판정`** 배지와 커버리지 100% 가 보인다. (drift.complete AC-2/AC-3)
 - **CASE-apicontract-051** REST Spec 에서 Drift 실행 → 결과에 **`관측 판정`** 배지와 `N 관측 / K 미관측` 이 보이고 미관측 목록이 열린다. (drift.observed AC-2/AC-3)
 - **CASE-apicontract-052** 어긋남 0 인 REST Spec → 문구가 "이상 없음"만이 아니라 **커버리지를 달고** 보인다. (drift.result AC-5)

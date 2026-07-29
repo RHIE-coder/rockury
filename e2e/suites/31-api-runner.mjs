@@ -2,12 +2,12 @@
 // 실행: `npm run e2e`(e2e/smoke.mjs 러너가 순서대로 부른다). 단독 실행용 진입점은 없다.
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 //
-// 13-api-studio 가 만든 명세 `e2e-billing` 을 이어 쓴다(파일 이름 번호 = 상태 의존 순서).
+// 30-api-studio 가 만든 명세 `e2e-billing` 을 이어 쓴다(파일 이름 번호 = 상태 의존 순서).
 
 import { createServer } from 'node:http'
 
 export const meta = {
-  name: '14-api-runner',
+  name: '31-api-runner',
   needsDb: false, // 도커 test-db 대신 스위트가 자기 HTTP 서버를 띄운다
   desc: 'API 운영부 — 환경·오조작 방지·조립 미리보기·실제 전송·기록'
 }

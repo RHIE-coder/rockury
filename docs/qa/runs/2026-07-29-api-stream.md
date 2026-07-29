@@ -13,7 +13,7 @@
   5. 저장 — `api_runs` 에 `shape`·`messages_json`·`message_count`(+ 구 스키마 `alter` 보정),
      목록 조회 컬럼 투영, `getRun` 직접 조회
   6. 판정 — `DriftCoverage.unjudged` 신설 · `normalizeDrift` · 완전/관측 두 경로 공통 규칙
-  7. e2e — `e2e/suites/18-api-stream.mjs` 신설(자체 SSE 서버 + 손으로 구현한 WebSocket 서버)
+  7. e2e — `e2e/suites/35-api-stream.mjs` 신설(자체 SSE 서버 + 손으로 구현한 WebSocket 서버)
 
 - 결과:
   - typecheck (`npm run typecheck`): **PASS**
@@ -22,7 +22,7 @@
      `redact.test.ts` +2 · `patch.test.ts` +2)
   - build (`npm run build`): **PASS**
   - e2e (`npm run e2e`): **PASS** — ALL PASS, 18/18 스위트 · **372 체크**(이전 333 → +39).
-    신규 `18-api-stream` 39체크. `--no-db` 없이 전량 실행 — 건너뜀 0 · 미실행 0
+    신규 `35-api-stream` 39체크. `--no-db` 없이 전량 실행 — 건너뜀 0 · 미실행 0
   - surface-verify (`npm run surface-verify`): **status=ok** · 화면 44개 · 차단 **0** ·
     관찰(baseline 수용) 120
 
@@ -73,14 +73,14 @@
      본문 2MB 상한, 목록 500건 상한)
   3. IPC/창구 — `main/ipc/api/inbox.ts` 4채널(전부 MCP 제외 등재) · preload `apiInbox`
   4. 화면 — `runner/InboxView.tsx` · `runner/inboxStore.ts`
-  5. e2e — `e2e/suites/19-api-inbox.mjs`(앱 밖 노드에서 실제 HTTP 를 쏴서 검증)
+  5. e2e — `e2e/suites/36-api-inbox.mjs`(앱 밖 노드에서 실제 HTTP 를 쏴서 검증)
 
 - 결과:
   - typecheck (`npm run typecheck`): **PASS**
   - test (`npm test`): **PASS** — 1290 pass / 4 skip (이전 1263 → **+27**, 전부 `inbox.test.ts`)
   - build (`npm run build`): **PASS**
   - e2e (`npm run e2e`): **PASS** — ALL PASS, 19/19 스위트 · **407 체크**(이전 372 → +35).
-    신규 `19-api-inbox` 35체크. 건너뜀 0 · 미실행 0
+    신규 `36-api-inbox` 35체크. 건너뜀 0 · 미실행 0
   - surface-verify (`npm run surface-verify`): **status=ok** · 차단 **0** · 관찰 120
     (자리표시자를 실화면으로 바꾼 것이라 화면 수 불변)
 
@@ -122,7 +122,7 @@
   - test (`npm test`): **PASS** — 1357 pass / 4 skip (이전 1290 → **+67**)
   - build (`npm run build`): **PASS**
   - e2e (`npm run e2e`): **PASS** — ALL PASS, 20/20 스위트 · **450 체크**(이전 407 → +43).
-    신규 `20-api-gaps` 43체크. 건너뜀 0 · 미실행 0
+    신규 `37-api-gaps` 43체크. 건너뜀 0 · 미실행 0
   - surface-verify: **status=ok** · 차단 **0** · 관찰 120
 
 - drift:
@@ -168,14 +168,14 @@
   2. 서버 — `main/api/mockServer.ts`(`node:http`, **`127.0.0.1` 고정 바인딩**)
   3. IPC/창구 — `main/ipc/api/mocking.ts` 4채널(전부 MCP 제외 등재) · preload `apiMock`
   4. 화면 — `studio/MockingWorkspace.tsx`
-  5. e2e — `e2e/suites/21-api-mocking.mjs`(앱 밖 노드에서 실제 HTTP 를 쏴서 검증)
+  5. e2e — `e2e/suites/38-api-mocking.mjs`(앱 밖 노드에서 실제 HTTP 를 쏴서 검증)
 
 - 결과:
   - typecheck (`npm run typecheck`): **PASS**
   - test (`npm test`): **PASS** — 1385 pass / 4 skip (이전 1357 → **+28**)
   - build (`npm run build`): **PASS**
   - e2e (`npm run e2e`): **PASS** — ALL PASS, 21/21 스위트 · **481 체크**(이전 450 → +31).
-    신규 `21-api-mocking` 31체크. 건너뜀 0 · 미실행 0
+    신규 `38-api-mocking` 31체크. 건너뜀 0 · 미실행 0
   - surface-verify: **status=ok** · 차단 **0** · 관찰 120
 
 - drift:

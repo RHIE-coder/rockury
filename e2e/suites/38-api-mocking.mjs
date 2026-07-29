@@ -5,7 +5,7 @@
 import { createServer } from 'node:http'
 
 export const meta = {
-  name: '21-api-mocking',
+  name: '38-api-mocking',
   needsDb: false, // 서버는 앱이 띄운다. 우리는 그 주소로 쏘기만 한다
   desc: 'API Studio › Mocking — 선언한 응답 모양으로만 답하는 로컬 가짜 서버'
 }

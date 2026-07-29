@@ -6,7 +6,7 @@
 import { createServer } from 'node:http'
 
 export const meta = {
-  name: '20-api-gaps',
+  name: '37-api-gaps',
   needsDb: false, // 자기 HTTP 서버를 띄운다
   desc: 'API 화면 빈칸 — 트리·enum·응답 손편집·치환 미리보기·markdown·취소·재실행·Run 비교·고아/구멍'
 }

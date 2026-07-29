@@ -7,7 +7,7 @@
 import { createServer } from 'node:http'
 
 export const meta = {
-  name: '19-api-inbox',
+  name: '36-api-inbox',
   needsDb: false, // 수신 서버는 앱이 띄운다. 우리는 그 주소로 쏘기만 한다
   desc: 'API Runner › Inbox — 로컬 웹훅 수신 · 기대 본문 대조 · 수신→기록 · 응답 코드'
 }

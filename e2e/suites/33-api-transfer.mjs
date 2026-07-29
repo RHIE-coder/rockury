@@ -3,7 +3,7 @@
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 
 export const meta = {
-  name: '16-api-transfer',
+  name: '33-api-transfer',
   needsDb: false,
   desc: 'API 가져오기·내보내기 — 세 형식 · 덮지 않음 · 미해석 보고 · 내보낸 파일에 값 없음'
 }

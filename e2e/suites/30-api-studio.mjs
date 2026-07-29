@@ -3,7 +3,7 @@
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 
 export const meta = {
-  name: '13-api-studio',
+  name: '30-api-studio',
   needsDb: false, // 로컬 SQLite 만 쓴다 — 도커 test-db 불필요
   desc: 'API Studio — 명세 생성·요청 트리·인터페이스별 칸·문서 분리·에이전트 쓰기 반영'
 }
