@@ -25,9 +25,12 @@ export function ActivityRail() {
             aria-current={active ? 'page' : undefined}
             onClick={() => selectService(service.id)}
             className={cx(
-              'relative flex w-14 flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium transition-colors',
+              'relative flex w-14 flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium transition-[background-color,color,box-shadow,transform] duration-100',
               active
-                ? "bg-accent-soft text-accent before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r before:bg-accent before:content-['']"
+                ? // 활성은 accent 원색으로 꽉 채운다(연한 칠 + 좌측 막대 → 진한 채움).
+                  // 입체감은 세 겹 그림자로 만든다: 윗면 하이라이트 / 아랫면 그림자(안쪽) + 바닥 그림자(바깥).
+                  // 눌리면 1px 내려앉고 그림자가 줄어 "실제로 눌린" 느낌을 준다.
+                  'bg-accent text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(0,0,0,0.18),0_2px_4px_-1px_rgba(14,116,144,0.45)] active:translate-y-px active:shadow-[inset_0_1px_2px_rgba(0,0,0,0.22)]'
                 : 'text-muted hover:bg-panel-strong hover:text-fg'
             )}
           >
