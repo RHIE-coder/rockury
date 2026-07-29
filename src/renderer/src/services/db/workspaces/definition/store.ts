@@ -1,8 +1,7 @@
 import { create } from 'zustand'
-import { useNav } from '@renderer/nav/useNav'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { autoIncrementToken } from '../../typeCatalog'
-import { useVersionsStore } from '../../versions/store'
+import { isReadOnlyLens, useVersionLens, useVersionsStore } from '../../versions/store'
 import { changedDesignIds, mergeDesignTables, reconcileActiveTable, toTableDef } from './designScope'
 import type { Column, Constraint, ConstraintKind, TableDef } from './types'
 // 순환 참조 주의: definition → {designs, versions} 방향만 존재(역방향 import 없음).
@@ -381,16 +380,16 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
 
 /**
  * 활성 Design 스코프의 테이블 목록.
- * 컨텍스트 바 Version 렌즈가 'draft'(또는 미선택)면 편집 가능한 작업본,
+ * Studio 렌즈(도구줄 시점 손잡이)가 'draft'면 편집 가능한 작업본,
  * 커밋 버전이면 그 스냅샷(읽기 전용)을 반환한다. 설계 미선택이면 빈 배열.
  */
 export function useDesignTables(): TableDef[] {
   const design = useActiveDesign()
-  const versionId = useNav((s) => s.contextValues['version'])
+  const lens = useVersionLens()
   const draft = useDefinitionStore((s) => s.tables)
   const snapshotTables = useVersionsStore((s) =>
-    design && versionId && versionId !== 'draft'
-      ? s.byDesign[design.id]?.find((v) => v.number === versionId)?.snapshot.tables
+    design && isReadOnlyLens(lens)
+      ? s.byDesign[design.id]?.find((v) => v.number === lens)?.snapshot.tables
       : undefined
   )
   if (!design) return []
@@ -400,8 +399,7 @@ export function useDesignTables(): TableDef[] {
 
 /** Studio 가 읽기 전용인가 — 커밋된 버전을 렌즈로 보고 있으면 true. */
 export function useStudioReadOnly(): boolean {
-  const versionId = useNav((s) => s.contextValues['version'])
-  return !!versionId && versionId !== 'draft'
+  return isReadOnlyLens(useVersionLens())
 }
 
 /** 현재 활성 테이블 — 활성 Design 스코프. 스코프 밖이면 첫 테이블로 폴백, 없으면 undefined. */

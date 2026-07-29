@@ -34,7 +34,7 @@ DB 서비스의 **설계부(design)** 는 로컬 SQLite 저장소 위에 실제 
 - **Design 스토어**: `services/db/designs/store.ts` (IPC 하이드레이션), 생성/관리 다이얼로그.
 - **Definition**(Studio): `services/db/workspaces/definition/` — 표/SQL 편집, 컬럼/제약, 다중컬럼 CHECK 파생칩+CHK마커, 테이블 write-through 영속.
 - **Versions**: `services/db/versions/` — `store.ts`, `semver.ts`, `diff.ts`(스냅샷 diff 엔진), `TimelineView`(컷), `VersionDiffView`(diff①), `CutVersionDialog`, `VersionSync`.
-- **버전 렌즈**: 컨텍스트 바 Version 셀렉터(설계 영역). Draft=편집 / 커밋버전=읽기전용. `useDesignTables`/`useStudioReadOnly`가 버전 인지.
+- **버전 렌즈**: Studio 도구줄의 시점 손잡이(Definition·Diagram·Seed). Draft=편집 / 커밋버전=읽기전용. 상태는 `versions/store.ts` 의 `lens`, `useDesignTables`/`useStudioReadOnly`가 그것을 읽는다. (2026-07-29 컨텍스트 바 셀렉터에서 내려옴 — IA 결정 C.)
 - **컨텍스트 바**: `shell/ContextBar.tsx` — Design / Version(설계) / Env(운영) ambient 셀렉터. 옵션은 `nav/contextOptions.ts` 런타임 레지스트리.
 - nav 선택은 localStorage 영속(`useNav` persist), 설계·버전·테이블은 SQLite 영속.
 

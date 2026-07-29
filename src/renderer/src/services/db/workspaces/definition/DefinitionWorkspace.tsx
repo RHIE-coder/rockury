@@ -7,9 +7,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@renderer/ui/dropdown-menu'
-import { useNav } from '@renderer/nav/useNav'
 import { TableSidePanel } from '../../TableSidePanel'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
+import { DRAFT_LENS, useVersionLens, useVersionsStore } from '../../versions/store'
 import { useDefinitionStore, useDesignTables, useStudioReadOnly } from './store'
 import { TableForm } from './TableForm'
 import { SqlForm } from './SqlForm'
@@ -128,7 +128,7 @@ function NoTablesState({ onAdd }: { onAdd: () => void }) {
 
 /** 과거 버전 열람 중임을 알리는 읽기 전용 배너 — Draft 로 복귀 액션 포함. */
 function ReadOnlyBanner({ version }: { version: string }) {
-  const setContextValue = useNav((s) => s.setContextValue)
+  const setLens = useVersionsStore((s) => s.setLens)
   return (
     <div className="flex items-center gap-2 border-b border-line bg-accent-2-soft px-4 py-1.5 text-[12px] text-accent-2">
       <Lock className="size-3.5" />
@@ -137,7 +137,7 @@ function ReadOnlyBanner({ version }: { version: string }) {
       <span className="text-accent-2/80">과거 버전을 보고 있어요 — 편집하려면 Draft 로 전환하세요.</span>
       <button
         type="button"
-        onClick={() => setContextValue('version', 'draft')}
+        onClick={() => setLens(DRAFT_LENS)}
         className="ml-auto rounded-md bg-accent-2 px-2 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-2/90"
       >
         Draft 로 전환
@@ -151,7 +151,7 @@ export function DefinitionWorkspace() {
   const design = useActiveDesign()
   const tables = useDesignTables()
   const readOnly = useStudioReadOnly()
-  const versionId = useNav((s) => s.contextValues['version'])
+  const versionId = useVersionLens()
   const form = useDefinitionStore((s) => s.form)
   const addTable = useDefinitionStore((s) => s.addTable)
 

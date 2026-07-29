@@ -41,10 +41,24 @@ const toDef = (r: {
   createdAt: r.createdAt
 })
 
+/** Studio 가 보고 있는 시점 — 편집 가능한 작업본. */
+export const DRAFT_LENS = 'draft'
+
 interface VersionsState {
   /** 설계별 버전 목록(최신순). */
   byDesign: Record<string, VersionDef[]>
   loaded: Record<string, boolean>
+  /**
+   * **Studio 렌즈** — 지금 어느 시점의 설계를 보고 있는가.
+   * `'draft'`(편집 가능) 또는 커밋 버전 번호(읽기 전용).
+   *
+   * 예전엔 상단 컨텍스트 바의 셀렉터였다. 그런데 컨텍스트 바의 다른 칸(Design·Connection)은
+   * "무엇을 대상으로 하느냐"인데 이것만 "그 대상을 언제 시점으로 보느냐"라 성격이 달랐고,
+   * 실제로 읽는 화면도 Studio 셋뿐이라 운영부에서는 아무 일도 안 했다.
+   * 그래서 상태를 이 서비스 스토어로 내리고, 손잡이는 Studio 도구줄에 둔다(2026-07-29 사용자 결정).
+   */
+  lens: string
+  setLens: (lens: string) => void
   ensureLoaded: (designId: string) => Promise<void>
   /** 저장소에서 다시 읽어 덮는다 — 에이전트(MCP) 버전 컷 리하이드레이션용. 미로드 설계는 lazy 로딩 몫. */
   refresh: (designId: string) => Promise<void>
@@ -61,6 +75,8 @@ interface VersionsState {
 export const useVersionsStore = create<VersionsState>()((set, get) => ({
   byDesign: {},
   loaded: {},
+  lens: DRAFT_LENS,
+  setLens: (lens) => set({ lens }),
   ensureLoaded: async (designId) => {
     if (get().loaded[designId]) return
     const rows = await window.rockury.versions.list(designId)
@@ -88,6 +104,16 @@ export const useVersionsStore = create<VersionsState>()((set, get) => ({
     }))
   }
 }))
+
+/** 지금 Studio 가 보고 있는 시점. */
+export function useVersionLens(): string {
+  return useVersionsStore((s) => s.lens)
+}
+
+/** 커밋된 버전을 보고 있으면 true — 그동안 Studio 는 읽기 전용이다. */
+export function isReadOnlyLens(lens: string): boolean {
+  return !!lens && lens !== DRAFT_LENS
+}
 
 /** 활성 설계의 버전 목록(최신순). 로드되지 않았으면 트리거하고 빈 배열 반환. */
 export function useDesignVersions(designId: string | null): VersionDef[] {

@@ -5,9 +5,9 @@ import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
-import { useNav } from '@renderer/nav/useNav'
 import { autoColumnWidths } from '../../console/data/colWidth'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
+import { useVersionLens } from '../../versions/store'
 import { useDesignTables, useStudioReadOnly } from '../definition/store'
 import type { Column, TableDef } from '../definition/types'
 import { missingRequiredCells, isVariableCell, seedVariables, validateSeedRows, type SeedRowIssue } from './seedRows'
@@ -964,7 +964,7 @@ export function SeedWorkspace() {
   const sets = useDesignSeedSets()
   const active = useActiveSeedSet()
   const readOnly = useStudioReadOnly()
-  const versionId = useNav((s) => s.contextValues['version'])
+  const versionId = useVersionLens()
   const activeKey = useSeedStore((s) => s.activeKey)
   const setActive = useSeedStore((s) => s.setActive)
   const addSet = useSeedStore((s) => s.addSet)

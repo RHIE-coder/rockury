@@ -3,8 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { cx } from '@renderer/lib/cx'
 import { useActiveDesign } from '../../designs/store'
 import { dialectInfo } from '../../dialects'
-import { latestVer } from '../../versions/semver'
-import { useDesignVersions } from '../../versions/store'
+import { VersionLens } from '../../versions/VersionLens'
 import { useDefinitionStore } from './store'
 
 const FORMS: { id: 'table' | 'sql'; label: string; icon: LucideIcon }[] = [
@@ -13,16 +12,17 @@ const FORMS: { id: 'table' | 'sql'; label: string; icon: LucideIcon }[] = [
 ]
 
 /**
- * L4 — Definition 표현 토글([Table|SQL]) + draft 칩.
+ * L4 — Definition 표현 토글([Table|SQL]) + 시점 손잡이(Version 렌즈).
  * SQL 뷰의 방언은 선택지가 아니라 설계의 고정 속성 — 읽기 전용 배지로만 노출한다.
  * (벤더 이동은 추후 "포팅"으로 새 설계를 만드는 명시적 작업)
+ *
+ * 오른쪽 끝에 있던 `<마지막 컷> · draft` 칩을 렌즈가 대신한다. 그 칩은 커밋 버전을 보는
+ * 중에도 늘 "draft" 라고 적혀 있어서, 지금 무엇을 보고 있는지를 오히려 틀리게 말했다.
  */
 export function DefinitionToolbar() {
   const form = useDefinitionStore((s) => s.form)
   const setForm = useDefinitionStore((s) => s.setForm)
   const design = useActiveDesign()
-  const versions = useDesignVersions(design?.id ?? null)
-  const latest = latestVer(versions.map((v) => v.number))
 
   return (
     <>
@@ -59,12 +59,7 @@ export function DefinitionToolbar() {
             {dialectInfo(design.dialect).label}
           </span>
         )}
-        <span
-          title={latest ? `마지막 컷 ${latest} 이후 편집 중` : '아직 컷된 버전 없음'}
-          className="rounded-full bg-accent-2-soft px-2 py-0.5 font-mono text-[11px] font-medium text-accent-2"
-        >
-          {latest ?? '미커밋'} · draft
-        </span>
+        <VersionLens />
       </div>
     </>
   )

@@ -1,7 +1,6 @@
 import { create } from 'zustand'
-import { useNav } from '@renderer/nav/useNav'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
-import { useVersionsStore } from '../../versions/store'
+import { isReadOnlyLens, useVersionLens, useVersionsStore } from '../../versions/store'
 import { changedDesignIds } from '../definition/designScope'
 import type { TableDef } from '../definition/types'
 import { createSeedSet, cycleSeedColumnRole } from './seedSet'
@@ -144,17 +143,17 @@ export const useSeedStore = create<SeedState>()((set) => ({
 
 /**
  * 활성 Design 스코프의 시드 세트.
- * Version 렌즈가 'draft'(또는 미선택)면 편집 가능한 작업본, 커밋 버전이면 그 스냅샷의 시드
+ * Studio 렌즈(도구줄 시점 손잡이)가 'draft'면 편집 가능한 작업본, 커밋 버전이면 그 스냅샷의 시드
  * (읽기 전용)를 반환한다 — Definition 의 `useDesignTables` 와 같은 규칙.
  * 시드 개념이 없던 옛 스냅샷은 빈 목록으로 읽는다.
  */
 export function useDesignSeedSets(): SeedSet[] {
   const design = useActiveDesign()
-  const versionId = useNav((s) => s.contextValues['version'])
+  const lens = useVersionLens()
   const draft = useSeedStore((s) => s.sets)
   const snapshotSeeds = useVersionsStore((s) =>
-    design && versionId && versionId !== 'draft'
-      ? s.byDesign[design.id]?.find((v) => v.number === versionId)?.snapshot.seeds
+    design && isReadOnlyLens(lens)
+      ? s.byDesign[design.id]?.find((v) => v.number === lens)?.snapshot.seeds
       : undefined
   )
   if (!design) return []

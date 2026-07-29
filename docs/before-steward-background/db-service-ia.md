@@ -86,8 +86,9 @@ Rockury 를 거치지 않고 실 DB 를 손댄 핫픽스(드리프트)까지 흡
 
 ```
 DB (service)
-│  컨텍스트 바:  [ Design ▾ ]  [ Version: Draft/커밋본 ▾ ]  [ Env ▾ ]
-│                              └ Version 은 설계부에서만 활성    └ Env 는 운영부에서만 활성
+│  컨텍스트 바:  [ Design ▾ ]  [ Connection ▾ ]
+│                              └ Connection 은 운영부에서만 활성
+│  Studio 도구줄:  [ Draft/커밋본 ▾ ]   ← 시점 렌즈(결정 C 로 컨텍스트 바에서 내려옴)
 │
 ├─ Overview                              공통 · A 의 전 환경 상태 한눈에
 │
@@ -103,7 +104,7 @@ DB (service)
 └─ Reference                             공통 · 데이터 사전/문서
 ```
 
-- **depth = Service→Module→View 3단.** Design/Version/Env 는 nav 계층이 아니라 상단 **컨텍스트 바**의 ambient 셀렉터(결정 ②-a) → depth 를 늘리지 않는다.
+- **depth = Service→Module→View 3단.** Design/Env 는 nav 계층이 아니라 상단 **컨텍스트 바**의 ambient 셀렉터(결정 ②-a) → depth 를 늘리지 않는다. (Version 은 결정 C 로 Studio 도구줄로 내려갔다.)
 
 ### Version 은 경계 객체, 조율자는 Migration/Overview (결정 ③-a)
 
@@ -119,7 +120,7 @@ Version 은 어느 한 모듈이 "소유"하지 않는다. 설계부가 **생산
                           Overview (대시보드 조율자: 설계↔환경↔적용버전↔드리프트 매트릭스)
 ```
 
-- **설계 영역**: Version = "보는 렌즈". 컨텍스트 바 Version 셀렉터(Draft=편집 / 커밋본=읽기전용)가 운반하고, Studio 전체가 그 스냅샷을 렌더한다. Version 의 관리 홈은 **Versions 모듈**이지 Studio 가 아니다.
+- **설계 영역**: Version = "보는 렌즈". **Studio 도구줄의 시점 손잡이**(Draft=편집 / 커밋본=읽기전용)가 운반하고, Studio 전체가 그 스냅샷을 렌더한다(결정 C 이전에는 컨텍스트 바 셀렉터였다). Version 의 관리 홈은 **Versions 모듈**이지 Studio 가 아니다.
 - **운영 영역**: Version = "환경이 가리키는 배포 대상". 자유 선택이 아니라 Environment 가 타깃/적용 버전을 바인딩하고 **Env 셀렉터**가 운반한다.
 - **조율자**: **Migration**(액션 — Forward/Backward 의 "정의된 문") + **Overview**(대시보드 — 전 환경 매핑을 한눈에). 별도 코디네이터 서비스를 만들지 않는다.
 - **레벨 주의**: Version 은 L1 서비스가 아니라 DB 서비스 내 설계↔운영 경계의 도메인 객체다.
@@ -147,7 +148,8 @@ nav 는 "깊이는 데이터다" 원칙. 관련 타입은 `src/renderer/src/nav/
 | rky `IPackage` 폐기 | 리소스 번들 개념 미사용 | Environment 가 중심 |
 | dialect ⊂ Design | 벤더(방언)는 Design 생성 시 1회 결정되는 고정 속성. 설계 화면·DDL 은 네이티브 구문 그대로("표를 보면 그 벤더다"), 벤더 이동은 명시적 **포팅**(리포트 딸린 새 Design 생성)으로만 | 벤더 전용 타입(INET·JSONB 등) 자유도 + DBA 가독성. 중립 모델의 손실·혼란 회피. Design 1:N Env 라 전 환경 동일 벤더가 구조적으로 보장되고, Env 생성 시 Connection 벤더 일치 검증이 공짜 |
 | Design 생성 진입점 | nav 모듈이 아니라 **컨텍스트 바 Design 드롭다운의 "새 설계…" 액션**(+ 빈 상태 CTA). 관리(이름변경·삭제·포팅)는 추후 Overview 가 담당 | ②-a 유지(depth 안 늘림) · 워크스페이스 스위처 관례 |
-| ③-a Version=경계 객체 | Version 은 설계↔운영이 공유하는 경계 객체. 설계=**렌즈**(컨텍스트 바 Version 셀렉터, Draft/커밋본 읽기전용), 운영=**환경 바인딩**(Env 가 운반). 관리 홈=Versions 모듈. 조율자=**Migration**(액션)+**Overview**(대시보드). 별도 L1 서비스로 승격하지 않음 | 사용자 지적("양쪽에서 바인딩, 중간에서 조율") 반영. Studio 가 Version 을 소유하지 않고 렌더만 |
+| ③-a Version=경계 객체 (렌즈 자리는 **C 로 개정** — 컨텍스트 바 → Studio 도구줄) | Version 은 설계↔운영이 공유하는 경계 객체. 설계=**렌즈**(당시엔 컨텍스트 바 Version 셀렉터, Draft/커밋본 읽기전용), 운영=**환경 바인딩**(Env 가 운반). 관리 홈=Versions 모듈. 조율자=**Migration**(액션)+**Overview**(대시보드). 별도 L1 서비스로 승격하지 않음 | 사용자 지적("양쪽에서 바인딩, 중간에서 조율") 반영. Studio 가 Version 을 소유하지 않고 렌더만 |
+| **C — Version 렌즈를 Studio 도구줄로** (구현됨, `③-a` 의 "컨텍스트 바 셀렉터" 부분 대체) | 시점 렌즈(Draft ↔ 커밋본)를 상단 컨텍스트 바에서 빼고 **Studio 세 뷰(Definition·Diagram·Seed)의 도구줄**로 내렸다. 상태는 `versions/store.ts` 의 `lens`. 컨텍스트 바에는 Design·Connection 만 남는다. Version 의 관리 홈이 **Versions 모듈**이라는 것과 경계 객체 성격(`③-a`)은 그대로 | 사용자 지적(2026-07-29): "Version 은 Design 에 귀속되고 운영은 참조만 하는데 상단에서 고르는 게 의미가 있나". 실측으로도 **운영부는 이 셀렉터를 안 읽었다**(Migration 은 화면 안에서 타깃 버전을 따로 고른다). 컨텍스트 바의 나머지 칸은 "무엇을 대상으로 하느냐"인데 렌즈만 "언제 시점으로 보느냐"라 성격이 달라 한 줄에 섞이면 위계가 흐려진다 |
 | **B — Connection 1급 분리** (구현됨, `①-a`/`dialect⊂Design` 일부 대체) | **Connection**(접속, 설계 무관)을 1급으로 승격. **Console 은 Connection 만으로 동작**(설계 없이 모니터링/조회). **Environment = (connection × design) 바인딩**으로 Migration 에서만 필요. 컨텍스트 바 ops 셀렉터는 **Env → Connection**. dbType 은 Connection 속성(폼 자유선택); 벤더-설계 일치 검증은 Migration 바인딩 시점으로 이동 | 사용자 지적: "운영 DB 모니터링만 할 수도 있는데 왜 Design 강제?". Console(Reverse/조회)은 접속만 필요하고, 설계는 Migration(diff 대상)에만 필요 — 관심사 분리. IA 원안 "Connection ≠ Environment" 복원 |
 
 ---

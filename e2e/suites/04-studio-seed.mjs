@@ -338,11 +338,14 @@ export async function run(ctx) {
         const l = await window.rockury.diagram.getLayout('design:commerce-core')
         return JSON.stringify({ p: l?.positions ?? {}, g: l?.groups ?? [] })
       })
-    await click('button:has-text("Version")')
-    await click('[role="menuitem"]:has-text("v0.3.15")')
-    await page.waitForTimeout(400)
+    // 시점 손잡이는 Studio 도구줄에 있다(예전엔 상단 컨텍스트 바) — 먼저 화면으로 가서 고른다.
     await click('button:has-text("Studio")')
     await click('button:has-text("Diagram")')
+    await page.waitForSelector('.react-flow__node[data-id]', { timeout: 10_000 })
+    check('Studio › Diagram: 도구줄에 시점 손잡이가 있다', (await page.locator('[data-version-lens]').count()) === 1)
+    await click('[data-version-lens]')
+    await click('[data-version-lens-option="v0.3.15"]')
+    await page.waitForTimeout(400)
     await page.waitForSelector('.react-flow__node[data-id]', { timeout: 10_000 })
     await page.waitForTimeout(500)
     check('Studio › Diagram(커밋 버전): 읽기 전용 배지', (await body()).includes('읽기 전용'))
@@ -361,17 +364,28 @@ export async function run(ctx) {
       (await nd.evaluate((el) => el.style.transform)) === tfPre
     )
     check('Studio › Diagram(커밋 버전): 저장본이 그대로', (await savedLayout()) === before)
+    // 그룹 패널을 펼친 상태에서 센다 — 안 펼치면 읽기 전용이 아니어도 0 이라 검증이 안 된다.
+    await page.locator('[data-side-tab="groups"]').first().click()
+    await page.waitForTimeout(300)
     check(
       'Studio › Diagram(커밋 버전): 그룹 만들기 버튼 없음',
-      (await page.locator('[data-side-tab="groups"]').count()) > 0 &&
+      (await page.locator('[data-diagram-group-panel]').count()) > 0 &&
         (await page.locator('[data-group-create]').count()) === 0
     )
 
     // 렌즈를 Draft 로, 화면을 Versions › Timeline 으로 되돌린다 —
     // 다음 스위트(05-mcp-write)는 타임라인이 열린 채로 시작한다고 본다(상태 의존 순서).
-    await click('button:has-text("Version")')
-    await click('[role="menuitem"]:has-text("Draft")')
+    await click('[data-version-lens]')
+    await click('[data-version-lens-option="draft"]')
     await page.waitForTimeout(400)
+    // 그룹 패널을 실제로 펼쳐서 본다 — `data-group-create` 는 그 패널 안에만 있어서,
+    // 안 펼치고 세면 읽기 전용이든 아니든 0 이라 아무것도 검증하지 못한다.
+    await page.locator('[data-side-tab="groups"]').first().click()
+    await page.waitForTimeout(300)
+    check('Studio › Diagram: Draft 로 돌아오면 편집이 풀린다(그룹 만들기 복귀)',
+      (await page.locator('[data-group-create]').count()) > 0)
+    check('Studio › Diagram: Draft 로 돌아오면 읽기 전용 배지가 사라진다',
+      !(await body()).includes('읽기 전용(커밋 버전)'))
     await click('button:has-text("Versions")')
     await click('button:has-text("Timeline")')
     await page.waitForTimeout(400)
