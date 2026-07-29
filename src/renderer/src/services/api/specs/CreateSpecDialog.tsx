@@ -12,15 +12,9 @@ import {
 } from '@renderer/ui/dialog'
 import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
-import { INTERFACE_META, type InterfaceKind } from '@shared/api/types'
+import { INTERFACE_META, SHAPE_LABEL, type InterfaceKind } from '@shared/api/types'
 import { useApiStore } from '../store'
 
-const SHAPE_LABEL: Record<string, string> = {
-  unary: '한 번 보내고 한 번 받음',
-  'server-stream': '서버가 계속 보내옴',
-  duplex: '서로 계속 주고받음',
-  inbound: '내가 안 보냈는데 들어옴'
-}
 
 /**
  * 새 명세 모달 — 이름 · 설명 · 인터페이스 종류.

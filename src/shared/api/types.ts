@@ -26,6 +26,18 @@ export type InterfaceKind = (typeof INTERFACE_KINDS)[number]
 export const INTERACTION_SHAPES = ['unary', 'server-stream', 'duplex', 'inbound'] as const
 export type InteractionShape = (typeof INTERACTION_SHAPES)[number]
 
+/**
+ * 사람 말 이름. **화면에 원시 enum(`duplex`)을 그대로 내보내지 않는다** —
+ * 명세를 만들 때 "서로 계속 주고받음"으로 고른 것이 다른 화면에서 `duplex` 로 보이면
+ * 같은 개념을 두 어휘로 배우게 된다.
+ */
+export const SHAPE_LABEL: Record<InteractionShape, string> = {
+  unary: '한 번 묻고 한 번 받음',
+  'server-stream': '계속 받기만 함',
+  duplex: '서로 계속 주고받음',
+  inbound: '내가 안 보냈는데 들어옴'
+}
+
 export interface InterfaceMeta {
   id: InterfaceKind
   label: string

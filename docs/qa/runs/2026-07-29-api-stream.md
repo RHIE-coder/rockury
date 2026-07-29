@@ -267,3 +267,36 @@
   - **UI 시각 리뷰** — 이번 회차에 다시 띄웠다(결과는 별도)
 
 - 판정: **PASS**
+
+---
+
+# gate run — 2026-07-29 · UI 시각 리뷰 반영 (네 회차 밀린 것)
+
+- 기준 커밋(HEAD=부모): `e02fcdf`
+- 범위: UI 시각 관점 리뷰(화면 8종 실물 드라이브 5회) 지적 22건 중 **high 5 + medium 8 해소**.
+  산출물 `.harness/steward/artifacts/feat-api/findings-ui.md`
+
+- 결과:
+  - typecheck · build · test: **PASS** — 1395 pass / 4 skip
+  - e2e: **PASS** — 21/21 스위트 · 493 체크
+  - surface-verify: **status=ok · 차단 0 · 관찰 120 → 107** (저대비 칩 13개 제거)
+
+- 가장 큰 것: **`--color-danger-soft` 가 선언조차 안 돼 있었다.** 세트의 다른 4개
+  (`accent-soft`·`accent-2-soft`·`success-soft`·`info-soft`)는 다 있는데 이것만 빠졌고,
+  Tailwind v4 가 미선언 키의 유틸리티를 안 만들어 **쓰는 자리 24곳이 전부 투명**하게
+  렌더됐다 — 위험 표시만 채움이 없어 **위계가 정확히 반전**됐다.
+  `#fdf2f1`(danger 얹어 4.61:1, AA 통과) 로 선언. `globals.css` 는 공용 파일이지만
+  **추가만** 했고 쓰는 곳이 이 서비스뿐이라 다른 서비스에 영향 없음.
+
+- **기계 검증의 한계가 드러났다:** `surface-verify` 순회는 각 화면의 기본 빈 상태만 훑어서
+  데이터가 있어야 나타나는 칩과 투명 배경을 못 본다. "차단 0" 을 이 화면들의 통과 근거로
+  쓰면 안 된다. `token-guard` 미바인딩이 이번 건을 놓친 직접 원인이다.
+
+- drift: 정본 변경 없음(전부 화면 표현). `docs/qa/api-runner.md` 미구현 절의
+  "UI 시각 미확인" 항목을 **남긴 지적 6건**으로 교체.
+
+- 남긴 것 6건: `accent-2` 대비(db 공유 토큰 — `main` 몫) · 환경 값 행 흔들림(추정) ·
+  Inbox 상세 헤더 접기 · 넓은 폭 목록 분리(`main` 몫) · `KIND_META.risk` 미표시 ·
+  리사이즈 손잡이 포커스(공용 파일, `main` 몫)
+
+- 판정: **PASS**

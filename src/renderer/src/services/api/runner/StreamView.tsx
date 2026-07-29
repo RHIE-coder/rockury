@@ -25,6 +25,7 @@ import {
   transportFor
 } from '@shared/api/stream'
 import {
+  SHAPE_LABEL,
   STREAM_DIRECTIONS,
   STREAM_DIRECTION_LABEL,
   STREAM_STATE_LABEL,
@@ -83,7 +84,8 @@ const MessageRow = memo(function MessageRow({ m }: { m: StreamMessage }) {
       className="group flex items-start gap-2 border-b border-line px-3 py-1.5 last:border-b-0 hover:bg-panel"
     >
       <Icon className={cn('mt-[3px] size-3 shrink-0', DIRECTION_STYLE[m.direction])} />
-      <span className="w-16 shrink-0 pt-[1px] text-[10.5px] tabular-nums text-muted">
+      {/* `02:03:12.238` 는 12자 — `w-16`(64px)에선 넘쳐 다음 칸과 맞닿는다. */}
+      <span className="w-20 shrink-0 pt-[1px] text-[10.5px] tabular-nums text-muted">
         {m.at.slice(11, 23)}
       </span>
       {m.event && (
@@ -176,12 +178,26 @@ export function StreamView() {
   // **바닥 근처일 때만** 따라간다. 조건 없이 부르면 위로 올려 읽는 중에도 끌려 내려가고,
   // 메시지마다 동기 레이아웃(줄바꿈 계산이 필요한 `pre` 수천 개)을 강제한다.
   const scroller = useRef<HTMLDivElement>(null)
+  /** 바닥을 벗어나 있나 — 벗어나면 자동 따라가기가 멈추므로 **되돌아갈 손잡이**를 띄운다. */
+  const [behind, setBehind] = useState(0)
   useEffect(() => {
     const el = scroller.current
     if (!el) return
-    if (el.scrollHeight - el.scrollTop - el.clientHeight > 80) return
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (gap > 80) {
+      // 따라가기를 멈춘 사실을 **화면이 말한다.** 안 말하면 카운터가 "320/320건" 이라
+      // 전부 보이고 있다고 읽히고, 돌아갈 방법도 없다(실측: 한 번 올리면 8,900px 뒤처짐).
+      setBehind((n) => n + 1)
+      return
+    }
+    setBehind(0)
     bottom.current?.scrollIntoView({ block: 'end' })
   }, [messages.length])
+
+  const jumpToBottom = (): void => {
+    setBehind(0)
+    bottom.current?.scrollIntoView({ block: 'end' })
+  }
 
   // 요청을 바꾸면 남의 타임라인이 남아 보이면 안 된다. **살아 있는 세션은 안 건드린다.**
   useEffect(() => {
@@ -194,7 +210,6 @@ export function StreamView() {
     return (
       <PlaceholderView
         icon={Waves}
-        depth="depth 3 · API › Runner › Stream"
         title="명세를 먼저 고르세요"
         subtitle="상단 컨텍스트 바에서 명세를 고르면 스트림 요청에 붙을 수 있어요."
       />
@@ -271,7 +286,9 @@ export function StreamView() {
                         r.name === selected ? 'bg-accent-soft font-medium' : 'hover:bg-panel'
                       )}
                     >
-                      <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                      <span title={r.name} className="min-w-0 flex-1 truncate">
+                        {r.name}
+                      </span>
                       {/* 목록에서 이미 갈라 보인다 — 골라 놓고 "왜 안 열리지" 하지 않게. */}
                       <span
                         className={cn(
@@ -279,7 +296,7 @@ export function StreamView() {
                           streamable ? 'bg-accent-2-soft text-accent-2' : 'bg-panel text-muted'
                         )}
                       >
-                        {r.shape}
+                        {SHAPE_LABEL[r.shape]}
                       </span>
                     </button>
                   )
@@ -291,7 +308,6 @@ export function StreamView() {
           {!req || !pick ? (
             <PlaceholderView
               icon={Waves}
-              depth="depth 3 · API › Runner › Stream"
               title="요청을 고르세요"
               subtitle="왼쪽에서 스트림 요청을 고르면 붙어서 메시지를 주고받을 수 있어요."
             />
@@ -299,7 +315,6 @@ export function StreamView() {
             /* 못 여는 것은 **사유를 단 빈 결과**로 준다 — 다른 전송으로 흉내 내지 않는다. */
             <PlaceholderView
               icon={Ban}
-              depth="depth 3 · API › Runner › Stream"
               title="이 요청은 여기서 못 엽니다"
               subtitle={pick.unsupported ?? ''}
             />
@@ -329,6 +344,8 @@ export function StreamView() {
                     data-api-stream-autoreconnect
                     checked={autoReconnect}
                     disabled={live}
+                    // 기본 체크박스는 13×13 이라 트랙패드에서 빗나간다(WCAG 2.5.8).
+                    className="size-4"
                     onChange={(e) => useStreamStore.getState().setAutoReconnect(e.target.checked)}
                   />
                   자동 재접속
@@ -472,6 +489,17 @@ export function StreamView() {
                 )}
                 <div ref={bottom} />
               </div>
+
+              {behind > 0 && (
+                <button
+                  type="button"
+                  data-api-stream-jump
+                  onClick={jumpToBottom}
+                  className="flex items-center justify-center gap-1.5 border-t border-line bg-accent-soft px-4 py-1.5 text-[11.5px] font-medium text-accent hover:bg-accent-soft/70"
+                >
+                  <ArrowDown className="size-3.5" /> 맨 아래로 — 그동안 {behind}건이 더 왔습니다
+                </button>
+              )}
 
               {/* ── 보내기 패널: 양방향에만 **있다**(AC-3) ── */}
               {sendPanelVisible(req.shape) && (

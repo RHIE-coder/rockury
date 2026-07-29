@@ -86,7 +86,6 @@ export function DiffView() {
     return (
       <PlaceholderView
         icon={GitCompare}
-        depth="depth 3 · API › Versions › Diff"
         title="명세를 먼저 고르세요"
         subtitle="비교는 같은 명세의 두 스냅샷 사이에서 합니다."
       />
@@ -96,7 +95,6 @@ export function DiffView() {
     return (
       <PlaceholderView
         icon={GitCompare}
-        depth="depth 3 · API › Versions › Diff"
         title="비교할 버전이 없어요"
         subtitle="Timeline 에서 버전을 한 번 컷하면 Draft 와 비교할 수 있습니다."
       />

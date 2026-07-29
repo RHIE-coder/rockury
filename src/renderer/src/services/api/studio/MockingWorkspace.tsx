@@ -8,6 +8,7 @@ import { cn } from '@renderer/lib/utils'
 import { DEFAULT_MOCK_PORT, mockableRequests, mockUnsupportedReason } from '@shared/api/mock'
 import { useApiStore, useSpecSync } from '../store'
 import type { MockHitEvent, MockStatus } from '../../../../../preload/services/api'
+import { ipcErrorText } from '../errorText'
 
 /**
  * Studio › Mocking — `docs/spec/api-studio.md` § mocking.server.
@@ -82,7 +83,6 @@ export function MockingWorkspace() {
     return (
       <PlaceholderView
         icon={FlaskConical}
-        depth="depth 3 · API › Studio › Mocking"
         title="명세를 먼저 고르세요"
         subtitle="선언한 응답 모양으로 가짜 서버를 띄웁니다 — 명세를 골라야 흉내 낼 것이 생겨요."
       />
@@ -95,7 +95,6 @@ export function MockingWorkspace() {
     return (
       <PlaceholderView
         icon={Ban}
-        depth="depth 3 · API › Studio › Mocking"
         title="이 명세는 아직 흉내 낼 수 없습니다"
         subtitle={unsupported}
       />
@@ -113,7 +112,7 @@ export function MockingWorkspace() {
       useMockStore.setState({ status: s, hits: [] })
     } catch (e) {
       // 포트 충돌 사유·제안이 여기로 온다 — 몰래 다른 포트로 옮기지 않는다.
-      useMockStore.setState({ error: e instanceof Error ? e.message : String(e) })
+      useMockStore.setState({ error: ipcErrorText(e) })
     } finally {
       useMockStore.setState({ busy: false })
     }
@@ -312,7 +311,8 @@ export function MockingWorkspace() {
                   >
                     {h.status}
                   </span>
-                  <span className="w-16 shrink-0 text-right tabular-nums text-muted">{fmt(h.at)}</span>
+                  {/* `오전 11:04:19` 는 ~85px — `w-16`(64px)에선 모든 행이 두 줄로 접힌다. */}
+                  <span className="w-24 shrink-0 text-right tabular-nums text-muted">{fmt(h.at)}</span>
                 </div>
               ))
           )}

@@ -19,7 +19,6 @@ export function LogsView() {
     return (
       <PlaceholderView
         icon={ScrollText}
-        depth="depth 3 · API › Contract › Logs"
         title="명세를 먼저 고르세요"
         subtitle="이력은 명세에 속합니다."
       />

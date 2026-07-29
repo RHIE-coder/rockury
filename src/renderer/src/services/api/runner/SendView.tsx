@@ -66,7 +66,6 @@ export function SendView() {
     return (
       <PlaceholderView
         icon={Send}
-        depth="depth 3 · API › Runner › Send"
         title="명세를 먼저 고르세요"
         subtitle="상단 컨텍스트 바에서 명세를 고르면 요청을 쏠 수 있어요."
       />
@@ -122,7 +121,6 @@ export function SendView() {
           {!req || !preview ? (
             <PlaceholderView
               icon={Send}
-              depth="depth 3 · API › Runner › Send"
               title="요청을 고르세요"
               subtitle="왼쪽에서 요청을 고르면 파라미터를 넣고 최종 요청을 미리 볼 수 있어요."
             />

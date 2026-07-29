@@ -42,7 +42,13 @@
    */
   --color-warning-soft: #fdf1e3;
   --color-danger: #b0524c;
-  /* 위험 채움. `--color-danger` 를 얹었을 때 4.61:1(AA 통과). */
+  /*
+   * 위험 채움. `accent-soft`·`accent-2-soft`·`success-soft`·`info-soft` 는 있는데
+   * 이것만 빠져 있었다 — Tailwind v4 는 미선언 키의 유틸리티를 아예 안 만들어서,
+   * `bg-danger-soft` 를 쓰던 자리가 전부 **투명하게** 그려지고 있었다(위험 표시만 채움이
+   * 없어 위계가 뒤집혔다). `--color-danger`(#b0524c) 를 얹었을 때 **4.61:1** 이 나오는
+   * 값으로 골랐다(AA 4.5:1 통과). `tokens.test.ts` 가 이 짝을 강제한다.
+   */
   --color-danger-soft: #fdf2f1;
   --color-info: #3f72a8;
   --color-info-soft: #e9f0f8;

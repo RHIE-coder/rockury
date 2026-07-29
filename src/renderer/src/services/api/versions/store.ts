@@ -5,6 +5,7 @@ import { diffSpecs, type DiffResult } from '@shared/api/breaking'
 import type { SpecDef } from '@shared/api/types'
 import { useApiStore } from '../store'
 import type { VersionRecord } from '../../../../../preload/services/api'
+import { ipcErrorText } from '../errorText'
 
 /**
  * 버전 스토어 — `docs/spec/api-studio.md` § versions.
@@ -71,7 +72,7 @@ export const useVersionsStore = create<VersionsState>()((set, get) => ({
       set({ error: null, cutOpen: false })
       return true
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
       return false
     }
   },

@@ -4,6 +4,7 @@ import { useContextOptions } from '@renderer/nav/contextOptions'
 import { useNav } from '@renderer/nav/useNav'
 import { interfaceMeta, type InterfaceKind, type RequestDef, type SpecDef } from '@shared/api/types'
 import type { SpecSummary } from '../../../../preload/services/api'
+import { ipcErrorText } from './errorText'
 
 /**
  * API 명세 스토어 — 컨텍스트 바의 Spec 셀렉터와 Studio 화면이 함께 쓴다.
@@ -91,7 +92,7 @@ export const useApiStore = create<ApiState>()((set, get) => ({
       set({ error: null })
       return true
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
       return false
     }
   },

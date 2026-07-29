@@ -6,6 +6,7 @@ import { cryptoUnavailable, type FunctionEnv } from '@shared/api/functions'
 import type { EnvironmentDef, RunRecord } from '@shared/api/types'
 import { useApiStore } from '../store'
 import type { SendRequestResult } from '../../../../../preload/services/api'
+import { ipcErrorText } from '../errorText'
 
 /**
  * 운영부 스토어 — 환경과 실행 기록.
@@ -79,7 +80,7 @@ export const useOpsStore = create<OpsState>()((set, get) => ({
       set({ error: null })
       return true
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
       return false
     }
   },
@@ -90,7 +91,7 @@ export const useOpsStore = create<OpsState>()((set, get) => ({
       await get().loadEnvironments(copy.specId)
       set({ error: null })
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
     }
   },
 
@@ -143,7 +144,7 @@ export const useOpsStore = create<OpsState>()((set, get) => ({
       set({ lastRun: res.run, pruned: res.pruned })
       await get().loadRuns(specId)
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
     } finally {
       set({ sending: false, sendId: null })
     }

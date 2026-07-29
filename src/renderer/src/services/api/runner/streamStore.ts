@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { StreamMessage, StreamState } from '@shared/api/types'
 import type { StreamTransport } from '@shared/api/stream'
+import { ipcErrorText } from '../errorText'
 
 /**
  * 스트림 세션 스토어 — `docs/spec/api-runner.md` § stream.session.
@@ -88,7 +89,7 @@ export const useStreamStore = create<StreamStoreState>()((set, get) => ({
     } catch (e) {
       // 못 붙는 이유(미지원 인터페이스·미해결 참조)가 여기로 온다 — 빈 화면으로 두지 않는다.
       // 세션이 아예 안 열렸으므로 id 도 놓아 준다(안 놓으면 '접속 중' 으로 남는다).
-      set({ sessionId: null, state: 'idle', error: e instanceof Error ? e.message : String(e) })
+      set({ sessionId: null, state: 'idle', error: ipcErrorText(e) })
     } finally {
       set({ busy: false })
     }
@@ -101,7 +102,7 @@ export const useStreamStore = create<StreamStoreState>()((set, get) => ({
       await window.rockury.apiStream.send(id, text)
       return true
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
       return false
     }
   },

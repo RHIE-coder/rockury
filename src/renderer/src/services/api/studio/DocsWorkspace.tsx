@@ -58,7 +58,8 @@ function Block({ b }: { b: MdBlock }) {
     return (
       <pre
         data-api-md-code
-        className="overflow-auto rounded-md border border-line bg-canvas px-2.5 py-2 font-mono text-[11.5px] text-fg"
+        // 가로만 넘치게 둔다 — 세로로 자르면 코드가 몇 줄에서 끊긴다(표와 같은 자리).
+        className="overflow-x-auto rounded-md border border-line bg-canvas px-2.5 py-2 font-mono text-[11.5px] text-fg"
       >
         {b.text}
       </pre>
@@ -77,15 +78,19 @@ function Block({ b }: { b: MdBlock }) {
     )
   }
   if (b.t === 'quote') {
+    // 인용은 본문과 같은 크기다 — 크게 두면 h2 와 동급이 되어 위계가 뒤집힌다.
     return (
-      <blockquote className="border-l-2 border-line pl-2.5 text-muted" data-api-md-quote>
+      <blockquote className="border-l-2 border-line pl-2.5 text-[12px] text-muted" data-api-md-quote>
         <Spans spans={b.spans} />
       </blockquote>
     )
   }
   if (b.t === 'table') {
+    // `overflow-x: auto` 는 규정상 `overflow-y` 도 auto 로 만든다 — 세로 flex(`min-h-0`)
+    // 안에서 이 상자가 스크롤 주체가 되어 **표 본문이 0행 보이는** 일이 있었다(실측).
+    // 가로만 넘치게 두고 세로는 안 자른다.
     return (
-      <div className="overflow-x-auto" data-api-md-table>
+      <div className="overflow-x-auto overflow-y-visible" data-api-md-table>
         <table className="w-full border-collapse text-[11.5px]">
           <thead>
             <tr>
@@ -129,8 +134,10 @@ function MarkdownPreview({ source }: { source: string }) {
     )
   }
   return (
+    // **미리보기 상자 하나만 스크롤 주체다.** 안쪽 표·코드가 각자 세로 스크롤을 가지면
+    // 바깥 페이지를 내려도 안 나오는 내용이 생긴다(실측: 표 3행 중 0행).
     <div
-      className="flex flex-col gap-2 overflow-auto rounded-md border border-line px-3 py-2.5"
+      className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto rounded-md border border-line px-3 py-2.5"
       data-api-md-preview
     >
       {blocks.map((b, i) => (
@@ -158,7 +165,6 @@ export function DocsWorkspace() {
     return (
       <PlaceholderView
         icon={BookOpen}
-        depth="depth 3 · API › Studio › Docs"
         title="명세를 먼저 고르세요"
         subtitle="상단 컨텍스트 바에서 명세를 고르면 문서를 볼 수 있어요."
       />
@@ -169,7 +175,6 @@ export function DocsWorkspace() {
     return (
       <PlaceholderView
         icon={BookOpen}
-        depth="depth 3 · API › Studio › Docs"
         title="요청이 없어요"
         subtitle="Requests 에서 요청을 먼저 만들면 문서가 생깁니다."
       />

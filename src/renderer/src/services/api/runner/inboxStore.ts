@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { ReceivedRequest } from '@shared/api/inbox'
 import type { InboxStatus } from '../../../../../preload/services/api'
+import { ipcErrorText } from '../errorText'
 
 /**
  * 웹훅 수신 스토어 — `docs/spec/api-runner.md` § inbox.
@@ -60,7 +61,7 @@ export const useInboxStore = create<InboxStoreState>()((set, get) => ({
     try {
       set({ status: await window.rockury.apiInbox.setResponseCode(c) })
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
     }
   },
 
@@ -81,7 +82,7 @@ export const useInboxStore = create<InboxStoreState>()((set, get) => ({
       set({ status, received: [], dropped: 0 })
     } catch (e) {
       // 포트 충돌 사유·제안이 여기로 온다 — 몰래 다른 포트로 옮기지 않는다.
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
     } finally {
       set({ busy: false })
     }

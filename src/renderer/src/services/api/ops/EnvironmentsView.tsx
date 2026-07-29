@@ -155,6 +155,8 @@ function EnvironmentCard({ env, requests }: { env: EnvironmentDef; requests: Req
             type="checkbox"
             checked={draft.production}
             data-api-env-production
+            // 잘못 눌리면 실서비스로 요청이 나가는 스위치다 — 기본 13×13 은 너무 작다.
+            className="size-4"
             onChange={(e) => setDraft({ ...draft, production: e.target.checked })}
           />
           운영
@@ -247,7 +249,6 @@ export function EnvironmentsView() {
     return (
       <PlaceholderView
         icon={Server}
-        depth="depth 2 · API › Environments"
         title="명세를 먼저 고르세요"
         subtitle="환경은 명세에 속합니다 — 상단 컨텍스트 바에서 명세를 고르세요."
       />

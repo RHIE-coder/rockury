@@ -31,6 +31,7 @@ import { renderTemplate } from '@shared/api/template'
 import { buildScope } from '@shared/api/resolve'
 import { rendererFunctionEnv, useActiveEnvironment } from '../ops/store'
 import { useApiStore, useSpecSync } from '../store'
+import { useOpsStore, useOpsSync } from '../ops/store'
 
 /** 칸 하나의 사람 말 이름 — 인터페이스마다 나오는 칸이 다르다(spec shape AC-7). */
 const FIELD_LABEL: Record<RequestField, string> = {
@@ -47,6 +48,9 @@ const FIELD_LABEL: Record<RequestField, string> = {
   connectUrl: '접속 주소',
   expectedBody: '기대 본문'
 }
+
+/** 폴더 행 앞에만 붙는 글리프 폭(chevron + folder 아이콘 + 간격). 요청 행을 이만큼 민다. */
+const GLYPH_LEAD = 38
 
 /** 여러 줄로 받아야 자연스러운 칸. */
 const MULTILINE: RequestField[] = ['body', 'graphqlQuery', 'graphqlVariables', 'rpcParams', 'expectedBody']
@@ -67,12 +71,15 @@ function RequestRow({
   req,
   active,
   depth,
+  observed,
   onSelect,
   onDragStart
 }: {
   req: RequestDef
   active: boolean
   depth: number
+  /** 이 요청으로 실제로 쏴 본(또는 받은) 기록이 있나. */
+  observed: boolean
   onSelect: () => void
   onDragStart: () => void
 }) {
@@ -83,24 +90,46 @@ function RequestRow({
       draggable
       onDragStart={onDragStart}
       onClick={onSelect}
-      style={{ paddingLeft: 12 + depth * 14 }}
+      /*
+        폴더 행에는 chevron(12) + gap(6) + folder 아이콘(14) + gap(6) ≈ 38px 이 앞에 붙는다.
+        같은 공식을 쓰면 **자식 요청이 부모 폴더 라벨보다 왼쪽에 놓여** 트리가 뒤집혀 보인다.
+        그만큼 밀어 준다.
+      */
+      style={{ paddingLeft: 12 + depth * 16 + GLYPH_LEAD }}
       className={cn(
         'flex w-full items-center gap-2 border-b border-line py-2 pr-3 text-left transition-colors last:border-b-0',
         active ? 'bg-accent-soft' : 'hover:bg-panel'
       )}
     >
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">{req.name}</span>
+      <span title={req.name} className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">
+        {req.name}
+      </span>
       <span className="shrink-0 truncate font-mono text-[10.5px] text-muted">
         {req.request.method ?? req.request.rpcMethod ?? req.request.grpcMethod ?? ''}
       </span>
-      {/* 판정 기록이 아직 없다 — 일치가 아니라 '미관측'이다(spec §4-①). */}
-      <span
-        data-api-request-state="unobserved"
-        title="아직 실제로 쏴 본 적이 없습니다 — 일치 여부를 모릅니다."
-        className="shrink-0 rounded-full bg-panel px-1.5 py-0.5 text-[10px] font-medium text-muted"
-      >
-        미관측
-      </span>
+      {/*
+        **안 쏴 본 것만 '미관측'이다.** 이 배지를 하드코딩해 두면, 쏴 본 뒤에도 계속
+        "모른다"고 말해 Drift 화면(`1/1 관측`)과 어긋난다 — 서비스의 한 문장이 뒤집힌 자리다
+        (모르는 것을 안다고 하는 게 아니라 **아는 것을 모른다고** 말한다).
+        쏴 본 것을 '일치'라고는 하지 않는다 — 그건 판정이 할 말이다(spec §4-①).
+      */}
+      {observed ? (
+        <span
+          data-api-request-state="observed"
+          title="실제로 쏴 본 기록이 있습니다. 일치 여부는 Contract › Drift 가 말합니다."
+          className="shrink-0 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent"
+        >
+          관측됨
+        </span>
+      ) : (
+        <span
+          data-api-request-state="unobserved"
+          title="아직 실제로 쏴 본 적이 없습니다 — 일치 여부를 모릅니다."
+          className="shrink-0 rounded-full bg-panel px-1.5 py-0.5 text-[10px] font-medium text-muted"
+        >
+          미관측
+        </span>
+      )}
     </button>
   )
 }
@@ -117,6 +146,7 @@ function TreeView({
   depth,
   selected,
   collapsed,
+  observedNames,
   onToggleFolder,
   onSelect,
   onDragStart,
@@ -126,6 +156,7 @@ function TreeView({
   depth: number
   selected: string | null
   collapsed: Set<string>
+  observedNames: Set<string>
   onToggleFolder: (path: string) => void
   onSelect: (name: string) => void
   onDragStart: (name: string) => void
@@ -139,6 +170,7 @@ function TreeView({
             key={n.request.name}
             req={n.request}
             depth={depth}
+            observed={observedNames.has(n.request.name)}
             active={n.request.name === selected}
             onSelect={() => onSelect(n.request.name)}
             onDragStart={() => onDragStart(n.request.name)}
@@ -148,7 +180,7 @@ function TreeView({
             <button
               type="button"
               data-api-folder={n.path}
-              style={{ paddingLeft: 12 + depth * 14 }}
+              style={{ paddingLeft: 12 + depth * 16 }}
               onClick={() => onToggleFolder(n.path)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
@@ -172,6 +204,7 @@ function TreeView({
                 depth={depth + 1}
                 selected={selected}
                 collapsed={collapsed}
+                observedNames={observedNames}
                 onToggleFolder={onToggleFolder}
                 onSelect={onSelect}
                 onDragStart={onDragStart}
@@ -716,6 +749,8 @@ function RequestDetail({ req }: { req: RequestDef }) {
 /** Studio › Requests — 명세의 요청을 짓는 화면. */
 export function RequestsWorkspace() {
   useSpecSync()
+  // 관측 여부는 실행 기록에서 온다 — 배지가 사실을 말하려면 그 기록을 읽어야 한다.
+  useOpsSync()
   const active = useApiStore((s) => s.active)
   const selected = useApiStore((s) => s.selectedRequest)
   const selectRequest = useApiStore((s) => s.selectRequest)
@@ -728,6 +763,8 @@ export function RequestsWorkspace() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   /** 지금 끌고 있는 요청 이름. 드롭 대상이 어디인지는 폴더 행이 안다. */
   const [dragging, setDragging] = useState<string | null>(null)
+  const runs = useOpsStore((s) => s.runs)
+  const observedNames = useMemo(() => new Set(runs.map((r) => r.requestName)), [runs])
 
   const shown = useMemo(() => filterRequests(active?.requests ?? [], q), [active?.requests, q])
   // **검색 중에는 평평하게 보인다** — 걸린 것만 남는데 폴더 껍데기가 남아 있으면
@@ -740,7 +777,6 @@ export function RequestsWorkspace() {
       <div className="flex h-full flex-col items-center justify-center gap-3" data-api-empty="no-spec">
         <PlaceholderView
           icon={Route}
-          depth="depth 3 · API › Studio › Requests"
           title="명세를 먼저 고르세요"
           subtitle="상단 컨텍스트 바에서 명세를 고르거나 새로 만들면 요청을 지을 수 있어요."
         />
@@ -837,6 +873,7 @@ export function RequestsWorkspace() {
                     key={r.name}
                     req={r}
                     depth={0}
+                    observed={observedNames.has(r.name)}
                     active={r.name === selected}
                     onSelect={() => selectRequest(r.name)}
                     onDragStart={() => setDragging(r.name)}
@@ -856,6 +893,7 @@ export function RequestsWorkspace() {
                     depth={0}
                     selected={selected}
                     collapsed={collapsed}
+                    observedNames={observedNames}
                     onToggleFolder={(p) =>
                       setCollapsed((cur) => {
                         const next = new Set(cur)
@@ -878,7 +916,6 @@ export function RequestsWorkspace() {
           ) : (
             <PlaceholderView
               icon={Route}
-              depth="depth 3 · API › Studio › Requests"
               title="요청을 고르세요"
               subtitle="왼쪽 목록에서 요청을 고르면 파라미터·요청 내용·문서를 볼 수 있어요."
             />

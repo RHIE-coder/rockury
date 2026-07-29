@@ -33,7 +33,6 @@ export function AcceptView() {
     return (
       <PlaceholderView
         icon={ArrowDownToLine}
-        depth="depth 3 · API › Contract › Accept"
         title="명세를 먼저 고르세요"
         subtitle="흡수는 판정 결과를 명세로 받아들이는 것입니다."
       />
@@ -43,7 +42,6 @@ export function AcceptView() {
     return (
       <PlaceholderView
         icon={ArrowDownToLine}
-        depth="depth 3 · API › Contract › Accept"
         title="판정을 먼저 돌리세요"
         subtitle="Drift 에서 판정을 실행하면 흡수 후보가 여기 모입니다."
       />

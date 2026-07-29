@@ -5,6 +5,7 @@ import type { DriftResult } from '@shared/api/drift'
 import type { AbsorbPreview } from '@shared/api/absorb'
 import type { ContractLog } from '../../../../../preload/services/api'
 import { useApiStore } from '../store'
+import { ipcErrorText } from '../errorText'
 
 /**
  * 판정 스토어 — `docs/spec/api-contract.md`.
@@ -61,7 +62,7 @@ export const useContractStore = create<ContractState>()((set, get) => ({
       set({ drift, ranAt: new Date().toISOString() })
       set({ logs: await window.rockury.apiContract.listLogs(specId) })
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
     } finally {
       set({ running: false })
     }
@@ -71,7 +72,7 @@ export const useContractStore = create<ContractState>()((set, get) => ({
     try {
       set({ preview: await window.rockury.apiContract.previewAbsorb(specId, environmentId, requestNames) })
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
     }
   },
 
@@ -83,7 +84,7 @@ export const useContractStore = create<ContractState>()((set, get) => ({
       await useApiStore.getState().loadSpec(specId)
       await get().load(specId)
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) })
+      set({ error: ipcErrorText(e) })
     }
   },
 

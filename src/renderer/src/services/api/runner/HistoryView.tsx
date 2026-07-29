@@ -330,7 +330,6 @@ export function HistoryView() {
     return (
       <PlaceholderView
         icon={History}
-        depth="depth 3 · API › Runner › History"
         title="명세를 먼저 고르세요"
         subtitle="기록은 명세에 속합니다 — 상단 컨텍스트 바에서 명세를 고르세요."
       />

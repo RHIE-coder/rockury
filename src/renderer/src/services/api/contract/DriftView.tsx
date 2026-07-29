@@ -9,7 +9,7 @@ import {
   type DriftFinding,
   type DriftResult
 } from '@shared/api/drift'
-import { supportsCompleteDrift } from '@shared/api/types'
+import { supportsCompleteDrift, type RequestDef } from '@shared/api/types'
 import { useApiStore } from '../store'
 import { OpsGuardBand } from '../ops/EnvironmentsView'
 import { useActiveEnvironment } from '../ops/store'
@@ -62,8 +62,13 @@ function GradeBadge({ drift }: { drift: DriftResult }) {
   )
 }
 
-function Coverage({ drift }: { drift: DriftResult }) {
+function Coverage({ drift, requests }: { drift: DriftResult; requests: RequestDef[] }) {
   const { total, observed, unobserved, unparsable, unjudged } = drift.coverage
+  // 안내 문장을 관측 종류에 맞게 갈라 쓰기 위한 판정.
+  const unjudgedKinds = {
+    stream: unjudged.some((n) => requests.find((r) => r.name === n)?.shape !== 'inbound'),
+    inbound: unjudged.some((n) => requests.find((r) => r.name === n)?.shape === 'inbound')
+  }
   const all = unobserved.length === 0 && unparsable.length === 0 && unjudged.length === 0
   return (
     <div className="flex flex-col gap-1.5" data-api-drift-coverage>
@@ -71,8 +76,13 @@ function Coverage({ drift }: { drift: DriftResult }) {
         <span className="font-semibold text-fg">
           {observed} / {total} 관측
         </span>
+        {/*
+          **'모르는 것'은 빨강이 아니다.** 어긋남을 찾은 것이 아니라 아직 확인이 안 된
+          상태다 — Inbox 가 같은 뜻을 회색으로 쓰고 있어 색을 맞춘다(같은 서비스 안에서
+          같은 의미가 두 색이면 안 된다).
+        */}
         {!all && (
-          <span className="text-danger">
+          <span className="font-medium text-muted">
             · 미관측 {unobserved.length}개
             {unparsable.length > 0 && ` · 모양 못 읽음 ${unparsable.length}개`}
             {unjudged.length > 0 && ` · 맞출 선언 없음 ${unjudged.length}개`}
@@ -103,10 +113,19 @@ function Coverage({ drift }: { drift: DriftResult }) {
           관측은 쌓였는데 <b>어느 선언과 맞출지 못 정한</b> 요청 —{' '}
           <span className="font-mono">{unjudged.join(', ')}</span>
           <br />
-          스트림은 메시지의 <b>이벤트 이름</b>으로 선언을 찾습니다 — 이름이 없으면 하나뿐인
-          선언에 갖다 붙이지 않습니다(한 소켓에 여러 종류가 흐르는 것이 보통이라 그 추측은
-          조용히 틀립니다). 웹훅은 <b>기대 본문</b> 선언이 있어야 대조합니다.
-          미관측과 달리 <b>더 쏴 본다고 풀리지 않습니다</b> — 이벤트 이름을 붙이거나 선언을 더하세요.
+          {/* 관측 종류에 맞는 문장만 보인다 — 웹훅만 쓰는 사람에게 소켓 설명을 먼저 읽히지 않는다. */}
+          {unjudgedKinds.stream && (
+            <>
+              스트림은 메시지의 <b>이벤트 이름</b>으로 선언을 찾습니다 — 이름이 없으면 하나뿐인
+              선언에 갖다 붙이지 않습니다.{' '}
+            </>
+          )}
+          {unjudgedKinds.inbound && (
+            <>
+              웹훅은 <b>기대 본문</b> 선언이 있어야 대조합니다.{' '}
+            </>
+          )}
+          <b>더 쏴 본다고 풀리지 않습니다</b> — 이벤트 이름을 붙이거나 선언을 더하세요.
         </p>
       )}
       {drift.unroutedMessages > 0 && (
@@ -166,7 +185,6 @@ export function DriftView() {
     return (
       <PlaceholderView
         icon={Radar}
-        depth="depth 3 · API › Contract › Drift"
         title="명세를 먼저 고르세요"
         subtitle="판정은 명세와 환경을 짝지어 봅니다 — 상단 컨텍스트 바에서 명세를 고르세요."
       />
@@ -246,7 +264,7 @@ export function DriftView() {
                   {ranAt && ` · ${new Date(ranAt).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}`}
                 </span>
               </div>
-              <Coverage drift={drift} />
+              <Coverage drift={drift} requests={spec.requests} />
             </div>
 
             {drift.findings.length === 0 ? (

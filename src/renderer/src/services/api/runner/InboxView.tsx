@@ -142,7 +142,6 @@ export function InboxView() {
     return (
       <PlaceholderView
         icon={Inbox}
-        depth="depth 3 · API › Runner › Inbox"
         title="명세를 먼저 고르세요"
         subtitle="상단 컨텍스트 바에서 명세를 고르면 웹훅 수신 대기를 걸 수 있어요."
       />
@@ -208,7 +207,6 @@ export function InboxView() {
           {!req ? (
             <PlaceholderView
               icon={Inbox}
-              depth="depth 3 · API › Runner › Inbox"
               title="받을 요청을 고르세요"
               subtitle="왼쪽에서 웹훅 요청을 고르면 수신 주소를 만들 수 있어요."
             />

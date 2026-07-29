@@ -185,7 +185,6 @@ export function TimelineView() {
     return (
       <PlaceholderView
         icon={Milestone}
-        depth="depth 3 · API › Versions › Timeline"
         title="명세를 먼저 고르세요"
         subtitle="버전은 명세 전체의 스냅샷입니다 — 상단 컨텍스트 바에서 명세를 고르세요."
       />
