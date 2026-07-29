@@ -34,7 +34,7 @@ function toStatus(info: AiServerInfo | null): AiStatusPayload {
   return { running: true, url: info.url, port: info.port, token: info.token, ...buildAgentCommands(info.url, info.token) }
 }
 
-export function registerAiIpc(): void {
+export function registerAiStatusIpc(): void {
   ipcMain.handle('ai:status', () => envelope(() => toStatus(getAiServerInfo())))
 
   // 접속 키 재발급 — 즉시 적용(구 키 401). 기존 등록 에이전트는 재등록 필요(UI 가 확인 후 호출).

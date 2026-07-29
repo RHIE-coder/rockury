@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { McpServiceTools } from './toolCatalog'
 
 /**
  * AI › Agents 스토어 — 게이트웨이 상태 + 접속 키 관리.
@@ -25,10 +26,17 @@ interface AiServerState {
   /** 접속 키 노출 여부 — 기본 마스킹. 화면을 떠나면 다시 가려진다(마운트 시 리셋). */
   revealed: boolean
   rotating: boolean
+  /**
+   * 에이전트에게 열어 둔 MCP 도구 목록(서비스별). null = 아직 안 읽음.
+   * 앱을 켠 동안 바뀌지 않는 정적 목록이라 화면에 들어올 때 한 번만 읽는다.
+   */
+  catalog: McpServiceTools[] | null
+  catalogError: string | null
   refresh: () => Promise<void>
   toggleReveal: () => void
   /** 접속 키 재발급 — 즉시 적용(구 키 401). 호출 전 UI 가 반드시 확인을 받는다. */
   rotate: () => Promise<void>
+  loadTools: () => Promise<void>
 }
 
 export const useAiStore = create<AiServerState>()((set) => ({
@@ -37,6 +45,8 @@ export const useAiStore = create<AiServerState>()((set) => ({
   error: null,
   revealed: false,
   rotating: false,
+  catalog: null,
+  catalogError: null,
 
   refresh: async () => {
     try {
@@ -48,6 +58,15 @@ export const useAiStore = create<AiServerState>()((set) => ({
   },
 
   toggleReveal: () => set((s) => ({ revealed: !s.revealed })),
+
+  loadTools: async () => {
+    try {
+      const catalog = await window.rockury.ai.tools()
+      set({ catalog, catalogError: null })
+    } catch (e) {
+      set({ catalogError: e instanceof Error ? e.message : String(e) })
+    }
+  },
 
   rotate: async () => {
     set({ rotating: true })

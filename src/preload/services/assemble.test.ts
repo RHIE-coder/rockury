@@ -123,10 +123,16 @@ describe('preload 서비스 분할', () => {
     for (const k of KEYS_BEFORE_SPLIT) expect(keys.has(k), `창구 '${k}' 가 사라졌다`).toBe(true)
   })
 
-  it('CASE-pdev-031 각 그룹의 함수 이름이 분할 전과 같다 — 조용히 빠진 메서드 0', () => {
+  it('CASE-pdev-031 분할 전 함수가 하나도 빠지지 않았다 — 조용히 빠진 메서드 0', () => {
+    // 위 CASE-pdev-030 과 **같은 이유로 포함 검사**다. 예전엔 정확히 같음으로 봤는데,
+    // 그러면 서비스가 자기 파일에 창구를 하나 열 때마다 이 공용 테스트가 깨져
+    // 병렬 개발 규칙("창구는 자기 서비스 파일에만 더한다")과 정면으로 부딪혔다(실측: ai.tools).
+    // 이 테스트가 지키려는 것은 "무엇이 사라졌나"이지 "무엇이 늘었나"가 아니다.
     for (const [group, methods] of Object.entries(METHODS_BEFORE_SPLIT)) {
-      const actual = Object.keys(api[group] as Record<string, unknown>)
-      expect(actual.sort(), `${group} 그룹의 함수 목록이 달라졌다`).toEqual([...methods].sort())
+      const actual = new Set(Object.keys(api[group] as Record<string, unknown>))
+      for (const m of methods) {
+        expect(actual.has(m), `${group}.${m} 이 사라졌다`).toBe(true)
+      }
     }
   })
 

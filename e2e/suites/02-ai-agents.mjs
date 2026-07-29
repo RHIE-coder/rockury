@@ -57,6 +57,56 @@ export async function run(ctx) {
     await page.waitForTimeout(300)
   }
 
+  // ── AI › Tools 화면 — 에이전트에게 열어 둔 도구를 서비스별로 훑는다 ──
+  {
+    await click('[data-nav-service="ai"]')
+    await click('[data-nav-module="tools"]')
+    await page.waitForSelector('[data-ai-tool]', { timeout: 5_000 })
+
+    // 목록은 손으로 관리하지 않는다 — 메인의 도구 정의 + 노출 지도를 조립한 결과여야 한다.
+    const catalog = await page.evaluate(() => window.rockury.ai.tools())
+    const names = catalog.flatMap((s) => s.tools.map((t) => t.name))
+    check('Tools: 서비스별로 묶여 온다(uiux·api·db·infra 포함)',
+      ['uiux', 'api', 'db', 'infra'].every((id) => catalog.some((s) => s.service === id)))
+    check('Tools: 한 도구는 한 서비스만 소유', names.length === new Set(names).size)
+    // 채널은 비어 있을 수 있다(창구 없이 저장소를 직접 읽는 도구) — 설명은 예외 없이 있어야 한다.
+    check('Tools: 도구마다 설명이 있다',
+      catalog.flatMap((s) => s.tools).every((t) => t.description.length > 0))
+
+    // 화면에 실제로 그려지는지 — DOM 훅 수가 목록 수와 같아야 한다(조용한 잘림 방지).
+    const rendered = await page.evaluate(() => document.querySelectorAll('[data-ai-tool]').length)
+    check('Tools: 전체 도구가 화면에 모두 그려진다', rendered === names.length)
+
+    // 서비스 좁히기 — DB 칩을 누르면 DB 묶음만 남는다.
+    // (칩 글자 "DB" 는 좌측 레일 버튼과 겹친다 → 전용 훅으로 집는다.)
+    await click('[data-ai-tools-filter="db"]')
+    await page.waitForTimeout(200)
+    const dbCount = catalog.find((s) => s.service === 'db')?.tools.length ?? 0
+    const afterFilter = await page.evaluate(() => ({
+      tools: document.querySelectorAll('[data-ai-tool]').length,
+      services: document.querySelectorAll('[data-ai-tool-service]').length
+    }))
+    check('Tools: 서비스 칩으로 그 서비스만 남는다',
+      afterFilter.services === 1 && afterFilter.tools === dbCount)
+
+    // 검색 — 채널 이름만 알아도 도구에 닿아야 한다.
+    await click('[data-ai-tools-filter="all"]')
+    await page.fill('[data-ai-tools-search]', 'get_schema')
+    await page.waitForTimeout(200)
+    const searched = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-ai-tool]')].map((el) => el.getAttribute('data-ai-tool'))
+    )
+    // 이름뿐 아니라 설명까지 보므로 여러 개가 걸릴 수 있다(예: set_schema 설명이 get_schema 를 가리킨다).
+    // 검사할 것은 "찾는 게 남고, 상관없는 건 사라진다"이지 결과 개수가 아니다.
+    check('Tools: 검색이 목록을 좁힌다',
+      searched.includes('get_schema') &&
+      !searched.includes('list_ui_projects') &&
+      searched.length < names.length)
+
+    await click('[data-nav-service="db"]') // 후속 DB 흐름을 위해 복귀
+    await page.waitForTimeout(300)
+  }
+
   // 설계 선택
   await click('button:has-text("Design")')
   await click('[role="menuitem"]:has-text("commerce-core")')
