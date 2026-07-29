@@ -222,6 +222,55 @@ export async function run(ctx) {
       check('기록 어디에도 비밀 실값이 없다 (가린 뒤 저장)', leaked === false)
     }
 
+    // ── **세션 도중 환경에 비밀을 더해도 그 뒤 것은 가려진다** ──
+    // 대기는 오래 사는데 켤 때 뜬 목록을 가둬 두면 그 뒤 들어온 웹훅이 안 가려진다.
+    {
+      await page.evaluate(async (id) => {
+        const envs = await window.rockury.apiOps.listEnvironments(id)
+        const env = envs.find((e) => e.name === 'E2E-HOOK')
+        await window.rockury.apiOps.saveEnvironment({
+          ...env,
+          values: [...env.values, { name: 'lateSecret', value: 'LATE-SECRET-VALUE', secret: true }]
+        })
+      }, specId)
+      await fetch(url + 'hooks/late', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"id":"evt_late","amount":1,"leak":"LATE-SECRET-VALUE"}'
+      })
+      await page.waitForTimeout(700)
+      check('대기 도중 더한 비밀도 화면에서 가려진다', !(await body()).includes('LATE-SECRET-VALUE'))
+      const leaked = await page.evaluate(async (id) => {
+        const rows = await window.rockury.apiOps.listRuns(id)
+        const all = await Promise.all(rows.map((r) => window.rockury.apiOps.getRun(id, r.id)))
+        return JSON.stringify(all).includes('LATE-SECRET-VALUE')
+      }, specId)
+      check('**기록에도 안 남는다** — 가리는 그물은 늘 최신이어야 한다', leaked === false)
+    }
+
+    // ── 본문 상한: 넘기면 잘랐다고 적는다 ──
+    {
+      await fetch(url + 'hooks/big', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        // 2MB 상한을 넘긴다.
+        body: JSON.stringify({ id: 'evt_big', amount: 1, pad: 'x'.repeat(3 * 1024 * 1024) })
+      })
+      await page.waitForTimeout(1_200)
+      const run = await page.evaluate(async (id) => {
+        const rows = await window.rockury.apiOps.listRuns(id)
+        const full = await window.rockury.apiOps.getRun(id, rows[0].id)
+        return full.messages.find((m) => m.direction === 'in')?.data ?? ''
+      }, specId)
+      check('상한을 넘긴 본문은 **잘랐다고 적는다** — 조용히 짧아지지 않는다', run.includes('상한을 넘어 잘렸습니다'))
+      check('받은 크기도 함께 적는다', /받은 크기 \d+바이트/.test(run))
+    }
+
+    // 잘린 수신 다음에 온 정상 수신은 다시 대조된다 — 판정은 **최신 하나**를 보므로
+    // 이 한 줄이 없으면 아래 판정 검사가 잘린 본문을 기준으로 삼는다(그건 대조 불가다).
+    await post(url + 'hooks/paid', '{"id":"evt_ok","amount":7}')
+    await page.waitForTimeout(600)
+
     // ── 대기 끄기 → 포트가 실제로 닫힌다 ──
     await click('button[data-api-inbox-stop]')
     await page.waitForSelector('[data-api-inbox-state="off"]', { timeout: 5_000 })

@@ -81,6 +81,22 @@ interface SessionContext {
 const contexts = new Map<string, SessionContext>()
 
 /**
+ * 지금 이 환경이 아는 비밀 전부.
+ *
+ * 세션을 열 때 뜬 목록을 그대로 쓰면, 세션 도중에 환경에 비밀을 추가한 뒤 오는 메시지가
+ * **안 가려진다**(리뷰가 짚은 자리). 매번 환경을 다시 읽되 **읽기 실패는 세션을 안 죽인다** —
+ * 그때는 시작 시점 목록으로 물러난다(가리는 것이 없는 것보다 낫다).
+ */
+function currentSecrets(environmentId: string, fallback: string[]): string[] {
+  try {
+    const env = getEnvironment(environmentId)
+    return env ? secretValues(env.values) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/**
  * 운영부 IPC — 스트림 세션(`docs/spec/api-runner.md` § stream.session).
  *
  * 단발 전송(`api:send`)과 같은 규율을 그대로 쓴다:
@@ -186,7 +202,10 @@ export function registerApiStreamIpc(): void {
         displayUrl: masked.url,
         headers: real.headers,
         autoReconnect: input.autoReconnect,
-        redact: (t) => redactText(t, secrets)
+        // **비밀 목록을 세션 시작 시점에 가두지 않는다.** 세션은 오래 사는데 그동안 환경에
+        // 비밀이 새로 추가될 수 있고, 가둬 두면 그 뒤 오는 메시지가 안 가려진다.
+        // 붙어 있는 것(주소·헤더)은 안 바뀌는 게 맞지만 **가리는 그물은 늘 최신이어야 한다.**
+        redact: (t) => redactText(t, currentSecrets(env.id, secrets))
       },
       emit,
       finalize

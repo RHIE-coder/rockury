@@ -56,7 +56,24 @@ interface Listening {
   /** 이 요청이 선언한 기대 본문. 없으면 대조가 `선언 없음` 이 된다. */
   expectedBody: string | undefined
   responseCode: number
+  /** 대기를 켤 때 뜬 비밀 목록 — 환경을 다시 못 읽을 때 물러날 자리다. */
   secrets: string[]
+}
+
+/**
+ * 지금 이 환경이 아는 비밀 전부.
+ *
+ * 대기는 오래 사는데 그동안 환경에 비밀이 추가될 수 있다 — 켤 때 뜬 목록을 가둬 두면
+ * 그 뒤 들어온 웹훅이 **안 가려진다**(스트림에서 짚힌 것과 같은 자리).
+ * 읽기 실패는 대기를 안 죽인다 — 그때는 시작 시점 목록으로 물러난다.
+ */
+function currentSecrets(cur: Listening): string[] {
+  try {
+    const env = getEnvironment(cur.environmentId)
+    return env ? secretValues(env.values) : cur.secrets
+  } catch {
+    return cur.secrets
+  }
 }
 
 let active: Listening | null = null
@@ -95,13 +112,14 @@ export function registerApiInboxIpc(): void {
 
     // 비밀은 **기록에 들어가기 전에** 지운다(가린 뒤 저장 — send.observe AC-3 와 같은 규율).
     // 웹훅은 서명 헤더에 우리 비밀이 실려 오는 경우가 흔하다.
-    const body = redactText(raw.body, cur.secrets)
+    const secrets = currentSecrets(cur)
+    const body = redactText(raw.body, secrets)
     const item: ReceivedRequest = {
       id: raw.id,
       at: raw.at,
       method: raw.method,
-      path: redactText(raw.path, cur.secrets),
-      headers: redactHeaders(raw.headers, cur.secrets),
+      path: redactText(raw.path, secrets),
+      headers: redactHeaders(raw.headers, secrets),
       // 상한을 넘겨 잘렸으면 **잘렸다고 적는다** — 조용히 짧아지면 안 된다.
       body: raw.truncated ? `${body}\n…(상한을 넘어 잘렸습니다 — 받은 크기 ${raw.size}바이트)` : body,
       size: raw.size,

@@ -481,6 +481,34 @@ export async function run(ctx) {
       )
     }
 
+    // ── **자동 재접속이 실제로 돈다** (AC-4) ──
+    // 서버가 스스로 끊는 SSE 에 자동 재접속을 켜면 재접속 시도가 타임라인에 남아야 한다.
+    {
+      await switchSpec(page, click, sseSpecId)
+      await click('[data-nav-module="environments"]')
+      await page.waitForSelector('[data-api-env-card="E2E-SSE"]', { timeout: 5_000 })
+      await click('[data-api-env-card="E2E-SSE"] button[data-api-env-select]')
+      await click('[data-nav-module="runner"]')
+      await page.waitForTimeout(300)
+      await click('[data-nav-view="stream"]')
+      await page.waitForTimeout(400)
+      await click('[data-api-stream-pick="ticker"]')
+      await page.waitForTimeout(300)
+      await page.locator('input[data-api-stream-autoreconnect]').check()
+      await page.waitForTimeout(200)
+      await click('button[data-api-stream-open]')
+      // 서버가 150ms 뒤 스스로 닫는다 → 1초 뒤 재접속 시도가 타임라인에 뜬다.
+      await page.waitForSelector('[data-api-stream-msg="system"]', { timeout: 10_000 })
+      await page.waitForTimeout(2_500)
+      const timeline = await page.locator('[data-api-stream-timeline]').innerText()
+      check('**재접속 시도가 타임라인에 남는다** (AC-4)', timeline.includes('재접속'))
+      check('몇 번째 시도인지 적힌다', /\d번째 재접속/.test(timeline))
+      await click('button[data-api-stream-close]')
+      await page.waitForTimeout(500)
+      await page.locator('input[data-api-stream-autoreconnect]').uncheck()
+      await page.waitForTimeout(200)
+    }
+
     // ── 못 여는 인터페이스는 사유를 준다 — 조용히 다른 전송으로 안 내려간다 ──
     {
       const err = await page.evaluate(async () => {
