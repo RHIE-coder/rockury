@@ -10,6 +10,7 @@ import {
   sessionToRun,
   streamRunStatus,
   transportFor,
+  transportLabel,
   type StreamSessionSnapshot
 } from './stream'
 import type { StreamMessage } from './types'
@@ -48,21 +49,24 @@ describe('보내기 패널 가시성 (CASE-apirunner-040)', () => {
 // ── 전송 선택: 못 하는 것을 한다고 말하지 않는다 ───────────────────────────
 
 describe('전송 선택', () => {
-  it('WebSocket · SSE 는 1차 범위라 전송이 정해진다', () => {
+  it('WebSocket · SSE · gRPC 는 각자의 전송으로 연다', () => {
     expect(transportFor('websocket', 'duplex')).toEqual({ transport: 'websocket', unsupported: null })
     expect(transportFor('sse', 'server-stream')).toEqual({ transport: 'sse', unsupported: null })
-  })
-
-  it('gRPC 스트리밍은 **관측으로 강등하지 않고** 사유를 준다', () => {
-    const p = transportFor('grpc', 'duplex')
-    expect(p.transport).toBeNull()
-    expect(p.unsupported).toContain('gRPC')
+    expect(transportFor('grpc', 'duplex')).toEqual({ transport: 'grpc', unsupported: null })
+    expect(transportFor('grpc', 'server-stream').transport).toBe('grpc')
   })
 
   it('GraphQL subscription 도 마찬가지 — 하위 프로토콜이 다르다는 사실을 적는다', () => {
     const p = transportFor('graphql', 'server-stream')
     expect(p.transport).toBeNull()
     expect(p.unsupported).toContain('graphql-ws')
+  })
+
+  it('전송 이름 옆의 모양은 **명세에서 고른 말 그대로** 쓴다', () => {
+    // 여기서만 "양방향"처럼 다르게 적으면 같은 개념을 두 어휘로 배우게 된다.
+    expect(transportLabel('websocket', 'duplex')).toBe('WebSocket · 서로 계속 주고받음')
+    expect(transportLabel('sse', 'server-stream')).toBe('SSE · 계속 받기만 함')
+    expect(transportLabel('grpc', 'duplex')).toBe('gRPC · 서로 계속 주고받음')
   })
 
   it('단발 요청은 이 화면이 아니라 Send 로 안내한다', () => {

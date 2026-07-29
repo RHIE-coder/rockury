@@ -243,7 +243,8 @@ export function DriftView() {
               <GradeBadge drift={drift} />
               <span className="text-[13px] font-semibold text-danger">완전 판정 불가</span>
             </div>
-            <p className="rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger">
+            {/* 사유는 여러 줄일 수 있다(가정한 암호화 방식 안내가 붙는다) — 접히면 한 덩이가 된다. */}
+            <p className="whitespace-pre-wrap rounded-md bg-danger-soft px-3 py-2 text-[12px] text-danger">
               {UNAVAILABLE_LABEL[drift.unavailable.reason]} — {drift.unavailable.message}
             </p>
             <p className="text-[11.5px] text-muted">

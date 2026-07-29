@@ -1,5 +1,6 @@
 import { shapeOfBody } from './observed'
 import { matchExpectedBody } from './inbox'
+import { interfaceMeta } from './types'
 import type { FieldDef, RequestDef, RunRecord, SpecDef } from './types'
 
 /**
@@ -442,9 +443,8 @@ export interface SchemaDriftInput {
   /** 요청 이름 → 서버 루트 필드 이름. 못 읽은 요청은 여기 없다(그러면 판정에서 빠진다). */
   rootOf: Record<string, string | null>
   /**
-   * 스트림 관측 유무를 가리는 데만 쓴다 — 완전 판정도 **스트리밍 요청은 대조하지 않는다**.
-   * GraphQL introspection 에는 subscription 루트가 없어서, 이걸 안 가리면 정상 서버의
-   * subscription 요청이 "명세에만 있음(내 요청이 깨진다)"으로 잘못 잡힌다.
+   * 스트림 관측 유무를 가리는 데 쓴다 — 스키마가 스트리밍을 안 덮는 경우(아래) 그 요청이
+   * "안 쏴 봤다"인지 "쏴 봤는데 대조할 규칙이 없다"인지 갈라 커버리지에 정직하게 싣는다.
    */
   runs?: readonly RunRecord[]
 }
@@ -455,15 +455,21 @@ export interface SchemaDriftInput {
  */
 export function driftFromSchema(input: SchemaDriftInput): DriftResult {
   const { spec, schema, environmentName, rootOf, runs = [] } = input
+  // **호출처가 손으로 넘기지 않는다.** 종류별 능력은 `INTERFACE_META` 하나가 든다 —
+  // 옵션이면 새 종류를 얹을 때 빠뜨려도 아무것도 안 깨지고 그 종류의 스트리밍만 조용히 빠진다.
+  const covers = interfaceMeta(spec.kind).schemaCoversStreaming
   const ctx: Ctx = { findings: [], skippedUnknown: 0 }
   const unobserved: string[] = []
   const unjudged: string[] = []
   let observed = 0
 
   for (const request of spec.requests) {
-    // 완전 판정에서는 **선언 모양으로 가르는 것이 맞다** — 서버 스키마에 스트리밍 루트가
-    // 아예 없어서(introspection 에 subscription 이 없다) 어떻게 쏴 봤든 대조할 것이 없다.
-    if (request.shape !== 'unary') {
+    // 완전 판정에서는 **선언 모양으로 가른다** — 스키마가 스트리밍을 안 덮으면 어떻게 쏴 봤든
+    // 대조할 것이 없기 때문이다. 덮는 스키마(gRPC reflection)에서는 안 가른다.
+    // 수신(웹훅)은 어느 쪽이든 대조 대상이 아니다 — 부르는 쪽이 서버다.
+    const outOfScope =
+      request.shape === 'inbound' || (request.shape !== 'unary' && !covers)
+    if (outOfScope) {
       bucketUnobserved(request.name, runs, null, unjudged, unobserved)
       continue
     }

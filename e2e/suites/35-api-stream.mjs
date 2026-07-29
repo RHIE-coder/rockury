@@ -510,21 +510,23 @@ export async function run(ctx) {
     }
 
     // ── 못 여는 인터페이스는 사유를 준다 — 조용히 다른 전송으로 안 내려간다 ──
+    // (gRPC 는 이제 진짜로 붙는다 — `39-api-grpc` 가 덮는다. 여기 남은 것은 GraphQL 구독이다.)
     {
       const err = await page.evaluate(async () => {
-        const spec = await window.rockury.apiSpecs.create({ name: 'e2e-stream-grpc', kind: 'grpc' })
+        const spec = await window.rockury.apiSpecs.create({ name: 'e2e-stream-gql', kind: 'graphql' })
         await window.rockury.apiSpecs.patch(spec.id, [
           { op: 'add_request', name: 'feed', shape: 'server-stream' }
         ])
         const envs = await window.rockury.apiOps.saveEnvironment({
           specId: spec.id,
-          name: 'E2E-GRPC',
+          name: 'E2E-GQL-SUB',
           baseUrl: 'http://127.0.0.1:1',
           production: false,
           values: []
         })
         try {
           await window.rockury.apiStream.open({
+            sessionId: 'e2e-gql-sub',
             specId: spec.id,
             requestName: 'feed',
             environmentId: envs.id,
@@ -536,8 +538,8 @@ export async function run(ctx) {
           return String(e.message ?? e)
         }
       })
-      check('gRPC 스트리밍은 열리지 않고 사유가 온다', err !== null && err.includes('gRPC'))
-      check('사유에 왜 못 하는지가 적힌다', err.includes('HTTP/2'))
+      check('GraphQL 구독은 열리지 않고 사유가 온다', err !== null && err.includes('subscription'))
+      check('사유에 왜 못 하는지가 적힌다', err.includes('graphql-ws'))
     }
   } finally {
     sse.server.close()

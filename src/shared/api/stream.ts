@@ -1,7 +1,10 @@
+import { plaintextSecretBlock, type GrpcTarget } from './grpcTarget'
 import {
+  SHAPE_LABEL,
   STREAM_DIRECTION_LABEL,
   type InteractionShape,
   type InterfaceKind,
+  type RequestDef,
   type RunRecord,
   type RunStatus,
   type StreamDirection,
@@ -19,12 +22,30 @@ import {
  * 못 붙이는 인터페이스는 조용히 다른 전송으로 내려가지 않고 **사유를 단 빈 결과**를 준다.
  */
 
-export type StreamTransport = 'websocket' | 'sse'
+export type StreamTransport = 'websocket' | 'sse' | 'grpc'
 
 /** 전송에 붙일 요청 전문의 `method` 자리 — 단발의 GET/POST 자리에 무엇을 썼는지 남긴다. */
 const TRANSPORT_METHOD: Record<StreamTransport, string> = {
   websocket: 'WS',
-  sse: 'SSE'
+  sse: 'SSE',
+  grpc: 'GRPC'
+}
+
+/** 사람이 읽는 전송 이름. */
+const TRANSPORT_LABEL: Record<StreamTransport, string> = {
+  websocket: 'WebSocket',
+  sse: 'SSE',
+  grpc: 'gRPC'
+}
+
+/**
+ * 세션 머리에 적을 한 줄 — `WebSocket · 서로 계속 주고받음`.
+ *
+ * 모양 이름은 반드시 `SHAPE_LABEL` 을 쓴다. 여기서만 "양방향"처럼 다르게 적으면
+ * 명세를 만들 때 고른 말과 실행 화면의 말이 갈려 **같은 개념을 두 어휘로 배우게 된다**.
+ */
+export function transportLabel(transport: StreamTransport, shape: InteractionShape): string {
+  return `${TRANSPORT_LABEL[transport]} · ${SHAPE_LABEL[shape]}`
 }
 
 // ── 보내기 패널 ───────────────────────────────────────────────────────────
@@ -51,9 +72,9 @@ const no = (unsupported: string): TransportPick => ({ transport: null, unsupport
 /**
  * 이 요청을 어느 전송으로 여나.
  *
- * 1차 범위는 **WebSocket · SSE** 다. gRPC 스트리밍과 GraphQL subscription 은 프레이밍·
- * 하위 프로토콜이 아예 달라서, 있는 전송으로 흉내 내면 "붙었는데 아무것도 안 온다"가 된다 —
- * 그건 판정으로 치면 미관측을 통과로 적는 것과 같은 거짓말이다.
+ * **WebSocket · SSE · gRPC** 는 각자의 전송으로 연다. 남은 GraphQL subscription 은 하위
+ * 프로토콜이 아예 달라서, 있는 전송으로 흉내 내면 "붙었는데 아무것도 안 온다"가 된다 —
+ * 그건 판정으로 치면 미관측을 통과로 적는 것과 같은 거짓말이다. 그래서 **사유를 단 빈 결과**다.
  */
 export function transportFor(kind: InterfaceKind, shape: InteractionShape): TransportPick {
   if (shape === 'unary') {
@@ -64,12 +85,7 @@ export function transportFor(kind: InterfaceKind, shape: InteractionShape): Tran
   }
   if (kind === 'websocket') return { transport: 'websocket', unsupported: null }
   if (kind === 'sse') return { transport: 'sse', unsupported: null }
-  if (kind === 'grpc') {
-    return no(
-      'gRPC 스트리밍은 아직 만들지 않았습니다 — HTTP/2 프레이밍이 필요해 전송 라이브러리 도입이 ' +
-        '선행됩니다. 다른 전송으로 흉내 내지 않습니다.'
-    )
-  }
+  if (kind === 'grpc') return { transport: 'grpc', unsupported: null }
   if (kind === 'graphql') {
     return no(
       'GraphQL subscription 은 아직 만들지 않았습니다 — WebSocket 위에 graphql-ws 하위 프로토콜이 ' +
@@ -77,6 +93,53 @@ export function transportFor(kind: InterfaceKind, shape: InteractionShape): Tran
     )
   }
   return no(`'${kind}' 에는 스트리밍 상호작용이 없습니다.`)
+}
+
+/**
+ * gRPC 세션을 열기 전에 막아야 하는 것 — **붙어 본 뒤가 아니라 누르기 전에** 안다.
+ *
+ * 화면(`canOpen`)과 창구(`api:openStream`) 둘 다 이 함수를 쓴다. 화면에만 두면 다른 경로가
+ * 우회하고, 창구에만 두면 사용자가 정의 받아 오는 왕복(최대 20초)을 기다렸다 실패를 본다.
+ *
+ * null 이면 막을 것이 없다.
+ */
+export function grpcStreamBlocker(
+  request: Pick<RequestDef, 'request'>,
+  target: GrpcTarget,
+  headers: Record<string, string>,
+  secrets: readonly string[]
+): string | null {
+  if (target.problem) return target.problem
+  if (!(request.request.grpcMethod ?? '').trim()) {
+    return '어느 메서드인지가 비어 있습니다 — 요청의 gRPC 메서드 칸을 채우세요.'
+  }
+  return plaintextSecretBlock(target, headers, secrets)
+}
+
+/**
+ * 보낼 본문을 JSON 으로 읽는다 — **두 벌을 받는다**(소켓에 나갈 실값 / 사람에게 보일 가림).
+ *
+ * 실패 문구를 실값에서 만들면 안 되는 이유: `JSON.parse` 의 오류는 **입력 조각을 그대로
+ * 싣는다**(`…"{"token": sk_live_AB"… is not valid JSON`). 잘린 비밀은 글자 그대로 일치가
+ * 아니라서 지우는 그물에 안 걸리고, 그대로 화면·기록에 굳는다.
+ * 그래서 사유는 **가린 쪽**을 파싱해 만든다(spec stream.session AC-8).
+ */
+export function parseJsonBody(
+  real: string,
+  display: string
+): { value: unknown } | { reason: string } {
+  try {
+    return { value: real.trim() ? JSON.parse(real) : {} }
+  } catch {
+    let why = ''
+    try {
+      if (display.trim()) JSON.parse(display)
+    } catch (err) {
+      why = err instanceof Error ? err.message : String(err)
+    }
+    // 가린 쪽이 (드물게) 잘 읽히면 이유를 지어내지 않는다 — 자리를 못 짚을 뿐이다.
+    return { reason: why ? `보낼 본문이 JSON 이 아닙니다 — ${why}` : '보낼 본문이 JSON 이 아닙니다.' }
+  }
 }
 
 // ── 타임라인 ──────────────────────────────────────────────────────────────

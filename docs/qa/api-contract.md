@@ -10,6 +10,15 @@
 - **CASE-apicontract-003** 불가 사유 구분: `기능 꺼짐` / `권한 없음` / `접속 실패` / **`아직 안 만듦`** 이 서로 다른 사유로 분류된다. 마지막 갈래는 우리 쪽 사정이라 '서버가 안 줬다'로 보이면 안 된다. (drift.complete AC-4)
 - **CASE-apicontract-004** 완전 판정 커버리지: 결과에 커버리지 100% 가 명시된다. 커버리지 필드가 비면 실패. (drift.complete AC-3)
 - **CASE-apicontract-005** 결과 모델 공유: GraphQL 과 gRPC 의 완전 판정이 **같은 결과 타입**을 낸다 — 판정 로직·결과 화면이 인터페이스별로 갈라지지 않는다. 갈라지면 gRPC 를 얹을 때 화면을 두 번 만들게 된다. (drift.complete AC-5)
+- **CASE-apicontract-005b (proto 서술자 → 응답 모양)** 스칼라·배열(`repeated`)·중첩 메시지·열거형 허용 값이 옮겨진다. **`optional` 을 명시한 것만 `없을 수 있음`이고** 표시 없는 단일 필드는 `required` 로 못 박지 않고 `모름`이다(proto3 는 없음과 기본값이 안 갈린다). proto 의 map 은 배열이 아니라 객체다. 모르는 타입은 추측하지 않고 안쪽을 지어내지 않는다. 자기를 참조하는 메시지에서 무한히 파고들지 않는다. (drift.complete AC-8) → `shared/api/proto.test.ts`
+- **CASE-apicontract-005c (메서드 이름 맞추기)** 선언의 `grpcMethod` 를 서버 경로에 맞춘다. 전체 경로·꼬리만 적은 경우 모두 하나뿐이면 고르고, **둘 이상 맞으면 짐작하지 않고 null** 이다. 응답 모양을 못 읽으면 빈 목록을 지어내지 않는다(메서드가 있다는 사실은 남는다). (drift.complete AC-7) → `shared/api/proto.test.ts`
+- **CASE-apicontract-005d (서술자 묶기)** reflection 이 파일을 하나씩 주므로 태그·길이 머리를 붙여 한 덩어리로 잇는다. 길이가 127 을 넘으면 두 바이트로 적고, 같은 파일이 여러 번 와도 한 번만 담는다. **진짜 디코더에 물려 왕복**시켜 형식 가정 전체를 붙잡는다. → `shared/api/proto.test.ts`
+- **CASE-apicontract-005e (reflection 왕복 — 진짜 서버)** reflection 을 켠 서버에서 서비스 목록·정의를 받아 우리 응답 모양으로 옮긴다. **판 넘기기는 두 서버로 확인한다** — v1alpha 만 켠 서버와 v1 만 켠 서버 각각에 붙어야 넘기기가 실제로 도는 것이다(같은 서버에 두 번 붙는 검사는 넘기기를 안 짚는다). 정의를 안 주는 서버는 `기능 꺼짐`, 토큰이 틀리면 `권한 없음`, **개별 심볼 조회가 거절당하면 그 사유 그대로** — 봐야 할 곳이 다르다. **못 실은 헤더(ASCII 아닌 값)는 사유에 이름이 실린다.** **사용자가 끊으면 받아 오던 것도 멈춘다.** (drift.complete AC-4/AC-11) → `main/api/grpcReflect.test.ts`
+- **CASE-apicontract-005i (규약 칸 번호 — 골든 바이트)** reflection 요청·응답의 **칸 번호**를 바이트로 못 박는다(`list_services`=7 · `file_containing_symbol`=4 · `list_services_response`=6 · `file_descriptor_response`=4 · `error_response`=7). 구현과 검사용 서버가 같은 정의의 복사본이라, 이 검사가 없으면 **둘이 사이좋게 틀린 채** 전 게이트를 통과하고 실제 서버에서만 안 붙는다. 읽기 규칙(열거형 이름 · 64비트 글자 · 기본값 안 채움)도 여기서 고정한다. → `shared/api/reflectionProto.test.ts`
+- **CASE-apicontract-005k (판정 대상이 아닌 서비스)** reflection·health·channelz 는 사용자의 API 가 아니라 목록에서 뺀다. **넓게 잡아 사용자 서비스를 걸러 내면 안 된다** — `grpc.reflectionary.MyService` 는 남는다. → `shared/api/reflectionProto.test.ts`
+- **CASE-apicontract-005f (접속 대상 읽기)** 환경 주소에서 `호스트:포트` 와 암호화 여부를 읽는다. 경로·쿼리는 잘라 내고, 포트가 없으면 방식의 기본 포트를 쓴다. **방식이 없으면 평문으로 가정하되 가정했다고 밝힌다** — 조용히 정하면 TLS 서버에서 아무 말 없이 멎는다. gRPC 가 아닌 방식은 짐작하지 않고 사유를 단다. → `shared/api/grpcTarget.test.ts`
+- **CASE-apicontract-005g (스키마가 덮는 범위로 가른다)** 스키마가 스트리밍까지 설명하면(gRPC reflection) 스트리밍 요청도 대조한다. 안 덮으면(GraphQL introspection) 대조하지 않고 관측 유무만 가린다. 어느 쪽이든 수신(웹훅)은 대조 대상이 아니다. **그 사실은 호출처가 넘기는 옵션이 아니라 `INTERFACE_META` 가 든다** — 옵션이면 새 종류를 얹을 때 빠뜨려도 아무것도 안 깨진다. (drift.complete AC-6/AC-8b) → `shared/api/drift.test.ts`
+- **CASE-apicontract-005j (암호화되는지 모르면 비밀을 안 보낸다)** 주소에 방식이 없는데 헤더에 비밀이 실려 있으면 **붙기 전에 막고** `grpc://`·`grpcs://` 를 적으라고 안내한다. 방식을 적었으면 사람이 정한 것이므로 막지 않고, 비밀이 안 실렸으면 평문 자체는 잘못이 아니다. 주소의 `사용자:비번@` 는 잘라 낸다(환경 비밀이 아니라 가리는 그물에 안 걸린다). (stream.session AC-7b) → `shared/api/grpcTarget.test.ts`
 
 ## Scenario S2 — 커버리지 정직 (순수 로직) — 미관측을 통과로 세지 않는다
 - **CASE-apicontract-010 (불변식 ①)** **관측 커버리지 집계**: 요청 12개 중 Run 이 있는 것이 7개면 결과가 `7 관측 / 5 미관측` 이다. 미관측 5개를 일치로 세면 실패. (drift.observed AC-2) → `api/contract/coverage.test.ts`
@@ -53,12 +62,11 @@
 - **CASE-apicontract-052** 어긋남 0 인 REST Spec → 문구가 "이상 없음"만이 아니라 **커버리지를 달고** 보인다. (drift.result AC-5)
 - **CASE-apicontract-053** `서버에만 있음` 항목 흡수 → 미리보기 → 수락 → Studio Draft 에 반영된 것이 보인다. 버전은 안 늘어난다. (accept.absorb AC-2/AC-3)
 - **CASE-apicontract-054** `명세에만 있음` 항목은 흡수 버튼이 없고 **고칠 목록**에 있다. 리포트 내보내기가 동작한다. (accept.report AC-1/AC-2)
-- **CASE-apicontract-055** reflection 꺼진 gRPC 서버 → **`완전 판정 불가`** 와 사유가 보인다. 관측 결과로 대체 표시되지 않는다. (drift.complete AC-4)
+- **CASE-apicontract-055** reflection 꺼진 gRPC 서버 → **`완전 판정 불가`** 와 사유가 보인다. 관측 결과로 대체 표시되지 않는다. (drift.complete AC-4) → `e2e/suites/39-api-grpc.mjs`
+- **CASE-apicontract-056** reflection 켠 gRPC 서버 → **`완전 판정`** 등급 · 사유 없음 · 스트리밍 메서드까지 대조된다(`observed` 가 스트리밍 요청을 포함한다). 선언한 타입이 서버 정의와 다르면 `다름`, 서버에만 있는 필드는 `서버에만 있음`으로 잡힌다. (drift.complete AC-2/AC-6) → `e2e/suites/39-api-grpc.mjs`
 
 ## 미구현 · 미검증 (조용한 통과 금지)
-- **gRPC 완전 판정** — 구현 순서상 GraphQL 다음이다(`drift.complete` AC-5).
-  GraphQL 로 S1·S6 를 먼저 세우고, gRPC 케이스는 같은 시나리오에 항목으로 더한다.
-- **SOAP/WSDL** — 후순위. 케이스 없음.
+- **SOAP/WSDL** — 후순위. 케이스 없음. (완전 판정 대상 셋 중 남은 하나다.)
 - **이름 없는 스트림 메시지의 대조** — WebSocket 프레임에는 이벤트 이름이 없어서 어느 선언과
   맞출지 못 정한다. **추측하지 않고 못 맞춘 건수로 세는 것까지**가 구현이다(017).
   본문 안의 판별 필드(`type` 같은 것)를 쓰려면 "어느 필드가 판별자인가"를 선언에 더해야 하는데,

@@ -238,6 +238,43 @@ describe('CASE-apicontract-011c 완전 판정에서도 스트리밍은 대조하
     expect(d.coverage.unjudged).toEqual(['messageAdded'])
     expect(d.findings).toEqual([])
   })
+
+  it('**스키마가 스트리밍까지 설명하면 대조한다** — gRPC reflection 이 그렇다', () => {
+    // 덮는지 여부는 호출처가 넘기지 않는다 — `INTERFACE_META` 가 종류별로 든다.
+    // 서버가 스트리밍 메서드의 응답 메시지까지 말해 줬는데 빼 두면, 다 말해 준 것을
+    // 우리가 안 본 것이 되어 판정이 헐거워진다.
+    const declared: RequestDef = {
+      ...req('messageAdded', [{ status: 'OK', fields: [f('id', 'string', 'required')] }]),
+      shape: 'server-stream',
+      request: { grpcMethod: '/pkg.Svc/Watch' }
+    }
+    const d = driftFromSchema({
+      spec: spec([declared], 'grpc'),
+      schema: {
+        rootFields: {
+          '/pkg.Svc/Watch': [f('id', 'string', 'required'), f('extra', 'number', 'unknown')]
+        }
+      },
+      environmentName: 'DEV',
+      rootOf: { messageAdded: '/pkg.Svc/Watch' },
+      runs: []
+    })
+    expect(d.coverage.observed).toBe(1)
+    expect(d.findings.map((x) => x.path)).toEqual(['messageAdded./pkg.Svc/Watch.extra'])
+  })
+
+  it('덮는 스키마여도 수신(웹훅)은 대조 대상이 아니다 — 서버가 부르는 쪽이다', () => {
+    const inbound: RequestDef = { ...req('hook'), shape: 'inbound' }
+    const d = driftFromSchema({
+      spec: spec([inbound], 'grpc'),
+      schema: { rootFields: {} },
+      environmentName: 'DEV',
+      rootOf: { hook: null },
+      runs: []
+    })
+    expect(d.findings).toEqual([])
+    expect(d.coverage.unobserved).toEqual(['hook'])
+  })
 })
 
 // ── 저장돼 있던 옛 판정 기록 ───────────────────────────────────────────────

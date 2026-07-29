@@ -1,8 +1,10 @@
 import { classifyFailure } from './httpSend'
+import { binaryPlaceholder, openGrpcStream, type GrpcStreamHandle } from './grpcStream'
 import { SseParser } from '../../shared/api/sse'
 import { nextReconnect, RECONNECT_TOTAL_MAX } from '../../shared/api/stream'
 import type { StreamOutcome, StreamTransport } from '../../shared/api/stream'
-import type { RunStatus, StreamMessage, StreamState } from '../../shared/api/types'
+import type { GrpcTarget } from '../../shared/api/grpcTarget'
+import type { InteractionShape, RunStatus, StreamMessage, StreamState } from '../../shared/api/types'
 
 /**
  * 스트림 전송 — `docs/spec/api-runner.md` § stream.session.
@@ -42,6 +44,19 @@ export interface OpenSessionInput {
    * 문자열은 이걸 믿지 말고 조립기가 가린 것을 써라 — 위 `displayUrl` 이 그 이유다.
    */
   redact: (text: string) => string
+  /**
+   * gRPC 전송에만 있는 것. 이 전송은 주소만으로 못 연다 — **어느 메서드인지**와
+   * **암호화 여부**가 따로 필요하고, 메시지 정의는 서버에게 받아 온다(`grpcStream.ts`).
+   */
+  grpc?: {
+    target: GrpcTarget
+    method: string
+    /** 요청에 **선언된** 모양. 서버 정의와 다르면 안 연다(무피드백 교착 방지). */
+    declaredShape: InteractionShape
+    /** 서버 스트리밍의 첫 본문 — 실값 / 기록·문구용 가림 두 벌. */
+    body: string
+    displayBody: string
+  }
 }
 
 export interface SessionEvent {
@@ -103,6 +118,12 @@ class Session {
 
   private seq = 0
   private socket: WebSocket | null = null
+  private grpc: GrpcStreamHandle | null = null
+  /**
+   * 지금 회차의 **중단 창구**. SSE 는 `fetch` 를, gRPC 는 정의 받아 오는 왕복을 여기서 끊는다.
+   * gRPC 는 붙기 전에 왕복이 있어서, 이게 없으면 사용자가 끊어도 그 왕복이 끝까지 돌고
+   * 심지어 그 뒤에 스트림을 한 번 열었다 닫는다(실측).
+   */
   private abort: AbortController | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private connectTimer: ReturnType<typeof setTimeout> | null = null
@@ -202,18 +223,27 @@ class Session {
 
   // ── 열기 ────────────────────────────────────────────────────────────────
 
+  /**
+   * 몇 번째 접속 회차인가. gRPC 는 붙기 전에 정의를 받아 오느라 **비동기로 열린다** —
+   * 그 사이 제한시간이 지나 다음 회차가 시작되면, 뒤늦게 열린 통로가 지금 회차의 것을
+   * 덮어써 끊을 수 없는 통로가 남는다. 회차 번호로 자기 것인지 가린다.
+   */
+  private round = 0
+
   start(): void {
+    this.round += 1
     this.state = 'connecting'
     // 붙는 데까지만 제한시간을 건다. 붙은 뒤에 오래 조용한 것은 정상이다(그게 스트림이다).
     this.connectTimer = setTimeout(() => {
       this.connectTimer = null
       if (this.opened || this.ended) return
-      this.socket?.close()
-      this.abort?.abort()
+      // **살아 있는 통로를 전부** 닫는다 — 하나라도 빠뜨리면 끊을 수 없는 통로가 남는다.
+      this.dropConnection()
       this.roundEnded(`${CONNECT_TIMEOUT_MS / 1000}초 안에 연결되지 않았습니다.`, 'timeout')
     }, CONNECT_TIMEOUT_MS)
 
     if (this.input.transport === 'websocket') this.openWebSocket()
+    else if (this.input.transport === 'grpc') void this.openGrpc()
     else void this.openSse()
   }
 
@@ -261,7 +291,7 @@ class Session {
       const text =
         typeof raw === 'string'
           ? raw
-          : `(바이너리 ${raw instanceof ArrayBuffer ? raw.byteLength : 0} 바이트)`
+          : binaryPlaceholder(raw instanceof ArrayBuffer ? raw.byteLength : 0)
       const m = this.add('in', '', text)
       this.push('open', [m])
     })
@@ -275,6 +305,75 @@ class Session {
       if (!this.opened) this.roundEnded('서버에 붙지 못했습니다.', 'connect-failed')
       else this.roundEnded(`서버가 연결을 닫았습니다 (${why}).`)
     })
+  }
+
+  private async openGrpc(): Promise<void> {
+    const cfg = this.input.grpc
+    if (!cfg) {
+      this.terminate('gRPC 세션인데 메서드 정보가 없습니다.', 'error', 'connect-failed')
+      return
+    }
+    const myRound = this.round
+    const stale = (): boolean => this.round !== myRound || this.ended || this.closedByUser
+    // 정의 받아 오는 왕복을 사용자가 끊을 수 있게 — 이 회차의 중단 창구를 먼저 걸어 둔다.
+    const ac = new AbortController()
+    this.abort = ac
+
+    const outcome = await openGrpcStream(
+      {
+        target: cfg.target,
+        method: cfg.method,
+        declaredShape: cfg.declaredShape,
+        headers: this.input.headers,
+        body: cfg.body,
+        displayBody: cfg.displayBody,
+        signal: ac.signal
+      },
+      {
+        // 붙기 전 안내(가정한 암호화 방식·못 실은 헤더)는 타임라인에 남긴다 —
+        // 조용히 넘기면 나중에 "왜 안 붙지"의 원인 후보가 기록에서 통째로 빠진다.
+        onNote: (text) => {
+          if (stale()) return
+          this.push('connecting', [this.add('system', 'note', text)])
+        },
+        onOpen: () => {
+          if (stale()) return
+          this.markOpen()
+          this.system('connect', `연결됨 — ${this.input.displayUrl}`, 'open')
+        },
+        onMessage: (text) => {
+          if (stale()) return
+          this.push('open', [this.add('in', '', text)])
+        }
+      }
+    )
+
+    if (!outcome.ok) {
+      if (stale()) return
+      this.roundEnded(outcome.reason, outcome.failure)
+      return
+    }
+    // 늦게 열린 통로가 지금 회차의 것을 덮어쓰지 않게 한다 — 덮어쓰면 끊을 수 없는 통로가 남는다.
+    if (stale()) {
+      outcome.handle.close()
+      return
+    }
+    outcome.handle.onEnd((reason, failure) => {
+      if (stale()) return
+      this.grpc = null
+      this.roundEnded(reason, failure)
+    })
+    this.grpc = outcome.handle
+  }
+
+  /** 지금 살아 있는 통로를 전부 닫는다. **끊는 자리가 하나여야** 빠뜨리지 않는다. */
+  private dropConnection(): void {
+    this.socket?.close()
+    this.grpc?.close()
+    this.abort?.abort()
+    this.socket = null
+    this.grpc = null
+    this.abort = null
   }
 
   private async openSse(): Promise<void> {
@@ -336,7 +435,10 @@ class Session {
   /** 한 회 접속이 끝났다. 자동 재접속이 켜져 있고 사용자가 안 껐으면 다시 붙는다. */
   private roundEnded(reason: string, failure?: RunStatus): void {
     this.socket = null
+    this.grpc?.close()
+    this.grpc = null
     this.abort = null
+
     if (this.connectTimer) {
       clearTimeout(this.connectTimer)
       this.connectTimer = null
@@ -396,10 +498,18 @@ class Session {
    * `{{base64(apiKey)}}` 처럼 **가공된 비밀**은 원문과 안 맞아 그대로 남는다.
    */
   send(real: string, display: string): StreamMessage {
-    if (!this.socket || this.socket.readyState !== 1) {
-      throw new Error('연결돼 있지 않습니다 — 먼저 접속하세요.')
+    if (this.input.transport === 'grpc') {
+      if (!this.grpc || this.state !== 'open') {
+        throw new Error('연결돼 있지 않습니다 — 먼저 접속하세요.')
+      }
+      // 소켓에 나갈 실값 / 사람에게 보일 가림 — gRPC 는 오류 문구를 만드는 데도 가린 쪽이 필요하다.
+      this.grpc.send(real, display)
+    } else {
+      if (!this.socket || this.socket.readyState !== 1) {
+        throw new Error('연결돼 있지 않습니다 — 먼저 접속하세요.')
+      }
+      this.socket.send(real)
     }
-    this.socket.send(real)
     const m = this.add('out', '', display)
     this.push('open', [m])
     return m
@@ -410,12 +520,9 @@ class Session {
     for (const t of [this.reconnectTimer, this.connectTimer]) if (t) clearTimeout(t)
     this.reconnectTimer = null
     this.connectTimer = null
-    // 소켓을 먼저 닫되, 끝맺음은 여기서 한다 — WebSocket 의 close 이벤트를 기다리면
+    // 통로를 먼저 닫되, 끝맺음은 여기서 한다 — WebSocket 의 close 이벤트를 기다리면
     // "끊기를 눌렀는데 화면이 그대로"인 구간이 생긴다.
-    this.socket?.close()
-    this.abort?.abort()
-    this.socket = null
-    this.abort = null
+    this.dropConnection()
     this.terminate('사용자가 끊었습니다.', 'closed')
   }
 

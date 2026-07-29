@@ -21,9 +21,13 @@ import {
   copyMessageText,
   exportTimeline,
   filterTimeline,
+  grpcStreamBlocker,
   sendPanelVisible,
-  transportFor
+  transportFor,
+  transportLabel
 } from '@shared/api/stream'
+import { parseGrpcTarget } from '@shared/api/grpcTarget'
+import { secretValues } from '@shared/api/redact'
 import {
   SHAPE_LABEL,
   STREAM_DIRECTIONS,
@@ -216,7 +220,18 @@ export function StreamView() {
     )
   }
 
-  const canOpen = !!req && !!env && !!pick?.transport && !!preview?.canSend && !live && !busy
+  /**
+   * gRPC 만 붙기 전 조건이 더 있다(메서드 칸·주소·암호화). **창구와 같은 함수**를 쓴다 —
+   * 여기만 막으면 다른 경로가 우회하고, 창구만 막으면 사용자가 정의 받아 오는 왕복을
+   * 기다렸다 실패를 본다.
+   */
+  const grpcBlock =
+    spec.kind === 'grpc' && req && env && preview
+      ? grpcStreamBlocker(req, parseGrpcTarget(env.baseUrl), preview.headers, secretValues(env.values))
+      : null
+
+  const canOpen =
+    !!req && !!env && !!pick?.transport && !!preview?.canSend && !grpcBlock && !live && !busy
 
   return (
     <div className="flex h-full flex-col">
@@ -328,8 +343,8 @@ export function StreamView() {
                 >
                   {STREAM_STATE_LABEL[state]}
                 </span>
-                <span className="text-[11.5px] text-muted">
-                  {pick.transport === 'websocket' ? 'WebSocket · 양방향' : 'SSE · 서버 스트리밍'}
+                <span className="text-[11.5px] text-muted" data-api-stream-transport>
+                  {transportLabel(pick.transport, req.shape)}
                 </span>
                 {url && (
                   <span className="max-w-[24rem] truncate font-mono text-[11px] text-muted" data-api-stream-url>
@@ -370,7 +385,9 @@ export function StreamView() {
                     title={
                       canOpen
                         ? undefined
-                        : (preview?.blocking.map((b) => b.message).join('\n') ?? '붙을 수 없습니다')
+                        : (grpcBlock ??
+                          preview?.blocking.map((b) => b.message).join('\n') ??
+                          '붙을 수 없습니다')
                     }
                     onClick={() =>
                       void useStreamStore.getState().open({
@@ -507,7 +524,12 @@ export function StreamView() {
                   <Input
                     value={draft}
                     disabled={state !== 'open'}
-                    placeholder="보낼 메시지 — {{변수}} 를 쓰면 환경 값으로 바뀝니다"
+                    placeholder={
+                      // 전송마다 규칙이 다르다 — gRPC 는 그 메서드 메시지의 JSON 이어야 한다.
+                      spec.kind === 'grpc'
+                        ? '보낼 메시지(JSON) — {{변수}} 를 쓰면 환경 값으로 바뀝니다'
+                        : '보낼 메시지 — {{변수}} 를 쓰면 환경 값으로 바뀝니다'
+                    }
                     data-api-stream-draft
                     className="h-7 flex-1 font-mono text-[12px]"
                     onKeyDown={(e) => {

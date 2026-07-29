@@ -14,13 +14,15 @@ import { buildScope, type Scope } from '../../../shared/api/resolve'
 import { blockingIssues, renderTemplate } from '../../../shared/api/template'
 import { redactText, secretValues } from '../../../shared/api/redact'
 import { nodeFunctionEnv } from '../../../shared/api/nodeFunctionEnv'
+import { parseGrpcTarget } from '../../../shared/api/grpcTarget'
+import { grpcStreamBlocker } from '../../../shared/api/stream'
 import {
   sendPanelVisible,
   sessionToRun,
   transportFor,
   type StreamTransport
 } from '../../../shared/api/stream'
-import type { InteractionShape, RunRecord, StreamMessage } from '../../../shared/api/types'
+import { SHAPE_LABEL, type InteractionShape, type RunRecord, type StreamMessage } from '../../../shared/api/types'
 
 export interface OpenStreamInput {
   /**
@@ -175,6 +177,15 @@ export function registerApiStreamIpc(): void {
     }
 
     const secrets = secretValues(env.values)
+
+    // gRPC 는 붙기 전에 조건이 더 있다. **붙어 본 뒤가 아니라 여기서** 막는다 —
+    // 정의를 받아 오는 왕복이 최대 20초라, 뒤에서 막으면 그만큼 기다렸다 실패한다.
+    const grpcTarget = parseGrpcTarget(env.baseUrl)
+    if (pick.transport === 'grpc') {
+      const why = grpcStreamBlocker(request, grpcTarget, real.headers, secrets)
+      if (why) throw new Error(why)
+    }
+
     const sessionId = input.sessionId
 
     contexts.set(sessionId, {
@@ -202,6 +213,20 @@ export function registerApiStreamIpc(): void {
         displayUrl: masked.url,
         headers: real.headers,
         autoReconnect: input.autoReconnect,
+        // gRPC 는 주소만으로 못 연다 — 어느 메서드인지와 암호화 여부가 따로 필요하다.
+        // 메서드 이름은 요청 정의에 있고(`grpcMethod`), 접속 대상은 환경 주소에서 읽는다.
+        ...(pick.transport === 'grpc'
+          ? {
+              grpc: {
+                target: grpcTarget,
+                method: request.request.grpcMethod ?? '',
+                declaredShape: request.shape,
+                // 서버 스트리밍의 첫 메시지 — 실값 / 기록·문구용 가림 두 벌.
+                body: real.body,
+                displayBody: masked.body
+              }
+            }
+          : {}),
         // **비밀 목록을 세션 시작 시점에 가두지 않는다.** 세션은 오래 사는데 그동안 환경에
         // 비밀이 새로 추가될 수 있고, 가둬 두면 그 뒤 오는 메시지가 안 가려진다.
         // 붙어 있는 것(주소·헤더)은 안 바뀌는 게 맞지만 **가리는 그물은 늘 최신이어야 한다.**
@@ -220,7 +245,11 @@ export function registerApiStreamIpc(): void {
     // 화면은 보내기 패널을 안 그리지만 창구는 열려 있다. 여기서 안 막으면 서버 스트리밍
     // 세션에 "연결돼 있지 않습니다" 라는 **틀린 이유**가 돌아간다(배지는 '연결됨' 인데).
     if (!sendPanelVisible(ctx.shape)) {
-      throw new Error('이 전송은 한 방향입니다 — 서버 스트리밍 세션에는 보내기가 없습니다.')
+      // 모양 이름은 `SHAPE_LABEL` 을 쓴다 — 여기서만 옛말("서버 스트리밍")을 쓰면
+      // 같은 개념이 화면과 오류 문구에서 두 어휘가 된다.
+      throw new Error(
+        `이 전송은 한 방향입니다 — '${SHAPE_LABEL[ctx.shape]}' 세션에는 보내기가 없습니다.`
+      )
     }
 
     // 보낼 메시지도 `{{변수}}` 를 쓴다. 안 그러면 사용자가 토큰을 손으로 붙여넣게 되고,

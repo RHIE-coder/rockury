@@ -49,6 +49,16 @@ export interface InterfaceMeta {
    * 이 한 칸이 판정 2등급(완전 / 관측)을 가른다(spec §4-①).
    */
   selfDescribing: boolean
+  /**
+   * 그 자기서술이 **스트리밍 요청까지 설명하는가.**
+   *
+   * `selfDescribing` 과 갈라 두는 이유: 같은 "완전 판정 대상" 이라도 덮는 범위가 다르다.
+   * GraphQL introspection 에는 구독(subscription) 루트가 아예 없어 대조할 것이 없지만,
+   * gRPC reflection 은 스트리밍 메서드의 응답 메시지까지 그대로 설명한다.
+   * **이 칸이 여기 있는 이유**: 호출처가 손으로 넘기는 값이면 새 종류를 얹을 때 빠뜨려도
+   * 아무것도 안 깨지고, 그 종류의 스트리밍 요청만 조용히 판정에서 빠진다(drift.complete AC-6).
+   */
+  schemaCoversStreaming: boolean
   /** 요청 편집 표면에 나오는 칸. 여기 없는 칸은 **보이지 않는다**(비활성이 아니라 없음 — shape AC-7). */
   fields: RequestField[]
 }
@@ -76,6 +86,7 @@ export const INTERFACE_META: InterfaceMeta[] = [
     label: 'REST',
     shapes: ['unary'],
     selfDescribing: false,
+    schemaCoversStreaming: false,
     fields: ['method', 'path', 'query', 'headers', 'body']
   },
   {
@@ -84,6 +95,8 @@ export const INTERFACE_META: InterfaceMeta[] = [
     // subscription 은 서버 스트리밍. introspection 이 표준이라 완전 판정 대상.
     shapes: ['unary', 'server-stream'],
     selfDescribing: true,
+    // introspection 에는 subscription 루트가 없다 — 스트리밍은 대조할 것이 없다.
+    schemaCoversStreaming: false,
     fields: ['path', 'headers', 'graphqlQuery', 'graphqlVariables']
   },
   {
@@ -92,13 +105,18 @@ export const INTERFACE_META: InterfaceMeta[] = [
     // 스트리밍 종류는 proto 메서드 정의가 정한다 — 사람이 고르지 않는다(shape AC-3).
     shapes: ['unary', 'server-stream', 'duplex'],
     selfDescribing: true,
-    fields: ['connectUrl', 'headers', 'grpcMethod', 'body']
+    // reflection 은 스트리밍 메서드의 응답 메시지까지 설명한다.
+    schemaCoversStreaming: true,
+    // 접속 주소 칸이 **없다**: gRPC 대상은 `호스트:포트` 하나이고 경로 자리는 메서드 이름이
+    // 쓴다. 칸을 두면 화면이 보여 주는 주소와 실제로 붙는 주소가 갈린다(경로가 조용히 버려진다).
+    fields: ['headers', 'grpcMethod', 'body']
   },
   {
     id: 'jsonrpc',
     label: 'JSON-RPC',
     shapes: ['unary'],
     selfDescribing: false,
+    schemaCoversStreaming: false,
     fields: ['path', 'headers', 'rpcMethod', 'rpcParams']
   },
   {
@@ -107,6 +125,7 @@ export const INTERFACE_META: InterfaceMeta[] = [
     // 보낼 메시지는 요청 정의가 아니라 실행 화면 몫이라 body 칸이 없다(shape AC-5).
     shapes: ['duplex'],
     selfDescribing: false,
+    schemaCoversStreaming: false,
     fields: ['connectUrl', 'headers']
   },
   {
@@ -114,6 +133,7 @@ export const INTERFACE_META: InterfaceMeta[] = [
     label: 'SSE',
     shapes: ['server-stream'],
     selfDescribing: false,
+    schemaCoversStreaming: false,
     fields: ['connectUrl', 'headers']
   },
   {
@@ -122,6 +142,7 @@ export const INTERFACE_META: InterfaceMeta[] = [
     // 보내는 모양이 없다 — 받을 모양만 선언한다(shape AC-6).
     shapes: ['inbound'],
     selfDescribing: false,
+    schemaCoversStreaming: false,
     fields: ['expectedBody']
   }
 ]

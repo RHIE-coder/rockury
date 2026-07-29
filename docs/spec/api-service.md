@@ -190,9 +190,11 @@ AsyncAPI(= 이벤트 기반 시스템용 명세 표준) 형식 지원뿐이다.
 
 - **Overview · Reference 모듈** — 지금 IA 에 없다. DB 서비스는 뒀다. 필요해지면 추가.
 - **웹훅 외부 터널** — 1차는 로컬 전용. 진짜 외부 콜백을 받으려면 터널이 필요하다.
-- **gRPC 스트리밍 · GraphQL subscription 전송** — Stream 화면은 섰지만 전송이 WebSocket·SSE
-  둘뿐이다(`api-runner.md` § stream.session AC-7). gRPC 는 `@grpc/grpc-js` 도입이 선행되고,
-  그건 `main` 브랜치에서 한 명이 하는 일이라 사용자 합의가 먼저다.
+- **GraphQL subscription 전송** — 전송은 WebSocket·SSE·gRPC 셋이고 이것 하나가 남았다
+  (`api-runner.md` § stream.session AC-7). WebSocket 위 `graphql-ws` 하위 프로토콜
+  손잡기가 필요하다 — 새 의존성은 필요 없다.
+  (gRPC 는 2026-07-29 완료. `@grpc/grpc-js`·`@grpc/proto-loader` 는 사용자 합의 후
+  `main` 에서 더했다.)
 - **이름 없는 스트림 메시지의 대조** — 이벤트 이름이 있으면 대조하지만(`api-contract.md`
   § drift.observed AC-6), WebSocket 프레임처럼 이름이 없으면 어느 선언과 맞출지 못 정한다.
   본문 안의 판별 필드를 쓰려면 "어느 필드가 판별자인가"를 선언에 더해야 한다 — 모델이 늘어서
