@@ -3,7 +3,7 @@
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 
 export const meta = {
-  name: '13-uiux-spec',
+  name: '20-uiux-spec',
   needsDb: false,
   desc: 'UI/UX 전 모듈 — 위계·구조 · 미리보기 · 끌어놓기 · 규칙 · 흐름 · 토큰 · 의견 · 버전 · MCP · 능력 인덱스'
 }

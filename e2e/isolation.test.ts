@@ -68,3 +68,51 @@ describe('e2e 격리 불변식', () => {
     expect(scanned, '스위트 파일이 격리 검사에서 빠졌다').toBe(onDisk.length)
   })
 })
+
+/**
+ * 스위트 **이름 규칙** 가드.
+ *
+ * 러너가 폴더를 이름순으로 돌기 때문에 파일 이름이 곧 실행 순서다. 등록 목록이 없다는 것은
+ * 서비스가 공용 파일을 안 건드리고 스위트를 더할 수 있다는 뜻이지만, 그 대가로 **번호를
+ * 누가 쓰고 있는지 아무도 강제하지 않는다** — 실제로 2026-07-29 병렬 개발에서 infra·uiux·api
+ * 셋이 동시에 13번을 잡았다. 사람이 `ls` 로 알아채는 대신 여기서 막는다.
+ */
+const SUITE_BANDS = `  01–12  기존 블록(공용·db·ai) — 내부 순서가 상태 의존이라 재배치하지 않는다
+  13–19  infra
+  20–29  uiux
+  30–39  api
+  40–49  db 추가분      50–59  ai 추가분`
+
+describe('e2e 스위트 이름 규칙', () => {
+  const suites = files
+    .filter((f) => f.path.startsWith('suites/'))
+    .map((f) => ({ file: f.path.slice('suites/'.length), src: f.src }))
+
+  it('스위트가 하나 이상 발견된다(가드가 헛돌지 않게)', () => {
+    expect(suites.length).toBeGreaterThan(0)
+  })
+
+  it('번호가 겹치지 않는다 — 겹치면 실행 순서가 번호가 아니라 이름 철자에 좌우된다', () => {
+    const byNumber = new Map<string, string[]>()
+    for (const s of suites) {
+      const n = s.file.slice(0, 2)
+      byNumber.set(n, [...(byNumber.get(n) ?? []), s.file])
+    }
+    const dup = [...byNumber.entries()]
+      .filter(([, v]) => v.length > 1)
+      .map(([n, v]) => `${n}: ${v.join(' / ')}`)
+    expect(dup, `번호가 겹쳤다. 자기 서비스 구간에서 빈 번호를 고르세요 —\n${SUITE_BANDS}\n`).toEqual(
+      []
+    )
+  })
+
+  it('meta.name 이 파일 이름과 같다 — 개명할 때 안이 안 따라오면 체크포인트에 옛 이름이 남는다', () => {
+    const mismatched: string[] = []
+    for (const s of suites) {
+      const declared = /name:\s*'([^']+)'/.exec(s.src)?.[1]
+      const expected = s.file.replace(/\.mjs$/, '')
+      if (declared !== expected) mismatched.push(`${s.file}: meta.name='${declared}'`)
+    }
+    expect(mismatched, 'meta.name 과 파일 이름이 다르다').toEqual([])
+  })
+})
