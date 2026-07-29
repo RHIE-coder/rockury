@@ -2,11 +2,14 @@
 // (누적 회귀 자산 — 지우지 않고 더한다). 새 앱 흐름은 알맞은 스위트에 check 를 더하거나
 // `suites/` 에 새 파일을 놓기만 하면 된다 — **등록 목록이 없다**(아래 자동 발견).
 //
-// 실행: npm run build && npm run e2e            (docker test-db 전제 — npm run db:up)
-//       npm run e2e -- --no-db                  test-db 필요한 스위트는 건너뜀(미검증으로 표시)
-//       npm run e2e -- --only=03-studio-definition,04-studio-seed
-//       npm run e2e -- --continue               스위트가 깨져도 다음 스위트까지 계속
+// 실행: npm run e2e -- --only=03-studio-definition,04-studio-seed   ← **작업 중엔 이것만**
 //       npm run e2e -- --list                   스위트 목록만 출력
+//       npm run e2e -- --no-db                  test-db 필요한 스위트는 건너뜀(미검증으로 표시)
+//       npm run e2e -- --continue               스위트가 깨져도 다음 스위트까지 계속
+//       npm run e2e -- --all                    전체 한 바퀴 — **커밋 훅의 몫**(docker test-db 전제)
+//
+// ⛔ 범위를 안 밝히면 러너가 **거부한다**(`lib/runScope.mjs`). 전체를 습관적으로 태우는 걸 막는
+//    안전장치다 — 규칙을 문서에만 적어 뒀을 땐 안 지켜졌다(2026-07-30 사용자 지적, 두 번째).
 //
 // ⭐ 체크포인트: 스위트별 상태·체크 결과를 JSON 으로 남긴다(체크 하나마다 flush).
 //    중간에 죽어도 "어디까지 돌았고 무엇이 미실행인지"가 파일과 요약에 남는다.
@@ -19,6 +22,7 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { styleText } from 'node:util'
 import { APP, createContext, createCheckpoint, probeTestDb, requireBuild } from './lib/harness.mjs'
+import { blockedMessage, resolveScope } from './lib/runScope.mjs'
 
 /**
  * 스위트 목록은 **폴더를 읽어 자동으로** 만든다 — 러너에 손으로 등록하지 않는다.
@@ -43,10 +47,13 @@ if (SUITES.length === 0) {
 
 const argv = process.argv.slice(2)
 const has = (f) => argv.includes(f)
-const valOf = (f) => argv.find((a) => a.startsWith(f + '='))?.slice(f.length + 1)
 const NO_DB = has('--no-db')
 const CONTINUE = has('--continue')
-const ONLY = valOf('--only')?.split(',').map((s) => s.trim()).filter(Boolean)
+
+// 범위 판정 — 전체는 명시적으로 요청해야만 열린다(`--all` 또는 E2E_FULL=1). `--list` 는 앱을
+// 안 띄우고 목록만 뽑는 것이라 이 판정 밖이다.
+const SCOPE = resolveScope({ argv, env: process.env })
+const ONLY = SCOPE.only
 
 const modules = []
 for (const name of SUITES) {
@@ -57,6 +64,11 @@ for (const name of SUITES) {
 if (has('--list')) {
   for (const m of modules) console.log(`${m.name}${m.needsDb ? ' [test-db]' : ''} — ${m.desc}`)
   process.exit(0)
+}
+
+if (SCOPE.mode === 'blocked') {
+  console.error(styleText('yellow', blockedMessage()))
+  process.exit(2)
 }
 
 requireBuild()

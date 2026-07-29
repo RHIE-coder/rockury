@@ -9,7 +9,6 @@ import {
   GitCompare,
   History,
   Layers,
-  LayoutDashboard,
   Milestone,
   Monitor,
   Network,
@@ -38,7 +37,7 @@ import { DesignDialogs } from './designs/DesignDialogs'
 import { useDesignsStore } from './designs/store'
 import { TimelineView } from './versions/TimelineView'
 import { VersionDiffView } from './versions/VersionDiffView'
-import { StudioLensToolbar } from './versions/VersionLens'
+import { VersionLens } from './versions/VersionLens'
 import { ConnectionsView } from './connections/ConnectionsView'
 import { ObjectView } from './console/ObjectView'
 import { DiagramView } from './console/DiagramView'
@@ -57,14 +56,14 @@ import './rehydration' // 에이전트(MCP) 쓰기 → store:changed → 스코�
  *
  *   설계부(design) : 버전 중심. 도면을 짓고 버전을 컷한다. Env 무관.
  *   운영부(ops)    : active Env 중심. Connection 에 붙어 조회/반영한다.
- *   공통(common)   : Overview · Reference.
+ *   공통(common)   : Reference.
  *
  * 두 부서는 정의된 문으로만 오간다:
  *   설계→운영  Versions 에서 컷한 버전을 Migration 이 Environment 에 반영
  *   운영→설계  Migration/Drift 가 캡처한 변경을 Versions 에 새 버전으로 되먹임
  *
- * 화면은 아직 placeholder(경로 배지만). depth 는 Service→Module→View 3단이며
- * Design/Env 는 nav 계층이 아니라 상단 컨텍스트 바의 ambient 셀렉터다.
+ * depth 는 Service→Module→View 3단이며, Design·시점·Connection 은 nav 계층이 아니라
+ * 모듈 줄의 구획 뱃지가 든 ambient 셀렉터다(설계 뱃지 = 설계+시점, 운영 뱃지 = 연결).
  */
 const view = (icon: LucideIcon, depth: string, title: string, subtitle: string) => () =>
   <PlaceholderView icon={icon} depth={depth} title={title} subtitle={subtitle} />
@@ -75,12 +74,16 @@ export const dbService: Service = {
   icon: Database,
   // 서비스 전역 오버레이 — 설계 생성/관리 모달(컨텍스트 바 액션·빈 상태 CTA 로 열린다).
   Overlay: DesignDialogs,
+  // 상단 컨텍스트 바는 **없다**(2026-07-30 사용자 결정). 셋 다 `area` 를 달아 모듈 줄의
+  // 구획 뱃지 손잡이로 갔다 — '설계' 뱃지가 설계와 그 시점을, '운영' 뱃지가 연결을 든다.
+  // 대상이 자기 구획 안에 들어가 있으면 소속을 글자로 설명할 필요가 없고, 줄도 하나 줄어든다.
   context: [
     {
       // 설계는 런타임 데이터 — designs/store 가 contextOptions 레지스트리로 옵션을 주입한다.
       // 벤더(방언)는 설계의 고정 속성이라 옵션 hint/dot 으로 함께 노출된다.
       id: 'design',
       label: 'Design',
+      area: 'design',
       icon: Layers,
       placeholder: '설계 선택',
       options: [],
@@ -99,30 +102,31 @@ export const dbService: Service = {
         }
       ]
     },
-    // 버전 렌즈(Draft ↔ 커밋 버전)는 **여기 없다.** 2026-07-29 사용자 결정으로 Studio 도구줄로
-    // 내렸다(`versions/VersionLens.tsx`). 이 바의 다른 칸은 "무엇을 대상으로 하느냐"인데 렌즈만
-    // "그 대상을 언제 시점으로 보느냐"라 성격이 달랐고, 읽는 화면도 Studio 셋뿐이라 운영부에서는
-    // 아무 일도 안 했다. 상태는 `versions/store.ts` 의 `lens` 가 든다.
     {
-      // 연결(1급)도 런타임 데이터 → connections/store 가 옵션을 주입한다. 운영부에서만 활성.
+      // 시점 렌즈(Draft ↔ 커밋 버전) — 설계 바로 뒤 칸. 셸이 값을 들지 않고 서비스가 직접 그린다
+      // (`Render`): 목록이 활성 설계에 딸려 바뀌고 드롭다운 모양도 다르다. 상태는 `versions/store.ts`.
+      // 자리 이력: 상단 바(~2026-07-29) → Studio 도구줄 → 설계 뱃지 손잡이(2026-07-30).
+      id: 'lens',
+      label: '시점',
+      area: 'design',
+      options: [],
+      Render: VersionLens
+    },
+    {
+      // 연결(1급)도 런타임 데이터 → connections/store 가 옵션을 주입한다.
       // Console 은 이 연결만으로 동작하고, Migration 은 여기에 active Design 을 더해 바인딩한다.
       id: 'conn',
       label: 'Connection',
+      area: 'ops',
       icon: Server,
-      activeInAreas: ['ops'],
       placeholder: '연결 선택',
       options: []
     }
   ],
   modules: [
-    // ── 공통 ────────────────────────────────────────────────────────────────
-    {
-      id: 'overview',
-      label: 'Overview',
-      icon: LayoutDashboard,
-      area: 'common',
-      workspace: view(LayoutDashboard, 'depth 2 · DB › Overview', 'Overview', '현재 Design 의 전 환경 상태(환경별 적용버전·드리프트)를 한눈에')
-    },
+    // Overview 는 **없앴다**(2026-07-30 사용자 결정). 하려던 일("설계 하나가 환경마다 몇 버전으로
+    // 나가 있나")은 Connections 의 바인딩 목록과 Migration › Drift 가 이미 나눠 갖고 있었고,
+    // 빈 화면인 채로 첫 자리를 차지해 DB 서비스의 첫인상이 빈 화면이었다. 이제 Studio 로 착지한다.
 
     // ── 설계부 ──────────────────────────────────────────────────────────────
     {
@@ -131,12 +135,11 @@ export const dbService: Service = {
       icon: PenTool,
       area: 'design',
       views: [
-        // 시점 손잡이(Version 렌즈)는 그것을 읽는 세 뷰에만 붙는다 —
-        // Definition 은 자기 도구줄이 이미 있고, Diagram·Seed 는 손잡이만 있는 도구줄을 쓴다.
-        // 아래 Mocking·Documenting·Validation 은 아직 화면이 없어 붙이지 않는다.
+        // 시점 손잡이는 여기 없다 — 설계 뱃지가 들고 있어 Studio·Versions 전 뷰에서 늘 같은 자리다.
+        // Diagram·Seed 는 그래서 도구줄 자체가 없어졌다(손잡이 하나만 세우던 줄이었다).
         { id: 'definition', label: 'Definition', icon: TableProperties, workspace: DefinitionWorkspace, Toolbar: DefinitionToolbar },
-        { id: 'diagram', label: 'Diagram', icon: GitBranch, workspace: StudioDiagramWorkspace, Toolbar: StudioLensToolbar },
-        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedWorkspace, Toolbar: StudioLensToolbar },
+        { id: 'diagram', label: 'Diagram', icon: GitBranch, workspace: StudioDiagramWorkspace },
+        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedWorkspace },
         { id: 'mocking', label: 'Mocking', icon: Shuffle, workspace: view(Shuffle, 'depth 3 · Studio › Mocking', 'Mocking', '목업 데이터 생성 규칙을 설정한다') },
         { id: 'documenting', label: 'Documenting', icon: FileText, workspace: view(FileText, 'depth 3 · Studio › Documenting', 'Documenting', '스키마 문서를 작성/생성한다') },
         { id: 'validation', label: 'Validation', icon: ShieldCheck, workspace: view(ShieldCheck, 'depth 3 · Studio › Validation', 'Validation', '설계 단계 제약/무결성 규칙을 검증한다') }

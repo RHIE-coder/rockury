@@ -338,11 +338,12 @@ export async function run(ctx) {
         const l = await window.rockury.diagram.getLayout('design:commerce-core')
         return JSON.stringify({ p: l?.positions ?? {}, g: l?.groups ?? [] })
       })
-    // 시점 손잡이는 Studio 도구줄에 있다(예전엔 상단 컨텍스트 바) — 먼저 화면으로 가서 고른다.
+    // 시점 손잡이는 상단 '설계' 뱃지 손잡이 안에 있다(자리 이력: 컨텍스트 바 → Studio 도구줄 → 설계 뱃지).
+    // 설계부 어느 화면에서나 같은 자리라, 화면을 옮겨도 하나만 떠 있어야 한다.
     await click('button:has-text("Studio")')
     await click('button:has-text("Diagram")')
     await page.waitForSelector('.react-flow__node[data-id]', { timeout: 10_000 })
-    check('Studio › Diagram: 도구줄에 시점 손잡이가 있다', (await page.locator('[data-version-lens]').count()) === 1)
+    check('Studio › Diagram: 설계 뱃지에 시점 손잡이가 하나 있다', (await page.locator('[data-version-lens]').count()) === 1)
     await click('[data-version-lens]')
     await click('[data-version-lens-option="v0.3.15"]')
     await page.waitForTimeout(400)

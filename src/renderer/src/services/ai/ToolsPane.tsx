@@ -14,10 +14,15 @@ import {
 } from './toolCatalog'
 
 /**
- * AI › Tools — 에이전트에게 열어 둔 MCP 도구를 **서비스별로** 훑어보는 화면.
+ * 에이전트에게 열어 둔 도구 목록 — Agents 화면의 **오른쪽 칸**이다.
+ *
+ * 왜 별도 화면이 아닌가: 좌측 탭에 "Tools" 라고만 걸어 두면 **MCP 도구인지 앱의 범용
+ * 유틸리티인지 구분이 안 된다**(2026-07-30 사용자 지적). 도구 목록은 "연결하면 무엇을 쓸 수
+ * 있나"의 답이므로, 연결 화면 옆에 붙어 있을 때만 그 뜻이 분명해진다. 그래서 네비를 없애고
+ * 연결 바로 옆에 두고, 제목도 `Tools` 가 아니라 **"에이전트에게 열어 둔 도구"** 로 적는다.
  *
  * 목록은 손으로 관리하지 않는다 — 메인 프로세스가 도구 정의 + 노출 지도를 조립해 준다
- * (`ai:tools`). 그래서 도구가 늘거나 줄면 이 화면이 저절로 따라온다.
+ * (`ai:tools`). 그래서 도구가 늘거나 줄면 이 칸이 저절로 따라온다.
  *
  * "안 열어 둔 것"도 사유와 함께 같이 보여 준다. 목록에 없는 기능을 두고 "왜 안 되지"를
  * 코드까지 뒤져야 한다면, 그건 이 화면이 절반만 답한 것이다.
@@ -133,7 +138,7 @@ function FilterChip({
   )
 }
 
-export function ToolsWorkspace() {
+export function ToolsPane() {
   const catalog = useAiStore((s) => s.catalog)
   const error = useAiStore((s) => s.catalogError)
   const [query, setQuery] = useState('')
@@ -155,54 +160,51 @@ export function ToolsWorkspace() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* 머리말도 본문과 같은 760px 기둥에 세운다 — 좌우 기준이 다르면 한 화면이 두 장처럼 보인다. */}
-      <div className="shrink-0 border-b border-line px-5 py-3">
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="flex flex-col">
-              <h2 className="text-[14px] font-bold text-fg">Tools</h2>
-              <p className="text-[12px] break-keep text-muted">
-                연결한 에이전트가 이 앱에서 쓸 수 있는 도구 {total}개 — 서비스별로 무엇이 열려
-                있는지 확인합니다.
-              </p>
-            </div>
-            <div className="relative w-[240px]">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted" />
-              <Input
-                data-ai-tools-search
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="도구·설명·기능 이름으로 찾기"
-                className="h-8 pl-8 text-[12.5px]"
-              />
-            </div>
-          </div>
+      <div className="flex shrink-0 flex-col gap-2.5 border-b border-line px-5 py-3">
+        <div className="flex flex-col">
+          {/* 제목이 곧 이 목록의 정체다 — "Tools" 만으로는 범용 유틸리티와 구분이 안 된다. */}
+          <h2 className="text-[14px] font-bold text-fg">에이전트에게 열어 둔 도구</h2>
+          <p className="text-[12px] break-keep text-muted">
+            왼쪽에서 연결한 에이전트가 이 앱에서 쓸 수 있는 도구 {total}개 — 서비스별로 무엇이
+            열려 있는지 확인합니다.
+          </p>
+        </div>
 
-          {/* 서비스 고르기 — "DB 는 뭐가 열려 있나"를 한 번에 좁힌다. */}
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted" />
+          <Input
+            data-ai-tools-search
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="도구·설명·기능 이름으로 찾기"
+            className="h-8 pl-8 text-[12.5px]"
+          />
+        </div>
+
+        {/* 서비스 고르기 — "DB 는 뭐가 열려 있나"를 한 번에 좁힌다. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <FilterChip
+            id="all"
+            label="전체"
+            count={total}
+            active={service === null}
+            onClick={() => setService(null)}
+          />
+          {all.map((g) => (
             <FilterChip
-              id="all"
-              label="전체"
-              count={total}
-              active={service === null}
-              onClick={() => setService(null)}
+              key={g.service}
+              id={g.service}
+              label={serviceLabel(g.service)}
+              count={g.tools.length}
+              active={service === g.service}
+              onClick={() => setService(service === g.service ? null : g.service)}
             />
-            {all.map((g) => (
-              <FilterChip
-                key={g.service}
-                id={g.service}
-                label={serviceLabel(g.service)}
-                count={g.tools.length}
-                active={service === g.service}
-                onClick={() => setService(service === g.service ? null : g.service)}
-              />
-            ))}
-          </div>
+          ))}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-5 px-5 py-4">
+        <div className="flex w-full flex-col gap-5 px-5 py-4">
           {error && (
             <div className="rounded-lg bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
               {error}

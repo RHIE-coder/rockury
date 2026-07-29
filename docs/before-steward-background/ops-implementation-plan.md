@@ -1,7 +1,7 @@
 # 운영부(ops) 구현 플랜 & 세션 인수인계
 
 > 목적: 컨텍스트 clear 후 이 문서 + `docs/before-steward-background/db-service-ia.md` 만 읽고 바로 이어서 작업하기 위한 재개점.
-> 최종 갱신: 2026-07-23 (**Phase 0~3 + Connection 1급 분리 + Console 심화(rky 이식) + Diagram(Console 실 ERD·Studio 가상 편집 ERD)** 완료. 남은 것: Studio Seed/Mocking/Documenting/Validation·Overview·Reference 등 선택적 향상)
+> 최종 갱신: 2026-07-23 (**Phase 0~3 + Connection 1급 분리 + Console 심화(rky 이식) + Diagram(Console 실 ERD·Studio 가상 편집 ERD)** 완료. 남은 것: Studio Seed/Mocking/Documenting/Validation·Reference 등 선택적 향상. Overview 는 2026-07-30 결정 D 로 삭제)
 > Console 심화: Query(CodeMirror+스키마 자동완성+포매터, EXPLAIN, 히스토리) · Data(필터/정렬/페이지크기, 타입별 셀 에디터+NULL+FK 룩업+JSON, Export) · **Collection**(저장쿼리 폴더 DnD 트리 + 컬렉션 Run-All=tx 게이트). rky 결함(문자열SQL/비트랜잭션/반쪽 히스토리)은 반복하지 않고 파라미터 바인드·tx·정상 히스토리로 이식.
 
 ---
@@ -91,7 +91,7 @@ React 19.2 · Electron 43 · Vite 7 · electron-vite 5 · @vitejs/plugin-react 5
 
 ## 2. 핵심 아키텍처 결정 (상세는 `db-service-ia.md`)
 - **dialect ⊂ Design**: 벤더는 설계 생성 시 결정되는 고정 속성. 화면·DDL은 그 방언 네이티브. 벤더 이동=포팅(새 설계).
-- **Version = 경계 객체(boundary object)** (결정 ③-a): 설계부 생산 ↔ 운영부 소비. 설계=렌즈(컨텍스트 바), 운영=환경 바인딩(Env가 운반). 관리 홈=Versions 모듈. 조율자=**Migration**(액션)+**Overview**(대시보드). L1 서비스로 안 올림.
+- **Version = 경계 객체(boundary object)** (결정 ③-a): 설계부 생산 ↔ 운영부 소비. 설계=렌즈('설계' 구획 뱃지 안 — 결정 C·D 로 두 번 옮겼다), 운영=환경 바인딩(Env가 운반). 관리 홈=Versions 모듈. 조율자=**Migration**(액션). L1 서비스로 안 올림.
 - **로컬 저장소 = 지상 진실**: 적용 버전 등은 Rockury 로컬 DB 기록, 실제 구조는 Reverse로 읽어 스냅샷 비교로 드리프트 판정.
 - **파괴적 변경은 항상 사람 승인 게이트**.
 
@@ -164,7 +164,7 @@ Phase 0/1/2a/2b/2c/3 완료 — 운영부 전 모듈(Environments/Console/Migrat
 - **Diagram** ✅ 완료(Console 실 ERD + Studio 가상 편집 ERD): `@xyflow/react` + dagre. Console(2e)은 introspection `TableDef[]` 읽기 전용, Studio 는 설계 테이블 편집(테이블/컬럼/FK 생성·수정·삭제, 드래그로 관계 연결). 위치는 스코프별(`connection_id` / `design:<id>`) 영속. 검색·필터·PNG/SVG 내보내기 공용. 순수 로직 테스트 동반.
 - **Migration 심화**: 드리프트 Backward 자동 버전화(현재 기준선 갱신만), conflict 머지 UX(겹치는 드리프트), Validation(반영 후 일치 검증).
 - **Console 심화**: 2c EXPLAIN 패널(`explainSql` 유틸 이식)·쿼리 히스토리·저장 쿼리·CodeMirror·결과 가상화 / 2b 타입별 셀 에디터·타임존·필터·정렬.
-- **설계부 잔여**: Studio Seed/Mocking/Documenting/Validation, Overview 대시보드, Reference — 아직 placeholder. (Diagram 은 완료)
+- **설계부 잔여**: Studio Mocking/Documenting/Validation, Reference — 아직 placeholder. (Diagram·Seed 는 완료 · Overview 는 결정 D 로 삭제)
 - **정리**: 2a CHECK 제약·인덱스 방향(pg/sqlite), pg/sqlite 쿼리·편집·반영 경로 e2e(현재 mysql 만).
 
 재개 시: `npm run db:up` → 위 중 택1 → 순수 로직 `*.test.ts` 동반 → typecheck·test·build·e2e.

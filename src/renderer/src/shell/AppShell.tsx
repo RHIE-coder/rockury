@@ -5,6 +5,7 @@ import { ModuleTabs } from './ModuleTabs'
 import { ViewTabs } from './ViewTabs'
 import { ContextualToolbar } from './ContextualToolbar'
 import { useActive } from '../nav/useNav'
+import { DevFeedback } from '../devtools/feedback'
 
 /**
  * Rockury 공통 레이아웃 셸.
@@ -46,6 +47,9 @@ export function AppShell() {
 
       {/* 서비스 전역 오버레이(모달 등) — 예: DB 의 새 설계 모달 */}
       {Overlay && <Overlay />}
+
+      {/* 개발용 화면 피드백 도구. 빌드 시 상수로 접혀 배포본·e2e 에는 아예 없다. */}
+      {import.meta.env.DEV && <DevFeedback />}
     </div>
   )
 }

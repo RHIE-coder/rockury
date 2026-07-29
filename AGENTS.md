@@ -6,12 +6,28 @@
 
 Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 · **화이트 테마 고정**.
 현재 집중: **DB 서비스**. 설계부(Studio/Versions)·운영부(Environments/Console/Migration) 모두
-로컬 SQLite(`node:sqlite`) + 실 드라이버(mysql2/pg/node:sqlite) 위에 구현됨. Diagram(Console 실 ERD·Studio 가상 편집 ERD)까지 완료. 남은 것은 선택적 향상(Studio Seed/Mocking/Documenting/Validation·Overview·Reference 등).
+로컬 SQLite(`node:sqlite`) + 실 드라이버(mysql2/pg/node:sqlite) 위에 구현됨. Diagram(Console 실 ERD·Studio 가상 편집 ERD)까지 완료. 남은 것은 선택적 향상(Studio Mocking/Documenting/Validation·Reference 등).
 설계 근거·결정 → `docs/before-steward-background/db-service-ia.md` · 로드맵/진행·재개점 → `docs/before-steward-background/ops-implementation-plan.md`.
 살아있는 기획/테스트 정본(steward) → `docs/spec/` · `docs/qa/`.
 
 ## 응답
 - **간결·핵심만.** 해결하면 뭘 했는지 1~2줄. 요청 없으면 설명 안 붙인다. (steward "쉬운 말" 규율 위에서.)
+
+## 📮 화면 피드백 받기 (에이전트가 먼저 볼 것)
+사용자가 **화면에 대해** 뭔가를 말하면(“여기 이상해”, “이 버튼 좀…”) 먼저
+**`.harness/feedback/` 에 최근 폴더가 있는지 본다.** 있으면 `note.md` 와 `shot.png` 를 읽는다 —
+스크린샷을 다시 떠 달라고 요청하지 말 것. 폴더 하나가 곧 제보 하나이며 안에 다 들어 있다:
+표시가 그려진 화면 그림 · 표시마다의 메모 · **그 자리의 DOM 요소와 React 컴포넌트 사슬**
+(= 소스 파일을 바로 특정하는 주소) · 그때 나 있던 콘솔 오류 · nav 경로 · 컨텍스트 선택값.
+폴더 이름은 `<날짜>-<시각>-<화면>` 이라 **가장 최근 것이 마지막 줄**이다. 읽고 고쳤으면 폴더를 지운다.
+
+남기는 쪽(사용자): **개발 서버(`npm run dev`)로 띄운 앱**에서 우측 가장자리 손잡이를 누르거나
+`⌘/Ctrl+Shift+F` → 문제가 보이는 곳에 동그라미 → 메모 → 보내기.
+구현은 `src/renderer/src/devtools/feedback/`(오버레이) + `src/main/ipc/devFeedback.ts`(저장) +
+`src/shared/devFeedback.ts`(순수 로직·테스트 대상). **빌드본에는 오버레이가 아예 없다** —
+e2e·화면 품질 게이트가 순회하며 찍는 대상에 도구가 섞이면 기준선이 흔들리기 때문이다.
+그래서 이 오버레이는 e2e 커버리지 밖이고, 대신 순수 로직을 단위 테스트로 덮는다.
+피드백 폴더는 gitignore 대상(쓰고 버리는 입력).
 
 ## 🌿 Git (MUST)
 - **`main` 은 통합 전용이다 — 직접 작업하지 않고 병합만 받는다.**
@@ -110,6 +126,13 @@ MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접�
    **pre-commit 훅이 `npm run e2e` 까지 자동 실행**한다(docker test-db 전제 — `npm run db:up`).
    건너뛰려면 `SKIP_E2E=1 git commit ...`(통째로) 또는 `E2E_ARGS=--no-db git commit ...`(test-db 스위트만).
    (steward gate 단계 + git pre-commit 훅이 강제.)
+   **작업 중에는 전체 e2e 를 돌리지 않는다 — 건드린 스위트만 `npm run e2e -- --only=<스위트,...>`,
+   전체 한 바퀴는 커밋 시점 훅의 몫이다.** (2026-07-30 사용자 지시. 커밋도 안 한 채 전체를
+   두 번 돌린 뒤 나온 말이다 — 훅이 어차피 커밋에서 돌리므로 손으로 전체를 돌릴 자리는 없다.)
+   **이제 러너가 막는다** — 범위(`--only=`) 없이 `npm run e2e` 를 부르면 거부하고(종료코드 2)
+   다음 수를 알려준다. 전체는 `--all`(훅이 붙인다) 또는 `E2E_FULL=1` 로만 열린다
+   (`e2e/lib/runScope.mjs` · `runScope.test.ts` 가 훅이 열쇠를 붙이는지까지 강제).
+   같은 지적이 두 번 나온 뒤에야 기계로 옮겼다 — 문서에 적어 두는 것만으로는 안 지켜졌다.
 3. 버그를 고치면 그 버그를 재현하는 **회귀 테스트를 먼저/함께** 추가.
 4. UI 컴포넌트/스토어 자체는 강제 대상 아님 — 그 안의 **순수 로직은 분리해 테스트**, 실 앱 흐름은 `e2e/` 로 덮는다.
 5. **"나중에 테스트 추가" 금지 — 로직과 테스트는 한 묶음.** 건너뛰려면 **먼저 사용자에게 명시적으로 확인**받는다.
@@ -169,8 +192,9 @@ MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접�
 
 ## 검증 인프라
 - 단위: `npm test`(vitest). watch: `npm run test:watch`.
-- e2e 스모크: `npm run build && npm run e2e`(Playwright `_electron`). 함정·패턴은 `e2e/README.md`.
-  옵션: `--no-db`(test-db 스위트 건너뜀) · `--only=<스위트,...>` · `--continue`(깨져도 계속) · `--list`.
+- e2e 스모크: `npm run build && npm run e2e -- --only=<스위트,...>`(Playwright `_electron`). 함정·패턴은 `e2e/README.md`.
+  옵션: `--only=<스위트,...>`(**작업 중엔 이것만**) · `--list` · `--no-db`(test-db 스위트 건너뜀) ·
+  `--continue`(깨져도 계속) · `--all`(전체 — 커밋 훅의 몫).
   결과 기록: `.harness/steward/artifacts/e2e-checkpoint.json`.
 - UI 품질: `npm run surface-verify`(전 화면 순회 · 기준선 `e2e/surface/baseline.json`).
 - 실 DB: `npm run db:up`(docker mysql:13306 / mariadb:13307 / postgresql:15432 + sqlite 파일).

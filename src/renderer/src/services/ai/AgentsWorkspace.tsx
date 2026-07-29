@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Check, Copy, Eye, EyeOff, KeyRound, Loader2, RotateCcw } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
+import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { cn } from '@renderer/lib/utils'
 import { useAiStore } from './store'
+import { ToolsPane } from './ToolsPane'
 
 /**
- * AI › Agents — 에이전트 연동 화면.
- * 연동 = 등록 명령 복사 1회(프로젝트 무관 전역). 앱은 사용자 프로젝트 파일을 건드리지 않는다.
- * 시그니처: 상단 ink 밴드 "에이전트 게이트웨이" — 살아있으면 초록 점이 깜빡인다.
+ * AI › Agents — 에이전트 연동 화면. **한 화면 두 칸**이다.
+ *
+ *   왼쪽 "연결"  — 등록 명령 복사 1회(프로젝트 무관 전역) + 접속 키 관리
+ *   오른쪽       — 이으면 무엇을 쓸 수 있나(에이전트에게 열어 둔 도구 목록)
+ *
+ * 도구 목록을 별도 모듈 탭으로 두지 않는 이유는 `ToolsPane` 머리주석 참고 —
+ * 요약하면 "Tools" 라는 탭 이름만으로는 MCP 도구인지 범용 유틸리티인지 갈리지 않는다.
+ *
+ * 앱은 사용자 프로젝트 파일을 건드리지 않는다.
+ * 시그니처: 왼쪽 칸 맨 위 ink 밴드 "에이전트 게이트웨이" — 살아있으면 초록 점이 깜빡인다.
  */
 
 /** 복사 버튼 — 누르면 2초간 "복사됨"으로 바뀐다. tone: ink 밴드(dark) | 카드(light). */
@@ -179,7 +188,8 @@ function TokenCard() {
   )
 }
 
-export function AgentsWorkspace() {
+/** 왼쪽 칸 — 잇는 일 전부(게이트웨이 상태 · 등록 명령 · 접속 키 · 연결 방법). */
+function ConnectPane() {
   const st = useAiStore()
 
   // 화면에 들어올 때마다 상태 재점검(+접속 키는 다시 마스킹).
@@ -191,34 +201,36 @@ export function AgentsWorkspace() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
-        <div className="flex flex-col">
-          <h2 className="text-[14px] font-bold text-fg">Agents</h2>
-          <p className="text-[12px] text-muted">
-            AI 에이전트(Claude Code·Codex)가 이 컴퓨터의 Rockury 를 도구로 쓰도록 연결합니다.
-          </p>
-        </div>
+      <div className="shrink-0 border-b border-line px-5 py-3">
+        <h2 className="text-[14px] font-bold text-fg">Agents</h2>
+        <p className="text-[12px] break-keep text-muted">
+          AI 에이전트(Claude Code·Codex)가 이 컴퓨터의 Rockury 를 도구로 쓰도록 연결합니다.
+        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-5 py-4">
-          {/* 시그니처 — 에이전트 게이트웨이 상태 밴드(ink). 살아있으면 초록 점 깜빡임. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl bg-ink px-4 py-3.5 text-white">
-            <span className="relative flex size-2.5 shrink-0">
-              {running && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70 motion-reduce:animate-none" />
-              )}
-              <span className={cn('relative inline-flex size-2.5 rounded-full', running ? 'bg-emerald-400' : 'bg-white/25')} />
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-[13px] font-semibold">
-                {running ? '에이전트 게이트웨이 열림' : '게이트웨이 준비 중'}
+        <div className="flex w-full flex-col gap-4 px-5 py-4">
+          {/* 시그니처 — 에이전트 게이트웨이 상태 밴드(ink). 살아있으면 초록 점 깜빡임.
+              주소와 버튼을 **한 줄에 같이 두지 않는다.** 한 줄이면 좁은 칸에서 버튼이 폭을
+              가져가 주소가 잘리는데, 주소는 잘리면 쓸모가 없다(surface 게이트 실측). */}
+          <div className="flex flex-col gap-3 rounded-xl bg-ink px-4 py-3.5 text-white">
+            <div className="flex items-start gap-3">
+              <span className="relative mt-1 flex size-2.5 shrink-0">
+                {running && (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/70 motion-reduce:animate-none" />
+                )}
+                <span className={cn('relative inline-flex size-2.5 rounded-full', running ? 'bg-emerald-400' : 'bg-white/25')} />
               </span>
-              <span className="truncate font-mono text-[11.5px] text-white/55">
-                {running ? st.status?.url : '앱이 자동으로 다시 열어요 — 잠시 후 새로고침하세요'}
-              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-[13px] font-semibold">
+                  {running ? '에이전트 게이트웨이 열림' : '게이트웨이 준비 중'}
+                </span>
+                <span className="font-mono text-[11.5px] break-all text-white/55">
+                  {running ? st.status?.url : '앱이 자동으로 다시 열어요 — 잠시 후 새로고침하세요'}
+                </span>
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <CopyCommand label="Claude Code 등록 복사" command={st.status?.claudeCommand ?? null} />
               <CopyCommand label="Codex 등록 복사" command={st.status?.codexCommand ?? null} />
             </div>
@@ -231,8 +243,9 @@ export function AgentsWorkspace() {
           {/* 접속 키 관리 */}
           <TokenCard />
 
-          {/* 연결 방법 — 등록은 1회, 프로젝트 무관 전역 */}
-          <div className="flex flex-col gap-2 rounded-xl border border-line bg-panel/50 p-4">
+          {/* 연결 방법 — 등록은 1회, 프로젝트 무관 전역.
+              칸 배경이 panel 이라 카드도 panel 계열이면 경계가 사라진다 → canvas 로 띄운다. */}
+          <div className="flex flex-col gap-2 rounded-xl border border-line bg-canvas p-4">
             <span className="text-[12px] font-semibold text-fg">연결 방법</span>
             <ol className="flex list-inside list-decimal flex-col gap-1 text-[12px] leading-relaxed break-keep text-muted">
               <li>위에서 쓰는 에이전트의 <b className="font-semibold text-fg">등록 복사</b> 버튼을 누르고, 터미널에 붙여넣어 실행해요(1회).</li>
@@ -256,5 +269,18 @@ export function AgentsWorkspace() {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * 두 칸을 좌우로 놓는다 — 왼쪽 "연결", 오른쪽 "열어 둔 도구".
+ * 칸 너비는 사람이 끌어 정하고 그 선택이 기억된다(autoSaveId) — 도구 목록을 넓게 보고 싶은
+ * 날과 연결만 손보는 날의 필요가 다르다.
+ */
+export function AgentsWorkspace() {
+  return (
+    <WorkspacePanels autoSaveId="ai-agents" defaultSize={40} sidebar={<ConnectPane />}>
+      <ToolsPane />
+    </WorkspacePanels>
   )
 }

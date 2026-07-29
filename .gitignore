@@ -149,6 +149,9 @@ scripts/test-db/data/
 # steward — 작업 산출물(바통·리포트·surface 증거)은 재생성되는 transient. 수용 기준선은 e2e/surface/baseline/<서비스>.json 로 커밋.
 .harness/steward/artifacts/
 
+# 개발용 화면 피드백(앱에서 동그라미 쳐 남긴 제보). 그때그때 쓰고 버리는 입력이라 커밋하지 않는다.
+.harness/feedback/
+
 # Claude Code 가 저장소 안에 만드는 임시 worktree (`claude --worktree`, 서브에이전트 격리).
 # 상설 병렬 개발 워크트리는 저장소 **밖**(../.worktrees/<repo>/<서비스>)에 둔다 — AGENTS.md.
 .claude/worktrees/

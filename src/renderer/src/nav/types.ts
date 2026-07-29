@@ -47,11 +47,26 @@ export interface ContextAction {
 /**
  * 서비스 전역에 떠 있는 컨텍스트 셀렉터(예: Design, Env).
  * nav 트리(모듈/뷰)와 달리 "지금 어느 대상을 기준으로 보는가"를 고르는 ambient 상태.
+ *
+ * 놓이는 자리는 `area` 가 가른다:
+ *   - `area` 없음 → 모듈 탭 위의 **컨텍스트 바**(기존 자리)
+ *   - `area` 있음 → 모듈 탭 줄의 **그 구획 뱃지 손잡이** 안. 뱃지가 자기 구획의 대상을 든다.
  */
 export interface ContextSelector {
   id: string
   label: string
   icon?: LucideIcon
+  /**
+   * 이 셀렉터가 붙는 구획. 지정하면 컨텍스트 바가 아니라 모듈 탭 줄의 구획 뱃지 안으로 들어가고,
+   * 그 구획 모듈을 보는 중이 아니어도 자리는 그대로 있다(소속을 자리로 말한다).
+   * 같은 area 를 여러 셀렉터가 쓰면 한 손잡이 안에 세로선으로 나뉘어 나란히 선다.
+   */
+  area?: ModuleArea
+  /**
+   * 셸이 값을 들지 않고 **서비스가 직접 그리는 칸**. 지정하면 options·actions·placeholder 는 무시된다.
+   * 값이 서비스 스토어에 있거나(예: DB 의 시점 렌즈) 드롭다운 모양이 일반 셀렉터와 다를 때 쓴다.
+   */
+  Render?: ComponentType
   /**
    * 정적 옵션. 옵션이 런타임 데이터라면 서비스 스토어가
    * `nav/contextOptions` 레지스트리로 밀어 넣는다(그 경우 이 배열은 대체됨).
@@ -100,7 +115,11 @@ export interface Service {
   label: string
   icon: LucideIcon
   modules: Module[]
-  /** 상단 컨텍스트 바에 렌더되는 ambient 셀렉터들(예: Design, Env). 없으면 바 자체가 생략된다. */
+  /**
+   * ambient 셀렉터들(예: Design, Env). `area` 가 없는 것만 상단 컨텍스트 바로 가고,
+   * `area` 가 붙은 것은 모듈 탭 줄의 구획 뱃지 손잡이로 간다. 바로 갈 것이 하나도 없으면
+   * 바 자체가 생략된다(DB 가 그 경우 — 셋 다 구획 뱃지로 갔다).
+   */
   context?: ContextSelector[]
   /** 서비스 전역 오버레이(모달 등) — 서비스가 활성인 동안 항상 마운트된다. */
   Overlay?: ComponentType

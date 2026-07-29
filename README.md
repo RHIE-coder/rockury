@@ -17,7 +17,8 @@ npm run dev        # Electron 개발 창 실행 (HMR)
 npm run typecheck  # main/renderer 타입 검사
 npm test           # 단위 테스트 (vitest — 순수 도메인 로직)
 npm run build      # 프로덕션 번들 (out/)
-npm run e2e        # 빌드된 앱 구동 스모크 (Playwright _electron). build 선행 필요
+npm run e2e -- --only=<스위트>   # 앱 구동 스모크 (Playwright _electron). build 선행 · 목록은 --list
+                   # 전체 한 바퀴는 커밋 훅의 몫 — 범위 없이 부르면 러너가 거부한다
 ```
 
 > 변경 게이트: `npm run typecheck && npm test && npm run build`. 순수 로직을 추가하면 옆에 `*.test.ts` 를 함께 둔다. e2e 함정·패턴은 `e2e/README.md`, 이후 작업 계획은 `docs/before-steward-background/ops-implementation-plan.md`.

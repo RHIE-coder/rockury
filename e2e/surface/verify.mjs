@@ -177,7 +177,7 @@ try {
   // 시드 설계 선택 — 설계부 화면들이 placeholder 가 아니라 실 콘텐츠로 렌더되도록.
   // (운영부는 docker 없이도 도는 게이트라 연결은 안 만든다 — 빈 상태 화면 그대로가 검사 대상.)
   try {
-    await page.locator('button:has-text("Design")').first().click()
+    await page.locator('[data-context-selector="design"]').first().click()
     await page.locator('[role="menuitem"]:has-text("commerce-core")').first().click()
     await page.waitForTimeout(300)
   } catch {

@@ -1,11 +1,11 @@
-// 스모크 스위트 — AI › Agents 화면 — 게이트웨이 상태(초록불) + 접속 키 마스킹/재발급
+// 스모크 스위트 — AI › Agents 한 화면 두 칸 — 왼쪽 연결(게이트웨이·접속 키), 오른쪽 열어 둔 도구
 // 실행: `npm run e2e`(e2e/smoke.mjs 러너가 순서대로 부른다). 단독 실행용 진입점은 없다.
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 
 export const meta = {
   name: '02-ai-agents',
   needsDb: false,
-  desc: 'AI › Agents 화면 — 게이트웨이 상태(초록불) + 접속 키 마스킹/재발급'
+  desc: 'AI › Agents 한 화면 두 칸 — 게이트웨이 상태·접속 키 재발급 + 열어 둔 도구 목록(별도 탭 없음)'
 }
 
 export async function run(ctx) {
@@ -57,11 +57,18 @@ export async function run(ctx) {
     await page.waitForTimeout(300)
   }
 
-  // ── AI › Tools 화면 — 에이전트에게 열어 둔 도구를 서비스별로 훑는다 ──
+  // ── 열어 둔 도구 목록 — Agents 화면의 **오른쪽 칸**(별도 모듈 탭이 아니다) ──
   {
     await click('[data-nav-service="ai"]')
-    await click('[data-nav-module="tools"]')
     await page.waitForSelector('[data-ai-tool]', { timeout: 5_000 })
+
+    // 회귀 핀 — "따로 네비를 만들지마"(2026-07-30 화면 피드백). 도구 목록이 다시 모듈 탭으로
+    // 갈라지면 여기서 걸린다. 탭 이름 "Tools" 만으로는 MCP 도구인지 범용 유틸리티인지 안 갈린다.
+    check('도구 목록에 별도 모듈 탭을 만들지 않는다',
+      (await page.locator('[data-nav-module="tools"]').count()) === 0)
+    // 연결(왼쪽)과 도구(오른쪽)가 같은 화면에 함께 있다 — "이으면 이걸 쓸 수 있다"가 한눈에.
+    check('연결과 도구 목록이 한 화면에 나란히 있다',
+      (await body()).includes('에이전트 게이트웨이') && (await body()).includes('에이전트에게 열어 둔 도구'))
 
     // 목록은 손으로 관리하지 않는다 — 메인의 도구 정의 + 노출 지도를 조립한 결과여야 한다.
     const catalog = await page.evaluate(() => window.rockury.ai.tools())
@@ -108,7 +115,7 @@ export async function run(ctx) {
   }
 
   // 설계 선택
-  await click('button:has-text("Design")')
+  await click('[data-context-selector="design"]')
   await click('[role="menuitem"]:has-text("commerce-core")')
   await page.waitForTimeout(300)
 

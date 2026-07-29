@@ -37,7 +37,7 @@ export async function run(ctx) {
   }
 
   // 시드 세트도 콜드 재시작을 넘긴다 — CASE-studio-044(선언·행 잔존).
-  await click('button:has-text("Design")')
+  await click('[data-context-selector="design"]')
   await click('[role="menuitem"]:has-text("commerce-core")')
   await page.waitForTimeout(300)
   await click('button:has-text("Studio")')

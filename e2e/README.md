@@ -6,10 +6,14 @@
 ## 실행
 ```bash
 npm run db:up                 # docker test-db(mysql/mariadb/postgresql) — 기본 전제
-npm run build && npm run e2e
+npm run build
+npm run e2e -- --only=03-studio-definition,04-studio-seed    # 건드린 스위트만
 ```
-옵션: `npm run e2e -- --no-db`(test-db 필요한 스위트 건너뜀) · `--only=03-studio-definition,04-studio-seed`
-· `--continue`(스위트가 깨져도 다음까지) · `--list`(스위트 목록).
+**범위 없이 `npm run e2e` 를 부르면 러너가 거부한다**(종료코드 2) — 전체 한 바퀴는 커밋 훅의 몫이다.
+전체가 정말 필요하면 `--all`(또는 `E2E_FULL=1`). 판정·문구는 `e2e/lib/runScope.mjs`.
+
+옵션: `--only=<스위트,...>` · `--list`(스위트 목록) · `--no-db`(test-db 필요한 스위트 건너뜀)
+· `--continue`(스위트가 깨져도 다음까지) · `--all`(전체).
 
 `src/`·`e2e/` 를 건드린 커밋은 **pre-commit 훅이 자동으로 e2e 를 돌린다**.
 빠져나갈 문: `SKIP_E2E=1 git commit ...`(통째로) · `E2E_ARGS=--no-db git commit ...`(test-db 스위트만).
