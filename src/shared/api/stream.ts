@@ -181,6 +181,8 @@ export interface StreamSessionSnapshot {
   environmentName: string
   baseVersion: string | null
   shape: InteractionShape
+  /** 세션을 열 때 넣은 호출 파라미터. **이미 가려진 채로** 들어온다. */
+  call: Record<string, string>
   transport: StreamTransport
   url: string
   /** **이미 가려진 채로** 들어온다 — 이 함수가 가리는 게 아니라, 가린 것만 받는다. */
@@ -209,6 +211,7 @@ export function sessionToRun(s: StreamSessionSnapshot): Omit<RunRecord, 'id' | '
     environmentName: s.environmentName,
     baseVersion: s.baseVersion,
     shape: s.shape,
+    call: s.call,
     status: streamRunStatus(s.outcome),
     httpStatus: null,
     durationMs: Number.isFinite(started) && Number.isFinite(ended) ? Math.max(0, ended - started) : 0,

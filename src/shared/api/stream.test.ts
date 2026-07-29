@@ -138,6 +138,7 @@ const snap = (over: Partial<StreamSessionSnapshot> = {}): StreamSessionSnapshot 
   environmentName: 'DEV',
   baseVersion: 'v1',
   shape: 'server-stream',
+  call: {},
   transport: 'sse',
   url: 'https://x.test/stream',
   headers: { Authorization: '••••' },

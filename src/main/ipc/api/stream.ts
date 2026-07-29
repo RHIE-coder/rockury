@@ -70,6 +70,8 @@ interface SessionContext {
   /** 가려진 것 — Run 에 그대로 들어간다. */
   maskedUrl: string
   maskedHeaders: Record<string, string>
+  /** 가린 호출 파라미터 — Run 에 그대로 들어간다. */
+  maskedCall: Record<string, string>
   baseVersion: string | null
   environmentName: string
   /** 보낼 메시지의 `{{변수}}` 를 실값으로 바꿀 때 쓰는 자리. */
@@ -110,6 +112,7 @@ export function registerApiStreamIpc(): void {
         environmentName: ctx.environmentName,
         baseVersion: ctx.baseVersion,
         shape: ctx.shape,
+        call: ctx.maskedCall,
         transport: ctx.transport,
         url: ctx.maskedUrl,
         headers: ctx.maskedHeaders,
@@ -164,6 +167,9 @@ export function registerApiStreamIpc(): void {
       shape: request.shape,
       maskedUrl: masked.url,
       maskedHeaders: masked.headers,
+      maskedCall: Object.fromEntries(
+        Object.entries(input.call).map(([k, v]) => [k, redactText(v, secrets)])
+      ),
       // 호출자가 안 정했으면 Draft 가 어느 버전과 똑같은지로 정한다(단발과 같은 규칙).
       baseVersion: input.baseVersion ?? versionMatchingDraft(spec.id),
       environmentName: env.name,

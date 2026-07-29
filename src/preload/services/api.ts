@@ -107,6 +107,8 @@ export const apiApi = {
 
     send: (input: SendRequestInput): Promise<SendRequestResult> =>
       ipcRenderer.invoke('api:send', input),
+    /** 도는 중인 전송 끊기. 없는 id 면 false — 이미 끝난 것을 끊었다고 말하지 않는다. */
+    cancelSend: (sendId: string): Promise<boolean> => ipcRenderer.invoke('api:cancelSend', sendId),
     listRuns: (specId: string, filter?: ListRunsFilter): Promise<RunRecord[]> =>
       ipcRenderer.invoke('api:listRuns', specId, filter),
     getRun: (specId: string, runId: string): Promise<RunRecord | null> =>

@@ -28,6 +28,8 @@ interface OpsState {
   /** 보관 상한으로 지워진 건수. 0 이 아니면 알린다(조용한 소실 금지). */
   pruned: number
   sending: boolean
+  /** 도는 중인 전송의 취소 손잡이. **응답을 기다리기 전에 화면이 알아야** 버튼을 누를 수 있다. */
+  sendId: string | null
   error: string | null
   /** 요청별 호출 파라미터 입력값. 요청을 옮겨도 값이 남아 있게 요청 이름으로 가른다. */
   callValues: Record<string, Record<string, string>>
@@ -38,8 +40,10 @@ interface OpsState {
   deleteEnvironment: (id: string) => Promise<string | null>
 
   setCallValue: (requestName: string, param: string, value: string) => void
+  setCallValues: (requestName: string, values: Record<string, string>) => void
   loadRuns: (specId: string | null) => Promise<void>
   send: (input: { specId: string; requestName: string; environmentId: string }) => Promise<void>
+  cancelSend: () => Promise<void>
   clearError: () => void
 }
 
@@ -49,6 +53,7 @@ export const useOpsStore = create<OpsState>()((set, get) => ({
   lastRun: null,
   pruned: 0,
   sending: false,
+  sendId: null,
   error: null,
   callValues: {},
 
@@ -111,6 +116,10 @@ export const useOpsStore = create<OpsState>()((set, get) => ({
       }
     })),
 
+  /** 값 묶음을 통째로 갈아 끼운다 — 재실행이 지나간 파라미터를 그대로 되살릴 때 쓴다. */
+  setCallValues: (requestName, values) =>
+    set((s) => ({ callValues: { ...s.callValues, [requestName]: { ...values } } })),
+
   loadRuns: async (specId) => {
     if (!specId) {
       set({ runs: [] })
@@ -120,12 +129,15 @@ export const useOpsStore = create<OpsState>()((set, get) => ({
   },
 
   send: async ({ specId, requestName, environmentId }) => {
-    set({ sending: true, error: null })
+    // id 를 먼저 정해 상태에 심는다 — 그래야 응답을 기다리는 동안 취소 버튼이 살아 있다.
+    const sendId = `snd_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+    set({ sending: true, sendId, error: null })
     try {
       const res: SendRequestResult = await window.rockury.apiOps.send({
         specId,
         requestName,
         environmentId,
+        sendId,
         call: get().callValues[requestName] ?? {}
       })
       set({ lastRun: res.run, pruned: res.pruned })
@@ -133,8 +145,18 @@ export const useOpsStore = create<OpsState>()((set, get) => ({
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) })
     } finally {
-      set({ sending: false })
+      set({ sending: false, sendId: null })
     }
+  },
+
+  /**
+   * 도는 중인 전송 끊기 (spec send.execute AC-3).
+   * 여기서 상태를 안 바꾼다 — 끊긴 결과는 `send` 가 **취소 기록**으로 정상 반환한다.
+   * 화면에서 미리 "취소됨"으로 바꾸면 실제 기록과 화면이 어긋난다.
+   */
+  cancelSend: async () => {
+    const id = get().sendId
+    if (id) await window.rockury.apiOps.cancelSend(id)
   },
 
   clearError: () => set({ error: null })

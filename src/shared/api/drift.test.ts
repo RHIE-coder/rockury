@@ -52,6 +52,7 @@ const run = (requestName: string, body: string, over: Partial<RunRecord> = {}): 
   environmentName: 'DEV',
   baseVersion: null,
   shape: 'unary',
+  call: {},
   status: 'ok',
   httpStatus: 200,
   durationMs: 1,

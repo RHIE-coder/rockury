@@ -7,6 +7,7 @@
 ## Scenario S1 — 파라미터 시그니처 (순수 로직)
 - **CASE-apistudio-001** 시그니처 검증: 필수 파라미터 누락 시 실행 차단 + 빠진 이름 목록 반환. 다 채워지면 통과. (signature AC-3) → `api/studio/signature.test.ts`
 - **CASE-apistudio-002** 타입 검증: `string`/`number`/`boolean`/`enum`/`object`/`array` 각각에 대해 맞는 값은 통과, 틀린 값은 어느 파라미터가 왜 틀렸는지 지목. (signature AC-1)
+- **CASE-apistudio-003b (enum 편집 화면)** `string → enum` 전환이 열려 있다 — 빈 허용 목록은 저장이 거부되므로 **타입과 허용 값을 함께 커밋**한다. 값을 치기 전에는 경고만 뜨고 저장 오류 배너가 번쩍이지 않는다. (requests.template AC-7) → `e2e/suites/20-api-gaps.mjs`
 - **CASE-apistudio-003** enum 경계: 허용 목록 안 값은 통과, 목록 밖 값은 거부하며 허용 목록을 함께 반환. 빈 허용 목록은 정의 오류로 거부. (signature AC-2)
 - **CASE-apistudio-004** 시그니처 직렬화: 파라미터 정의 → MCP 응답 형태(이름·타입·필수·기본값·설명)로 손실 없이 변환. (signature AC-5)
 
@@ -49,7 +50,7 @@
 ## Scenario S4 — 문서 생성 (순수 로직)
 - **CASE-apistudio-030** 자동 생성분: 정의 → 파라미터 표·응답 필드 표·상태 목록이 생성된다. 정의를 바꾸면 결과가 따라 바뀐다. (docs.generated AC-1)
 - **CASE-apistudio-031** 예시 출처 표기: 관측 기록이 있으면 실제 응답에서 만들고 `실제 관측`, 없으면 스키마에서 만들고 `스키마 생성` 으로 표기. 표기 없는 예시는 생성하지 않는다. (docs.generated AC-3)
-- **CASE-apistudio-032** markdown 렌더: 링크·코드블록·표가 미리보기에서 올바르게 렌더된다. (docs.authored AC-2)
+- **CASE-apistudio-032** markdown 렌더: 링크·코드블록·표가 미리보기에서 올바르게 렌더된다. 코드블록 **안쪽은 안 꾸민다**(예제가 망가지면 안 된다). **`javascript:`·`data:` 는 링크로 안 만들고 원문 그대로 글자로 남긴다.** 지원하지 않는 문법도 추측해서 꾸미지 않는다. 어디까지 그리는지 화면이 말한다. (docs.authored AC-2) → `shared/api/markdown.test.ts` · `e2e/suites/20-api-gaps.mjs`
 - **CASE-apistudio-033** MCP 동봉: 사람이 쓴 문서가 `api_get_spec` 응답에 그대로 실린다 — AI 가 구현할 때 주로 읽는 부분이다. (docs.authored AC-4)
 
 ## Scenario S5 — 버전 diff · 깨지는 변경 판정 (순수 로직)
@@ -70,13 +71,13 @@
 
 ## Scenario S6 — 트리·목록 (순수 로직)
 - **CASE-apistudio-050** 검색 필터: 이름·경로 부분일치(대소문자 무시), 빈 질의는 전체를 원래 순서로, 매칭 없으면 빈 결과. (tree AC-2)
-- **CASE-apistudio-051** 드롭 방지: 폴더를 자기 자손으로 옮기려 하면 거부. (tree AC-1)
+- **CASE-apistudio-051** 드롭 방지: 폴더를 자기 자손으로 옮기려 하면 거부하고 **이유를 준다**(조용히 무시하면 "왜 안 되지"가 된다). 경로 다듬기·조상 판정이 경계에서 안 헷갈린다(`a` 는 `a/b` 의 조상이지만 `ab` 의 조상은 아니다). 폴더를 옮기거나 이름을 바꾸면 자손 경로가 함께 따라간다. 검색 중에는 트리가 평평해진다. 요청을 폴더로 끌어다 놓으면 소속이 바뀐다. (tree AC-1) → `shared/api/tree.test.ts` · `e2e/suites/20-api-gaps.mjs`
 - **CASE-apistudio-052** 상태 표식 판정: 판정 기록이 없는 요청은 **미관측**이고 일치가 아니다. 일치/어긋남/미관측 세 상태가 섞이지 않는다. (tree AC-4 · `api-service.md` §4-①)
 
 ## Scenario S7 — 앱 구동 흐름 (e2e/suites/13-api-studio, CSS/text 로케이터만)
 - **CASE-apistudio-060** API 서비스 진입 → Studio › Requests 에 요청 트리와 인터페이스 배지(텍스트)가 렌더된다. (tree AC-1/AC-3)
 - **CASE-apistudio-061** 요청 선택 → 파라미터 시그니처 칸과 환경 값 칸이 **구획이 갈려** 보인다. (signature AC-4)
-- **CASE-apistudio-062** 본문에 `{{함수()}}` 입력 → **편집 중에** 치환 미리보기가 보인다. (template AC-6)
+- **CASE-apistudio-062** 본문에 `{{함수()}}` 입력 → **편집 중에** 치환 미리보기가 보인다. 비밀은 편집 화면에서도 가려진다. (template AC-6) → `e2e/suites/20-api-gaps.mjs`
 - **CASE-apistudio-063** OpenAPI 파일 가져오기 → 미리보기에 추가 항목이 뜨고, 수락 후 트리에 요청이 늘어난다. (import AC-1/AC-4)
 - **CASE-apistudio-064** Docs 뷰 → 자동 생성 표가 보이고 **편집이 막혀 있다**. 사람 작성 markdown 칸은 편집된다. (docs.generated AC-2 · docs.authored AC-1/AC-3)
 - **CASE-apistudio-065** 깨지는 변경을 만든 뒤 버전 컷 → **승인 게이트**가 뜨고 무엇이 왜 깨지는지 항목별로 보인다. 취소하면 컷이 안 된다. (versions.diff AC-6 · `api-service.md` §4-⑧)
@@ -85,9 +86,6 @@
 ## 미구현 · 미검증 (조용한 통과 금지)
 > 아래는 **정의는 있으나 아직 만들지 않은 것**이다. 케이스가 적혀 있다고 통과한 것이 아니다.
 - **Mocking** — 후속 범위다. 케이스 없음(유일한 미커버 인수조건). 구현 시 이 절에서 승격한다.
-- **요청 트리 폴더 계층·끌어 옮기기(051)** — 지금은 평평한 목록이다.
-- **응답 모양 손편집(076·078)** — 지금은 가져오기·판정 흡수로만 채워진다.
-- **enum 허용 값 편집(003 의 화면 쪽)** — 저장·검증은 되는데 편집 UI 가 없다.
-- **편집 중 치환 미리보기(062)** — Runner › Send 에는 있고 Studio 편집기에는 없다.
-- **markdown 미리보기(032)** — 지금은 원문 textarea 만.
+- **폴더 이름 바꾸기·폴더째 끌어 옮기기** — 순수 로직(`renameFolder`·`moveFolder`)은 있고
+  테스트로 덮였지만 **화면 손잡이가 없다**. 지금은 요청의 폴더 칸을 고쳐서 같은 일을 한다.
 - **인터페이스별 shape** — SOAP(후순위)는 케이스 없음.

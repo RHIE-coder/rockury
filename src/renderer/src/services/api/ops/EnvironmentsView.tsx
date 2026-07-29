@@ -5,7 +5,8 @@ import { Input } from '@renderer/ui/input'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { cn } from '@renderer/lib/utils'
 import { useNav } from '@renderer/nav/useNav'
-import type { EnvValue, EnvironmentDef } from '@shared/api/types'
+import { envHealth } from '@shared/api/envHealth'
+import type { EnvValue, EnvironmentDef, RequestDef } from '@shared/api/types'
 import { useOpsStore, useOpsSync } from './store'
 import { useApiStore } from '../store'
 
@@ -36,16 +37,35 @@ export function OpsGuardBand() {
 
 function ValueRow({
   v,
+  health,
   onChange,
   onRemove
 }: {
   v: EnvValue
+  /** 고아·구멍 판정 결과. 정상이면 null — 정상인 것을 나열하면 목록이 시끄러워 아무도 안 읽는다. */
+  health: 'orphan' | 'hole' | null
   onChange: (next: EnvValue) => void
   onRemove: () => void
 }) {
   const [reveal, setReveal] = useState(false)
   return (
     <div className="flex items-center gap-1.5" data-api-env-value={v.name}>
+      {health && (
+        <span
+          data-api-env-health={health}
+          title={
+            health === 'orphan'
+              ? '어느 요청도 이 값을 참조하지 않습니다 — 지워도 되는지 확인해 보세요.'
+              : '요청이 참조하는데 값이 비었습니다 — 이대로면 실행이 막힙니다.'
+          }
+          className={cn(
+            'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+            health === 'orphan' ? 'bg-panel text-muted' : 'bg-danger-soft text-danger'
+          )}
+        >
+          {health === 'orphan' ? '고아' : '구멍'}
+        </span>
+      )}
       <Input
         value={v.name}
         placeholder="이름"
@@ -88,7 +108,7 @@ function ValueRow({
   )
 }
 
-function EnvironmentCard({ env }: { env: EnvironmentDef }) {
+function EnvironmentCard({ env, requests }: { env: EnvironmentDef; requests: RequestDef[] }) {
   const save = useOpsStore((s) => s.saveEnvironment)
   const duplicate = useOpsStore((s) => s.duplicateEnvironment)
   const remove = useOpsStore((s) => s.deleteEnvironment)
@@ -96,6 +116,12 @@ function EnvironmentCard({ env }: { env: EnvironmentDef }) {
   const setContextValue = useNav((s) => s.setContextValue)
   const [draft, setDraft] = useState(env)
   const dirty = JSON.stringify(draft) !== JSON.stringify(env)
+
+  // 고아·구멍은 **저장된 값이 아니라 지금 편집 중인 값** 기준으로 본다 — 값을 지우자마자
+  // 구멍이 뜨는 게 저장 뒤에 뜨는 것보다 낫다(spec values AC-4).
+  const health = envHealth(requests, draft.values)
+  const healthOf = (name: string): 'orphan' | 'hole' | null =>
+    health.orphans.includes(name) ? 'orphan' : health.holes.includes(name) ? 'hole' : null
 
   const usedNames = new Set(draft.values.map((v) => v.name))
   const addValue = (): void => {
@@ -140,6 +166,7 @@ function EnvironmentCard({ env }: { env: EnvironmentDef }) {
           <ValueRow
             key={i}
             v={v}
+            health={healthOf(v.name)}
             onChange={(next) => setDraft({ ...draft, values: draft.values.map((x, j) => (j === i ? next : x)) })}
             onRemove={() => setDraft({ ...draft, values: draft.values.filter((_, j) => j !== i) })}
           />
@@ -147,6 +174,16 @@ function EnvironmentCard({ env }: { env: EnvironmentDef }) {
         <Button variant="ghost" size="sm" className="h-7 self-start text-[12px]" data-api-add-env-value onClick={addValue}>
           <Plus className="size-3.5" /> 환경 값
         </Button>
+        {(health.orphans.length > 0 || health.holes.length > 0) && (
+          <p className="text-[11px] text-muted" data-api-env-health-summary>
+            {health.holes.length > 0 && (
+              <span className="text-danger">
+                구멍 {health.holes.length}개 — 요청이 쓰는데 값이 비었습니다.{' '}
+              </span>
+            )}
+            {health.orphans.length > 0 && <>고아 {health.orphans.length}개 — 어느 요청도 안 씁니다.</>}
+          </p>
+        )}
       </div>
 
       <footer className="flex items-center gap-1.5">
@@ -254,7 +291,7 @@ export function EnvironmentsView() {
             아직 환경이 없어요. DEV·STG·PROD 처럼 보낼 곳을 만들면 요청을 쏠 수 있습니다.
           </p>
         ) : (
-          envs.map((e) => <EnvironmentCard key={e.id} env={e} />)
+          envs.map((e) => <EnvironmentCard key={e.id} env={e} requests={spec.requests} />)
         )}
       </div>
     </div>

@@ -141,6 +141,7 @@ interface RunRow {
   environment_name: string
   base_version: string | null
   shape: string | null
+  call_json: string | null
   status: string
   http_status: number | null
   duration_ms: number
@@ -161,8 +162,8 @@ interface RunRow {
  * IPC 를 다 처리하므로 DB·Infra 화면까지 같이 선다). 목록 화면은 본문을 안 쓴다.
  */
 const LIST_COLUMNS =
-  'id, spec_id, request_name, environment_id, environment_name, base_version, shape, status, ' +
-  'http_status, duration_ms, created_at, request_json, response_json, message_count, error'
+  'id, spec_id, request_name, environment_id, environment_name, base_version, shape, call_json, ' +
+  'status, http_status, duration_ms, created_at, request_json, response_json, message_count, error'
 
 const toRun = (r: RunRow): RunRecord => ({
   id: r.id,
@@ -173,6 +174,9 @@ const toRun = (r: RunRow): RunRecord => ({
   baseVersion: r.base_version,
   // 스트림 이전에 쌓인 기록은 전부 단발이다(칸이 생기기 전이라 null 일 수 있다).
   shape: (r.shape ?? 'unary') as InteractionShape,
+  // 이 칸이 생기기 전에 쌓인 기록은 파라미터를 모른다 — 빈 묶음이 "안 넣었다"가 아니라
+  // "기록에 없다" 는 뜻인데, 둘을 가르려면 칸을 하나 더 늘려야 해서 여기서는 합쳤다.
+  call: JSON.parse(r.call_json ?? '{}') as Record<string, string>,
   status: r.status as RunStatus,
   httpStatus: r.http_status,
   durationMs: r.duration_ms,
@@ -203,7 +207,7 @@ export function appendRun(input: AppendRunInput): RunRecord {
   }
   getDb()
     .prepare(
-      'INSERT INTO api_runs (id, spec_id, request_name, environment_id, environment_name, base_version, shape, status, http_status, duration_ms, created_at, request_json, response_json, messages_json, message_count, error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      'INSERT INTO api_runs (id, spec_id, request_name, environment_id, environment_name, base_version, shape, call_json, status, http_status, duration_ms, created_at, request_json, response_json, messages_json, message_count, error) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     )
     .run(
       record.id,
@@ -213,6 +217,7 @@ export function appendRun(input: AppendRunInput): RunRecord {
       record.environmentName,
       record.baseVersion,
       record.shape,
+      JSON.stringify(record.call),
       record.status,
       record.httpStatus,
       record.durationMs,

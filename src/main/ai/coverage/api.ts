@@ -39,6 +39,9 @@ export const apiCoverage: ServiceCoverage = {
     'api:send':
       '실행은 사람이 앱에서만 — AI 는 터미널에서 더 잘 쏘고, 실행을 안 주면 자격증명 문제 자체가 ' +
       '생기지 않는다(spec api-mcp tools.absent AC-1).',
+    'api:cancelSend':
+      '실행의 짝이다 — 열 수 없는 것을 끊게 할 이유가 없고, 사람이 보고 있는 전송을 남이 ' +
+      '끊는 도구는 두지 않는다.',
     'api:openStream':
       '실행이다 — `api:send` 와 같은 선. 게다가 세션은 오래 살아서, 도구로 열면 누가 언제 ' +
       '닫는지가 흐려진다(앱을 닫아도 남는 소켓이 생긴다). 쌓인 세션 기록은 api_get_runs 로 읽힌다.',

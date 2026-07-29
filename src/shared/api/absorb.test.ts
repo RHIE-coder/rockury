@@ -37,6 +37,7 @@ const run = (requestName: string, body: string, status = 200, createdAt = '2026-
   environmentName: 'DEV',
   baseVersion: null,
   shape: 'unary',
+  call: {},
   messages: null,
   messageCount: null,
   status: 'ok',

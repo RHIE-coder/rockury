@@ -306,6 +306,12 @@ export interface RunRecord {
   /** 어느 버전 기준의 관측인가. Draft 상태면 null — 판정이 버전을 가르는 데 쓴다. */
   baseVersion: string | null
   /**
+   * 그때 넣은 호출 파라미터 (spec send.observe AC-1 — 기록에 **파라미터**가 들어간다).
+   * 이게 없으면 "같은 파라미터로 다시 실행"이 불가능하다 — 조립된 주소에서 되돌릴 수 없다
+   * (치환은 한 방향이다). 비밀 표식 값이 섞였으면 **가려진 채로** 들어온다.
+   */
+  call: Record<string, string>
+  /**
    * 어떤 상호작용을 관측한 기록인가. **선택 필드가 아니다** — 단발 응답과 스트림 세션은
    * 관측 내용의 모양 자체가 달라서, 이 칸이 없으면 판정이 메시지 목록을 응답 본문으로
    * 오독한다(spec api-contract drift.observed AC-6).

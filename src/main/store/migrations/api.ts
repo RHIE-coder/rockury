@@ -83,6 +83,7 @@ export const apiMigration: ServiceMigration = {
       environment_name TEXT NOT NULL,
       base_version   TEXT,
       shape          TEXT NOT NULL DEFAULT 'unary',
+      call_json      TEXT NOT NULL DEFAULT '{}',
       status         TEXT NOT NULL,
       http_status    INTEGER,
       duration_ms    INTEGER NOT NULL DEFAULT 0,
@@ -122,5 +123,8 @@ export const apiMigration: ServiceMigration = {
     // 목록 조회가 메시지 본문을 안 읽으려면 건수만 따로 있어야 한다(본문 5,000건을 매번
     // 파싱하면 메인 프로세스가 초 단위로 멈춘다 — 실측).
     addColumnIfMissing(d, 'api_runs', 'message_count', 'INTEGER')
+    // 그때 넣은 호출 파라미터. 없으면 "같은 파라미터로 다시 실행" 을 못 한다 —
+    // 조립된 주소에서는 되돌릴 수 없다(치환은 한 방향이다).
+    addColumnIfMissing(d, 'api_runs', 'call_json', "TEXT NOT NULL DEFAULT '{}'")
   }
 }

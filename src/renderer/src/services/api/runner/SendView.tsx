@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Ban, Copy, Send } from 'lucide-react'
+import { AlertTriangle, Ban, Copy, Send, XCircle } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
@@ -35,6 +35,7 @@ export function SendView() {
   const setCallValue = useOpsStore((s) => s.setCallValue)
   const send = useOpsStore((s) => s.send)
   const sending = useOpsStore((s) => s.sending)
+  const cancelSend = useOpsStore((s) => s.cancelSend)
   const lastRun = useOpsStore((s) => s.lastRun)
   const pruned = useOpsStore((s) => s.pruned)
   const error = useOpsStore((s) => s.error)
@@ -220,16 +221,33 @@ export function SendView() {
                       취소
                     </Button>
                   </>
+                ) : sending ? (
+                  /* 보내는 중에는 **끊을 수 있어야 한다** — 안 그러면 타임아웃(30초)까지 갇힌다.
+                     끊긴 결과는 실패가 아니라 `취소` 기록으로 남는다(execute AC-3). */
+                  <>
+                    <Button size="sm" className="h-7 text-[12px]" disabled data-api-send>
+                      <Send className="size-3.5" /> 보내는 중…
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-7 text-[12px]"
+                      data-api-cancel-send
+                      onClick={() => void cancelSend()}
+                    >
+                      <XCircle className="size-3.5" /> 취소
+                    </Button>
+                  </>
                 ) : (
                   <Button
                     size="sm"
                     className="h-7 text-[12px]"
-                    disabled={!preview.canSend || sending}
+                    disabled={!preview.canSend}
                     data-api-send
                     title={preview.canSend ? undefined : preview.blocking.map((b) => b.message).join('\n')}
                     onClick={() => (env?.production ? setConfirming(true) : doSend())}
                   >
-                    <Send className="size-3.5" /> {sending ? '보내는 중…' : '보내기'}
+                    <Send className="size-3.5" /> 보내기
                   </Button>
                 )}
                 <Button

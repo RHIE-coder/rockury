@@ -210,6 +210,8 @@ export function receivedToRun(input: InboxRunInput): Omit<RunRecord, 'id' | 'cre
     environmentName: input.environmentName,
     baseVersion: input.baseVersion,
     shape: 'inbound',
+    // 받는 쪽은 **우리가 넣은 파라미터가 없다** — 남이 보낸 것이다. 빈 묶음이 사실이다.
+    call: {},
     // 받았다는 사실 자체가 관측이다 — 대조가 어긋났어도 수신은 성공이다(둘은 다른 축이다).
     status: 'ok',
     httpStatus: r.respondedWith,
