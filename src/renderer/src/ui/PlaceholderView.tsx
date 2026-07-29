@@ -30,8 +30,12 @@ export function PlaceholderView({
           <Icon size={24} strokeWidth={1.8} />
         </div>
       )}
+      {/*
+        칩 배경이 `panel-strong` 이면 `muted` 글자가 **4.35:1** 로 AA 에 못 미친다(실측).
+        테두리로 모양을 유지하고 배경만 캔버스로 내려 5.06:1 을 만든다.
+      */}
       {depth && (
-        <span className="rounded-full bg-panel-strong px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-muted">
+        <span className="rounded-full border border-line bg-canvas px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-muted">
           {depth}
         </span>
       )}

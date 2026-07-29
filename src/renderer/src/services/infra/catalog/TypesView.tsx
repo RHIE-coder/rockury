@@ -83,7 +83,7 @@ export function TypesView(): React.JSX.Element {
           onChange={(e) => setQ(e.target.value)}
           data-types-search
         />
-        <p className="text-xs text-muted-foreground" data-types-count>
+        <p className="text-xs text-muted" data-types-count>
           {rows.length}개 · 탐침 있음 {probeCount}개 · 프리셋 {rows.length - probeCount}개
         </p>
         <Button
@@ -99,11 +99,11 @@ export function TypesView(): React.JSX.Element {
 
       {creating && (
         <div className="mb-3 flex flex-wrap items-end gap-2 rounded-md border border-border p-3" data-preset-form>
-          <p className="w-full text-[11px] text-muted-foreground">
+          <p className="w-full text-[11px] text-muted">
             <strong>모양만 있는 종류</strong>를 만듭니다 — 탐침(읽어 오는 법)은 없어도 됩니다. 그림에 먼저
             올리고, 나중에 읽어 올 수 있게 되면 <strong>승격</strong>으로 탐침을 붙이면 됩니다.
           </p>
-          <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+          <label className="flex flex-col gap-1 text-[11px] text-muted">
             종류 id
             <Input
               className="h-8 w-48 font-mono text-[11px]"
@@ -113,7 +113,7 @@ export function TypesView(): React.JSX.Element {
               data-preset-id
             />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+          <label className="flex flex-col gap-1 text-[11px] text-muted">
             표시 이름
             <Input
               className="h-8 w-40 text-[11px]"
@@ -123,7 +123,7 @@ export function TypesView(): React.JSX.Element {
               data-preset-label
             />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+          <label className="flex flex-col gap-1 text-[11px] text-muted">
             아이콘(선택)
             <Input
               className="h-8 w-44 font-mono text-[11px]"
@@ -133,7 +133,7 @@ export function TypesView(): React.JSX.Element {
               data-preset-icon
             />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+          <label className="flex flex-col gap-1 text-[11px] text-muted">
             어느 카탈로그에
             <select
               className="h-8 rounded-md border border-input bg-background px-1.5 text-xs"
@@ -158,7 +158,7 @@ export function TypesView(): React.JSX.Element {
               data-preset-provider-id
             />
           )}
-          <label className="flex items-center gap-1.5 pb-1.5 text-[11px] text-muted-foreground">
+          <label className="flex items-center gap-1.5 pb-1.5 text-[11px] text-muted">
             <input
               type="checkbox"
               checked={form.box}
@@ -171,7 +171,7 @@ export function TypesView(): React.JSX.Element {
             만들기
           </Button>
           {msg && (
-            <p className="w-full text-[11px] text-muted-foreground" data-preset-msg>
+            <p className="w-full text-[11px] text-muted" data-preset-msg>
               {msg}
             </p>
           )}
@@ -214,8 +214,8 @@ export function TypesView(): React.JSX.Element {
                     {r.type.label}
                   </span>
                 </td>
-                <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">{r.type.id}</td>
-                <td className="px-3 py-1.5 text-muted-foreground">
+                <td className="px-3 py-1.5 font-mono text-[11px] text-muted">{r.type.id}</td>
+                <td className="px-3 py-1.5 text-muted">
                   {r.type.canContain?.includes('*')
                     ? '무엇이든 담음'
                     : (r.type.canNestIn?.join(' · ') ?? '최상위')}
@@ -225,7 +225,7 @@ export function TypesView(): React.JSX.Element {
                     <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-800">탐침 있음</span>
                   ) : (
                     <span className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground">모양만(프리셋)</span>
+                      <span className="text-muted">모양만(프리셋)</span>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -243,7 +243,7 @@ export function TypesView(): React.JSX.Element {
                   <span className={cn('rounded px-1.5 py-0.5 text-[10px]', sourceTone[r.source])}>
                     {SOURCE_LABEL[r.source]}
                   </span>
-                  <span className="ml-1.5 text-[10px] text-muted-foreground">
+                  <span className="ml-1.5 text-[10px] text-muted">
                     {r.provider} {r.version}
                   </span>
                 </td>
@@ -251,7 +251,7 @@ export function TypesView(): React.JSX.Element {
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && <p className="p-4 text-xs text-muted-foreground">찾는 종류가 없습니다.</p>}
+        {rows.length === 0 && <p className="p-4 text-xs text-muted">찾는 종류가 없습니다.</p>}
       </div>
     </div>
   )

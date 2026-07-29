@@ -44,8 +44,10 @@ export function WorkspacePanels({
 
       <PanelResizeHandle
         className={cx(
-          'w-px bg-line outline-none transition-colors',
-          'hover:bg-accent data-[resize-handle-state=drag]:bg-accent'
+          'w-px bg-line transition-colors',
+          // Tab 으로 닿는 요소인데 표시가 없으면 키보드 사용자는 지금 어디인지 모른다
+          // (WCAG 2.4.7). 마우스 hover 와 같은 강조를 포커스에도 준다.
+          'hover:bg-accent focus-visible:bg-accent focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent data-[resize-handle-state=drag]:bg-accent'
         )}
       />
 

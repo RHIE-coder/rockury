@@ -45,7 +45,7 @@ export function InfraNode({ data, selected }: NodeProps): React.JSX.Element {
       )}
       style={d.color && !selected ? { borderColor: `${d.color}66` } : undefined}
     >
-      <Handle type="target" position={Position.Left} className="!size-2 !border-0 !bg-muted-foreground" />
+      <Handle type="target" position={Position.Left} className="!size-2 !border-0 !bg-muted" />
       <div
         className={cn(
           'flex items-center gap-1.5 px-2',
@@ -83,7 +83,7 @@ export function InfraNode({ data, selected }: NodeProps): React.JSX.Element {
           </span>
         )}
       </div>
-      <Handle type="source" position={Position.Right} className="!size-2 !border-0 !bg-muted-foreground" />
+      <Handle type="source" position={Position.Right} className="!size-2 !border-0 !bg-muted" />
     </div>
   )
 }

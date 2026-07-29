@@ -211,7 +211,7 @@ function DiagramInner(): React.JSX.Element {
 
   if (!store.activeDesignId) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted">
         <p>아직 설계본이 없습니다.</p>
         <Button onClick={() => void store.createDesign('새 아키텍처')} data-infra-create-design>
           새 설계본 만들기
@@ -288,7 +288,7 @@ function DiagramInner(): React.JSX.Element {
                 data-infra-search-results
               >
                 {hits.length === 0 && (
-                  <p className="px-2 py-1.5 text-[11px] text-muted-foreground">찾는 노드가 없습니다.</p>
+                  <p className="px-2 py-1.5 text-[11px] text-muted">찾는 노드가 없습니다.</p>
                 )}
                 {hits.map((n) => {
                   const t = n.typeId ? types[n.typeId] : undefined
@@ -304,7 +304,7 @@ function DiagramInner(): React.JSX.Element {
                         <InfraIcon icon={t?.icon ?? 'phosphor:cube'} size={13} />
                       </span>
                       <span className="min-w-0 flex-1 truncate">{n.name}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                      <span className="shrink-0 text-[10px] text-muted">
                         {t?.label ?? '맨 노드'}
                       </span>
                     </button>
@@ -367,7 +367,7 @@ function DiagramInner(): React.JSX.Element {
 
           {showVerdicts && !store.snapshot && (
             <Panel position="bottom-center">
-              <div className="rounded-md border border-border bg-background px-3 py-1.5 text-[11px] text-muted-foreground">
+              <div className="rounded-md border border-border bg-background px-3 py-1.5 text-[11px] text-muted">
                 실물을 아직 읽지 않았습니다 — <strong>Live › 실물 지도</strong>에서 새로고침하면 배지가 채워집니다.
               </div>
             </Panel>
@@ -394,12 +394,12 @@ function DiagramInner(): React.JSX.Element {
             onChange={(e) => store.renameNode(selected.id, e.target.value)}
             data-infra-node-name
           />
-          <p className="font-mono text-[10px] text-muted-foreground">
+          <p className="font-mono text-[10px] text-muted">
             {selected.typeId ?? '(종류 없음)'}
             {selected.catalogVersion ? ` · 카탈로그 ${selected.catalogVersion}` : ''}
           </p>
 
-          <label className="mt-2 flex flex-col gap-1 text-[11px] text-muted-foreground">
+          <label className="mt-2 flex flex-col gap-1 text-[11px] text-muted">
             담길 부모
             <select
               className="h-8 rounded-md border border-input bg-background px-1.5 text-xs"

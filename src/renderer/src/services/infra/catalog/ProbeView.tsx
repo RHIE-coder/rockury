@@ -191,7 +191,7 @@ export function ProbeView(): React.JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4" data-infra-view="probe">
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label className="flex flex-col gap-1 text-xs text-muted">
           공급자 연결(선택)
           <select
             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
@@ -206,11 +206,11 @@ export function ProbeView(): React.JSX.Element {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label className="flex flex-col gap-1 text-xs text-muted">
           명령
           <Input className="w-40 font-mono" value={cmd} onChange={(e) => setCmd(e.target.value)} />
         </label>
-        <label className="flex min-w-[280px] flex-1 flex-col gap-1 text-xs text-muted-foreground">
+        <label className="flex min-w-[280px] flex-1 flex-col gap-1 text-xs text-muted">
           인자
           <Input
             className="font-mono"
@@ -219,7 +219,7 @@ export function ProbeView(): React.JSX.Element {
             placeholder="ec2 describe-instances --output json"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <label className="flex flex-col gap-1 text-xs text-muted">
           응답 형식
           <select
             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
@@ -288,9 +288,9 @@ export function ProbeView(): React.JSX.Element {
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs font-medium">{s.label}</span>
-                <span className="text-[10px] text-muted-foreground">{s.hint}</span>
+                <span className="text-[10px] text-muted">{s.hint}</span>
               </div>
-              <div className="truncate font-mono text-[11px] text-muted-foreground">
+              <div className="truncate font-mono text-[11px] text-muted">
                 {exprs[s.key] || '— 클릭해서 고르세요 —'}
               </div>
             </button>
@@ -313,7 +313,7 @@ export function ProbeView(): React.JSX.Element {
                 이므로 이미 그려 둔 노드는 남습니다.
               </p>
             )}
-            <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+            <label className="flex flex-col gap-1 text-[11px] text-muted">
               어느 카탈로그에
               <select
                 className="h-8 rounded-md border border-input bg-background px-1.5 text-xs"
@@ -357,7 +357,7 @@ export function ProbeView(): React.JSX.Element {
               저장
             </Button>
             {saveMsg && (
-              <p className="text-[11px] whitespace-pre-wrap text-muted-foreground" data-probe-save-msg>
+              <p className="text-[11px] whitespace-pre-wrap text-muted" data-probe-save-msg>
                 {saveMsg}
               </p>
             )}
@@ -367,7 +367,7 @@ export function ProbeView(): React.JSX.Element {
         <section className="flex w-[280px] shrink-0 flex-col rounded-md border border-border">
           <header className="border-b border-border px-3 py-2 text-xs font-medium">미리보기</header>
           <div className="min-h-0 flex-1 overflow-auto p-2" data-probe-preview>
-            {!result && <p className="text-xs text-muted-foreground">목록과 id 를 고르면 여기 뜹니다.</p>}
+            {!result && <p className="text-xs text-muted">목록과 id 를 고르면 여기 뜹니다.</p>}
             {result?.error && <p className="text-xs text-destructive">{result.error}</p>}
             {result && !result.error && (
               <>

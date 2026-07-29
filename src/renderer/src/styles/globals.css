@@ -30,8 +30,20 @@
   /* 시맨틱 */
   --color-success: #3f9277;
   --color-success-soft: #e6f2ed;
-  --color-warning: #bf7326;
+  /*
+   * 예전 `#bf7326` 은 **흰 바탕에서도 최대 3.69:1** 이라 어떤 배경을 깔아도 본문 글자로는
+   * AA 를 넘을 수 없었다. 지금 값은 아래 `warning-soft` 위 **4.81:1**, 흰 바탕 5.36:1.
+   */
+  --color-warning: #9a5c1c;
+  /*
+   * `bg-warning-soft` 를 db 가 세 곳에서 쓰는데 **선언이 없었다** — Tailwind v4 는 미선언
+   * 키의 유틸리티를 안 만들어서 그 자리가 전부 투명하게 그려지고 있었다(api 의 `danger-soft`
+   * 와 같은 사고). `tokens.test.ts` 가 이제 이 짝을 강제한다.
+   */
+  --color-warning-soft: #fdf1e3;
   --color-danger: #b0524c;
+  /* 위험 채움. `--color-danger` 를 얹었을 때 4.61:1(AA 통과). */
+  --color-danger-soft: #fdf2f1;
   --color-info: #3f72a8;
   --color-info-soft: #e9f0f8;
 

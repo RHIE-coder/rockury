@@ -51,7 +51,7 @@ export function LiveView(): React.JSX.Element {
 
   if (!provider) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-muted">
         먼저 Catalog › 공급자에서 연결을 만드세요.
       </div>
     )
@@ -89,10 +89,10 @@ export function LiveView(): React.JSX.Element {
         >
           {store.syncing ? '읽는 중…' : '새로고침'}
         </Button>
-        <span className="text-xs text-muted-foreground" data-live-taken-at>
+        <span className="text-xs text-muted" data-live-taken-at>
           {snap ? agoLabel(snap.takenAt) : '아직 읽지 않았습니다'}
         </span>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-[11px] text-muted">
           자동 갱신은 꺼져 있습니다 — 호출 제한·요금 때문에 직접 누를 때만 읽습니다.
         </span>
       </div>
@@ -152,16 +152,16 @@ export function LiveView(): React.JSX.Element {
                     </span>
                   </td>
                   <td className="px-3 py-1.5">{r.name}</td>
-                  <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">{r.externalId}</td>
+                  <td className="px-3 py-1.5 font-mono text-[11px] text-muted">{r.externalId}</td>
                   <td className="px-3 py-1.5">
                     <span className={cn('rounded px-1.5 py-0.5 text-[10px]', tone[r.status])}>
                       {STATUS_LABEL[r.status]}
                     </span>
                     {r.rawStatus && (
-                      <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{r.rawStatus}</span>
+                      <span className="ml-1.5 font-mono text-[10px] text-muted">{r.rawStatus}</span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+                  <td className="px-3 py-1.5 font-mono text-[11px] text-muted">
                     {r.parentExternalId ?? ''}
                   </td>
                 </tr>
@@ -170,10 +170,10 @@ export function LiveView(): React.JSX.Element {
           </tbody>
         </table>
         {snap && snap.resources.length === 0 && (
-          <p className="p-4 text-xs text-muted-foreground">읽어 온 것이 없습니다.</p>
+          <p className="p-4 text-xs text-muted">읽어 온 것이 없습니다.</p>
         )}
         {!snap && (
-          <p className="p-4 text-xs text-muted-foreground">
+          <p className="p-4 text-xs text-muted">
             `새로고침` 을 누르면 이 연결의 탐침을 돌려 실물을 읽어 옵니다.
           </p>
         )}
@@ -189,7 +189,7 @@ export function LiveView(): React.JSX.Element {
             provider={provider}
           />
         ) : (
-          <p className="p-3 text-[11px] text-muted-foreground" data-action-hint>
+          <p className="p-3 text-[11px] text-muted" data-action-hint>
             왼쪽 표에서 실물을 하나 고르면 그 종류에 정의된 액션이 여기 뜹니다.
           </p>
         )}

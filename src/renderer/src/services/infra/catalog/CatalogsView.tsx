@@ -95,10 +95,10 @@ export function CatalogsView(): React.JSX.Element {
                 return (
                   <tr key={c.id} className="border-t border-border" data-catalog-row={c.id}>
                     <td className="px-3 py-1.5">{c.catalog.provider.label}</td>
-                    <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+                    <td className="px-3 py-1.5 font-mono text-[11px] text-muted">
                       {c.catalog.catalogVersion}
                     </td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
+                    <td className="px-3 py-1.5 text-muted">
                       {c.catalog.nodeTypes.length}개 (탐침 {probes})
                     </td>
                     <td className="px-3 py-1.5">
@@ -154,13 +154,13 @@ export function CatalogsView(): React.JSX.Element {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">
+        <p className="mt-2 text-[11px] text-muted">
           내장 카탈로그는 앱과 함께 업데이트됩니다 — 고치려면 <strong>복제</strong>해서 내 것으로 만드세요.
         </p>
 
         {cloning && (
           <div className="mt-2 flex items-end gap-2 rounded-md border border-border p-2">
-            <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+            <label className="flex flex-col gap-1 text-[11px] text-muted">
               새 공급자 id
               <Input
                 className="h-8 w-40 font-mono text-xs"
@@ -187,7 +187,7 @@ export function CatalogsView(): React.JSX.Element {
 
         {exported && (
           <div className="mt-2 flex flex-col gap-1 rounded-md border border-border p-2">
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[11px] text-muted">
               {exported.name} — 자격증명 값은 들어 있지 않습니다(참조만).
             </span>
             <textarea
@@ -205,7 +205,7 @@ export function CatalogsView(): React.JSX.Element {
 
       <section className="flex w-[420px] shrink-0 flex-col gap-2 rounded-md border border-border p-3">
         <h2 className="text-xs font-medium">가져오기</h2>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-muted">
           카탈로그 JSON 을 붙여 넣으세요. 저장 전에 <strong>이 파일이 돌릴 명령을 전부</strong> 보여 드립니다.
         </p>
         <textarea

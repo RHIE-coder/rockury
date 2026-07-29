@@ -3,7 +3,7 @@
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 
 export const meta = {
-  name: '12-cold-restart',
+  name: '99-cold-restart',
   needsDb: true,
   desc: '콜드 재시작(프로세스 종료→재기동) 후 영속 — 연결·시드·편집 반영'
 }

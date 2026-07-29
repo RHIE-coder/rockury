@@ -63,6 +63,14 @@ MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접�
 - **IPC 채널**: `<svc>:<동작>` (예: `infra:listContainers`, `ai:mcpStatus`). 기존 DB 채널은 무접두어 그대로 둔다(레거시 예외).
 - **SQLite 테이블**: `<svc>_` 접두어. 두 서비스가 같은 테이블을 선언하면 앱이 안 켜진다(런타임 검사).
 - **preload 최상위 키**: 서비스마다 달라야 한다. 겹치면 조립이 실패한다.
+- **MCP 도구 이름**: `<svc>_<동작>` (예: `api_get_spec`, `infra_reconcile`). 접두어가 없으면
+  다섯 서비스가 `create_version`·`list_versions` 같은 흔한 이름에서 **실제로 부딪힌다**
+  (api·db 가 정확히 그랬다). 도구는 IPC 채널과 달리 **한 목록에 평평하게 놓이므로** 이름이
+  유일해야 한다. 기존 DB 도구는 무접두어 그대로 둔다(IPC 채널과 같은 레거시 예외).
+- **디자인 토큰**: 새 색·간격은 `styles/globals.css` 의 `@theme` 에 **선언하고 쓴다.**
+  Tailwind v4 는 미선언 키의 유틸리티를 **아무 말 없이 안 만든다** — 선언 없이 `bg-danger-soft`
+  를 쓰면 그 자리가 전부 투명하게 그려진다(2026-07-29 api 에서 24곳이 그랬다).
+  `tokens.test.ts` 가 강제한다.
 
 ### 병합
 1. **받기** — `main` 이 움직였으면 본진에서 `node scripts/parallel/setup.mjs sync` 한 번.
@@ -168,5 +176,8 @@ MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접�
 
 ## 코드 관례
 - 로컬 저장소는 `node:sqlite`(내장). 네이티브 모듈(better-sqlite3 등) 도입 금지 — `electron-rebuild` 회피가 의도된 선택.
+  **순수 JS 패키지는 이 금지에 안 걸린다** — 막는 것은 빌드가 필요한 네이티브 바인딩이다.
+  (2026-07-29 `@grpc/grpc-js`·`@grpc/proto-loader` 추가 — gRPC 는 HTTP/2 프레이밍이라 손으로 못 짠다.
+  둘 다 순수 JS 라 `electron-rebuild` 가 필요 없다.)
 - zustand 5: `create<T>()(...)` **curried** 형태 사용.
 - 주석·식별자는 주변 코드 스타일(한국어 주석 다수)에 맞춘다.

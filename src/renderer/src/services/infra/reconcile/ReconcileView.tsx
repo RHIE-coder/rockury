@@ -55,7 +55,7 @@ export function ReconcileView(): React.JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col p-4" data-infra-view="reconcile">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground" data-reconcile-basis>
+        <span className="text-xs text-muted" data-reconcile-basis>
           {store.snapshot ? agoLabel(store.snapshot.takenAt) : '실물을 아직 읽지 않았습니다'}
         </span>
         {(['missing', 'drift', 'unregistered', 'not-checked'] as Verdict[]).map((v) => (
@@ -92,7 +92,7 @@ export function ReconcileView(): React.JSX.Element {
         </div>
       </div>
 
-      <p className="mb-2 text-[11px] text-muted-foreground">
+      <p className="mb-2 text-[11px] text-muted">
         <strong>흡수는 설계본만 고칩니다.</strong> 실물은 이 화면에서 바뀌지 않습니다 — 구축·수정은 밖에서
         하고, 여기서는 그 결과를 다시 읽어 확인합니다.
       </p>
@@ -173,17 +173,17 @@ export function ReconcileView(): React.JSX.Element {
                           )}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted">—</span>
                       )}
                     </td>
                     <td className="px-3 py-1.5">
                       {r.resources.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted">—</span>
                       ) : (
                         <span>
                           {r.resources[0].name || r.resources[0].externalId}
                           {r.resources.length > 1 && (
-                            <span className="ml-1 text-muted-foreground" data-reconcile-multi>
+                            <span className="ml-1 text-muted" data-reconcile-multi>
                               외 {r.resources.length - 1}개
                             </span>
                           )}
@@ -197,19 +197,19 @@ export function ReconcileView(): React.JSX.Element {
                     </td>
                     <td className="px-3 py-1.5">
                       {r.fields.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted">—</span>
                       ) : (
                         <ul className="flex flex-col gap-0.5">
                           {r.fields.map((f) => (
                             <li key={f.field}>
-                              <span className="font-mono text-[10px] text-muted-foreground">{f.field}</span>{' '}
+                              <span className="font-mono text-[10px] text-muted">{f.field}</span>{' '}
                               설계 &ldquo;{f.design}&rdquo; ↔ 실물 &ldquo;{f.live}&rdquo;
                             </li>
                           ))}
                         </ul>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
+                    <td className="px-3 py-1.5 text-muted">
                       {r.basis ? BASIS_LABEL[r.basis] : '—'}
                     </td>
                   </tr>
@@ -218,7 +218,7 @@ export function ReconcileView(): React.JSX.Element {
           </tbody>
         </table>
         {rows.filter((r) => r.verdict !== 'ok').length === 0 && (
-          <p className="p-4 text-xs text-muted-foreground" data-reconcile-clean>
+          <p className="p-4 text-xs text-muted" data-reconcile-clean>
             어긋난 곳이 없습니다.
           </p>
         )}

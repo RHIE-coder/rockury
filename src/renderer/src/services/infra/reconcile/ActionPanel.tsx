@@ -116,7 +116,7 @@ export function ActionPanel({
 
   if (actions.length === 0) {
     return (
-      <p className="p-3 text-[11px] text-muted-foreground" data-action-none>
+      <p className="p-3 text-[11px] text-muted" data-action-none>
         이 종류에는 정의된 액션이 없습니다 — 카탈로그에 `actions` 를 적으면 여기 버튼으로 뜹니다.
       </p>
     )
@@ -124,7 +124,7 @@ export function ActionPanel({
 
   return (
     <div className="flex flex-col gap-2 p-3" data-action-panel={target.externalId}>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-[11px] text-muted">
         <strong className="text-foreground">{target.name || target.externalId}</strong> 에 대고 돌립니다.
       </p>
 
@@ -153,7 +153,7 @@ export function ActionPanel({
                 </span>
               )}
               {blocked && (
-                <span className="text-[10px] text-muted-foreground" data-action-blocked={a.id}>
+                <span className="text-[10px] text-muted" data-action-blocked={a.id}>
                   {blocked}
                 </span>
               )}
@@ -162,12 +162,12 @@ export function ActionPanel({
             {isOpen && !blocked && (
               <div className="flex flex-col gap-1.5 border-t border-border px-2 py-2">
                 {/* 무엇이 돌아갈지 먼저 보인다 — 라벨만 보고 누르게 하지 않는다. */}
-                <p className="font-mono text-[10px] break-all text-muted-foreground" data-action-preview={a.id}>
+                <p className="font-mono text-[10px] break-all text-muted" data-action-preview={a.id}>
                   {describeAction(a)}
                 </p>
 
                 {(a.args ?? []).map((arg) => (
-                  <label key={arg.id} className="flex flex-col gap-0.5 text-[10px] text-muted-foreground">
+                  <label key={arg.id} className="flex flex-col gap-0.5 text-[10px] text-muted">
                     {arg.label}
                     {arg.required && <span className="text-[9px]">필수</span>}
                     <Input
@@ -228,8 +228,8 @@ export function ActionPanel({
             >
               종료 코드 {result.exitCode ?? '(없음)'}
             </span>
-            <span className="text-muted-foreground">{result.durationMs}ms</span>
-            <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{result.command}</span>
+            <span className="text-muted">{result.durationMs}ms</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-muted">{result.command}</span>
           </div>
           <pre
             className="max-h-48 overflow-auto p-2 font-mono text-[10px] whitespace-pre-wrap"

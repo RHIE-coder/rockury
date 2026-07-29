@@ -59,7 +59,7 @@ function Row({
         {!leaf ? (
           <button
             type="button"
-            className="w-3 shrink-0 cursor-pointer text-muted-foreground"
+            className="w-3 shrink-0 cursor-pointer text-muted"
             onClick={() => setOpen(!shown)}
             aria-label={shown ? '접기' : '펼치기'}
           >
@@ -76,7 +76,7 @@ function Row({
           onClick={() => onPick(path, array)}
         >
           <span className="text-foreground">{label}</span>
-          <span className="text-muted-foreground"> : {preview(value)}</span>
+          <span className="text-muted"> : {preview(value)}</span>
         </button>
       </div>
       {!leaf && shown && (
@@ -112,7 +112,7 @@ function Row({
                 ))}
           {array && (value as unknown[]).length > 20 && (
             <div
-              className="px-1 py-0.5 font-mono text-[11px] text-muted-foreground"
+              className="px-1 py-0.5 font-mono text-[11px] text-muted"
               style={{ paddingLeft: (depth + 1) * 12 + 20 }}
             >
               … {(value as unknown[]).length - 20}개 더 (집을 때는 전체가 대상이다)
@@ -143,7 +143,7 @@ export function JsonPicker({
 }): React.JSX.Element {
   const handle = (path: Path, isArray: boolean): void => onPick(path, isArray)
   if (data === undefined) {
-    return <div className="p-3 text-xs text-muted-foreground">아직 실행하지 않았습니다.</div>
+    return <div className="p-3 text-xs text-muted">아직 실행하지 않았습니다.</div>
   }
   return (
     <div className="overflow-auto p-1">

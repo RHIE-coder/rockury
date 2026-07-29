@@ -124,7 +124,7 @@ export function ProvidersView(): React.JSX.Element {
         <h2 className="mb-2 text-xs font-medium">연결 목록</h2>
         <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
           {store.providers.length === 0 && (
-            <p className="p-4 text-xs text-muted-foreground">아직 연결이 없습니다.</p>
+            <p className="p-4 text-xs text-muted">아직 연결이 없습니다.</p>
           )}
           {store.providers.map((p) => {
             const cat = store.catalogs.find((c) => c.id === p.catalogId)
@@ -134,7 +134,7 @@ export function ProvidersView(): React.JSX.Element {
               <div key={p.id} className="border-b border-border last:border-b-0" data-provider-row={p.id}>
                 <div className="flex items-center gap-2 px-3 py-2 text-xs">
                   <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                  <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted">
                     {p.hasCredentials ? '자격증명 있음' : '자격증명 없음'}
                   </span>
                   {p.readOnly && (
@@ -184,7 +184,7 @@ export function ProvidersView(): React.JSX.Element {
             )
           })}
         </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">
+        <p className="mt-2 text-[11px] text-muted">
           연결을 지워도 <strong>설계본은 그대로</strong> 남습니다 — 설계는 실물과 독립입니다.
         </p>
       </section>
@@ -192,7 +192,7 @@ export function ProvidersView(): React.JSX.Element {
       <section className="flex w-[360px] shrink-0 flex-col gap-2 rounded-md border border-border p-3">
         <h2 className="text-xs font-medium">새 연결</h2>
 
-        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+        <label className="flex flex-col gap-1 text-[11px] text-muted">
           카탈로그
           <select
             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
@@ -212,18 +212,18 @@ export function ProvidersView(): React.JSX.Element {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+        <label className="flex flex-col gap-1 text-[11px] text-muted">
           이름
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="prod" data-provider-name />
         </label>
 
         {slots.length === 0 && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[11px] text-muted">
             이 공급자는 자격증명이 필요 없습니다(로컬에서 바로 읽습니다).
           </p>
         )}
         {slots.map((s) => (
-          <label key={s.id} className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+          <label key={s.id} className="flex flex-col gap-1 text-[11px] text-muted">
             {s.label}
             {s.hint && <span className="-mt-1 text-[10px]">{s.hint}</span>}
             <Input
@@ -239,7 +239,7 @@ export function ProvidersView(): React.JSX.Element {
           <input type="checkbox" checked={readOnly} onChange={(e) => setReadOnly(e.target.checked)} />
           이 연결을 읽기 전용으로 표시
         </label>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-[10px] text-muted">
           이 표시는 <strong>보조선</strong>입니다. 실제로 무엇을 할 수 있는지는 클라우드 쪽 권한 설정(IAM)이
           정합니다 — 읽기 전용 자격증명을 쓰는 것이 진짜 안전선입니다.
         </p>

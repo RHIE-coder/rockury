@@ -23,7 +23,7 @@ export function NodeDocWorkspace(): React.JSX.Element {
 
   if (store.nodes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-muted">
         다이어그램에서 노드를 먼저 놓으세요.
       </div>
     )
@@ -79,11 +79,11 @@ export function NodeDocWorkspace(): React.JSX.Element {
       </aside>
 
       <div className="min-w-0 flex-1 overflow-auto p-4">
-        {!selected && <p className="text-sm text-muted-foreground">왼쪽에서 노드를 고르세요.</p>}
+        {!selected && <p className="text-sm text-muted">왼쪽에서 노드를 고르세요.</p>}
         {selected && (
           <div className="mx-auto flex max-w-2xl flex-col gap-3">
             <h2 className="text-sm font-medium">{selected.name}</h2>
-            <p className="-mt-2 text-[11px] text-muted-foreground">
+            <p className="-mt-2 text-[11px] text-muted">
               이 글은 <strong>설계 노드</strong>에 붙습니다. 실물은 다시 만들어지면 식별자가 바뀌므로,
               실물에 매달면 재배포 한 번에 사라집니다.
             </p>
@@ -92,7 +92,7 @@ export function NodeDocWorkspace(): React.JSX.Element {
               <label key={f.key} className="flex flex-col gap-1">
                 <span className="text-xs font-medium">
                   {f.label}
-                  <span className="ml-1.5 font-normal text-muted-foreground">— {f.hint}</span>
+                  <span className="ml-1.5 font-normal text-muted">— {f.hint}</span>
                 </span>
                 {f.key === 'notes' ? (
                   <textarea

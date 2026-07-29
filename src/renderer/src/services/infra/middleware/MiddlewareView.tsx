@@ -116,7 +116,7 @@ export function MiddlewareView(): React.JSX.Element {
         <h2 className="text-xs font-medium">접속</h2>
         <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
           {conns.length === 0 && (
-            <p className="p-3 text-[11px] text-muted-foreground">아직 접속이 없습니다.</p>
+            <p className="p-3 text-[11px] text-muted">아직 접속이 없습니다.</p>
           )}
           {conns.map((c) => (
             <button
@@ -134,9 +134,9 @@ export function MiddlewareView(): React.JSX.Element {
             >
               <span className="flex w-full items-center gap-1.5">
                 <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
-                <span className="rounded bg-secondary px-1 text-[10px] text-muted-foreground">{c.kind}</span>
+                <span className="rounded bg-secondary px-1 text-[10px] text-muted">{c.kind}</span>
               </span>
-              <span className="font-mono text-[10px] text-muted-foreground">
+              <span className="font-mono text-[10px] text-muted">
                 {c.host}:{c.port}
                 {c.hasSecret ? ' · 비밀 있음' : ''}
               </span>
@@ -146,7 +146,7 @@ export function MiddlewareView(): React.JSX.Element {
 
         <div className="flex flex-col gap-1.5 rounded-md border border-border p-2">
           <h3 className="text-[11px] font-medium">새 접속</h3>
-          <label className="flex flex-col gap-0.5 text-[10px] text-muted-foreground">
+          <label className="flex flex-col gap-0.5 text-[10px] text-muted">
             종류
             <select
               className="h-8 rounded-md border border-input bg-background px-1.5 text-xs"
@@ -208,7 +208,7 @@ export function MiddlewareView(): React.JSX.Element {
             onChange={(e) => setSecret(e.target.value)}
             data-mw-secret
           />
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-[10px] text-muted">
             비밀은 OS 키체인으로 암호화해 저장하고, <strong>꺼내는 창구가 없습니다.</strong>
           </p>
           {error && <p className="text-[10px] text-destructive">{error}</p>}
@@ -221,13 +221,13 @@ export function MiddlewareView(): React.JSX.Element {
       {/* 콘솔 */}
       <section className="flex min-w-0 flex-1 flex-col gap-2">
         {!active ? (
-          <p className="text-xs text-muted-foreground">왼쪽에서 접속을 만들거나 고르세요.</p>
+          <p className="text-xs text-muted">왼쪽에서 접속을 만들거나 고르세요.</p>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-1.5">
               <h2 className="text-xs font-medium">
                 {active.name}{' '}
-                <span className="font-mono text-[10px] text-muted-foreground">
+                <span className="font-mono text-[10px] text-muted">
                   {active.host}:{active.port}
                 </span>
               </h2>
@@ -259,13 +259,13 @@ export function MiddlewareView(): React.JSX.Element {
               data-mw-output
             >
               {lines.length === 0 && (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[11px] text-muted">
                   위의 빠른 명령을 누르거나 아래에 직접 쳐 보세요. <strong>전부 읽기 명령</strong>입니다.
                 </p>
               )}
               {lines.map((l, i) => (
                 <div key={i} className="mb-1.5" data-mw-line={i}>
-                  <p className="font-mono text-[11px] text-muted-foreground">&gt; {l.command}</p>
+                  <p className="font-mono text-[11px] text-muted">&gt; {l.command}</p>
                   <pre
                     className={cn(
                       'font-mono text-[11px] whitespace-pre-wrap',
@@ -274,7 +274,7 @@ export function MiddlewareView(): React.JSX.Element {
                   >
                     {l.output}
                   </pre>
-                  <p className="text-[9px] text-muted-foreground">{l.ms}ms</p>
+                  <p className="text-[9px] text-muted">{l.ms}ms</p>
                 </div>
               ))}
             </div>

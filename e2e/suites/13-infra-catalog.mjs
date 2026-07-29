@@ -287,7 +287,7 @@ export async function run(ctx) {
   await click('[data-nav-view="probe"]')
 
   // ── 콜드 재시작 후에도 공급자 연결이 남는다 ─────────────────────────────
-  // (12-cold-restart 는 DB 서비스 흐름이라 건드리지 않고 여기서 따로 확인한다.)
+  // (99-cold-restart 는 DB 서비스 흐름이라 건드리지 않고 여기서 따로 확인한다.)
   page = await ctx.relaunch()
   await click('[data-nav-service="infra"]')
   await click('[data-nav-module="catalog"]')
