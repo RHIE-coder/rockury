@@ -278,12 +278,13 @@ export async function run(ctx) {
       const cov = await page.evaluate(async (id) => {
         const envs = await window.rockury.apiOps.listEnvironments(id)
         const d = await window.rockury.apiContract.runDrift(id, envs[0].id)
-        return d.coverage
+        return { ...d.coverage, findings: d.findings, unrouted: d.unroutedMessages }
       }, specId)
       check('웹훅 수신 관측은 미관측으로 세지 않는다', !cov.unobserved.includes('onPaid'))
-      check('대신 "판정 규칙 없음" 으로 따로 센다 — 조용한 통과 금지', cov.unjudged.includes('onPaid'))
-      // onUnknown 도 한 건 받았으므로 같은 통에 든다 — 받은 것은 미관측이 아니다.
-      check('선언 없이 받은 것도 판정 규칙 없음이다', cov.unjudged.includes('onUnknown'))
+      // 기대 본문을 선언해 뒀으므로 **실제로 대조된다** — 어긋난 수신이 있었으니 잡힌다.
+      check('기대 본문 선언이 있으면 관측으로 세고 대조한다', cov.observed >= 1)
+      // onUnknown 은 선언이 없어 어느 것과도 못 맞춘다 — 통과가 아니다.
+      check('**선언이 없으면 통과가 아니라 "맞출 선언 없음" 이다**', cov.unjudged.includes('onUnknown'))
     }
 
     // ── 보내는 요청에는 수신 대기를 걸 수 없다 (모양이 곧 방향이다) ──

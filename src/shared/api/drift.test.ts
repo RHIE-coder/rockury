@@ -8,7 +8,7 @@ import {
   summarizeDrift,
   type DriftResult
 } from './drift'
-import type { FieldDef, RequestDef, RunRecord, SpecDef } from './types'
+import type { FieldDef, RequestDef, RunRecord, SpecDef, StreamMessage } from './types'
 
 /**
  * 판정 엔진 — `docs/qa/api-contract.md` S1~S3.
@@ -141,9 +141,23 @@ describe('CASE-apicontract-011c 스트림 관측은 통과도 미관측도 아�
     expect(d.findings).toEqual([])
   })
 
-  it('요약에 판정 규칙 없음 건수가 드러난다 — "이상 없음" 으로 끝나지 않는다', () => {
+  it('요약에 맞출 선언 없음 건수가 드러난다 — "이상 없음" 으로 끝나지 않는다', () => {
     const d = drift(spec([stream('ticker')]), [session('ticker')])
-    expect(summarizeDrift(d)).toContain('판정 규칙 없음 1개')
+    expect(summarizeDrift(d)).toContain('맞출 선언 없음 1개')
+    expect(summarizeDrift(d)).not.toBe('이상 없음')
+  })
+
+  it('**이름 없는 메시지는 하나뿐인 선언에 갖다 붙이지 않는다** — 못 맞춘 건수로 센다', () => {
+    // 한 소켓에 여러 종류가 흐르는 것이 WebSocket 의 보통 모습이라, 그 추측은 조용히 틀린다.
+    const declared: RequestDef = {
+      ...stream('ticker'),
+      responses: [{ status: 'tick', fields: [f('n', 'number', 'required')] }]
+    }
+    const d = drift(spec([declared]), [session('ticker')])
+    expect(d.unroutedMessages).toBe(1)
+    expect(d.coverage.unjudged).toEqual(['ticker'])
+    expect(d.findings).toEqual([])
+    expect(summarizeDrift(d)).toContain('못 맞춘 메시지 1건')
   })
 
   it('**붙지 못한 세션은 관측이 아니다** — 미관측으로 센다', () => {
@@ -261,6 +275,105 @@ describe('옛 판정 기록을 읽어도 화면이 죽지 않는다', () => {
       unjudged: []
     })
     expect(() => summarizeDrift(fixed)).not.toThrow()
+  })
+})
+
+// ── 스트림·수신 대조 규칙 ──────────────────────────────────────────────────
+
+describe('CASE-apicontract-017 스트림 관측을 이벤트 이름으로 대조한다', () => {
+  const msg = (event: string, data: string) => ({
+    seq: 1,
+    at: '2026-07-28T00:00:00.000Z',
+    direction: 'in' as const,
+    event,
+    data
+  })
+  const streamRun = (name: string, messages: StreamMessage[]): RunRecord =>
+    run(name, '', { shape: 'server-stream', response: null, httpStatus: null, messages })
+
+  const declared = (fields: FieldDef[]): RequestDef => ({
+    ...req('ticker'),
+    shape: 'server-stream',
+    responses: [{ status: 'tick', fields }]
+  })
+
+  it('**이벤트 이름이 선언을 고른다** — `status` 가 스트림에선 이벤트 종류다', () => {
+    const d = drift(spec([declared([f('n', 'number', 'required')])]), [
+      streamRun('ticker', [msg('tick', '{"n":1}')])
+    ])
+    expect(d.coverage.observed).toBe(1)
+    expect(d.coverage.unjudged).toEqual([])
+    expect(d.findings).toEqual([])
+  })
+
+  it('선언과 어긋난 필드를 이벤트 경로와 함께 잡는다', () => {
+    const d = drift(spec([declared([f('n', 'number', 'required')])]), [
+      streamRun('ticker', [msg('tick', '{"n":"열"}')])
+    ])
+    expect(d.findings[0]).toMatchObject({ kind: 'different', path: 'ticker.tick.n' })
+  })
+
+  it('선언에 없는 이벤트를 받으면 잡는다 — 단발의 "상태 X 선언 없음" 과 같은 자리', () => {
+    const d = drift(spec([declared([])]), [streamRun('ticker', [msg('boom', '{}')])])
+    expect(d.findings[0]).toMatchObject({ kind: 'server-only', path: 'ticker.boom' })
+  })
+
+  it('JSON 이 아닌 메시지는 통과가 아니라 **못 맞춘 것**으로 센다', () => {
+    const d = drift(spec([declared([])]), [streamRun('ticker', [msg('tick', '<xml/>')])])
+    expect(d.unroutedMessages).toBe(1)
+    expect(d.coverage.unjudged).toEqual(['ticker'])
+  })
+
+  it('일부만 맞춘 요청은 관측으로 세되 **못 맞춘 건수가 남는다**', () => {
+    const d = drift(spec([declared([f('n', 'number', 'required')])]), [
+      streamRun('ticker', [msg('tick', '{"n":1}'), msg('', '{"n":2}')])
+    ])
+    expect(d.coverage.observed).toBe(1)
+    expect(d.unroutedMessages).toBe(1)
+    // "전부 봤다" 로 읽히지 않는다.
+    expect(summarizeDrift(d)).toContain('못 맞춘 메시지 1건')
+  })
+
+  it('보낸 메시지는 관측이 아니다 — 서버가 준 것만 본다', () => {
+    const out: StreamMessage = { ...msg('tick', '{"n":"열"}'), direction: 'out' }
+    const d = drift(spec([declared([f('n', 'number', 'required')])]), [streamRun('ticker', [out])])
+    expect(d.findings).toEqual([])
+    expect(d.coverage.unjudged).toEqual(['ticker'])
+  })
+})
+
+describe('CASE-apicontract-018 웹훅 수신을 기대 본문과 대조한다', () => {
+  const hook = (expectedBody?: string): RequestDef => ({
+    ...req('onPaid'),
+    shape: 'inbound',
+    request: { expectedBody }
+  })
+  const hookRun = (body: string): RunRecord =>
+    run('onPaid', '', {
+      shape: 'inbound',
+      response: null,
+      httpStatus: null,
+      messages: [{ seq: 1, at: '2026-07-28T00:00:00.000Z', direction: 'in', event: 'POST /h', data: body }]
+    })
+
+  const expected = JSON.stringify([{ name: 'id', type: 'string', requiredness: 'required' }])
+
+  it('받는 쪽 선언은 **기대 본문**이다 — 응답 모양이 아니다', () => {
+    const d = drift(spec([hook(expected)]), [hookRun('{"id":"x"}')])
+    expect(d.coverage.observed).toBe(1)
+    expect(d.findings).toEqual([])
+  })
+
+  it('어긋난 필드를 잡는다', () => {
+    const d = drift(spec([hook(expected)]), [hookRun('{}')])
+    expect(d.findings[0]).toMatchObject({ kind: 'different', path: 'onPaid.id' })
+  })
+
+  it('**선언이 없으면 통과가 아니라 못 맞춘 것**이다', () => {
+    const d = drift(spec([hook()]), [hookRun('{"id":"x"}')])
+    expect(d.coverage.unjudged).toEqual(['onPaid'])
+    expect(d.unroutedMessages).toBe(1)
+    expect(d.findings).toEqual([])
   })
 })
 

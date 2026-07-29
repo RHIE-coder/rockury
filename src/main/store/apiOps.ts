@@ -281,6 +281,38 @@ export function listRuns(specId: string, filter: ListRunsFilter = {}): RunRecord
  */
 export const RUN_KEEP = 500
 
+/**
+ * 판정에 쓸 **세션 기록만** 본문까지 읽는다.
+ *
+ * 목록 조회는 메시지 본문을 안 싣는데(그러면 메인이 초 단위로 멈춘다) 스트림·수신 판정은
+ * 그 본문이 있어야 돈다. 그래서 **요청마다 가장 최근 세션 하나씩만** 골라 읽는다 —
+ * 단발 판정이 "가장 최근 성공 Run" 을 기준으로 삼는 것과 같은 규칙이라 규칙이 갈리지 않고,
+ * 읽는 양이 요청 수만큼으로 묶인다.
+ */
+export function latestSessionRuns(specId: string, environmentId?: string): RunRecord[] {
+  const where = ["spec_id = ?", "shape != 'unary'", "status = 'ok'"]
+  const args: unknown[] = [specId]
+  if (environmentId) {
+    where.push('environment_id = ?')
+    args.push(environmentId)
+  }
+  // 먼저 **본문 없이** 후보를 훑어 요청마다 최신 하나를 고른다.
+  const heads = getDb()
+    .prepare(
+      `SELECT id, request_name FROM api_runs WHERE ${where.join(' AND ')} ORDER BY created_at DESC, rowid DESC`
+    )
+    .all(...(args as never[])) as unknown as { id: string; request_name: string }[]
+
+  const picked: string[] = []
+  const seen = new Set<string>()
+  for (const h of heads) {
+    if (seen.has(h.request_name)) continue
+    seen.add(h.request_name)
+    picked.push(h.id)
+  }
+  return picked.map((id) => getRun(specId, id)).filter((r): r is RunRecord => r !== null)
+}
+
 export interface PruneResult {
   /** 상한을 넘겨 지운 건수. **조용히 사라지면 안 되므로** 세어서 돌려준다. */
   removed: number

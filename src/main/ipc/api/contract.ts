@@ -1,6 +1,18 @@
 import { ipcMain } from 'electron'
 import { getSpec, replaceRequests } from '../../store/apiSpecs'
-import { getEnvironment, listRuns } from '../../store/apiOps'
+import { getEnvironment, latestSessionRuns, listRuns } from '../../store/apiOps'
+
+/**
+ * 판정에 먹일 관측 목록.
+ *
+ * 단발은 목록 조회로 충분하지만(본문이 응답 자리에 있다), 스트림·수신은 **메시지 본문**이
+ * 관측 내용이라 따로 읽어야 한다 — 목록 조회는 본문을 안 싣는다(그러면 메인이 멈춘다).
+ * 요청마다 최신 세션 하나씩만 읽으므로 읽는 양이 요청 수만큼으로 묶인다.
+ */
+function observationRuns(specId: string, environmentId: string): ReturnType<typeof listRuns> {
+  const unary = listRuns(specId, { environmentId, limit: 1000 }).filter((r) => r.shape === 'unary')
+  return [...unary, ...latestSessionRuns(specId, environmentId)]
+}
 import { appendContractLog, latestDrift, listContractLogs } from '../../store/apiContract'
 import { introspectGraphql } from '../../api/introspect'
 import { composeRequest } from '../../../shared/api/compose'
@@ -63,7 +75,7 @@ async function completeDrift(specId: string, environmentId: string): Promise<Dri
     rootOf,
     // 스트리밍 요청(subscription)은 서버 스키마에 루트가 없어 대조 대상이 아니다 —
     // 세션 관측이 있었는지만 가려 커버리지에 정직하게 싣는다.
-    runs: listRuns(spec.id, { environmentId: env.id, limit: 1000 })
+    runs: observationRuns(spec.id, env.id)
   })
 }
 
@@ -78,7 +90,7 @@ export function registerApiContractIpc(): void {
       ? await completeDrift(spec.id, env.id)
       : driftFromObservations({
           spec,
-          runs: listRuns(spec.id, { environmentId: env.id, limit: 1000 }),
+          runs: observationRuns(spec.id, env.id),
           environmentName: env.name
         })
 

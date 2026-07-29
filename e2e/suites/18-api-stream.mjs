@@ -245,15 +245,46 @@ export async function run(ctx) {
 
     // ── 판정: 스트림 관측은 통과도 미관측도 아니다 ─────────────────────────
     {
-      const cov = await page.evaluate(async () => {
+      const d0 = await page.evaluate(async () => {
         const specs = await window.rockury.apiSpecs.list()
         const target = specs.find((s) => s.name === 'e2e-stream-sse')
         const envs = await window.rockury.apiOps.listEnvironments(target.id)
         const d = await window.rockury.apiContract.runDrift(target.id, envs[0].id)
-        return d.coverage
+        return { coverage: d.coverage, findings: d.findings }
       })
-      check('스트림 관측은 미관측으로 세지 않는다', !cov.unobserved.includes('ticker'))
-      check('대신 "판정 규칙 없음" 으로 따로 센다 — 조용한 통과 금지', cov.unjudged.includes('ticker'))
+      check('스트림 관측은 미관측으로 세지 않는다', !d0.coverage.unobserved.includes('ticker'))
+      // 이벤트 이름은 있는데 선언이 없다 → **조용한 통과가 아니라 어긋남**이다
+      // (단발의 "상태 X 를 받았는데 선언이 없다" 와 같은 자리).
+      check(
+        '선언 없는 이벤트를 받으면 통과가 아니라 어긋남으로 잡는다',
+        d0.findings.some((f) => f.path === 'ticker.tick' && f.kind === 'server-only')
+      )
+    }
+
+    // ── 이벤트 이름으로 선언을 찾아 **실제로 대조한다** ──
+    {
+      const after = await page.evaluate(async () => {
+        const specs = await window.rockury.apiSpecs.list()
+        const target = specs.find((s) => s.name === 'e2e-stream-sse')
+        // 이벤트 이름 `tick` 을 상태 자리에 선언한다 — 스트림에서 status 는 이벤트 종류다.
+        await window.rockury.apiSpecs.patch(target.id, [
+          {
+            op: 'set_response_schema',
+            request: 'ticker',
+            status: 'tick',
+            fields: [{ name: 'n', type: 'string', requiredness: 'required' }]
+          }
+        ])
+        const envs = await window.rockury.apiOps.listEnvironments(target.id)
+        const d = await window.rockury.apiContract.runDrift(target.id, envs[0].id)
+        return { coverage: d.coverage, findings: d.findings, unrouted: d.unroutedMessages }
+      })
+      check('이벤트 이름으로 선언을 찾아 관측으로 센다', after.coverage.observed === 1)
+      check(
+        '선언과 어긋난 필드를 이벤트 경로와 함께 잡는다',
+        after.findings.some((f) => f.path === 'ticker.tick.n' && f.kind === 'different')
+      )
+      check('선언한 이벤트는 더는 "맞출 선언 없음" 이 아니다', !after.coverage.unjudged.includes('ticker'))
     }
 
     // ── WebSocket 명세: 양방향 ─────────────────────────────────────────────
@@ -416,6 +447,37 @@ export async function run(ctx) {
       check(
         '다시 접속을 시도할 수 있다 — 끊기 버튼만 남지 않는다',
         (await page.locator('button[data-api-stream-open]').count()) === 1
+      )
+    }
+
+    // ── **이름 없는 메시지는 하나뿐인 선언에 갖다 붙이지 않는다** ──
+    // WebSocket 프레임에는 이벤트 이름이 없다. 한 소켓에 여러 종류가 흐르는 것이 보통이라
+    // 하나뿐인 선언에 맞춰 버리면 조용히 틀린 판정이 나온다.
+    {
+      const judged = await page.evaluate(async () => {
+        const specs = await window.rockury.apiSpecs.list()
+        const target = specs.find((s) => s.name === 'e2e-stream-ws')
+        await window.rockury.apiSpecs.patch(target.id, [
+          {
+            op: 'set_response_schema',
+            request: 'chat',
+            status: 'hello',
+            fields: [{ name: 'hello', type: 'string', requiredness: 'required' }]
+          }
+        ])
+        const envs = await window.rockury.apiOps.listEnvironments(target.id)
+        const env = envs.find((e) => e.name === 'E2E-WS')
+        const d = await window.rockury.apiContract.runDrift(target.id, env.id)
+        return { coverage: d.coverage, unrouted: d.unroutedMessages, findings: d.findings }
+      })
+      check('이름 없는 메시지를 못 맞춘 건수로 센다', judged.unrouted >= 1)
+      check(
+        '하나뿐인 선언에 갖다 붙이지 않는다 — 없는 어긋남을 만들지 않는다',
+        judged.findings.every((f) => !f.path.startsWith('chat.hello.'))
+      )
+      check(
+        '하나도 못 맞췄으면 "맞출 선언 없음" 이다 — 통과가 아니다',
+        judged.coverage.unjudged.includes('chat')
       )
     }
 

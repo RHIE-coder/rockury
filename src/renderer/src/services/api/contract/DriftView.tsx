@@ -75,7 +75,8 @@ function Coverage({ drift }: { drift: DriftResult }) {
           <span className="text-danger">
             · 미관측 {unobserved.length}개
             {unparsable.length > 0 && ` · 모양 못 읽음 ${unparsable.length}개`}
-            {unjudged.length > 0 && ` · 판정 규칙 없음 ${unjudged.length}개`}
+            {unjudged.length > 0 && ` · 맞출 선언 없음 ${unjudged.length}개`}
+            {drift.unroutedMessages > 0 && ` · 못 맞춘 메시지 ${drift.unroutedMessages}건`}
           </span>
         )}
         {all && total > 0 && <span className="text-muted">· 전부 관측됨</span>}
@@ -99,11 +100,19 @@ function Coverage({ drift }: { drift: DriftResult }) {
       )}
       {unjudged.length > 0 && (
         <p className="rounded-md bg-panel px-2.5 py-1.5 text-[11.5px] text-muted" data-api-drift-unjudged>
-          세션은 쌓였지만 <b>대조 규칙이 아직 없는</b> 요청 —{' '}
+          관측은 쌓였는데 <b>어느 선언과 맞출지 못 정한</b> 요청 —{' '}
           <span className="font-mono">{unjudged.join(', ')}</span>
           <br />
-          스트림·웹훅의 관측 내용은 응답 본문이 아니라 메시지 목록이라, 지금 판정기가 못 읽습니다.
-          미관측과 달리 <b>더 쏴 본다고 풀리지 않습니다.</b>
+          스트림은 메시지의 <b>이벤트 이름</b>으로 선언을 찾습니다 — 이름이 없으면 하나뿐인
+          선언에 갖다 붙이지 않습니다(한 소켓에 여러 종류가 흐르는 것이 보통이라 그 추측은
+          조용히 틀립니다). 웹훅은 <b>기대 본문</b> 선언이 있어야 대조합니다.
+          미관측과 달리 <b>더 쏴 본다고 풀리지 않습니다</b> — 이벤트 이름을 붙이거나 선언을 더하세요.
+        </p>
+      )}
+      {drift.unroutedMessages > 0 && (
+        <p className="rounded-md bg-panel px-2.5 py-1.5 text-[11.5px] text-muted" data-api-drift-unrouted>
+          어느 선언과도 못 맞춘 메시지 <b>{drift.unroutedMessages}건</b> — 일부만 대조됐다는
+          뜻입니다(전부 본 것이 아닙니다).
         </p>
       )}
       {drift.unstable.length > 0 && (
@@ -272,7 +281,10 @@ export function DriftView() {
                     `커버리지: ${drift.coverage.observed}/${drift.coverage.total} 관측 · 미관측 ${drift.coverage.unobserved.length}개` +
                       // 리포트가 코드 리뷰·이슈에 붙으므로, 못 본 자리는 붙여넣기에도 실려야 한다.
                       (drift.coverage.unjudged.length > 0
-                        ? ` · 판정 규칙 없음 ${drift.coverage.unjudged.length}개(${drift.coverage.unjudged.join(', ')})`
+                        ? ` · 맞출 선언 없음 ${drift.coverage.unjudged.length}개(${drift.coverage.unjudged.join(', ')})`
+                        : '') +
+                      (drift.unroutedMessages > 0
+                        ? ` · 못 맞춘 메시지 ${drift.unroutedMessages}건`
                         : ''),
                     `필수여부 모름으로 제외: ${drift.skippedUnknown}개`,
                     '',

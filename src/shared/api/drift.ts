@@ -1,5 +1,6 @@
 import { shapeOfBody } from './observed'
-import type { FieldDef, RunRecord, SpecDef } from './types'
+import { matchExpectedBody } from './inbox'
+import type { FieldDef, RequestDef, RunRecord, SpecDef } from './types'
 
 /**
  * 판정 — `docs/spec/api-contract.md`.
@@ -52,9 +53,15 @@ export interface DriftCoverage {
   /** 관측은 했지만 JSON 이 아니라 모양을 못 뽑은 요청. 통과가 아니다. */
   unparsable: string[]
   /**
-   * 관측은 쌓였지만 **이 상호작용 모양의 판정 규칙이 아직 없는** 요청(스트림 세션·웹훅 수신).
-   * 미관측과 갈라 두는 이유: 미관측은 *쏴 보면* 풀리고, 이쪽은 *우리가 규칙을 만들어야* 풀린다.
-   * 어느 쪽도 통과가 아니다.
+   * 관측은 쌓였지만 **그 관측을 어느 선언과 맞출지 못 정한** 요청.
+   *
+   * 스트림은 메시지의 **이벤트 이름**으로 선언을 찾는다(`ResponseDef.status` 가 그 자리다).
+   * 이름이 없는 메시지(WebSocket 이 흔히 그렇다)는 어느 선언과 맞출지 우리가 모른다 —
+   * **추측해서 하나뿐인 선언에 갖다 붙이지 않는다.** 한 소켓에 여러 종류가 흐르는 것이
+   * WebSocket 의 보통 모습이라, 그 추측은 조용히 틀린 판정을 만든다.
+   *
+   * 미관측과 갈라 두는 이유: 미관측은 *쏴 보면* 풀리고, 이쪽은 *이벤트 이름을 붙이거나
+   * 선언을 더해야* 풀린다. 어느 쪽도 통과가 아니다.
    */
   unjudged: string[]
 }
@@ -71,6 +78,11 @@ export interface DriftResult {
   skippedUnknown: number
   /** 과거 관측과 응답 모양이 달랐던 요청 — 서버가 도중에 바뀌었을 수 있다. */
   unstable: string[]
+  /**
+   * 어느 선언과 맞출지 못 정한 **메시지 건수**. 0 이어도 실린다(없는 것과 0 은 다르다).
+   * 일부만 대조된 요청이 "전부 봤다"로 읽히지 않게 하는 자리다.
+   */
+  unroutedMessages: number
 }
 
 export interface ObservationInput {
@@ -168,6 +180,28 @@ function observationsFor(runs: readonly RunRecord[], name: string, baseVersion?:
 }
 
 /**
+ * 판정에 쓸 스트림·수신 세션 기록. 붙은 뒤 끝난 것만이 관측이다.
+ * **가장 최근 것부터** 온다 — 판정은 최신 하나만 본다(단발이 "가장 최근 성공 Run" 을
+ * 기준으로 삼는 것과 같은 규칙 — AC-4).
+ */
+function sessionsFor(
+  runs: readonly RunRecord[],
+  name: string,
+  baseVersion?: string | null
+): RunRecord[] {
+  return runs
+    .filter(
+      (r) =>
+        r.requestName === name &&
+        r.shape !== 'unary' &&
+        r.status === 'ok' &&
+        (baseVersion == null ? true : r.baseVersion === baseVersion)
+    )
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+}
+
+/**
  * 스트림·수신 관측이 **실제로 있었나.**
  *
  * "행이 있나"로 세면 안 된다 — 접속 실패한 세션도 Run 으로 남기 때문에, 한 번도 못 붙은
@@ -215,8 +249,90 @@ export function normalizeDrift(raw: DriftResult): DriftResult {
     },
     findings: raw.findings ?? [],
     unstable: raw.unstable ?? [],
-    skippedUnknown: raw.skippedUnknown ?? 0
+    skippedUnknown: raw.skippedUnknown ?? 0,
+    unroutedMessages: raw.unroutedMessages ?? 0
   }
+}
+
+/**
+ * 스트림 세션 관측을 판정한다.
+ *
+ * **이벤트 이름이 선언을 고른다** — `ResponseDef.status` 는 단발에선 상태코드지만
+ * 스트림에선 "이벤트 종류"다(`types.ts` 가 그렇게 적어 뒀다). 이름 없는 메시지는
+ * **어느 선언과 맞출지 우리가 모르므로 세어 두고 넘어간다** — 하나뿐인 선언에 갖다
+ * 붙이면 한 소켓에 여러 종류가 흐르는 보통의 WebSocket 에서 조용히 틀린 판정이 나온다.
+ */
+function judgeStream(
+  ctx: Ctx,
+  request: RequestDef,
+  runs: readonly RunRecord[]
+): { judged: number; unrouted: number } {
+  let judged = 0
+  let unrouted = 0
+
+  for (const m of runs.flatMap((r) => r.messages ?? [])) {
+    if (m.direction !== 'in') continue
+    if (!m.event) {
+      unrouted += 1
+      continue
+    }
+    const declared = request.responses.find((r) => r.status === m.event)
+    if (!declared) {
+      // 단발의 "상태 X 를 받았는데 선언이 없다" 와 같은 자리다.
+      if (!ctx.findings.some((f) => f.path === `${request.name}.${m.event}`)) {
+        ctx.findings.push({
+          kind: 'server-only',
+          path: `${request.name}.${m.event}`,
+          detail: `이벤트 '${m.event}' 를 받았는데 명세에 선언이 없습니다.`,
+          actual: m.event
+        })
+      }
+      judged += 1
+      continue
+    }
+    const parsed = shapeOfBody(m.data)
+    if (!parsed.json) {
+      // JSON 이 아니면 모양을 못 뽑는다 — 대조 못 한 것으로 센다(통과가 아니다).
+      unrouted += 1
+      continue
+    }
+    compareFields(ctx, `${request.name}.${m.event}`, declared.fields, parsed.shape)
+    judged += 1
+  }
+  return { judged, unrouted }
+}
+
+/**
+ * 웹훅 수신 관측을 판정한다.
+ *
+ * 받는 쪽의 선언은 응답 모양이 아니라 **기대 본문**(`expectedBody`)이다 — 수신할 때
+ * 이미 같은 함수로 대조했고(`inbox.received AC-3`), 여기서는 쌓인 기록을 같은 규칙으로
+ * 다시 본다. **선언이 없으면 대조 못 한 것**이지 통과가 아니다.
+ */
+function judgeInbound(
+  ctx: Ctx,
+  request: RequestDef,
+  runs: readonly RunRecord[]
+): { judged: number; unrouted: number } {
+  let judged = 0
+  let unrouted = 0
+
+  for (const m of runs.flatMap((r) => r.messages ?? [])) {
+    if (m.direction !== 'in') continue
+    const result = matchExpectedBody(m.data, request.request.expectedBody)
+    if (result.verdict === 'undeclared' || result.verdict === 'unparsable') {
+      unrouted += 1
+      continue
+    }
+    for (const issue of result.issues) {
+      const path = `${request.name}.${issue.path}`
+      if (ctx.findings.some((f) => f.path === path)) continue
+      ctx.findings.push({ kind: 'different', path, detail: issue.detail })
+    }
+    ctx.skippedUnknown += result.skippedUnknown
+    judged += 1
+  }
+  return { judged, unrouted }
 }
 
 /**
@@ -245,6 +361,7 @@ export function driftFromObservations(input: ObservationInput): DriftResult {
   const unjudged: string[] = []
   const unstable: string[] = []
   let observed = 0
+  let unroutedMessages = 0
 
   for (const request of spec.requests) {
     // **선언 모양으로 먼저 가르지 않는다.** duplex 로 선언한 요청을 Send 로 한 번 쏴 볼 수도
@@ -252,7 +369,22 @@ export function driftFromObservations(input: ObservationInput): DriftResult {
     // 건너뛰면 그 findings 가 통째로 사라진다.
     const found = observationsFor(runs, request.name, baseVersion)
     if (found.length === 0) {
-      bucketUnobserved(request.name, runs, baseVersion, unjudged, unobserved)
+      // 단발 관측이 없다. 스트림·수신 세션이 있으면 **그쪽 규칙으로 판정한다.**
+      const sessions = sessionsFor(runs, request.name, baseVersion)
+      if (sessions.length === 0) {
+        unobserved.push(request.name)
+        continue
+      }
+      // 최신 세션 하나만 본다 — 지나간 세션까지 겹쳐 보면 이미 고친 어긋남이 계속 살아난다.
+      const latest = sessions.slice(0, 1)
+      const r =
+        request.shape === 'inbound'
+          ? judgeInbound(ctx, request, latest)
+          : judgeStream(ctx, request, latest)
+      unroutedMessages += r.unrouted
+      // 하나도 못 맞췄으면 관측으로 세지 않는다 — 대조한 것이 없다.
+      if (r.judged === 0) unjudged.push(request.name)
+      else observed += 1
       continue
     }
     const latest = found[0]
@@ -291,7 +423,8 @@ export function driftFromObservations(input: ObservationInput): DriftResult {
     coverage: { total: spec.requests.length, observed, unobserved, unparsable, unjudged },
     findings: ctx.findings,
     skippedUnknown: ctx.skippedUnknown,
-    unstable
+    unstable,
+    unroutedMessages
   }
 }
 
@@ -365,7 +498,8 @@ export function driftFromSchema(input: SchemaDriftInput): DriftResult {
     coverage: { total: spec.requests.length, observed, unobserved, unparsable: [], unjudged },
     findings: ctx.findings,
     skippedUnknown: ctx.skippedUnknown,
-    unstable: []
+    unstable: [],
+    unroutedMessages: 0
   }
 }
 
@@ -383,7 +517,8 @@ export function driftUnavailable(
     coverage: { total: 0, observed: 0, unobserved: [], unparsable: [], unjudged: [] },
     findings: [],
     skippedUnknown: 0,
-    unstable: []
+    unstable: [],
+    unroutedMessages: 0
   }
 }
 
@@ -401,9 +536,11 @@ export function summarizeDrift(d: DriftResult): string {
     d.coverage.unparsable.length > 0 ? ` · 모양 못 읽음 ${d.coverage.unparsable.length}개` : ''
   // 스트림·수신은 쌓아 놨어도 대조를 못 했다. 요약 한 줄만 보고 "이상 없음"으로 읽히면 안 된다.
   const unjudged =
-    d.coverage.unjudged.length > 0 ? ` · 판정 규칙 없음 ${d.coverage.unjudged.length}개` : ''
+    d.coverage.unjudged.length > 0 ? ` · 맞출 선언 없음 ${d.coverage.unjudged.length}개` : ''
+  // 일부만 대조된 요청이 "전부 봤다" 로 읽히지 않게 건수를 붙인다.
+  const unrouted = d.unroutedMessages > 0 ? ` · 못 맞춘 메시지 ${d.unroutedMessages}건` : ''
   const head = d.findings.length === 0 ? '이상 없음' : `어긋남 ${d.findings.length}건`
-  return `${head} (${cov}${skipped}${unparsable}${unjudged})`
+  return `${head} (${cov}${skipped}${unparsable}${unjudged}${unrouted})`
 }
 
 /**

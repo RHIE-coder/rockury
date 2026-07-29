@@ -193,8 +193,10 @@ AsyncAPI(= 이벤트 기반 시스템용 명세 표준) 형식 지원뿐이다.
 - **gRPC 스트리밍 · GraphQL subscription 전송** — Stream 화면은 섰지만 전송이 WebSocket·SSE
   둘뿐이다(`api-runner.md` § stream.session AC-7). gRPC 는 `@grpc/grpc-js` 도입이 선행되고,
   그건 `main` 브랜치에서 한 명이 하는 일이라 사용자 합의가 먼저다.
-- **스트림 관측의 판정 규칙** — 세션이 Run 으로 쌓이지만 대조 규칙이 없어
-  `DriftCoverage.unjudged` 로 드러내고 있다(`api-contract.md` § drift.observed AC-6).
+- **이름 없는 스트림 메시지의 대조** — 이벤트 이름이 있으면 대조하지만(`api-contract.md`
+  § drift.observed AC-6), WebSocket 프레임처럼 이름이 없으면 어느 선언과 맞출지 못 정한다.
+  본문 안의 판별 필드를 쓰려면 "어느 필드가 판별자인가"를 선언에 더해야 한다 — 모델이 늘어서
+  실제 필요가 나올 때 연다.
 - **MCP 도구 승격 스위치** — 자주 쓰는 요청을 전용 도구로 올릴지. 1차는
   `api_get_spec` 한 덩어리로 충분한지 보고 정한다.
 - **SOAP** — WSDL 덕에 완전 판정 대상이지만 수요가 낮아 후순위.
