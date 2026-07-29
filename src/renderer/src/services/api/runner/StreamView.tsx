@@ -21,6 +21,7 @@ import {
   copyMessageText,
   exportTimeline,
   filterTimeline,
+  graphqlSubscribeBlocker,
   grpcStreamBlocker,
   sendPanelVisible,
   transportFor,
@@ -230,8 +231,16 @@ export function StreamView() {
       ? grpcStreamBlocker(req, parseGrpcTarget(env.baseUrl), preview.headers, secretValues(env.values))
       : null
 
+  // 구독도 붙기 전에 알 수 있는 조건이 있다 — 손잡기까지 마친 뒤 실패하면 화면이
+  // '연결됨' 을 먼저 적고 그 다음에 못 한다고 말한다.
+  const gqlBlock =
+    spec.kind === 'graphql' && req && pick?.transport === 'graphql-ws'
+      ? graphqlSubscribeBlocker(req.request.graphqlQuery ?? '', req.request.graphqlVariables ?? '')
+      : null
+  const blocked = grpcBlock ?? gqlBlock
+
   const canOpen =
-    !!req && !!env && !!pick?.transport && !!preview?.canSend && !grpcBlock && !live && !busy
+    !!req && !!env && !!pick?.transport && !!preview?.canSend && !blocked && !live && !busy
 
   return (
     <div className="flex h-full flex-col">
@@ -385,7 +394,7 @@ export function StreamView() {
                     title={
                       canOpen
                         ? undefined
-                        : (grpcBlock ??
+                        : (blocked ??
                           preview?.blocking.map((b) => b.message).join('\n') ??
                           '붙을 수 없습니다')
                     }
@@ -406,7 +415,16 @@ export function StreamView() {
               {/* 끊긴 이유 · 기록으로 남았다는 사실 */}
               {(reason || savedNote || dropped > 0) && (
                 <div className="border-b border-line bg-panel px-4 py-1.5 text-[11.5px] text-muted">
-                  {reason && <div data-api-stream-reason>{reason}</div>}
+                  {/* 서버가 준 문구는 여러 줄이 정상이다(GraphQL 오류가 그렇다) — 접으면
+                      위치를 짚어 주는 캐럿이 엉뚱한 글자를 가리킨다. 길면 스스로 스크롤한다. */}
+                  {reason && (
+                    <div
+                      data-api-stream-reason
+                      className="max-h-32 overflow-y-auto whitespace-pre-wrap"
+                    >
+                      {reason}
+                    </div>
+                  )}
                   {savedNote && <div data-api-stream-saved>{savedNote}</div>}
                   {dropped > 0 && (
                     <div data-api-stream-dropped>

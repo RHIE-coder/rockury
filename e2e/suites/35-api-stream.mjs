@@ -7,6 +7,9 @@
 
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
+// 프레임 코덱은 구독 검사용 서버와 **함께 쓴다** — 각자 손으로 쓰면 한쪽만 고치는 자리가 생기고,
+// 프레이밍은 눈으로 틀린 걸 못 본다.
+import { decodeFrame, encodeFrame, WS_GUID } from '../lib/api/wsFrames.mjs'
 
 export const meta = {
   name: '35-api-stream',
@@ -43,7 +46,6 @@ function startSseServer() {
  * 손잡기 + 프레임 해석이 이 정도로 끝난다.
  */
 function startWsServer() {
-  const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
   return new Promise((resolve) => {
     const received = []
     const server = createServer((_req, res) => {
@@ -53,7 +55,7 @@ function startWsServer() {
 
     server.on('upgrade', (req, socket) => {
       const key = req.headers['sec-websocket-key']
-      const accept = createHash('sha1').update(key + GUID).digest('base64')
+      const accept = createHash('sha1').update(key + WS_GUID).digest('base64')
       socket.write(
         'HTTP/1.1 101 Switching Protocols\r\n' +
           'Upgrade: websocket\r\nConnection: Upgrade\r\n' +
@@ -84,37 +86,6 @@ function startWsServer() {
 
     server.listen(0, '127.0.0.1', () => resolve({ server, received, port: server.address().port }))
   })
-}
-
-/** 서버→클라이언트 텍스트 프레임(마스크 없음). 짧은 본문만 쓰므로 126 미만 길이만 다룬다. */
-function encodeFrame(text) {
-  const payload = Buffer.from(text, 'utf8')
-  if (payload.length > 125) throw new Error('테스트 프레임이 너무 깁니다')
-  return Buffer.concat([Buffer.from([0x81, payload.length]), payload])
-}
-
-/** 클라이언트→서버 프레임 해석. 클라이언트 프레임은 규약상 **항상 마스크**돼 있다. */
-function decodeFrame(buf) {
-  if (buf.length < 2) return null
-  const opcode = buf[0] & 0x0f
-  const masked = (buf[1] & 0x80) !== 0
-  let len = buf[1] & 0x7f
-  let offset = 2
-  if (len === 126) {
-    if (buf.length < 4) return null
-    len = buf.readUInt16BE(2)
-    offset = 4
-  } else if (len === 127) {
-    if (buf.length < 10) return null
-    len = Number(buf.readBigUInt64BE(2))
-    offset = 10
-  }
-  const maskKey = masked ? buf.subarray(offset, offset + 4) : null
-  if (masked) offset += 4
-  if (buf.length < offset + len) return null
-  const payload = Buffer.from(buf.subarray(offset, offset + len))
-  if (maskKey) for (let i = 0; i < payload.length; i += 1) payload[i] ^= maskKey[i % 4]
-  return { opcode, text: payload.toString('utf8'), size: offset + len }
 }
 
 /** 컨텍스트 바를 이 명세로 옮긴다 — 17번 스위트와 같은 방식(nav 저장소 + 새로고침). */
@@ -509,38 +480,8 @@ export async function run(ctx) {
       await page.waitForTimeout(200)
     }
 
-    // ── 못 여는 인터페이스는 사유를 준다 — 조용히 다른 전송으로 안 내려간다 ──
-    // (gRPC 는 이제 진짜로 붙는다 — `39-api-grpc` 가 덮는다. 여기 남은 것은 GraphQL 구독이다.)
-    {
-      const err = await page.evaluate(async () => {
-        const spec = await window.rockury.apiSpecs.create({ name: 'e2e-stream-gql', kind: 'graphql' })
-        await window.rockury.apiSpecs.patch(spec.id, [
-          { op: 'add_request', name: 'feed', shape: 'server-stream' }
-        ])
-        const envs = await window.rockury.apiOps.saveEnvironment({
-          specId: spec.id,
-          name: 'E2E-GQL-SUB',
-          baseUrl: 'http://127.0.0.1:1',
-          production: false,
-          values: []
-        })
-        try {
-          await window.rockury.apiStream.open({
-            sessionId: 'e2e-gql-sub',
-            specId: spec.id,
-            requestName: 'feed',
-            environmentId: envs.id,
-            call: {},
-            autoReconnect: false
-          })
-          return null
-        } catch (e) {
-          return String(e.message ?? e)
-        }
-      })
-      check('GraphQL 구독은 열리지 않고 사유가 온다', err !== null && err.includes('subscription'))
-      check('사유에 왜 못 하는지가 적힌다', err.includes('graphql-ws'))
-    }
+    // (못 여는 인터페이스: 이제 스트리밍 상호작용이 있는 종류는 전부 전송이 있다 —
+    //  gRPC 는 `39-api-grpc`, GraphQL 구독은 `40-api-graphql-sub` 가 덮는다.)
   } finally {
     sse.server.close()
     ws.server.close()

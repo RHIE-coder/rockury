@@ -16,6 +16,8 @@ import { redactText, secretValues } from '../../../shared/api/redact'
 import { nodeFunctionEnv } from '../../../shared/api/nodeFunctionEnv'
 import { parseGrpcTarget } from '../../../shared/api/grpcTarget'
 import { grpcStreamBlocker } from '../../../shared/api/stream'
+import { subscriptionEvent, websocketUrl } from '../../../shared/api/graphqlWs'
+import { graphqlSubscribeBlocker } from '../../../shared/api/stream'
 import {
   sendPanelVisible,
   sessionToRun,
@@ -186,13 +188,39 @@ export function registerApiStreamIpc(): void {
       if (why) throw new Error(why)
     }
 
+    // GraphQL 구독은 같은 자리에 **소켓으로** 붙는다 — 방식만 바꾼다(https 는 wss 로).
+    // 사유는 **가린 쪽**에서 만든다 — 실주소에는 치환된 비밀이 실려 있다.
+    const socketUrl = pick.transport === 'graphql-ws' ? websocketUrl(real.url) : null
+    const maskedSocket = pick.transport === 'graphql-ws' ? websocketUrl(masked.url) : null
+    if (socketUrl?.problem) throw new Error(maskedSocket?.problem ?? socketUrl.problem)
+    const maskedSocketUrl = maskedSocket?.url ?? null
+
+    // 구독 질의문·변수도 **`{{변수}}` 치환을 지난다.** 안 지나면 같은 요청을 Send 로 쏠 때와
+    // Stream 으로 열 때 서버가 **다른 것을 받는다**(단발 경로는 조립기가 치환한다) —
+    // 그런데 풀리는 참조만 조용히 안 풀리므로 화면 어디에도 단서가 안 남는다.
+    const gqlScope = buildScope({ params: request.params, env, call: input.call })
+    const renderGql = (text: string, maskSecrets: boolean): string =>
+      renderTemplate(text, { scope: gqlScope, env: nodeFunctionEnv, maskSecrets }).text
+
+    if (pick.transport === 'graphql-ws') {
+      // 붙기 전에 알 수 있는 것은 **붙기 전에** 막는다 — 손잡기까지 마친 뒤 실패하면
+      // 화면이 '연결됨' 을 먼저 적고, 자동 재접속까지 돌아 서버를 헛되이 두드린다.
+      const why = graphqlSubscribeBlocker(
+        renderGql(request.request.graphqlQuery ?? '', true),
+        renderGql(request.request.graphqlVariables ?? '', true)
+      )
+      if (why) throw new Error(why)
+    }
+
     const sessionId = input.sessionId
 
     contexts.set(sessionId, {
       input,
       transport: pick.transport,
       shape: request.shape,
-      maskedUrl: masked.url,
+      // 기록에도 **실제로 붙은 주소**가 남아야 한다 — 조립기가 만든 http 주소를 남기면
+      // 기록만 보고는 어디에 붙었는지 알 수 없다(구독은 소켓 주소로 붙는다).
+      maskedUrl: maskedSocketUrl ?? masked.url,
       maskedHeaders: masked.headers,
       maskedCall: Object.fromEntries(
         Object.entries(input.call).map(([k, v]) => [k, redactText(v, secrets)])
@@ -207,12 +235,35 @@ export function registerApiStreamIpc(): void {
       {
         sessionId,
         transport: pick.transport,
-        url: real.url,
+        url: socketUrl?.url ?? real.url,
         // 화면·기록에 적을 것은 **조립기가 가린 것**을 쓴다. `redact` 는 글자 그대로 일치만
         // 지우는데 주소 값은 URL 인코딩을 거쳐 원문과 안 맞는다(그래서 안 지워졌었다).
-        displayUrl: masked.url,
+        displayUrl: maskedSocketUrl ?? masked.url,
         headers: real.headers,
         autoReconnect: input.autoReconnect,
+        // GraphQL 구독은 소켓을 열기만 해서는 아무것도 안 온다 — 규약 손잡기에 쓸
+        // 질의문·변수·인증 값을 함께 넘긴다. **인증은 헤더가 아니라 `connection_init` 으로**
+        // 간다(WebSocket 손잡기에 헤더를 못 싣는다 — 규약이 그 자리를 따로 뒀다).
+        ...(pick.transport === 'graphql-ws'
+          ? {
+              graphqlWs: {
+                real: {
+                  query: renderGql(request.request.graphqlQuery ?? '', false),
+                  variables: renderGql(request.request.graphqlVariables ?? '', false),
+                  connectionParams: real.headers,
+                  // 구독 루트 이름은 **세션당 한 번만** 읽는다 — 메시지마다 질의문을 다시
+                  // 파싱하면 큰 질의문·빠른 스트림에서 초당 수십 MB 의 임시 문자열이 생긴다.
+                  event: subscriptionEvent(request.request.graphqlQuery ?? '')
+                },
+                display: {
+                  query: renderGql(request.request.graphqlQuery ?? '', true),
+                  variables: renderGql(request.request.graphqlVariables ?? '', true),
+                  connectionParams: masked.headers,
+                  event: subscriptionEvent(request.request.graphqlQuery ?? '')
+                }
+              }
+            }
+          : {}),
         // gRPC 는 주소만으로 못 연다 — 어느 메서드인지와 암호화 여부가 따로 필요하다.
         // 메서드 이름은 요청 정의에 있고(`grpcMethod`), 접속 대상은 환경 주소에서 읽는다.
         ...(pick.transport === 'grpc'
@@ -236,7 +287,7 @@ export function registerApiStreamIpc(): void {
       finalize
     )
 
-    return { transport: pick.transport, url: masked.url }
+    return { transport: pick.transport, url: maskedSocketUrl ?? masked.url }
   })
 
   ipcMain.handle('api:sendStream', (_e, sessionId: string, text: string): StreamMessage => {

@@ -1,6 +1,16 @@
 import { classifyFailure } from './httpSend'
 import { binaryPlaceholder, openGrpcStream, type GrpcStreamHandle } from './grpcStream'
 import { SseParser } from '../../shared/api/sse'
+import {
+  GRAPHQL_WS_PROTOCOL,
+  initialState,
+  onServerText,
+  onSocketOpen,
+  plaintextNote,
+  stopMessage,
+  type GqlWsAction,
+  type GqlWsContext
+} from '../../shared/api/graphqlWs'
 import { nextReconnect, RECONNECT_TOTAL_MAX } from '../../shared/api/stream'
 import type { StreamOutcome, StreamTransport } from '../../shared/api/stream'
 import type { GrpcTarget } from '../../shared/api/grpcTarget'
@@ -44,6 +54,12 @@ export interface OpenSessionInput {
    * 문자열은 이걸 믿지 말고 조립기가 가린 것을 써라 — 위 `displayUrl` 이 그 이유다.
    */
   redact: (text: string) => string
+  /**
+   * GraphQL 구독에만 있는 것. 소켓을 열기만 해서는 아무것도 안 온다 —
+   * 규약 손잡기에 쓸 질의문·변수·인증 값이 필요하다(`graphqlWs.ts`).
+   * `real` 은 소켓으로 나갈 것, `display` 는 타임라인 문구를 만들 때 쓰는 가린 것이다.
+   */
+  graphqlWs?: { real: GqlWsContext; display: GqlWsContext }
   /**
    * gRPC 전송에만 있는 것. 이 전송은 주소만으로 못 연다 — **어느 메서드인지**와
    * **암호화 여부**가 따로 필요하고, 메시지 정의는 서버에게 받아 온다(`grpcStream.ts`).
@@ -229,9 +245,12 @@ class Session {
    * 덮어써 끊을 수 없는 통로가 남는다. 회차 번호로 자기 것인지 가린다.
    */
   private round = 0
+  /** 이 회차가 이미 끝났나. `roundEnded` 를 한 번만 지나게 하는 빗장. */
+  private roundOver = false
 
   start(): void {
     this.round += 1
+    this.roundOver = false
     this.state = 'connecting'
     // 붙는 데까지만 제한시간을 건다. 붙은 뒤에 오래 조용한 것은 정상이다(그게 스트림이다).
     this.connectTimer = setTimeout(() => {
@@ -243,6 +262,7 @@ class Session {
     }, CONNECT_TIMEOUT_MS)
 
     if (this.input.transport === 'websocket') this.openWebSocket()
+    else if (this.input.transport === 'graphql-ws') this.openGraphqlWs()
     else if (this.input.transport === 'grpc') void this.openGrpc()
     else void this.openSse()
   }
@@ -305,6 +325,107 @@ class Session {
       if (!this.opened) this.roundEnded('서버에 붙지 못했습니다.', 'connect-failed')
       else this.roundEnded(`서버가 연결을 닫았습니다 (${why}).`)
     })
+  }
+
+  /**
+   * GraphQL 구독. 소켓은 여기서 잡고 **판단은 전부 `graphqlWs.ts`** 가 한다 —
+   * 손잡기 순서·오류 갈래가 판단이라 테스트로 덮여야 하고, 그러려면 소켓을 몰라야 한다.
+   */
+  private openGraphqlWs(): void {
+    const cfg = this.input.graphqlWs
+    if (!cfg) {
+      this.terminate('구독 세션인데 질의문 정보가 없습니다.', 'error', 'connect-failed')
+      return
+    }
+    // **이 회차의 것만 받는다.** 안 두면 앞 회차 소켓이 늦게 닫히면서 지금 회차를
+    // "서버가 연결을 닫았습니다"로 끝내고, 그 뒤로는 끊기 버튼이 아무것도 못 닫는다.
+    const myRound = this.round
+    const mine = (): boolean => this.round === myRound && !this.roundOver
+    const state = initialState()
+
+    let ws: WebSocket
+    try {
+      // 하위 프로토콜 이름으로 합의해야 서버가 규약을 켠다 — 안 주면 그냥 소켓이고 아무것도 안 온다.
+      ws = new WebSocket(this.input.url, [GRAPHQL_WS_PROTOCOL])
+    } catch (err) {
+      const { status, message } = classifyFailure(err)
+      this.terminate(message, 'error', status)
+      return
+    }
+    this.socket = ws
+
+    // 평문 소켓으로 자격증명이 나가면 **그 사실을 적는다.** 막지는 않는다 —
+    // `ws://` 는 사용자가 명시적으로 적은 것이고, 방식이 없는 주소는 애초에 안 열린다.
+    const plain = plaintextNote(this.input.url, cfg.real.connectionParams)
+    if (plain) this.push('connecting', [this.add('system', 'note', plain)])
+
+    ws.addEventListener('open', () => {
+      // **소켓에 나가는 것은 실값이다.** 안내 문구는 값이 아니라 **이름만** 담으므로
+      // 여기서 가린 쪽을 쓸 이유가 없다 — 쓰면 서버가 가린 글자를 토큰으로 받는다.
+      if (mine()) this.applyGqlWs(onSocketOpen(cfg.real))
+    })
+    ws.addEventListener('message', (e: MessageEvent) => {
+      if (!mine()) return
+      const raw: unknown = e.data
+      if (typeof raw !== 'string') {
+        this.push(this.state, [
+          this.add('in', '', binaryPlaceholder(raw instanceof ArrayBuffer ? raw.byteLength : 0))
+        ])
+        return
+      }
+      this.applyGqlWs(onServerText(raw, cfg.real, state))
+    })
+    ws.addEventListener('error', () => {
+      // WebSocket 의 error 는 이유를 안 준다 — 뒤따르는 close 가 코드를 주기를 기다린다.
+    })
+    ws.addEventListener('close', (e: CloseEvent) => {
+      if (!mine()) return
+      const why = e.reason ? `${e.code} ${e.reason}` : String(e.code)
+      if (!this.opened) {
+        // **소켓은 열렸는데 손을 안 잡아 준** 경우가 여기 온다 — 규약 이름이 안 맞는 서버다.
+        this.roundEnded(
+          `구독 규약 손잡기가 끝나기 전에 연결이 닫혔습니다 (${why}) — ` +
+            `서버가 '${GRAPHQL_WS_PROTOCOL}' 를 켰는지 확인하세요(GraphQL 서버 설정에서 구독 전송을 켜야 합니다).`,
+          'connect-failed'
+        )
+        return
+      }
+      this.roundEnded(`서버가 연결을 닫았습니다 (${why}).`)
+    })
+  }
+
+  /**
+   * 규약 판단이 낸 지시를 실제로 수행한다. 소켓에 나가는 글자만 실값이다.
+   *
+   * **문구는 순수 모듈이 만든 것을 그대로 쓴다** — 그 모듈은 인증 값의 **이름만** 담고
+   * 서버가 준 글자는 이미 잘라서 준다. 나머지 가림은 `add()` 의 그물 한 자리에서 한다
+   * (전에는 여기서 한 번 더 되돌렸는데, 그건 "내가 만든 문자열을 내가 못 믿는" 구조였다).
+   */
+  private applyGqlWs(actions: GqlWsAction[]): void {
+    for (const a of actions) {
+      switch (a.kind) {
+        case 'send':
+          this.socket?.send(a.text)
+          break
+        case 'open':
+          this.markOpen()
+          // **`연결됨` 은 소켓이 열린 때가 아니라 손을 잡은 때다.** 소켓만 열린 상태를
+          // 연결됨이라고 하면, 손잡기가 실패해도 사용자는 붙은 줄 안다.
+          // 문구는 다른 전송과 **같은 말**을 쓴다 — 타임라인 검색이 갈리지 않게.
+          this.system('connect', `연결됨 — ${this.input.displayUrl}`, 'open')
+          break
+        case 'system':
+          this.push(this.state, [this.add('system', 'note', a.text)])
+          break
+        case 'message':
+          this.push('open', [this.add('in', a.event, a.data)])
+          break
+        case 'end':
+          this.roundEnded(a.reason, a.failure)
+          // 이 회차는 끝났다 — 뒤에 남은 지시를 더 수행하지 않는다.
+          return
+      }
+    }
   }
 
   private async openGrpc(): Promise<void> {
@@ -432,12 +553,23 @@ class Session {
 
   // ── 끝내기 · 재접속 ─────────────────────────────────────────────────────
 
-  /** 한 회 접속이 끝났다. 자동 재접속이 켜져 있고 사용자가 안 껐으면 다시 붙는다. */
+  /**
+   * 한 회 접속이 끝났다. 자동 재접속이 켜져 있고 사용자가 안 껐으면 다시 붙는다.
+   *
+   * **통로를 실제로 닫는다.** 전에는 참조만 버렸는데, 그건 세 전송에서 우연히 안전했을 뿐이다 —
+   * WebSocket 은 `close` 이벤트 안에서만, SSE 는 본문을 다 읽은 뒤에만 여기 왔기 때문이다.
+   * GraphQL 구독은 **서버가 보낸 규약 메시지**(`complete`·`error`)로 회차를 끝내므로
+   * 소켓이 멀쩡히 살아 있는 채로 여기 온다. 참조만 버리면 그 소켓은 등록부에서도 지워져
+   * **어떤 창구로도 못 닫는다** — 리스너가 살아 있어 죽은 세션 id 로 IPC 를 계속 쏜다
+   * (실측: 30회 붙었다 끊으면 TCP 핸들 60개가 열린 채 남았다).
+   *
+   * **한 회차에 한 번만 지나간다.** 여기서 소켓을 닫으면 그 `close` 이벤트가 뒤늦게 와서
+   * 다시 들어오는데, 빗장이 없으면 재접속이 두 번 걸리고 타이머가 겹친다.
+   */
   private roundEnded(reason: string, failure?: RunStatus): void {
-    this.socket = null
-    this.grpc?.close()
-    this.grpc = null
-    this.abort = null
+    if (this.roundOver) return
+    this.roundOver = true
+    this.dropConnection()
 
     if (this.connectTimer) {
       clearTimeout(this.connectTimer)
@@ -520,6 +652,14 @@ class Session {
     for (const t of [this.reconnectTimer, this.connectTimer]) if (t) clearTimeout(t)
     this.reconnectTimer = null
     this.connectTimer = null
+    // 구독은 소켓을 닫기 전에 접는다 — 규약이 정한 순서다(안 접으면 서버에 구독이 남는다).
+    if (this.input.transport === 'graphql-ws' && this.socket?.readyState === 1) {
+      try {
+        this.socket.send(stopMessage())
+      } catch {
+        /* 이미 닫히는 중이면 그만이다 */
+      }
+    }
     // 통로를 먼저 닫되, 끝맺음은 여기서 한다 — WebSocket 의 close 이벤트를 기다리면
     // "끊기를 눌렀는데 화면이 그대로"인 구간이 생긴다.
     this.dropConnection()

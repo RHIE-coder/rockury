@@ -9,6 +9,7 @@ import {
   sendPanelVisible,
   sessionToRun,
   streamRunStatus,
+  graphqlSubscribeBlocker,
   transportFor,
   transportLabel,
   type StreamSessionSnapshot
@@ -54,12 +55,14 @@ describe('전송 선택', () => {
     expect(transportFor('sse', 'server-stream')).toEqual({ transport: 'sse', unsupported: null })
     expect(transportFor('grpc', 'duplex')).toEqual({ transport: 'grpc', unsupported: null })
     expect(transportFor('grpc', 'server-stream').transport).toBe('grpc')
+    expect(transportFor('graphql', 'server-stream').transport).toBe('graphql-ws')
   })
 
-  it('GraphQL subscription 도 마찬가지 — 하위 프로토콜이 다르다는 사실을 적는다', () => {
-    const p = transportFor('graphql', 'server-stream')
+  it('스트리밍 상호작용이 없는 종류는 사유를 준다', () => {
+    // REST·JSON-RPC 는 단발뿐이라 이 화면에 올 일이 없다 — 빈 화면 대신 이유를 준다.
+    const p = transportFor('rest', 'duplex')
     expect(p.transport).toBeNull()
-    expect(p.unsupported).toContain('graphql-ws')
+    expect(p.unsupported).toContain('스트리밍')
   })
 
   it('전송 이름 옆의 모양은 **명세에서 고른 말 그대로** 쓴다', () => {
@@ -67,6 +70,7 @@ describe('전송 선택', () => {
     expect(transportLabel('websocket', 'duplex')).toBe('WebSocket · 서로 계속 주고받음')
     expect(transportLabel('sse', 'server-stream')).toBe('SSE · 계속 받기만 함')
     expect(transportLabel('grpc', 'duplex')).toBe('gRPC · 서로 계속 주고받음')
+    expect(transportLabel('graphql-ws', 'server-stream')).toBe('GraphQL 구독 · 계속 받기만 함')
   })
 
   it('단발 요청은 이 화면이 아니라 Send 로 안내한다', () => {
@@ -244,5 +248,26 @@ describe('세션 결과 갈래 (CASE-apirunner-042 · execute AC-4 규율)', () 
 
   it('갈래를 못 받았으면 연결 실패로 둔다 — 성공으로 넘기지 않는다', () => {
     expect(streamRunStatus({ opened: false, endedBy: 'error' })).toBe('connect-failed')
+  })
+})
+
+// ── 붙기 전에 아는 것은 붙기 전에 막는다 ───────────────────────────────────
+
+describe('GraphQL 구독 사전 차단 (CASE-apirunner-047i)', () => {
+  const q = 'subscription { messageAdded { id } }'
+
+  it('질의문이 비었으면 **누르기 전에** 막는다', () => {
+    // 안 막으면 손잡기까지 마친 뒤 실패해 화면이 '연결됨' 을 먼저 적고, 자동 재접속까지 돈다.
+    expect(graphqlSubscribeBlocker('', '')).toContain('질의문')
+    expect(graphqlSubscribeBlocker('   ', '')).toContain('질의문')
+  })
+
+  it('변수가 JSON 이 아니면 막고 이유를 준다', () => {
+    expect(graphqlSubscribeBlocker(q, '{room:"a"}')).toContain('JSON')
+  })
+
+  it('멀쩡하면 막지 않는다 — 변수는 없어도 된다', () => {
+    expect(graphqlSubscribeBlocker(q, '')).toBeNull()
+    expect(graphqlSubscribeBlocker(q, '{"room":"a"}')).toBeNull()
   })
 })

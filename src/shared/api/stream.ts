@@ -22,20 +22,22 @@ import {
  * 못 붙이는 인터페이스는 조용히 다른 전송으로 내려가지 않고 **사유를 단 빈 결과**를 준다.
  */
 
-export type StreamTransport = 'websocket' | 'sse' | 'grpc'
+export type StreamTransport = 'websocket' | 'sse' | 'grpc' | 'graphql-ws'
 
 /** 전송에 붙일 요청 전문의 `method` 자리 — 단발의 GET/POST 자리에 무엇을 썼는지 남긴다. */
 const TRANSPORT_METHOD: Record<StreamTransport, string> = {
   websocket: 'WS',
   sse: 'SSE',
-  grpc: 'GRPC'
+  grpc: 'GRPC',
+  'graphql-ws': 'GQL-WS'
 }
 
 /** 사람이 읽는 전송 이름. */
 const TRANSPORT_LABEL: Record<StreamTransport, string> = {
   websocket: 'WebSocket',
   sse: 'SSE',
-  grpc: 'gRPC'
+  grpc: 'gRPC',
+  'graphql-ws': 'GraphQL 구독'
 }
 
 /**
@@ -72,9 +74,9 @@ const no = (unsupported: string): TransportPick => ({ transport: null, unsupport
 /**
  * 이 요청을 어느 전송으로 여나.
  *
- * **WebSocket · SSE · gRPC** 는 각자의 전송으로 연다. 남은 GraphQL subscription 은 하위
- * 프로토콜이 아예 달라서, 있는 전송으로 흉내 내면 "붙었는데 아무것도 안 온다"가 된다 —
- * 그건 판정으로 치면 미관측을 통과로 적는 것과 같은 거짓말이다. 그래서 **사유를 단 빈 결과**다.
+ * 스트리밍 상호작용이 있는 종류는 **저마다 다른 전송**을 쓴다 — 프레이밍도 손잡기도 다르다.
+ * 있는 전송으로 흉내 내면 "붙었는데 아무것도 안 온다"가 되는데, 그건 판정으로 치면
+ * 미관측을 통과로 적는 것과 같은 거짓말이다. 못 여는 종류에는 **사유를 단 빈 결과**를 준다.
  */
 export function transportFor(kind: InterfaceKind, shape: InteractionShape): TransportPick {
   if (shape === 'unary') {
@@ -86,12 +88,7 @@ export function transportFor(kind: InterfaceKind, shape: InteractionShape): Tran
   if (kind === 'websocket') return { transport: 'websocket', unsupported: null }
   if (kind === 'sse') return { transport: 'sse', unsupported: null }
   if (kind === 'grpc') return { transport: 'grpc', unsupported: null }
-  if (kind === 'graphql') {
-    return no(
-      'GraphQL subscription 은 아직 만들지 않았습니다 — WebSocket 위에 graphql-ws 하위 프로토콜이 ' +
-        '얹히는데, 그 손잡기를 안 하면 서버가 아무것도 안 보냅니다.'
-    )
-  }
+  if (kind === 'graphql') return { transport: 'graphql-ws', unsupported: null }
   return no(`'${kind}' 에는 스트리밍 상호작용이 없습니다.`)
 }
 
@@ -114,6 +111,29 @@ export function grpcStreamBlocker(
     return '어느 메서드인지가 비어 있습니다 — 요청의 gRPC 메서드 칸을 채우세요.'
   }
   return plaintextSecretBlock(target, headers, secrets)
+}
+
+/**
+ * GraphQL 구독을 열기 전에 막아야 하는 것 — **붙어 본 뒤가 아니라 누르기 전에** 안다.
+ *
+ * 이 둘은 요청 정의에 적힌 **정적인 값**이라 소켓을 열기 전에 판정할 수 있다. 안 막으면
+ * 손잡기까지 마친 뒤에야 실패하는데, 그때는 화면이 이미 '연결됨' 을 적은 뒤고
+ * 자동 재접속까지 돌아 서버를 헛되이 두드린다(gRPC 의 `grpcStreamBlocker` 와 같은 자리).
+ *
+ * 화면(`canOpen`)과 창구(`api:openStream`) 둘 다 이 함수를 쓴다.
+ * **가린 값으로 부른다** — 문구에 실값이 실리면 안 된다.
+ */
+export function graphqlSubscribeBlocker(query: string, variables: string): string | null {
+  if (!query.trim()) return '구독 질의문이 비어 있습니다 — 요청의 질의문 칸을 채우세요.'
+  const raw = variables.trim()
+  if (raw) {
+    try {
+      JSON.parse(raw)
+    } catch (err) {
+      return `질의 변수가 JSON 이 아닙니다 — ${err instanceof Error ? err.message : String(err)}`
+    }
+  }
+  return null
 }
 
 /**
