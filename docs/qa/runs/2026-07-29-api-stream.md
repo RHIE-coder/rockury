@@ -156,3 +156,41 @@
   - 폴더 이름 바꾸기·폴더째 옮기기의 화면 손잡이(위 등재)
 
 - 판정: **PASS**
+
+---
+
+# gate run — 2026-07-29 · API Studio › Mocking (자리표시자 0)
+
+- 기준 커밋(HEAD=부모): `d9aa5fd`
+- 범위: **Studio › Mocking 신설 — 마지막 자리표시자.** 이제 IA 의 모든 자리가 실제 화면이다.
+  1. 순수 로직 — `shared/api/mock.ts`(가짜 본문 생성 · 필수여부 번역 · 경로 대조 · 상태 고르기 ·
+     흉내 낼 수 있는 범위 판정)
+  2. 서버 — `main/api/mockServer.ts`(`node:http`, **`127.0.0.1` 고정 바인딩**)
+  3. IPC/창구 — `main/ipc/api/mocking.ts` 4채널(전부 MCP 제외 등재) · preload `apiMock`
+  4. 화면 — `studio/MockingWorkspace.tsx`
+  5. e2e — `e2e/suites/21-api-mocking.mjs`(앱 밖 노드에서 실제 HTTP 를 쏴서 검증)
+
+- 결과:
+  - typecheck (`npm run typecheck`): **PASS**
+  - test (`npm test`): **PASS** — 1385 pass / 4 skip (이전 1357 → **+28**)
+  - build (`npm run build`): **PASS**
+  - e2e (`npm run e2e`): **PASS** — ALL PASS, 21/21 스위트 · **481 체크**(이전 450 → +31).
+    신규 `21-api-mocking` 31체크. 건너뜀 0 · 미실행 0
+  - surface-verify: **status=ok** · 차단 **0** · 관찰 120
+
+- drift:
+  - `api-studio.md` § mocking.server 를 **AC-1 한 줄에서 AC-1~AC-8 로 확장**했다 —
+    지어내지 않음(501 과 사유, 404 가 아닌 이유) · 값은 일부러 가짜처럼 · 필수여부를 값으로
+    번역(`없을 수 있음` → null · `모름` → 짐작 건수) · 상태 고르기(서버 안 끊음) ·
+    **관측이 아니다** · 범위(REST 만, 강등 금지, 화면·창구 양쪽에서 막음) · 로컬 전용/꺼짐 시작
+  - `api-service.md` §3 IA 에서 "Mocking(후속)" 표기 제거 · §7 열린 항목에서 Mocking 삭제
+  - `docs/qa/api-studio.md` **Scenario S8 신설**(CASE-apistudio-090~096) ·
+    미구현 절에서 Mocking 삭제 → **"유일한 미커버 인수조건" 이 해소됐다**
+  - `docs/qa/api-mcp.md` 열린 항목의 **스위트 번호가 stale**(13~16)이던 것을 13~21 로 고치고,
+    Inbox 의 재시작 미검증이 정확히 이 순서 문제 때문임을 명시
+
+- 미검증으로 남긴 것:
+  - **UI 시각 리뷰** — 세 회차 연속 못 돌렸다(에이전트 세션 한도). 기계 검증만 통과
+  - GraphQL·JSON-RPC·gRPC 모의 — 흉내 내지 않는 것이 **의도**이고 그 사실을 검사한다(095)
+
+- 판정: **PASS**

@@ -71,7 +71,7 @@ API (service)
 │                            └ 설계부에서만 활성    └ 운영부에서만 활성
 │
 │  ── 설계부 (design) ──  Env 무관, 버전 중심
-├─ Studio      ┬ Requests · Docs · Mocking(후속)
+├─ Studio      ┬ Requests · Docs · Mocking
 ├─ Versions    ┬ Timeline(컷/락) · Diff
 │
 │  ── 운영부 (ops) ──  active Env 중심
@@ -189,7 +189,6 @@ AsyncAPI(= 이벤트 기반 시스템용 명세 표준) 형식 지원뿐이다.
 ## 7. 열린 질문 / 뒤로 미룬 것
 
 - **Overview · Reference 모듈** — 지금 IA 에 없다. DB 서비스는 뒀다. 필요해지면 추가.
-- **Mocking** — Studio 안에 자리만 두고 후속(`api-studio.md` § mocking).
 - **웹훅 외부 터널** — 1차는 로컬 전용. 진짜 외부 콜백을 받으려면 터널이 필요하다.
 - **gRPC 스트리밍 · GraphQL subscription 전송** — Stream 화면은 섰지만 전송이 WebSocket·SSE
   둘뿐이다(`api-runner.md` § stream.session AC-7). gRPC 는 `@grpc/grpc-js` 도입이 선행되고,

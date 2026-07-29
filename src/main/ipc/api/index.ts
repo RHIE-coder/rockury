@@ -3,6 +3,7 @@ import { registerApiSpecIpc } from './specs'
 import { registerApiOpsIpc } from './ops'
 import { registerApiStreamIpc, shutdownApiStreams } from './stream'
 import { registerApiInboxIpc } from './inbox'
+import { registerApiMockIpc } from './mocking'
 import { registerApiContractIpc } from './contract'
 import { registerApiTransferIpc } from './transfer'
 import { setApiChangeNotifier } from '../../ai/apiTools'
@@ -19,6 +20,7 @@ export function registerApiIpc(): void {
   registerApiOpsIpc()
   registerApiStreamIpc()
   registerApiInboxIpc()
+  registerApiMockIpc()
   registerApiContractIpc()
   registerApiTransferIpc()
 

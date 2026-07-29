@@ -47,6 +47,14 @@ export const apiCoverage: ServiceCoverage = {
       '닫는지가 흐려진다(앱을 닫아도 남는 소켓이 생긴다). 쌓인 세션 기록은 api_get_runs 로 읽힌다.',
     'api:sendStream': '위와 같음 — 열린 세션에 글자를 밀어 넣는 것도 실행이다.',
     'api:closeStream': '위와 같음. 열지 못하므로 닫을 것도 없다.',
+    'api:startMock':
+      '포트를 여는 조작이다 — 모르는 새 열려 있으면 안 되는 창구를 도구로 열게 하지 않는다. ' +
+      '게다가 가짜 응답은 관측이 아니라서 AI 가 여기서 얻을 것이 없다(선언은 api_get_spec 에 있다).',
+    'api:stopMock': '위와 같음 — 열지 못하므로 닫을 것도 없다.',
+    'api:getMock': '대기 상태는 화면이 자기 배지를 그리기 위한 것이다.',
+    'api:setMockStatus':
+      '어느 상태로 답할지는 사람이 화면에서 고르는 실험 손잡이다. 선언 자체는 ' +
+      'api_patch_spec 으로 고친다.',
     'api:startInbox':
       '실행이다 — 포트를 열어 남의 요청을 받는 조작이라 `api:send` 보다 더 사람 몫이다. ' +
       '모르는 새 열려 있으면 안 되는 창구를 도구로 열게 하지 않는다. 받은 것은 api_get_runs 로 읽힌다.',

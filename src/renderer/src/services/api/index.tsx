@@ -17,11 +17,10 @@ import {
   Upload,
   Waves
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import type { Service, WorkspaceComponent } from '@renderer/nav/types'
-import { PlaceholderView } from '@renderer/ui/PlaceholderView'
+import type { Service } from '@renderer/nav/types'
 import { RequestsWorkspace } from './studio/RequestsWorkspace'
 import { DocsWorkspace } from './studio/DocsWorkspace'
+import { MockingWorkspace } from './studio/MockingWorkspace'
 import { CreateSpecDialog } from './specs/CreateSpecDialog'
 import { TransferDialog } from './specs/TransferDialog'
 import { EnvironmentsView } from './ops/EnvironmentsView'
@@ -44,23 +43,10 @@ import './rehydration' // 에이전트(MCP) 쓰기 → api:changed → 스코프
  *   설계부(design) : 명세를 짓고 버전을 컷한다. 환경 무관.
  *   운영부(ops)    : active 환경에 대고 쏘고, 그 기록으로 판정한다.
  *
- * 지금 구현된 것: Studio(Requests·Docs) · Versions(Timeline·Diff) · Environments ·
+ * **자리표시자가 0 이다** — IA 의 모든 자리가 실제 화면이다:
+ * Studio(Requests·Docs·Mocking) · Versions(Timeline·Diff) · Environments ·
  * Runner(Send·History·Stream·Inbox) · Contract(Drift·Accept·Logs).
- * 남은 자리(Mocking)는 비워 두지 않고 자리표시자로 둔다 — 비우면 IA 가 다시
- * 흔들리고, 자리가 있으면 무엇이 남았는지 화면이 말해 준다.
  */
-
-const soon = (
-  icon: LucideIcon,
-  depth: string,
-  title: string,
-  subtitle: string
-): WorkspaceComponent => {
-  const View = (): React.JSX.Element => (
-    <PlaceholderView icon={icon} depth={depth} title={title} subtitle={subtitle} />
-  )
-  return View
-}
 
 export const apiService: Service = {
   id: 'api',
@@ -112,17 +98,7 @@ export const apiService: Service = {
       views: [
         { id: 'requests', label: 'Requests', icon: Route, workspace: RequestsWorkspace },
         { id: 'docs', label: 'Docs', icon: BookOpen, workspace: DocsWorkspace },
-        {
-          id: 'mocking',
-          label: 'Mocking',
-          icon: FlaskConical,
-          workspace: soon(
-            FlaskConical,
-            'depth 3 · API › Studio › Mocking',
-            'Mocking',
-            '선언한 응답 모양으로 가짜 서버를 띄웁니다 — 프론트가 백엔드 완성을 안 기다려도 되게. (후속)'
-          )
-        }
+        { id: 'mocking', label: 'Mocking', icon: FlaskConical, workspace: MockingWorkspace }
       ]
     },
     {

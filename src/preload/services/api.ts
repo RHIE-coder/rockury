@@ -17,6 +17,7 @@ import type {
   StartInboxInput
 } from '../../main/ipc/api/inbox'
 import type { ReceivedRequest } from '../../shared/api/inbox'
+import type { MockHitEvent, MockStatus, StartMockInput } from '../../main/ipc/api/mocking'
 import type { ContractLog } from '../../main/store/apiContract'
 import type { ImportPreview, ImportSourceKind } from '../../main/ipc/api/transfer'
 import type { ApiChangedEvent } from '../../main/ai/apiTools'
@@ -45,6 +46,9 @@ export type {
   StartInboxInput,
   InboxStatus,
   InboxReceivedEvent,
+  StartMockInput,
+  MockStatus,
+  MockHitEvent,
   ContractLog,
   AbsorbPreview,
   DriftResult,
@@ -167,6 +171,30 @@ export const apiApi = {
       const listener = (_e: unknown, payload: InboxStatus): void => fn(payload)
       ipcRenderer.on('api:inboxStatus', listener)
       return () => ipcRenderer.removeListener('api:inboxStatus', listener)
+    }
+  },
+
+  /**
+   * 모의(가짜) 서버 — **선언한 응답 모양으로만** 답한다. 선언이 없으면 지어내지 않고
+   * 501 과 사유를 준다. 가짜 응답은 관측 기록이 되지 않는다(판정이 거짓이 되므로).
+   */
+  apiMock: {
+    start: (input: StartMockInput): Promise<MockStatus> => ipcRenderer.invoke('api:startMock', input),
+    stop: (): Promise<MockStatus> => ipcRenderer.invoke('api:stopMock'),
+    get: (): Promise<MockStatus> => ipcRenderer.invoke('api:getMock'),
+    /** 어느 상태로 답할지 바꾼다. 서버를 안 끊는다(오류 경로를 켜고 끄는 자리). */
+    setStatus: (requestName: string, statusCode: string): Promise<MockStatus> =>
+      ipcRenderer.invoke('api:setMockStatus', requestName, statusCode),
+
+    onHit: (fn: (e: MockHitEvent) => void): (() => void) => {
+      const listener = (_e: unknown, payload: MockHitEvent): void => fn(payload)
+      ipcRenderer.on('api:mockHit', listener)
+      return () => ipcRenderer.removeListener('api:mockHit', listener)
+    },
+    onStatus: (fn: (s: MockStatus) => void): (() => void) => {
+      const listener = (_e: unknown, payload: MockStatus): void => fn(payload)
+      ipcRenderer.on('api:mockStatus', listener)
+      return () => ipcRenderer.removeListener('api:mockStatus', listener)
     }
   },
 
