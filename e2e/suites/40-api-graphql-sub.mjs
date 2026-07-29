@@ -36,13 +36,17 @@ export async function run(ctx) {
   const endless = await startGraphqlWsServer({ endless: true, ping: true })
   // 구독을 거절하는 서버 — 서버가 준 사유가 화면에 닿는지 본다.
   const rejecting = await startGraphqlWsServer({ rejectSubscribe: 'Cannot query field "nope"' })
+  // 여태 단위 테스트로만 덮였던 것들 — 실제 소켓 위에서 밟는다.
+  const flappy = await startGraphqlWsServer({ dropAfterAck: true })
+  const foreign = await startGraphqlWsServer({ foreignId: true })
+  const noisy = await startGraphqlWsServer({ preAckNoise: 25 })
 
   try {
     await click('[data-nav-service="api"]')
     await page.waitForTimeout(300)
 
     const specId = await page.evaluate(
-      async ({ url, legacyUrl, endlessUrl, rejectUrl }) => {
+      async ({ url, legacyUrl, endlessUrl, rejectUrl, flappyUrl, foreignUrl, noisyUrl }) => {
         const spec = await window.rockury.apiSpecs.create({ name: 'e2e-gql-sub', kind: 'graphql' })
         await window.rockury.apiSpecs.patch(spec.id, [
           { op: 'add_request', name: 'messages', shape: 'server-stream' },
@@ -88,6 +92,22 @@ export async function run(ctx) {
             { name: 'room', value: '공지' }
           ]
         })
+        for (const [name, baseUrl] of [
+          ['E2E-GQL-FLAPPY', flappyUrl],
+          ['E2E-GQL-FOREIGN', foreignUrl],
+          ['E2E-GQL-NOISY', noisyUrl]
+        ]) {
+          await window.rockury.apiOps.saveEnvironment({
+            specId: spec.id,
+            name,
+            baseUrl,
+            production: false,
+            values: [
+              { name: 'token', value: 'GQL-SECRET', secret: true },
+              { name: 'room', value: '공지' }
+            ]
+          })
+        }
         await window.rockury.apiOps.saveEnvironment({
           specId: spec.id,
           name: 'E2E-GQL-LEGACY',
@@ -100,7 +120,15 @@ export async function run(ctx) {
         })
         return spec.id
       },
-      { url: live.url, legacyUrl: legacy.url, endlessUrl: endless.url, rejectUrl: rejecting.url }
+      {
+        url: live.url,
+        legacyUrl: legacy.url,
+        endlessUrl: endless.url,
+        rejectUrl: rejecting.url,
+        flappyUrl: flappy.url,
+        foreignUrl: foreign.url,
+        noisyUrl: noisy.url
+      }
     )
     await switchSpec(page, click, specId)
 
@@ -252,6 +280,62 @@ export async function run(ctx) {
       (await page.locator('[data-api-stream-reason]').innerText()).includes('Cannot query field')
     )
 
+    /** 환경을 바꿔 다시 붙는다 — 뒤의 검사들이 같은 걸음을 반복한다. */
+    const openWith = async (envName, opts = {}) => {
+      await click('[data-nav-module="environments"]')
+      await page.waitForSelector(`[data-api-env-card="${envName}"]`, { timeout: 5_000 })
+      await click(`[data-api-env-card="${envName}"] button[data-api-env-select]`)
+      await click('[data-nav-module="runner"]')
+      await page.waitForTimeout(300)
+      await click('[data-nav-view="stream"]')
+      await page.waitForTimeout(400)
+      await click('[data-api-stream-pick="messages"]')
+      await page.waitForTimeout(300)
+      if (opts.autoReconnect) {
+        await page.locator('input[data-api-stream-autoreconnect]').check()
+        await page.waitForTimeout(200)
+      }
+      await click('button[data-api-stream-open]')
+    }
+
+    // ── 손잡기 뒤 끊는 서버에서 자동 재접속이 실제로 돈다 ───────────────────
+    await openWith('E2E-GQL-FLAPPY', { autoReconnect: true })
+    await page.waitForSelector('[data-api-stream-msg="system"]', { timeout: 20_000 })
+    await page.waitForTimeout(3_000)
+    {
+      const timeline = await page.locator('[data-api-stream-timeline]').innerText()
+      // 재접속 왕복에는 **손잡기가 다시 붙는다** — 그게 다른 전송과 다른 자리다.
+      check('구독도 자동 재접속이 돈다 — 손잡기를 다시 한다', timeline.includes('재접속'))
+      check('몇 번째 시도인지 적힌다', /\d번째 재접속/.test(timeline))
+    }
+    await click('button[data-api-stream-close]')
+    await page.waitForTimeout(500)
+    await page.locator('input[data-api-stream-autoreconnect]').uncheck()
+    await page.waitForTimeout(200)
+
+    // ── 우리가 연 구독이 아닌 것은 우리 관측이 아니다 ──────────────────────
+    await openWith('E2E-GQL-FOREIGN')
+    await page.waitForSelector('[data-api-stream-saved]', { timeout: 15_000 })
+    {
+      const timeline = await page.locator('[data-api-stream-timeline]').innerText()
+      check('남의 구독 결과를 우리 관측으로 세지 않는다', !timeline.includes('남의것'))
+      check('세지 않았다는 사실을 적는다', timeline.includes('우리가 연 구독이 아닌'))
+      check('우리 구독 결과는 그대로 온다', timeline.includes('안녕-공지-1'))
+    }
+
+    // ── 규약에 없는 글자를 흘리는 서버는 그 사실로 결론 낸다 ────────────────
+    await openWith('E2E-GQL-NOISY')
+    await page.waitForSelector('[data-api-stream-reason]', { timeout: 20_000 })
+    {
+      const reason = await page.locator('[data-api-stream-reason]').innerText()
+      // 안 두면 제한시간(30초)까지 프레임마다 타임라인 행 + IPC 가 나간다.
+      check('손잡기 전 소음이 상한에 닿으면 규약을 안 쓰는 서버로 보고 멈춘다', reason.includes('규약을 쓰지 않는'))
+      check(
+        '연결됨으로 가지 않는다',
+        (await page.locator('[data-api-stream-state="open"]').count()) === 0
+      )
+    }
+
     // ── 손잡기가 안 맞는 서버: 붙긴 해도 **연결됨이 아니다** ───────────────
     await click('[data-nav-module="environments"]')
     await page.waitForSelector('[data-api-env-card="E2E-GQL-LEGACY"]', { timeout: 5_000 })
@@ -278,5 +362,8 @@ export async function run(ctx) {
     await legacy.stop()
     await endless.stop()
     await rejecting.stop()
+    await flappy.stop()
+    await foreign.stop()
+    await noisy.stop()
   }
 }

@@ -32,6 +32,10 @@ export async function run(ctx) {
   // 정의를 주는 서버 / 안 주는 서버 둘을 띄운다 — 두 번째가 "관측으로 안 내려간다"의 증거다.
   const live = await startGrpcServer()
   const mute = await startGrpcServer({ reflection: false })
+  // 상한에 닿는 서버 · 이름이 위험한 서버 · 붙자마자 끊는 서버 — 여태 안 밟은 자리들.
+  const flood = await startGrpcServer({ floodServices: 600 })
+  const poison = await startGrpcServer({ poisonName: true })
+  const flappy = await startGrpcServer({ dropAfterFirst: true })
 
   try {
     await click('[data-nav-service="api"]')
@@ -39,7 +43,7 @@ export async function run(ctx) {
 
     // ── 명세: 계속 받기만 함(Watch) · 서로 주고받음(Chat) ──────────────────
     const specId = await page.evaluate(
-      async ({ url, muteUrl }) => {
+      async ({ url, muteUrl, floodUrl, poisonUrl, flappyUrl }) => {
         const spec = await window.rockury.apiSpecs.create({ name: 'e2e-grpc', kind: 'grpc' })
         await window.rockury.apiSpecs.patch(spec.id, [
           { op: 'add_request', name: 'watch', shape: 'server-stream' },
@@ -78,9 +82,22 @@ export async function run(ctx) {
           // (맞게도) 보내기를 막아서, 검사하려던 "정의를 못 받으면 안 붙는다" 에 닿지 못한다.
           values: [{ name: 'token', value: 'GRPC-SECRET', secret: true }]
         })
+        for (const [name, baseUrl] of [
+          ['E2E-GRPC-FLOOD', floodUrl],
+          ['E2E-GRPC-POISON', poisonUrl],
+          ['E2E-GRPC-FLAPPY', flappyUrl]
+        ]) {
+          await window.rockury.apiOps.saveEnvironment({
+            specId: spec.id,
+            name,
+            baseUrl,
+            production: false,
+            values: [{ name: 'token', value: 'GRPC-SECRET', secret: true }]
+          })
+        }
         return spec.id
       },
-      { url: live.url, muteUrl: mute.url }
+      { url: live.url, muteUrl: mute.url, floodUrl: flood.url, poisonUrl: poison.url, flappyUrl: flappy.url }
     )
     await switchSpec(page, click, specId)
 
@@ -204,6 +221,61 @@ export async function run(ctx) {
     await click('button[data-api-stream-close]')
     await page.waitForSelector('[data-api-stream-saved]', { timeout: 15_000 })
 
+    // ── 남의 서버가 주는 데이터에 상한이 있다 ─────────────────────────────
+    {
+      const d = await page.evaluate(async () => {
+        const specs = await window.rockury.apiSpecs.list()
+        const target = specs.find((s) => s.name === 'e2e-grpc')
+        const envs = await window.rockury.apiOps.listEnvironments(target.id)
+        const env = envs.find((e) => e.name === 'E2E-GRPC-FLOOD')
+        const r = await window.rockury.apiContract.runDrift(target.id, env.id)
+        return r.unavailable
+      })
+      // 상한에 닿으면 정의를 다 못 읽은 것이므로 **판정하지 않고** 그 사실을 말한다.
+      check('서비스 수 상한에 닿으면 판정하지 않고 사유를 준다', (d?.message ?? '').includes('상한'))
+    }
+
+    // ── 서버가 준 이름을 그대로 열쇠로 쓰지 않는다 ─────────────────────────
+    {
+      const d = await page.evaluate(async () => {
+        const specs = await window.rockury.apiSpecs.list()
+        const target = specs.find((s) => s.name === 'e2e-grpc')
+        const envs = await window.rockury.apiOps.listEnvironments(target.id)
+        const env = envs.find((e) => e.name === 'E2E-GRPC-POISON')
+        const r = await window.rockury.apiContract.runDrift(target.id, env.id)
+        return { grade: r.grade, coverage: r.coverage, unavailable: r.unavailable }
+      })
+      // `__proto__` 를 열쇠로 쓰면 프로토타입이 갈아치워져 정상 메시지까지 잘못 분류된다.
+      check('위험한 이름이 섞여도 판정이 죽지 않는다', d.grade === 'complete')
+      check('그 서버의 나머지 정의는 그대로 읽는다', d.unavailable === null && d.coverage.observed === 2)
+    }
+
+    // ── 붙자마자 끊는 서버에서 자동 재접속이 실제로 돈다 ───────────────────
+    await click('[data-nav-module="environments"]')
+    await page.waitForSelector('[data-api-env-card="E2E-GRPC-FLAPPY"]', { timeout: 5_000 })
+    await click('[data-api-env-card="E2E-GRPC-FLAPPY"] button[data-api-env-select]')
+    await click('[data-nav-module="runner"]')
+    await page.waitForTimeout(300)
+    await click('[data-nav-view="stream"]')
+    await page.waitForTimeout(400)
+    await click('[data-api-stream-pick="watch"]')
+    await page.waitForTimeout(300)
+    await page.locator('input[data-api-stream-autoreconnect]').check()
+    await page.waitForTimeout(200)
+    await click('button[data-api-stream-open]')
+    // 서버가 30ms 뒤 끊는다 → 1초 뒤 재접속. 그 왕복에는 **정의 받기가 다시 붙는다.**
+    await page.waitForSelector('[data-api-stream-msg="system"]', { timeout: 20_000 })
+    await page.waitForTimeout(3_000)
+    {
+      const timeline = await page.locator('[data-api-stream-timeline]').innerText()
+      check('gRPC 도 자동 재접속이 돈다 — 정의를 다시 받아 오는 왕복이 붙는다', timeline.includes('재접속'))
+      check('몇 번째 시도인지 적힌다', /\d번째 재접속/.test(timeline))
+    }
+    await click('button[data-api-stream-close]')
+    await page.waitForTimeout(500)
+    await page.locator('input[data-api-stream-autoreconnect]').uncheck()
+    await page.waitForTimeout(200)
+
     // ── 정의를 못 받으면 **붙지 않는다** ──────────────────────────────────
     // "연결됨인데 아무것도 안 옴" 을 만들면 사용자는 서버를 의심한다.
     await click('[data-nav-module="environments"]')
@@ -228,5 +300,8 @@ export async function run(ctx) {
   } finally {
     await live.stop()
     await mute.stop()
+    await flood.stop()
+    await poison.stop()
+    await flappy.stop()
   }
 }

@@ -170,6 +170,12 @@ export async function startGrpcServer(options = {}) {
     reflection = true,
     /** 심볼 조회를 **in-band 오류**로 거절한다 — 콜 오류와 다른 경로다. */
     symbolError = null,
+    /** 이만큼의 서비스 이름을 알려 준다 — 상한에 닿는지 보는 데 쓴다. */
+    floodServices = 0,
+    /** 서비스 이름에 `__proto__` 를 섞는다 — 열쇠로 쓰면 프로토타입을 갈아치우는 이름이다. */
+    poisonName = false,
+    /** 스트림을 한 건 보내고 곧바로 끊는다 — 자동 재접속이 실제로 도는지 보는 데 쓴다. */
+    dropAfterFirst = false,
     // 옛 서버는 v1alpha 만 켠다. 기본값을 그쪽으로 둬서 **판 넘기기(v1 → v1alpha)** 가
     // 실제로 도는지 늘 확인되게 한다.
     reflectionVersions = ['grpc.reflection.v1alpha'],
@@ -185,6 +191,12 @@ export async function startGrpcServer(options = {}) {
 
   server.addService(appPd['e2e.v1.Ticker'], {
     Watch: (call) => {
+      if (dropAfterFirst) {
+        call.write({ n: 1, label: 'tick-1', kind: 'LOUD', big: '1', blob: Buffer.from([1]) })
+        // 붙자마자 끊는 서버 — 재접속이 돌면 이 왕복이 반복된다.
+        setTimeout(() => call.end(), 30)
+        return
+      }
       const n = Number(call.request?.count) || 3
       for (let i = 1; i <= n; i += 1) {
         call.write({
@@ -228,7 +240,11 @@ export async function startGrpcServer(options = {}) {
             } else if (req.fileContainingSymbol) {
               call.write({ fileDescriptorResponse: { fileDescriptorProto: fileDescriptorProtos } })
             } else if (req.listServices !== undefined) {
-              call.write({ listServicesResponse: { service: [{ name: 'e2e.v1.Ticker' }] } })
+              const names = []
+              if (poisonName) names.push({ name: '__proto__' })
+              names.push({ name: 'e2e.v1.Ticker' })
+              for (let i = 0; i < floodServices; i += 1) names.push({ name: `flood.v1.S${i}` })
+              call.write({ listServicesResponse: { service: names } })
             } else {
               call.write({
                 errorResponse: { errorCode: grpc.status.NOT_FOUND, errorMessage: '모르는 요청' }

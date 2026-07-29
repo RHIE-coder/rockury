@@ -22,6 +22,12 @@ export async function startGraphqlWsServer(options = {}) {
     rejectSubscribe = null,
     /** 참이면 `complete` 를 안 보낸다 — **사용자가 끊어야** 끝나는 구독을 흉내 낸다. */
     endless = false,
+    /** 손잡기 뒤 곧바로 끊는다 — 자동 재접속이 실제로 도는지 보는 데 쓴다. */
+    dropAfterAck = false,
+    /** 우리가 안 연 구독의 결과를 섞어 보낸다 — 남의 데이터를 우리 관측으로 세는지 본다. */
+    foreignId = false,
+    /** 손잡기 전에 규약에 없는 글자를 흘린다 — 소음 상한에 닿는지 본다. */
+    preAckNoise = 0,
     requireToken = null,
     ping = false
   } = options
@@ -67,6 +73,8 @@ export async function startGraphqlWsServer(options = {}) {
     )
 
     const send = (obj) => socket.write(encodeFrame(JSON.stringify(obj)))
+    // 손잡기 전에 규약에 없는 글자를 흘린다.
+    for (let i = 0; i < preAckNoise; i += 1) socket.write(encodeFrame(`쓰레기-${i}`))
     let acked = false
     let timer = null
 
@@ -114,6 +122,11 @@ export async function startGraphqlWsServer(options = {}) {
           }
           acked = true
           send({ type: 'connection_ack' })
+          if (dropAfterAck) {
+            stop()
+            setTimeout(() => socket.end(), 30)
+            continue
+          }
           // 이미 걸린 것을 안 지우면 소켓이 죽은 뒤에도 계속 write 를 시도해 프로세스가 안 끝난다.
           stop()
           if (ping) timer = setInterval(() => send({ type: 'ping' }), 120)
@@ -131,6 +144,8 @@ export async function startGraphqlWsServer(options = {}) {
             send({ id: msg.id, type: 'error', payload: [{ message: rejectSubscribe }] })
             continue
           }
+          // 우리가 안 연 이름으로 먼저 하나 보낸다 — 세면 안 되는 것이다.
+          if (foreignId) send({ id: '99', type: 'next', payload: { data: { other: '남의것' } } })
           const room = msg.payload?.variables?.room ?? 'general'
           for (let i = 1; i <= 2; i += 1) {
             send({
