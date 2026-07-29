@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { getSpec, versionMatchingDraft } from '../../store/apiSpecs'
 import { appendRun, getEnvironment, pruneRuns, RUN_KEEP } from '../../store/apiOps'
+import type { OpenSessionInput } from '../../api/streamSession'
 import {
   closeAllSessions,
   closeSession,
@@ -16,7 +17,7 @@ import { redactText, secretValues } from '../../../shared/api/redact'
 import { nodeFunctionEnv } from '../../../shared/api/nodeFunctionEnv'
 import { parseGrpcTarget } from '../../../shared/api/grpcTarget'
 import { grpcStreamBlocker } from '../../../shared/api/stream'
-import { subscriptionEvent, websocketUrl } from '../../../shared/api/graphqlWs'
+import { subscriptionEvent, websocketUrl, type GqlWsContext } from '../../../shared/api/graphqlWs'
 import { graphqlSubscribeBlocker } from '../../../shared/api/stream'
 import {
   sendPanelVisible,
@@ -231,58 +232,53 @@ export function registerApiStreamIpc(): void {
       scope: buildScope({ params: request.params, env, call: input.call })
     })
 
-    openSession(
-      {
-        sessionId,
-        transport: pick.transport,
-        url: socketUrl?.url ?? real.url,
-        // 화면·기록에 적을 것은 **조립기가 가린 것**을 쓴다. `redact` 는 글자 그대로 일치만
-        // 지우는데 주소 값은 URL 인코딩을 거쳐 원문과 안 맞는다(그래서 안 지워졌었다).
-        displayUrl: maskedSocketUrl ?? masked.url,
-        headers: real.headers,
-        autoReconnect: input.autoReconnect,
-        // GraphQL 구독은 소켓을 열기만 해서는 아무것도 안 온다 — 규약 손잡기에 쓸
-        // 질의문·변수·인증 값을 함께 넘긴다. **인증은 헤더가 아니라 `connection_init` 으로**
-        // 간다(WebSocket 손잡기에 헤더를 못 싣는다 — 규약이 그 자리를 따로 뒀다).
-        ...(pick.transport === 'graphql-ws'
-          ? {
-              graphqlWs: {
-                real: {
-                  query: renderGql(request.request.graphqlQuery ?? '', false),
-                  variables: renderGql(request.request.graphqlVariables ?? '', false),
-                  connectionParams: real.headers,
-                  // 구독 루트 이름은 **세션당 한 번만** 읽는다 — 메시지마다 질의문을 다시
-                  // 파싱하면 큰 질의문·빠른 스트림에서 초당 수십 MB 의 임시 문자열이 생긴다.
-                  event: subscriptionEvent(request.request.graphqlQuery ?? '')
-                },
-                display: {
-                  query: renderGql(request.request.graphqlQuery ?? '', true),
-                  variables: renderGql(request.request.graphqlVariables ?? '', true),
-                  connectionParams: masked.headers,
-                  event: subscriptionEvent(request.request.graphqlQuery ?? '')
-                }
-              }
-            }
-          : {}),
-        // gRPC 는 주소만으로 못 연다 — 어느 메서드인지와 암호화 여부가 따로 필요하다.
-        // 메서드 이름은 요청 정의에 있고(`grpcMethod`), 접속 대상은 환경 주소에서 읽는다.
-        ...(pick.transport === 'grpc'
-          ? {
+    // 전송이 무엇이냐가 나머지를 정한다 — **갈래를 여기서 명시한다.**
+    // 칸을 나란히 두고 조건부로 얹으면 `{transport:'websocket', grpc:{…}}` 같은 불가능한
+    // 조합이 타입상 합법이 되고, 그걸 막을 런타임 확인이 전송마다 하나씩 는다.
+    const common = {
+      sessionId,
+      url: socketUrl?.url ?? real.url,
+      // 화면·기록에 적을 것은 **조립기가 가린 것**을 쓴다. `redact` 는 글자 그대로 일치만
+      // 지우는데 주소 값은 URL 인코딩을 거쳐 원문과 안 맞는다(그래서 안 지워졌었다).
+      displayUrl: maskedSocketUrl ?? masked.url,
+      headers: real.headers,
+      autoReconnect: input.autoReconnect,
+      // **비밀 목록을 세션 시작 시점에 가두지 않는다.** 세션은 오래 사는데 그동안 환경에
+      // 비밀이 새로 추가될 수 있고, 가둬 두면 그 뒤 오는 메시지가 안 가려진다.
+      redact: (t: string) => redactText(t, currentSecrets(env.id, secrets))
+    }
+
+    const gqlContext = (maskSecrets: boolean): GqlWsContext => ({
+      query: renderGql(request.request.graphqlQuery ?? '', maskSecrets),
+      variables: renderGql(request.request.graphqlVariables ?? '', maskSecrets),
+      connectionParams: maskSecrets ? masked.headers : real.headers,
+      // 구독 루트 이름은 **세션당 한 번만** 읽는다 — 메시지마다 질의문을 다시 파싱하면
+      // 큰 질의문·빠른 스트림에서 초당 수십 MB 의 임시 문자열이 생긴다.
+      event: subscriptionEvent(request.request.graphqlQuery ?? '')
+    })
+
+    const session: OpenSessionInput =
+      pick.transport === 'graphql-ws'
+        ? // 소켓을 열기만 해서는 아무것도 안 온다 — 규약 손잡기에 쓸 것을 함께 넘긴다.
+          // **인증은 헤더가 아니라 접속 인사로** 간다(WebSocket 손잡기에 헤더를 못 싣는다).
+          { ...common, transport: 'graphql-ws', graphqlWs: { real: gqlContext(false), display: gqlContext(true) } }
+        : pick.transport === 'grpc'
+          ? // gRPC 는 주소만으로 못 연다 — 어느 메서드인지와 암호화 여부가 따로 필요하다.
+            {
+              ...common,
+              transport: 'grpc',
               grpc: {
                 target: grpcTarget,
                 method: request.request.grpcMethod ?? '',
                 declaredShape: request.shape,
-                // 서버 스트리밍의 첫 메시지 — 실값 / 기록·문구용 가림 두 벌.
                 body: real.body,
                 displayBody: masked.body
               }
             }
-          : {}),
-        // **비밀 목록을 세션 시작 시점에 가두지 않는다.** 세션은 오래 사는데 그동안 환경에
-        // 비밀이 새로 추가될 수 있고, 가둬 두면 그 뒤 오는 메시지가 안 가려진다.
-        // 붙어 있는 것(주소·헤더)은 안 바뀌는 게 맞지만 **가리는 그물은 늘 최신이어야 한다.**
-        redact: (t) => redactText(t, currentSecrets(env.id, secrets))
-      },
+          : { ...common, transport: pick.transport }
+
+    openSession(
+      session,
       emit,
       finalize
     )

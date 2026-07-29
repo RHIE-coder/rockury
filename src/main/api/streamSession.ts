@@ -1,5 +1,5 @@
 import { classifyFailure } from './httpSend'
-import { binaryPlaceholder, openGrpcStream, type GrpcStreamHandle } from './grpcStream'
+import { binaryPlaceholder, openGrpcStream } from './grpcStream'
 import { SseParser } from '../../shared/api/sse'
 import {
   GRAPHQL_WS_PROTOCOL,
@@ -12,7 +12,7 @@ import {
   type GqlWsContext
 } from '../../shared/api/graphqlWs'
 import { nextReconnect, RECONNECT_TOTAL_MAX } from '../../shared/api/stream'
-import type { StreamOutcome, StreamTransport } from '../../shared/api/stream'
+import type { StreamOutcome } from '../../shared/api/stream'
 import type { GrpcTarget } from '../../shared/api/grpcTarget'
 import type { InteractionShape, RunStatus, StreamMessage, StreamState } from '../../shared/api/types'
 
@@ -30,9 +30,8 @@ import type { InteractionShape, RunStatus, StreamMessage, StreamState } from '..
  * 전부 테스트로 덮인다. 이 파일은 **소켓을 열고 닫고 줄을 흘려보내는 일만** 한다.
  */
 
-export interface OpenSessionInput {
+interface SessionBase {
   sessionId: string
-  transport: StreamTransport
   /** 실제로 붙을 주소 — 비밀 실값이 들어 있다. 타임라인·기록에는 **절대** 안 나간다. */
   url: string
   /**
@@ -54,24 +53,66 @@ export interface OpenSessionInput {
    * 문자열은 이걸 믿지 말고 조립기가 가린 것을 써라 — 위 `displayUrl` 이 그 이유다.
    */
   redact: (text: string) => string
-  /**
-   * GraphQL 구독에만 있는 것. 소켓을 열기만 해서는 아무것도 안 온다 —
-   * 규약 손잡기에 쓸 질의문·변수·인증 값이 필요하다(`graphqlWs.ts`).
-   * `real` 은 소켓으로 나갈 것, `display` 는 타임라인 문구를 만들 때 쓰는 가린 것이다.
-   */
-  graphqlWs?: { real: GqlWsContext; display: GqlWsContext }
-  /**
-   * gRPC 전송에만 있는 것. 이 전송은 주소만으로 못 연다 — **어느 메서드인지**와
-   * **암호화 여부**가 따로 필요하고, 메시지 정의는 서버에게 받아 온다(`grpcStream.ts`).
-   */
-  grpc?: {
-    target: GrpcTarget
-    method: string
-    /** 요청에 **선언된** 모양. 서버 정의와 다르면 안 연다(무피드백 교착 방지). */
-    declaredShape: InteractionShape
-    /** 서버 스트리밍의 첫 본문 — 실값 / 기록·문구용 가림 두 벌. */
-    body: string
-    displayBody: string
+}
+
+/**
+ * 세션을 여는 데 필요한 것. **전송이 무엇이냐가 나머지를 정한다.**
+ *
+ * 칸을 나란히 두고 전부 선택으로 만들면 `{transport:'websocket', grpc:{…}}` 같은 **불가능한
+ * 조합**이 타입상 합법이 되고, 그걸 막으려고 "gRPC 세션인데 메서드 정보가 없습니다" 같은
+ * 사용자가 볼 일 없어야 할 문구를 손으로 넣게 된다. 전송 하나를 더할 때 그 짝이 또 는다.
+ * 판별 합집합이면 빠뜨린 자리를 **컴파일러가 짚는다.**
+ */
+export type OpenSessionInput = SessionBase &
+  (
+    | { transport: 'websocket' | 'sse' }
+    | {
+        transport: 'graphql-ws'
+        /**
+         * 소켓을 열기만 해서는 아무것도 안 온다 — 규약 손잡기에 쓸 질의문·변수·인증 값.
+         * `real` 은 소켓으로 나갈 것, `display` 는 타임라인 문구를 만들 때 쓰는 가린 것이다.
+         */
+        graphqlWs: { real: GqlWsContext; display: GqlWsContext }
+      }
+    | {
+        transport: 'grpc'
+        /**
+         * 이 전송은 주소만으로 못 연다 — **어느 메서드인지**와 **암호화 여부**가 따로 필요하고,
+         * 메시지 정의는 서버에게 받아 온다(`grpcStream.ts`).
+         */
+        grpc: {
+          target: GrpcTarget
+          method: string
+          /** 요청에 **선언된** 모양. 서버 정의와 다르면 안 연다(무피드백 교착 방지). */
+          declaredShape: InteractionShape
+          /** 서버 스트리밍의 첫 본문 — 실값 / 기록·문구용 가림 두 벌. */
+          body: string
+          displayBody: string
+        }
+      }
+  )
+
+/**
+ * 지금 살아 있는 통로 하나. **전송마다 다른 것을 이 한 칸으로 모은다.**
+ *
+ * 전에는 `socket`·`grpc`·`abort` 세 칸이 나란히 있었고 "살아 있는 것을 닫는다"가 세 자리에
+ * 흩어져 있었다 — 네 번째 전송(GraphQL 구독)을 얹을 때 그중 한 자리가 빠져 **닫을 수 없는
+ * 연결이 남았다**(실측 30회 → 핸들 60개). 칸이 하나면 빠뜨릴 자리가 없다.
+ */
+interface StreamConnection {
+  /** 보낼 수 있으면 보낸다. 못 보내는 전송이면 **이유를 달아 던진다**(조용히 삼키지 않는다). */
+  send: (real: string, display: string) => void
+  /** 이 통로를 닫는다. 두 번 불려도 안 터진다. */
+  close: () => void
+}
+
+/** 보내기가 없는 전송의 통로 — 왜 없는지를 던진다. */
+function receiveOnly(why: string, close: () => void): StreamConnection {
+  return {
+    send: () => {
+      throw new Error(why)
+    },
+    close
   }
 }
 
@@ -133,14 +174,8 @@ class Session {
   closeReason: string | null = null
 
   private seq = 0
-  private socket: WebSocket | null = null
-  private grpc: GrpcStreamHandle | null = null
-  /**
-   * 지금 회차의 **중단 창구**. SSE 는 `fetch` 를, gRPC 는 정의 받아 오는 왕복을 여기서 끊는다.
-   * gRPC 는 붙기 전에 왕복이 있어서, 이게 없으면 사용자가 끊어도 그 왕복이 끝까지 돌고
-   * 심지어 그 뒤에 스트림을 한 번 열었다 닫는다(실측).
-   */
-  private abort: AbortController | null = null
+  /** 지금 살아 있는 통로. 전송이 무엇이든 **이 한 칸**이다. */
+  private conn: StreamConnection | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private connectTimer: ReturnType<typeof setTimeout> | null = null
   /** 연속 실패 수 — 붙으면 0으로 돌아간다(간격을 다시 짧게). */
@@ -261,9 +296,12 @@ class Session {
       this.roundEnded(`${CONNECT_TIMEOUT_MS / 1000}초 안에 연결되지 않았습니다.`, 'timeout')
     }, CONNECT_TIMEOUT_MS)
 
-    if (this.input.transport === 'websocket') this.openWebSocket()
-    else if (this.input.transport === 'graphql-ws') this.openGraphqlWs()
-    else if (this.input.transport === 'grpc') void this.openGrpc()
+    // 좁혀서 넘긴다 — 여는 함수가 자기에게 필요한 것을 **인자로** 받으므로
+    // "있어야 할 게 없다"를 런타임에 확인할 자리가 사라진다.
+    const input = this.input
+    if (input.transport === 'websocket') this.openWebSocket()
+    else if (input.transport === 'graphql-ws') this.openGraphqlWs(input.graphqlWs)
+    else if (input.transport === 'grpc') void this.openGrpc(input.grpc)
     else void this.openSse()
   }
 
@@ -289,7 +327,13 @@ class Session {
       this.terminate(message, 'error', status)
       return
     }
-    this.socket = ws
+    this.conn = {
+      send: (real) => {
+        if (ws.readyState !== 1) throw new Error('연결돼 있지 않습니다 — 먼저 접속하세요.')
+        ws.send(real)
+      },
+      close: () => ws.close()
+    }
 
     if (dropped.length > 0) {
       const m = this.add(
@@ -331,12 +375,7 @@ class Session {
    * GraphQL 구독. 소켓은 여기서 잡고 **판단은 전부 `graphqlWs.ts`** 가 한다 —
    * 손잡기 순서·오류 갈래가 판단이라 테스트로 덮여야 하고, 그러려면 소켓을 몰라야 한다.
    */
-  private openGraphqlWs(): void {
-    const cfg = this.input.graphqlWs
-    if (!cfg) {
-      this.terminate('구독 세션인데 질의문 정보가 없습니다.', 'error', 'connect-failed')
-      return
-    }
+  private openGraphqlWs(cfg: { real: GqlWsContext; display: GqlWsContext }): void {
     // **이 회차의 것만 받는다.** 안 두면 앞 회차 소켓이 늦게 닫히면서 지금 회차를
     // "서버가 연결을 닫았습니다"로 끝내고, 그 뒤로는 끊기 버튼이 아무것도 못 닫는다.
     const myRound = this.round
@@ -352,7 +391,16 @@ class Session {
       this.terminate(message, 'error', status)
       return
     }
-    this.socket = ws
+    this.conn = receiveOnly('구독은 계속 받기만 합니다 — 보내는 자리가 없습니다.', () => {
+      // **소켓을 닫기 전에 구독을 접는다** — 규약이 정한 순서다(안 접으면 서버에 구독이 남는다).
+      // 끊는 자리가 하나이므로 그 순서도 여기 한 곳에만 적힌다.
+      try {
+        if (ws.readyState === 1) ws.send(stopMessage())
+      } catch {
+        /* 이미 닫히는 중이면 그만이다 */
+      }
+      ws.close()
+    })
 
     // 평문 소켓으로 자격증명이 나가면 **그 사실을 적는다.** 막지는 않는다 —
     // `ws://` 는 사용자가 명시적으로 적은 것이고, 방식이 없는 주소는 애초에 안 열린다.
@@ -362,7 +410,7 @@ class Session {
     ws.addEventListener('open', () => {
       // **소켓에 나가는 것은 실값이다.** 안내 문구는 값이 아니라 **이름만** 담으므로
       // 여기서 가린 쪽을 쓸 이유가 없다 — 쓰면 서버가 가린 글자를 토큰으로 받는다.
-      if (mine()) this.applyGqlWs(onSocketOpen(cfg.real))
+      if (mine()) this.applyGqlWs(ws, onSocketOpen(cfg.real))
     })
     ws.addEventListener('message', (e: MessageEvent) => {
       if (!mine()) return
@@ -373,7 +421,7 @@ class Session {
         ])
         return
       }
-      this.applyGqlWs(onServerText(raw, cfg.real, state))
+      this.applyGqlWs(ws, onServerText(raw, cfg.real, state))
     })
     ws.addEventListener('error', () => {
       // WebSocket 의 error 는 이유를 안 준다 — 뒤따르는 close 가 코드를 주기를 기다린다.
@@ -401,11 +449,13 @@ class Session {
    * 서버가 준 글자는 이미 잘라서 준다. 나머지 가림은 `add()` 의 그물 한 자리에서 한다
    * (전에는 여기서 한 번 더 되돌렸는데, 그건 "내가 만든 문자열을 내가 못 믿는" 구조였다).
    */
-  private applyGqlWs(actions: GqlWsAction[]): void {
+  private applyGqlWs(ws: WebSocket, actions: GqlWsAction[]): void {
     for (const a of actions) {
       switch (a.kind) {
         case 'send':
-          this.socket?.send(a.text)
+          // 규약 프레임은 사용자가 보내는 것이 아니라 **우리가 규약을 지키는 것**이라
+          // 통로의 `send`(사람이 보내는 자리)가 아니라 소켓으로 곧장 나간다.
+          if (ws.readyState === 1) ws.send(a.text)
           break
         case 'open':
           this.markOpen()
@@ -428,17 +478,14 @@ class Session {
     }
   }
 
-  private async openGrpc(): Promise<void> {
-    const cfg = this.input.grpc
-    if (!cfg) {
-      this.terminate('gRPC 세션인데 메서드 정보가 없습니다.', 'error', 'connect-failed')
-      return
-    }
+  private async openGrpc(cfg: NonNullable<Extract<OpenSessionInput, { transport: 'grpc' }>['grpc']>): Promise<void> {
     const myRound = this.round
     const stale = (): boolean => this.round !== myRound || this.ended || this.closedByUser
-    // 정의 받아 오는 왕복을 사용자가 끊을 수 있게 — 이 회차의 중단 창구를 먼저 걸어 둔다.
+    // 정의 받아 오는 왕복을 사용자가 끊을 수 있게 — **붙기 전에도 닫을 것이 있어야 한다.**
+    // 여기 안 걸면 사용자가 끊어도 그 왕복이 끝까지 돌고, 심지어 그 뒤에 스트림을 한 번
+    // 열었다 닫는다(실측).
     const ac = new AbortController()
-    this.abort = ac
+    this.conn = receiveOnly('아직 서버 정의를 받는 중입니다.', () => ac.abort())
 
     const outcome = await openGrpcStream(
       {
@@ -481,25 +528,24 @@ class Session {
     }
     outcome.handle.onEnd((reason, failure) => {
       if (stale()) return
-      this.grpc = null
+      this.conn = null
       this.roundEnded(reason, failure)
     })
-    this.grpc = outcome.handle
+    this.conn = {
+      send: (real, display) => outcome.handle.send(real, display),
+      close: () => outcome.handle.close()
+    }
   }
 
-  /** 지금 살아 있는 통로를 전부 닫는다. **끊는 자리가 하나여야** 빠뜨리지 않는다. */
+  /** 살아 있는 통로를 닫는다. **끊는 자리가 하나여야** 빠뜨리지 않는다. */
   private dropConnection(): void {
-    this.socket?.close()
-    this.grpc?.close()
-    this.abort?.abort()
-    this.socket = null
-    this.grpc = null
-    this.abort = null
+    this.conn?.close()
+    this.conn = null
   }
 
   private async openSse(): Promise<void> {
     const ac = new AbortController()
-    this.abort = ac
+    this.conn = receiveOnly('이 전송은 한 방향입니다 — 받기만 합니다.', () => ac.abort())
     const parser = new SseParser()
 
     try {
@@ -630,18 +676,12 @@ class Session {
    * `{{base64(apiKey)}}` 처럼 **가공된 비밀**은 원문과 안 맞아 그대로 남는다.
    */
   send(real: string, display: string): StreamMessage {
-    if (this.input.transport === 'grpc') {
-      if (!this.grpc || this.state !== 'open') {
-        throw new Error('연결돼 있지 않습니다 — 먼저 접속하세요.')
-      }
-      // 소켓에 나갈 실값 / 사람에게 보일 가림 — gRPC 는 오류 문구를 만드는 데도 가린 쪽이 필요하다.
-      this.grpc.send(real, display)
-    } else {
-      if (!this.socket || this.socket.readyState !== 1) {
-        throw new Error('연결돼 있지 않습니다 — 먼저 접속하세요.')
-      }
-      this.socket.send(real)
+    if (!this.conn || this.state !== 'open') {
+      throw new Error('연결돼 있지 않습니다 — 먼저 접속하세요.')
     }
+    // 소켓에 나갈 실값 / 사람에게 보일 가림 — 오류 문구를 만드는 데도 가린 쪽이 필요하다.
+    // **전송별 분기가 없다** — 무엇을 보내는지는 통로가 안다.
+    this.conn.send(real, display)
     const m = this.add('out', '', display)
     this.push('open', [m])
     return m
@@ -652,14 +692,6 @@ class Session {
     for (const t of [this.reconnectTimer, this.connectTimer]) if (t) clearTimeout(t)
     this.reconnectTimer = null
     this.connectTimer = null
-    // 구독은 소켓을 닫기 전에 접는다 — 규약이 정한 순서다(안 접으면 서버에 구독이 남는다).
-    if (this.input.transport === 'graphql-ws' && this.socket?.readyState === 1) {
-      try {
-        this.socket.send(stopMessage())
-      } catch {
-        /* 이미 닫히는 중이면 그만이다 */
-      }
-    }
     // 통로를 먼저 닫되, 끝맺음은 여기서 한다 — WebSocket 의 close 이벤트를 기다리면
     // "끊기를 눌렀는데 화면이 그대로"인 구간이 생긴다.
     this.dropConnection()
