@@ -8,7 +8,8 @@ import {
   Route,
   Search,
   Trash2,
-  Upload
+  Upload,
+  Pencil
 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
@@ -26,7 +27,17 @@ import {
   type RequestField,
   type ResponseDef
 } from '@shared/api/types'
-import { buildRequestTree, canMoveFolder, moveRequest, normalizeFolder, type TreeNode } from '@shared/api/tree'
+import {
+  buildRequestTree,
+  canMoveFolder,
+  canRenameFolder,
+  folderPaths,
+  moveFolder,
+  moveRequest,
+  normalizeFolder,
+  renameFolder,
+  type TreeNode
+} from '@shared/api/tree'
 import { renderTemplate } from '@shared/api/template'
 import { buildScope } from '@shared/api/resolve'
 import { rendererFunctionEnv, useActiveEnvironment } from '../ops/store'
@@ -135,11 +146,41 @@ function RequestRow({
 }
 
 /**
+ * 폴더 이름 칸. 요청 이름 칸과 **같은 규율** — 글자마다 저장하지 않고 다 치고 나서 커밋한다
+ * (중간 상태인 빈 이름이 매번 "이름이 비었다" 오류를 번쩍이게 한다).
+ */
+function FolderNameInput({
+  initial,
+  onCommit,
+  onCancel
+}: {
+  initial: string
+  onCommit: (name: string) => void
+  onCancel: () => void
+}) {
+  const [text, setText] = useState(initial)
+  return (
+    <Input
+      autoFocus
+      value={text}
+      data-api-folder-name
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => onCommit(text)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onCommit(text)
+        if (e.key === 'Escape') onCancel()
+      }}
+      className="h-6 flex-1 text-[12px]"
+    />
+  )
+}
+
+/**
  * 폴더 트리 (spec requests.tree).
  *
- * 끌어 옮기기는 **요청 → 폴더** 만 연다. 폴더째 옮기기는 상세의 폴더 칸으로 하는데,
- * 그쪽이 자기 자손으로 넣는 실수를 글자로 막기 쉽고(경로가 보인다) 판정도
- * `canMoveFolder` 한 곳에 모여 있다.
+ * 끌어 옮기기는 **요청도 폴더도** 된다. 자기 자손으로 넣는 실수와 이름이 겹쳐 합쳐지는 것은
+ * `canMoveFolder` 한 곳이 막고, 막힌 이유는 트리 위에 글자로 뜬다 — 조용히 안 옮겨지면
+ * "왜 안 되지"가 된다.
  */
 function TreeView({
   nodes,
@@ -147,20 +188,29 @@ function TreeView({
   selected,
   collapsed,
   observedNames,
+  renaming,
   onToggleFolder,
   onSelect,
   onDragStart,
-  onDropInto
+  onDragFolder,
+  onDropInto,
+  onStartRename,
+  onCommitRename
 }: {
   nodes: TreeNode[]
   depth: number
   selected: string | null
   collapsed: Set<string>
   observedNames: Set<string>
+  /** 지금 이름을 고치고 있는 폴더 경로. 하나뿐이다. */
+  renaming: string | null
   onToggleFolder: (path: string) => void
   onSelect: (name: string) => void
   onDragStart: (name: string) => void
+  onDragFolder: (path: string) => void
   onDropInto: (folder: string) => void
+  onStartRename: (path: string | null) => void
+  onCommitRename: (path: string, name: string) => void
 }) {
   return (
     <>
@@ -177,27 +227,63 @@ function TreeView({
           />
         ) : (
           <div key={n.path}>
-            <button
-              type="button"
+            {/*
+              행 전체가 버튼이면 그 안에 다른 버튼·입력칸을 넣을 수 없다(중첩 금지).
+              그래서 껍데기는 div 로 두고, 여닫기만 버튼으로 남긴다.
+            */}
+            <div
               data-api-folder={n.path}
-              style={{ paddingLeft: 12 + depth * 16 }}
-              onClick={() => onToggleFolder(n.path)}
+              draggable={renaming !== n.path}
+              onDragStart={(e) => {
+                e.stopPropagation()
+                onDragFolder(n.path)
+              }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 onDropInto(n.path)
               }}
-              className="flex w-full items-center gap-1.5 border-b border-line py-1.5 pr-3 text-left hover:bg-panel"
+              style={{ paddingLeft: 12 + depth * 16 }}
+              className="group flex w-full items-center gap-1.5 border-b border-line py-1.5 pr-2 hover:bg-panel"
             >
-              {collapsed.has(n.path) ? (
-                <ChevronRight className="size-3 shrink-0 text-muted" />
+              <button
+                type="button"
+                data-api-folder-toggle={n.path}
+                onClick={() => onToggleFolder(n.path)}
+                className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              >
+                {collapsed.has(n.path) ? (
+                  <ChevronRight className="size-3 shrink-0 text-muted" />
+                ) : (
+                  <ChevronDown className="size-3 shrink-0 text-muted" />
+                )}
+                <Folder className="size-3.5 shrink-0 text-muted" />
+                {renaming === n.path ? null : (
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-fg">
+                    {n.name}
+                  </span>
+                )}
+              </button>
+              {renaming === n.path ? (
+                <FolderNameInput
+                  initial={n.name}
+                  onCommit={(name) => onCommitRename(n.path, name)}
+                  onCancel={() => onStartRename(null)}
+                />
               ) : (
-                <ChevronDown className="size-3 shrink-0 text-muted" />
+                <button
+                  type="button"
+                  data-api-folder-rename={n.path}
+                  title="폴더 이름 바꾸기"
+                  onClick={() => onStartRename(n.path)}
+                  // 호버로만 나타나면 키보드만 쓰는 사람은 닿지 못한다 — 초점이 오면 같이 보인다.
+                  className="shrink-0 rounded px-1 py-0.5 text-muted opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-fg"
+                >
+                  <Pencil className="size-3" />
+                </button>
               )}
-              <Folder className="size-3.5 shrink-0 text-muted" />
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-fg">{n.name}</span>
-            </button>
+            </div>
             {!collapsed.has(n.path) && (
               <TreeView
                 nodes={n.children}
@@ -205,10 +291,14 @@ function TreeView({
                 selected={selected}
                 collapsed={collapsed}
                 observedNames={observedNames}
+                renaming={renaming}
                 onToggleFolder={onToggleFolder}
                 onSelect={onSelect}
                 onDragStart={onDragStart}
+                onDragFolder={onDragFolder}
                 onDropInto={onDropInto}
+                onStartRename={onStartRename}
+                onCommitRename={onCommitRename}
               />
             )}
           </div>
@@ -762,7 +852,11 @@ export function RequestsWorkspace() {
   const [q, setQ] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   /** 지금 끌고 있는 요청 이름. 드롭 대상이 어디인지는 폴더 행이 안다. */
-  const [dragging, setDragging] = useState<string | null>(null)
+  /** 끌고 있는 것 — 요청인지 폴더인지. 드롭 자리가 같아서 무엇인지 알아야 한다. */
+  const [dragging, setDragging] = useState<{ kind: 'request' | 'folder'; id: string } | null>(null)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  /** 막힌 이유. 조용히 안 옮겨지면 "왜 안 되지"가 된다. */
+  const [treeError, setTreeError] = useState<string | null>(null)
   const runs = useOpsStore((s) => s.runs)
   const observedNames = useMemo(() => new Set(runs.map((r) => r.requestName)), [runs])
 
@@ -792,14 +886,40 @@ export function RequestsWorkspace() {
     )
   }
 
-  /** 끌어다 놓은 요청의 소속을 바꾼다. 같은 자리면 아무 일도 안 한다. */
+  /** 끌어다 놓은 것의 소속을 바꾼다. 같은 자리면 아무 일도 안 한다. */
   const drop = (folder: string): void => {
-    const name = dragging
+    const held = dragging
     setDragging(null)
-    if (!name) return
-    const req = active.requests.find((r) => r.name === name)
-    if (!req || normalizeFolder(req.folder) === normalizeFolder(folder)) return
-    void saveRequests(moveRequest(active.requests, name, folder))
+    setTreeError(null)
+    if (!held) return
+
+    if (held.kind === 'request') {
+      const req = active.requests.find((r) => r.name === held.id)
+      if (!req || normalizeFolder(req.folder) === normalizeFolder(folder)) return
+      void saveRequests(moveRequest(active.requests, held.id, folder))
+      return
+    }
+
+    // 폴더째 옮기기 — 자기 자손으로 넣기·이름 겹침을 **판정 한 곳**이 막고 이유를 준다.
+    const check = canMoveFolder(held.id, folder, folderPaths(active.requests))
+    if (!check.ok) {
+      setTreeError(check.reason)
+      return
+    }
+    void saveRequests(moveFolder(active.requests, held.id, folder))
+  }
+
+  /** 폴더 이름 바꾸기 — 자손 경로가 함께 따라간다. */
+  const commitRename = (path: string, name: string): void => {
+    setRenaming(null)
+    const check = canRenameFolder(path, name, folderPaths(active.requests))
+    if (!check.ok) {
+      // "이름이 그대로"는 사용자가 그냥 빠져나온 것이라 알릴 것이 없다.
+      setTreeError(check.reason === '이름이 그대로입니다.' ? null : check.reason)
+      return
+    }
+    setTreeError(null)
+    void saveRequests(renameFolder(active.requests, path, name))
   }
 
   const addRequest = (): void => {
@@ -861,6 +981,15 @@ export function RequestsWorkspace() {
                   className="h-7 pl-7 text-[12px]"
                 />
               </div>
+              {/* 못 옮긴 이유 — 조용히 아무 일도 안 일어나면 "왜 안 되지"가 된다. */}
+              {treeError && (
+                <p
+                  data-api-tree-error
+                  className="border-b border-line bg-danger-soft px-3 py-1.5 text-[11.5px] text-danger"
+                >
+                  {treeError}
+                </p>
+              )}
               {shown.length === 0 ? (
                 <p className="px-3 py-4 text-[12px] text-muted" data-api-empty="no-request">
                   {active.requests.length === 0
@@ -876,7 +1005,7 @@ export function RequestsWorkspace() {
                     observed={observedNames.has(r.name)}
                     active={r.name === selected}
                     onSelect={() => selectRequest(r.name)}
-                    onDragStart={() => setDragging(r.name)}
+                    onDragStart={() => setDragging({ kind: 'request', id: r.name })}
                   />
                 ))
               ) : (
@@ -902,9 +1031,13 @@ export function RequestsWorkspace() {
                         return next
                       })
                     }
+                    renaming={renaming}
                     onSelect={selectRequest}
-                    onDragStart={setDragging}
+                    onDragStart={(name) => setDragging({ kind: 'request', id: name })}
+                    onDragFolder={(path) => setDragging({ kind: 'folder', id: path })}
                     onDropInto={drop}
+                    onStartRename={setRenaming}
+                    onCommitRename={commitRename}
                   />
                 </div>
               )}

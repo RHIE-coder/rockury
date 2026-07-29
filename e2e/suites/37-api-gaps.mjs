@@ -210,6 +210,81 @@ export async function run(ctx) {
       check('요청을 폴더로 끌어다 놓으면 소속이 바뀐다', moved === '결제')
     }
 
+    // ── 폴더 손잡이 (CASE-apistudio-051b) ──
+    {
+      // 폴더 하나 더 만들어 둔다 — 폴더째 옮기기·이름 겹침을 볼 대상이 필요하다.
+      // **화면 경로로 만든다** — 창구(IPC)로 고치면 렌더러 저장소가 그 사실을 모른다.
+      await click('button[data-api-add-request]')
+      await page.waitForTimeout(600)
+      await page.locator('input[data-api-request-folder]').fill('빠름')
+      await page.waitForTimeout(600)
+      check('새 폴더가 트리에 선다', (await page.locator('[data-api-folder="빠름"]').count()) === 1)
+
+      // 이름 바꾸기 — 자손 경로가 함께 따라간다.
+      await click('[data-api-folder-rename="빠름"]')
+      await page.locator('input[data-api-folder-name]').fill('신속')
+      await page.locator('input[data-api-folder-name]').press('Enter')
+      await page.waitForTimeout(700)
+      {
+        const folder = await page.evaluate(async (id) => {
+          const s = await window.rockury.apiSpecs.get(id)
+          return s.requests.find((r) => r.name === 'newRequest').folder
+        }, specId)
+        check('폴더 이름을 바꾸면 그 아래 요청의 경로가 따라간다', folder === '신속')
+      }
+
+      // **겹치는 이름으로는 안 바꾼다** — 안 막으면 두 폴더가 조용히 하나로 합쳐진다.
+      await click('[data-api-folder-rename="신속"]')
+      await page.locator('input[data-api-folder-name]').fill('결제')
+      await page.locator('input[data-api-folder-name]').press('Enter')
+      await page.waitForTimeout(500)
+      {
+        const reason = await page.locator('[data-api-tree-error]').innerText()
+        check('겹치는 이름으로 바꾸려 하면 막고 이유를 준다', reason.includes('이미 있습니다'))
+        const folder = await page.evaluate(async (id) => {
+          const s = await window.rockury.apiSpecs.get(id)
+          return s.requests.find((r) => r.name === 'newRequest').folder
+        }, specId)
+        check('막혔으므로 폴더가 그대로다 — 합쳐지지 않았다', folder === '신속')
+      }
+
+      // 폴더째 끌어 옮기기.
+      const movedFolder = await page.evaluate(async (id) => {
+        const src = document.querySelector('[data-api-folder="신속"]')
+        const dst = document.querySelector('[data-api-folder="결제"]')
+        const dt = new DataTransfer()
+        src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
+        // 요청 끌기와 같은 이유로 한 박자 쉰다(React 상태가 같은 블록에서 안 보인다).
+        await new Promise((r) => setTimeout(r, 150))
+        dst.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }))
+        dst.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }))
+        await new Promise((r) => setTimeout(r, 700))
+        const s = await window.rockury.apiSpecs.get(id)
+        return s.requests.find((r) => r.name === 'newRequest').folder
+      }, specId)
+      check('폴더를 통째로 끌어 옮기면 그 아래 요청도 함께 간다', movedFolder === '결제/신속')
+
+      // **자기 자손 안으로는 못 옮긴다** — 옮기면 트리가 고리가 된다.
+      const intoSelf = await page.evaluate(async (id) => {
+        const src = document.querySelector('[data-api-folder="결제"]')
+        const dst = document.querySelector('[data-api-folder="결제/신속"]')
+        if (!src || !dst) return { moved: null, reason: '(대상 없음)' }
+        const dt = new DataTransfer()
+        src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
+        await new Promise((r) => setTimeout(r, 150))
+        dst.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }))
+        dst.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }))
+        await new Promise((r) => setTimeout(r, 500))
+        const s = await window.rockury.apiSpecs.get(id)
+        return {
+          moved: s.requests.find((r) => r.name === 'newRequest').folder,
+          reason: document.querySelector('[data-api-tree-error]')?.textContent ?? ''
+        }
+      }, specId)
+      check('자기 자손 안으로는 못 옮긴다', intoSelf.moved === '결제/신속')
+      check('막힌 이유가 화면에 뜬다', intoSelf.reason.includes('자기 안'))
+    }
+
     // ── markdown 미리보기 (CASE-apistudio-032) ──
     await page.evaluate(async (id) => {
       await window.rockury.apiSpecs.patch(id, [

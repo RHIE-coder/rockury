@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildRequestTree,
   canMoveFolder,
+  canRenameFolder,
   folderPaths,
   isAncestor,
   moveFolder,
@@ -140,5 +141,47 @@ describe('옮기기', () => {
 
   it('이름에 슬래시를 넣어 계층을 몰래 만들 수 없다', () => {
     expect(renameFolder([r('x', 'a')], 'a', 'b/c').map((q) => q.folder)).toEqual(['a'])
+  })
+})
+
+// ── 조용히 합쳐지지 않는다 ────────────────────────────────────────────────
+
+describe('폴더 합치기 방지 (CASE-apistudio-051b)', () => {
+  // 합쳐진 뒤에는 어느 요청이 원래 어느 쪽이었는지 사람이 기억해야 한다 — 되돌릴 수 없다.
+  const existing = ['auth', 'auth/v1', 'billing', 'billing/v1']
+
+  it('**옮기는 자리에 같은 이름이 있으면 막는다**', () => {
+    const check = canMoveFolder('auth/v1', 'billing', existing)
+    expect(check.ok).toBe(false)
+    expect(check.reason).toContain('이미 있습니다')
+  })
+
+  it('겹치지 않으면 옮긴다', () => {
+    expect(canMoveFolder('auth/v1', '', existing).ok).toBe(true)
+  })
+
+  it('목록을 안 주면 겹침을 따지지 않는다 — 예전 부르는 자리를 안 깨뜨린다', () => {
+    expect(canMoveFolder('auth/v1', 'billing').ok).toBe(true)
+  })
+
+  it('**이름을 바꿀 때도 형제와 겹치면 막는다**', () => {
+    const check = canRenameFolder('auth', 'billing', existing)
+    expect(check.ok).toBe(false)
+    expect(check.reason).toContain('이미 있습니다')
+  })
+
+  it('겹치지 않는 새 이름은 통과한다', () => {
+    expect(canRenameFolder('auth', 'identity', existing).ok).toBe(true)
+    expect(canRenameFolder('auth/v1', 'v2', existing).ok).toBe(true)
+  })
+
+  it('빈 이름·구분자 든 이름·같은 이름은 막고 이유를 준다', () => {
+    expect(canRenameFolder('auth', '  ', existing).reason).toContain('비었습니다')
+    expect(canRenameFolder('auth', 'a/b', existing).reason).toContain('끌어다 놓으세요')
+    expect(canRenameFolder('auth', 'auth', existing).reason).toContain('그대로')
+  })
+
+  it('최상위는 이름을 바꿀 대상이 아니다', () => {
+    expect(canRenameFolder('', 'x', existing).ok).toBe(false)
   })
 })

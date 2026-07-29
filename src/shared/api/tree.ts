@@ -101,7 +101,11 @@ export interface MoveCheck {
  * **자기 자손 안으로는 못 옮긴다** — 옮기는 순간 그 가지가 자기를 부모로 갖게 되어 경로가
  * 무한히 늘어난다(트리가 고리가 된다). 조용히 무시하면 "왜 안 옮겨지지"가 되므로 이유를 준다.
  */
-export function canMoveFolder(from: string, toParent: string): MoveCheck {
+export function canMoveFolder(
+  from: string,
+  toParent: string,
+  existing: readonly string[] = []
+): MoveCheck {
   const src = normalizeFolder(from)
   const dst = normalizeFolder(toParent)
   if (!src) return { ok: false, reason: '최상위는 옮길 대상이 아닙니다.' }
@@ -110,6 +114,47 @@ export function canMoveFolder(from: string, toParent: string): MoveCheck {
   }
   const parent = src.includes(FOLDER_SEP) ? src.slice(0, src.lastIndexOf(FOLDER_SEP)) : ''
   if (parent === dst) return { ok: false, reason: '이미 그 자리에 있습니다.' }
+
+  // **가는 자리에 같은 이름이 있으면 막는다.** 안 막으면 두 폴더가 조용히 하나로 합쳐지고,
+  // 되돌리려면 어느 요청이 원래 어느 쪽이었는지를 사람이 기억해야 한다(되돌릴 수 없다).
+  const leaf = leafOf(src)
+  const target = dst ? `${dst}${FOLDER_SEP}${leaf}` : leaf
+  if (existing.some((p) => normalizeFolder(p) === target)) {
+    return { ok: false, reason: `'${target}' 가 이미 있습니다 — 합치지 않습니다.` }
+  }
+  return { ok: true, reason: null }
+}
+
+/** 경로의 마지막 조각. `a/b/c` → `c`. */
+function leafOf(path: string): string {
+  return path.includes(FOLDER_SEP) ? path.slice(path.lastIndexOf(FOLDER_SEP) + 1) : path
+}
+
+/**
+ * 폴더 이름을 바꿔도 되나.
+ *
+ * `renameFolder` 는 경로를 갈아 끼우기만 해서, 형제와 이름이 겹치면 **두 폴더가 조용히
+ * 합쳐진다.** 옮기기와 같은 이유로 막는다 — 합쳐진 뒤에는 되돌릴 근거가 사라진다.
+ */
+export function canRenameFolder(
+  path: string,
+  newName: string,
+  existing: readonly string[] = []
+): MoveCheck {
+  const src = normalizeFolder(path)
+  const name = normalizeFolder(newName)
+  if (!src) return { ok: false, reason: '최상위는 이름을 바꿀 대상이 아닙니다.' }
+  if (!name) return { ok: false, reason: '이름이 비었습니다.' }
+  if (name.includes(FOLDER_SEP)) {
+    return { ok: false, reason: `이름에 '${FOLDER_SEP}' 는 못 씁니다 — 옮기려면 끌어다 놓으세요.` }
+  }
+  if (name === leafOf(src)) return { ok: false, reason: '이름이 그대로입니다.' }
+
+  const parent = src.includes(FOLDER_SEP) ? src.slice(0, src.lastIndexOf(FOLDER_SEP)) : ''
+  const target = parent ? `${parent}${FOLDER_SEP}${name}` : name
+  if (existing.some((p) => normalizeFolder(p) === target)) {
+    return { ok: false, reason: `'${target}' 가 이미 있습니다 — 합치지 않습니다.` }
+  }
   return { ok: true, reason: null }
 }
 
@@ -132,8 +177,7 @@ export function moveFolder(
   const src = normalizeFolder(from)
   const dst = normalizeFolder(toParent)
   if (!canMoveFolder(src, dst).ok) return [...requests]
-  const leaf = src.includes(FOLDER_SEP) ? src.slice(src.lastIndexOf(FOLDER_SEP) + 1) : src
-  const next = dst ? `${dst}${FOLDER_SEP}${leaf}` : leaf
+  const next = dst ? `${dst}${FOLDER_SEP}${leafOf(src)}` : leafOf(src)
 
   return requests.map((r) => {
     const f = normalizeFolder(r.folder)
