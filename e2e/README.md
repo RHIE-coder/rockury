@@ -9,14 +9,18 @@ npm run db:up                 # docker test-db(mysql/mariadb/postgresql) — 기
 npm run build
 npm run e2e -- --only=03-studio-definition,04-studio-seed    # 건드린 스위트만
 ```
-**범위 없이 `npm run e2e` 를 부르면 러너가 거부한다**(종료코드 2) — 전체 한 바퀴는 커밋 훅의 몫이다.
-전체가 정말 필요하면 `--all`(또는 `E2E_FULL=1`). 판정·문구는 `e2e/lib/runScope.mjs`.
+**e2e 는 사용자가 지시할 때만 돈다**(2026-07-30 지시 — 그전엔 커밋 훅이 자동으로 돌렸다).
+스위트를 **쓰는** 의무는 그대로다 — 새 앱 흐름은 여기 스위트로 쌓는다.
+
+**범위 없이 `npm run e2e` 를 부르면 러너가 거부한다**(종료코드 2). 지시받은 범위를 `--only=` 로 밝히고,
+전체를 돌려 달라는 지시면 `--all`(또는 `E2E_FULL=1`). 판정·문구는 `e2e/lib/runScope.mjs`.
 
 옵션: `--only=<스위트,...>` · `--list`(스위트 목록) · `--no-db`(test-db 필요한 스위트 건너뜀)
 · `--continue`(스위트가 깨져도 다음까지) · `--all`(전체).
 
-`src/`·`e2e/` 를 건드린 커밋은 **pre-commit 훅이 자동으로 e2e 를 돌린다**.
-빠져나갈 문: `SKIP_E2E=1 git commit ...`(통째로) · `E2E_ARGS=--no-db git commit ...`(test-db 스위트만).
+커밋과 함께 돌리라는 지시가 오면: `RUN_E2E=1 git commit ...`(전체) ·
+`RUN_E2E=--only=<스위트> git commit ...`(그 스위트만) · `E2E_ARGS=--no-db` 로 test-db 스위트 제외.
+그 변수가 없으면 훅은 typecheck·test·build 만 보고 통과한다.
 
 > 실 앱 DB 는 **절대** 건드리지 않는다 — 매 실행 격리된 임시 userData(`--user-data-dir=<mkdtemp>`)로
 > 띄우고 끝나면 그 임시 디렉터리만 지운다. `isolation.test.ts` 가 `e2e/**/*.mjs` 전체를 검사해 강제한다.

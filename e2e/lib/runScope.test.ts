@@ -49,11 +49,33 @@ describe('runScope — 전체 실행은 명시적으로 요청해야만 열린�
   })
 })
 
-describe('커밋 훅은 전체를 돌린다', () => {
-  it('pre-commit 이 열쇠를 붙여 부른다 — 안 붙이면 커밋 게이트가 통째로 막힌다', () => {
-    const hook = fs.readFileSync(path.join(APP, 'scripts/git-hooks/pre-commit'), 'utf8')
-    const line = hook.split('\n').find((l) => l.includes('npm run e2e') && !l.trimStart().startsWith('#'))
-    expect(line, 'pre-commit 에서 e2e 호출 줄을 못 찾았습니다').toBeTruthy()
-    expect(line).toContain(FULL_FLAG)
+/**
+ * 2026-07-30 사용자 지시: "내가 따로 명시적으로 e2e 테스트를 지시하기 전까지는 이제 하지마."
+ * 그전엔 훅이 src/·e2e/ 변경 커밋마다 전체 한 바퀴를 돌렸다 — 그 자동 실행을 뗐고,
+ * **다시 붙는 것을 이 테스트가 막는다**(문서에만 적어 두면 되돌아간다는 걸 이미 겪었다).
+ */
+describe('커밋 훅은 e2e 를 지시 없이 돌리지 않는다', () => {
+  const hook = (): string => fs.readFileSync(path.join(APP, 'scripts/git-hooks/pre-commit'), 'utf8')
+  const OPT_IN = 'RUN_E2E'
+
+  it('e2e 호출은 옵트인 변수 뒤에만 있다 — 조건 없이 부르면 실패', () => {
+    const text = hook()
+    const lines = text.split('\n')
+    const callIdx = lines.findIndex((l) => l.includes('npm run e2e') && !l.trimStart().startsWith('#'))
+    if (callIdx === -1) return // 훅이 e2e 를 아예 안 부르면 그것도 지시 없이 안 도는 상태다
+    const guardIdx = lines.findIndex((l) => !l.trimStart().startsWith('#') && l.includes(OPT_IN) && l.includes('if '))
+    expect(guardIdx, `pre-commit 의 e2e 호출이 ${OPT_IN} 조건 밖에 있습니다`).toBeGreaterThan(-1)
+    expect(guardIdx).toBeLessThan(callIdx)
+  })
+
+  it('돌리는 방법이 훅 안에 적혀 있다 — 지시가 왔을 때 바로 쓴다', () => {
+    expect(hook()).toContain(`${OPT_IN}=1`)
+  })
+
+  it('정본(AGENTS.md)과 훅이 같은 변수를 말한다', () => {
+    const canon = fs.readFileSync(path.join(APP, 'AGENTS.md'), 'utf8')
+    expect(canon).toContain(OPT_IN)
+    // 자동 실행 시절의 건너뛰기 열쇠 — 남아 있으면 없는 손잡이를 안내하는 셈이다.
+    expect(canon).not.toContain('SKIP_E2E')
   })
 })
