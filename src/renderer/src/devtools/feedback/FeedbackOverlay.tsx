@@ -52,6 +52,19 @@ type DraftMark = {
   target: ReturnType<typeof targetInBounds>
 }
 
+/**
+ * 이벤트를 오버레이 안에서 끊는다 — **열린 모달 위에 그릴 수 있으려면 필요하다.**
+ *
+ * Radix 모달(Dialog)은 `document` 에 두 개를 걸어 둔다: 바깥에서 포인터를 누르면 닫고
+ * (`pointerdown`), 포커스가 바깥으로 나가면 되돌린다(`focusin`). 오버레이는 그 모달의
+ * 자식이 아니므로 둘 다 "바깥"으로 취급된다 — 그리려고 누르면 모달이 닫히고, 메모창에
+ * 글자를 넣으려 하면 포커스를 빼앗긴다. React 핸들러는 그 document 리스너보다 먼저 도니
+ * 여기서 끊으면 모달은 우리 조작을 아예 못 본다.
+ */
+function stopAtOverlay(e: React.SyntheticEvent): void {
+  e.stopPropagation()
+}
+
 /** 포인터 캡처는 부가 기능이다. 실패해도 그리기 자체는 계속돼야 한다. */
 function capturePointer(el: Element, pointerId: number): void {
   try {
@@ -265,6 +278,9 @@ export function FeedbackOverlay(): React.JSX.Element {
   const downRef = useRef<{ badgeId: number | null; x: number; y: number; moved: boolean } | null>(null)
 
   const onDrawDown = (e: React.PointerEvent): void => {
+    // 열린 모달의 "바깥을 눌렀다" 판정으로 넘어가면, 그리려고 누른 순간 지적하려던 모달이
+    // 닫힌다 — 그림판에서 시작한 누르기는 모달에게 알리지 않는다.
+    stopAtOverlay(e)
     if (editingId !== null) {
       setEditingId(null)
       return
@@ -440,7 +456,21 @@ export function FeedbackOverlay(): React.JSX.Element {
     // (닫힌 상태의 껍데기에는 걸지 않는다. 걸면 타이틀바로 창을 못 끌게 된다.)
     <div
       {...{ [FEEDBACK_ATTR]: '' }}
-      style={{ position: 'fixed', inset: 0, zIndex: 2000, touchAction: 'none', ...NO_DRAG }}
+      // pointerEvents 를 여기서 못박는 이유: Radix 모달(Dialog)이 열려 있으면 그 층이
+      // `body` 에 `pointer-events:none` 을 건다. 물려받으면 그림판(SVG)이 포인터를 못 받아
+      // **모달 위에서는 동그라미가 아예 안 그려진다** — 도구막대는 스스로 auto 를 켜 놔서
+      // 버튼만 눌리고, "왜 안 그려지지"로 보였다(2026-07-30 사용자 제보).
+      // 안 걸린 화면에서는 원래도 auto 라 달라지는 것이 없다.
+      onFocusCapture={stopAtOverlay}
+      onBlurCapture={stopAtOverlay}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2000,
+        touchAction: 'none',
+        pointerEvents: 'auto',
+        ...NO_DRAG
+      }}
     >
       {/* 그림판. 배경을 어둡게 덮지 않는다 — 무엇이 문제인지 눈으로 보면서 그려야 한다. */}
       <svg
