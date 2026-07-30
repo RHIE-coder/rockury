@@ -55,6 +55,33 @@ describe('generateDdl — 방언별 매핑', () => {
   })
 })
 
+// 화면 회귀(사용자 제보 2026-07-30): DDL 첫 줄에 `-- <테이블> (<방언>)` 머리 주석을 달았다.
+// 테이블 이름은 바로 아래 CREATE 문에, 방언은 상단 컨텍스트 바에 이미 있다 — 자명한 것을
+// 되풀이하는 설명이라 걷어냈다. 첫 줄은 언제나 실행되는 문장으로 시작한다.
+describe('generateDdl — 자명한 것을 주석으로 되풀이하지 않는다', () => {
+  const firstLine = (s: string) => s.split('\n')[0]
+
+  it('테이블: 첫 줄이 머리 주석이 아니다', () => {
+    for (const d of ['mysql', 'mariadb', 'postgresql', 'sqlite'] as const) {
+      const ddl = generateDdl(orders, d)
+      expect(firstLine(ddl).startsWith('--')).toBe(false)
+      // 어느 줄에서도 이름을 주석으로 되풀이하지 않는다(머리를 아래로 옮기는 회귀 차단).
+      expect(ddl).not.toMatch(/^--.*orders/m)
+    }
+  })
+
+  it('뷰: 첫 줄이 머리 주석이 아니다', () => {
+    for (const d of ['mysql', 'postgresql', 'sqlite'] as const) {
+      expect(firstLine(generateDdl(activeProducts, d)).startsWith('--')).toBe(false)
+    }
+  })
+
+  it('방언 이름(MySQL 8.0 등)을 DDL 본문에 박지 않는다', () => {
+    expect(generateDdl(orders, 'mysql')).not.toMatch(/MySQL 8\.0/)
+    expect(generateDdl(orders, 'postgresql')).not.toMatch(/PostgreSQL/)
+  })
+})
+
 // 보안 회귀(감사 HIGH): MCP set_schema 가 식별자를 원격 작성자에게 열었다 —
 // 이름에 인용부호가 섞이면 인용을 탈출해 실 DB DDL 로 주입될 수 있었다.
 describe('quoteId — 식별자 인용부호 이스케이프(주입 차단)', () => {

@@ -69,7 +69,7 @@ export function DiagramEdit({ conn }: { conn: ConnectionDef }) {
               onConnectFk={onConnectFk}
               detailSubtitle="라이브 스키마 편집 · 대기 변경"
               detail={(t) => <EditableTableDetail table={t} dialect={conn.dbType} allTables={draft} />}
-              sqlDetail={(t) => <SqlView table={t} dialect={conn.dbType} note="대기 변경 반영 · 미리보기" />}
+              sqlDetail={(t) => <SqlView table={t} dialect={conn.dbType} labeled={false} />}
               toolbarExtra={
                 <Button
                   size="sm"

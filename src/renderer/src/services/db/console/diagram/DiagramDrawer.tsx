@@ -56,14 +56,15 @@ export function DiagramDrawer({
             {open ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
             상세
           </button>
-          {title ? (
-            <span className="min-w-0 truncate font-mono text-[12px] text-fg" title={title}>
-              {title}
-            </span>
-          ) : (
-            <span className="text-[11.5px] italic text-muted">테이블을 고르면 상세가 여기 뜹니다</span>
+          {/* 아무것도 안 고른 상태에선 머리에 '상세' 한 마디만 둔다 — 안내는 서랍 안에서 한다. */}
+          {title && (
+            <>
+              <span className="min-w-0 truncate font-mono text-[12px] text-fg" title={title}>
+                {title}
+              </span>
+              {subtitle && <span className="shrink-0 text-[11px] text-muted">· {subtitle}</span>}
+            </>
           )}
-          {subtitle && <span className="shrink-0 text-[11px] text-muted">· {subtitle}</span>}
 
           {open && title && (
             <div className="ml-auto flex items-center gap-1">
@@ -86,9 +87,7 @@ export function DiagramDrawer({
             {title ? (
               body
             ) : (
-              <p className="px-4 py-6 text-center text-[12px] text-muted">
-                캔버스에서 테이블을 누르거나 왼쪽 목록에서 고르세요.
-              </p>
+              <p className="px-4 py-6 text-center text-[12px] text-muted">선택된 테이블 없음</p>
             )}
           </div>
         )}

@@ -13,11 +13,12 @@ import type { TableDef } from '../../workspaces/definition/types'
 export function SqlView({
   table,
   dialect,
-  note = '실 DB 역설계 · 읽기 전용'
+  labeled = true
 }: {
   table: TableDef
   dialect: Parameters<typeof generateDdl>[1]
-  note?: string
+  /** 이름·출처가 바로 위에서 이미 보이는 자리(상세 서랍)면 false — 머리를 되풀이하지 않고 Copy 만 남긴다. */
+  labeled?: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const ddl = generateDdl(table, dialect)
@@ -37,11 +38,15 @@ export function SqlView({
     <div className="mx-auto max-w-[1160px] p-5">
       <div className="overflow-hidden rounded-[10px] border border-line">
         <div className="flex h-9 items-center gap-2.5 border-b border-line bg-panel px-3">
-          <span className="font-mono text-[12px] text-fg">{table.name}.sql</span>
-          <span className="flex items-center gap-1.5 text-[11px] text-muted">
-            <span className="size-1.5 rounded-full bg-muted/60" />
-            {note}
-          </span>
+          {labeled && (
+            <>
+              <span className="font-mono text-[12px] text-fg">{table.name}.sql</span>
+              <span className="flex items-center gap-1.5 text-[11px] text-muted">
+                <span className="size-1.5 rounded-full bg-muted/60" />
+                실 DB 역설계 · 읽기 전용
+              </span>
+            </>
+          )}
           <div className="ml-auto flex gap-1.5">
             <Button variant="secondary" size="sm" onClick={copy}>
               <Copy />

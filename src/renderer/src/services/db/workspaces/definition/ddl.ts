@@ -1,4 +1,4 @@
-import { dialectInfo, type DialectId } from '../../dialects'
+import type { DialectId } from '../../dialects'
 import type { Column, Constraint, TableDef } from './types'
 import { resolveColumns } from './derive'
 
@@ -75,10 +75,10 @@ function colList(d: DialectId, t: TableDef, con: Constraint, withDirection: bool
  * 방언이 받는 구문만 낸다. 본문이 비면 자리만 만들고 무엇이 비었는지 주석으로 알린다.
  */
 function generateViewDdl(t: TableDef, d: DialectId): string {
-  const label = dialectInfo(d).label
   const body = (t.viewSql ?? '').trim().replace(/;\s*$/, '')
   const head = d === 'sqlite' ? 'CREATE VIEW' : 'CREATE OR REPLACE VIEW'
-  const out: string[] = [`-- ${t.name}  (${label} · 뷰)`, '']
+  // 이름·방언은 SQL 본문과 화면 머리에 이미 있다 — 주석으로 되풀이하지 않는다.
+  const out: string[] = []
   // 본문이 없는 경우가 둘이다 — 설계부에서 아직 안 쓴 뷰, 그리고 운영부 역설계로 들어온 뷰
   // (introspection 은 뷰 본문을 가져오지 않는다). 어느 쪽인지 모르므로 둘 다 알린다.
   if (!body)
@@ -93,7 +93,6 @@ function generateViewDdl(t: TableDef, d: DialectId): string {
 export function generateDdl(t: TableDef, d: DialectId): string {
   if (t.isView) return generateViewDdl(t, d)
 
-  const label = dialectInfo(d).label
   const pre: string[] = []
   const comments: string[] = []
   const indexes: string[] = []
@@ -193,7 +192,7 @@ export function generateDdl(t: TableDef, d: DialectId): string {
     ? `) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4${t.comment ? ` COMMENT='${esc(t.comment)}'` : ''};`
     : ');'
 
-  const out: string[] = [`-- ${t.name}  (${label})`, '']
+  const out: string[] = []
   if (pre.length) out.push(...pre, '')
   out.push(`CREATE TABLE ${q(d, t.name)} (`)
   out.push([...t.columns.map(buildColumn), ...consLines].join(',\n'))
