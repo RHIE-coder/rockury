@@ -5,7 +5,11 @@ import { useActiveTable } from './store'
 import { generateDdl } from './ddl'
 import { HighlightedSqlLine } from './HighlightedSql'
 
-export function SqlForm() {
+/**
+ * @param labeled 이름·상태가 바로 위에서 이미 보이는 자리(상세 서랍·크게 보기 모달)면 false —
+ *   머리를 되풀이하지 않고 Format·Copy 만 남긴다. Console 쪽 `SqlView` 와 같은 규칙.
+ */
+export function SqlForm({ labeled = true }: { labeled?: boolean }) {
   const table = useActiveTable()
   const design = useActiveDesign()
 
@@ -19,11 +23,15 @@ export function SqlForm() {
     <div className="mx-auto max-w-[1160px] p-5">
       <div className="overflow-hidden rounded-[10px] border border-line">
         <div className="flex h-9 items-center gap-2.5 border-b border-line bg-panel px-3">
-          <span className="font-mono text-[12px] text-fg">{table.name}.sql</span>
-          <span className="flex items-center gap-1.5 text-[11px] text-success">
-            <span className="size-1.5 rounded-full bg-success" />
-            Table 폼과 동기화됨
-          </span>
+          {labeled && (
+            <>
+              <span className="font-mono text-[12px] text-fg">{table.name}.sql</span>
+              <span className="flex items-center gap-1.5 text-[11px] text-success">
+                <span className="size-1.5 rounded-full bg-success" />
+                Table 폼과 동기화됨
+              </span>
+            </>
+          )}
           <div className="ml-auto flex gap-1.5">
             <Button variant="secondary" size="sm">
               <AlignLeft />

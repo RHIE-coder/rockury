@@ -103,7 +103,10 @@ export function DiagramDrawer({
             <DialogTitle className="flex items-center gap-2 font-mono text-[13px]">
               {title}
               <span className="font-sans text-[11px] font-normal text-muted">{subtitle}</span>
-              <span className="ml-auto pr-4">
+              {/* 닫기(✕)는 모달 우상단 right-4 에 24px 박스로 앉는다 — 오른쪽 끝에서 40px 까지가
+                  그 자리다. 헤더 px-4(16px)만으로는 토글이 그 아래로 파고들어 겹쳤다(사용자 제보).
+                  16 + pr-8(32) = 48px 로 비켜 8px 틈을 남긴다. */}
+              <span className="ml-auto pr-8">
                 <FormToggle form={form} onChange={onFormChange} />
               </span>
             </DialogTitle>

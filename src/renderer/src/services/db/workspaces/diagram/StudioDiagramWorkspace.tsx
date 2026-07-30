@@ -130,7 +130,7 @@ export function StudioDiagramWorkspace() {
             detailSubtitle={readOnly ? '설계 · 읽기 전용' : '설계 · 편집'}
             // 서랍 내용은 Definition 화면 그대로 — 같은 편집을 두 자리에서 다르게 하지 않는다.
             detail={() => <TableForm />}
-            sqlDetail={() => <SqlForm />}
+            sqlDetail={() => <SqlForm labeled={false} />}
             // 설계부에서만 — 그룹을 지울 때 소속 테이블까지 지울 수 있다(확인 문구 입력).
             //   설계 테이블은 이 앱이 가진 도면이라 여기서 지우는 게 자연스럽다.
             //   실 DB 는 안 건드린다(반영은 Migration 몫).
