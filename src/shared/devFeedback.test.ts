@@ -8,6 +8,7 @@ import {
   badgeHit,
   feedbackFailureMessage,
   feedbackFolderName,
+  feedbackKeyAction,
   formatClock,
   formatStamp,
   isNoiseComponentName,
@@ -27,7 +28,7 @@ import {
 
 function payload(over: Partial<FeedbackPayload> = {}): FeedbackPayload {
   return {
-    location: { route: '/db/studio/schema', label: 'DB › Studio › Schema', context: [] },
+    location: { route: '/db/design/schema', label: 'DB › Design › Schema', context: [] },
     viewport: { width: 1440, height: 900 },
     marks: [{ memo: '여백이 좁다', bounds: { x: 10, y: 20, width: 30, height: 40 }, target: null }],
     logs: [],
@@ -84,6 +85,57 @@ describe('요소 찾기 보조', () => {
   })
 })
 
+describe('키 판정', () => {
+  const key = (
+    k: string,
+    mods: { meta?: boolean; ctrl?: boolean; shift?: boolean } = {}
+  ): { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean } => ({
+    key: k,
+    metaKey: mods.meta ?? false,
+    ctrlKey: mods.ctrl ?? false,
+    shiftKey: mods.shift ?? false
+  })
+  const closed = { open: false, fromOverlay: false }
+  const openApp = { open: true, fromOverlay: false }
+  const openMemo = { open: true, fromOverlay: true }
+
+  it('⌘/Ctrl+Shift+F 는 열려 있든 닫혀 있든 도구를 여닫는다', () => {
+    expect(feedbackKeyAction(key('f', { meta: true, shift: true }), closed)).toBe('toggle')
+    // 대문자로 오는 경우(Shift 를 같이 눌렀으니 실제로 이렇게 온다)
+    expect(feedbackKeyAction(key('F', { ctrl: true, shift: true }), openApp)).toBe('toggle')
+  })
+
+  it('닫혀 있으면 앱의 키를 건드리지 않는다', () => {
+    expect(feedbackKeyAction(key('Escape'), closed)).toBe('pass')
+    expect(feedbackKeyAction(key('Enter', { meta: true }), closed)).toBe('pass')
+    expect(feedbackKeyAction(key('a'), closed)).toBe('pass')
+  })
+
+  it('열려 있으면 앱은 키를 못 본다 — 얼린 화면 뒤에서 상태가 바뀌지 않게', () => {
+    expect(feedbackKeyAction(key('a'), openApp)).toBe('shield')
+    expect(feedbackKeyAction(key('Tab'), openApp)).toBe('shield')
+  })
+
+  it('메모창에 친 글자는 그대로 흘려보낸다', () => {
+    expect(feedbackKeyAction(key('a'), openMemo)).toBe('pass')
+    expect(feedbackKeyAction(key('Backspace'), openMemo)).toBe('pass')
+  })
+
+  it('Escape 는 메모창에서 쳤어도 오버레이가 먹는다 — 지적하던 모달이 같이 닫히면 안 된다', () => {
+    // 회귀: Radix 겹층은 Escape 를 document 캡처에서 듣는다. 여기서 'pass' 로 새면
+    // 메모창을 접으려는 순간 지적 대상이 사라진다(2026-07-30 사용자 제보).
+    expect(feedbackKeyAction(key('Escape'), openMemo)).toBe('close')
+    expect(feedbackKeyAction(key('Escape'), openApp)).toBe('close')
+  })
+
+  it('⌘/Ctrl+Enter 는 메모창 안에서도 보내기다', () => {
+    expect(feedbackKeyAction(key('Enter', { meta: true }), openMemo)).toBe('send')
+    expect(feedbackKeyAction(key('Enter', { ctrl: true }), openApp)).toBe('send')
+    // 맨 Enter 는 메모창이 먹는다(확인).
+    expect(feedbackKeyAction(key('Enter'), openMemo)).toBe('pass')
+  })
+})
+
 describe('콘솔 기록 버퍼', () => {
   it('상한을 넘으면 오래된 것부터 버린다', () => {
     let list: number[] = []
@@ -94,15 +146,15 @@ describe('콘솔 기록 버퍼', () => {
 
 describe('저장 폴더 이름', () => {
   it('경로 구분자와 특수문자를 없애 폴더 밖으로 새지 않게 한다', () => {
-    expect(slugifyRoute('/db/studio/schema')).toBe('db-studio-schema')
+    expect(slugifyRoute('/db/design/schema')).toBe('db-design-schema')
     expect(slugifyRoute('/../../etc/passwd')).toBe('etc-passwd')
     expect(slugifyRoute('///')).toBe('root')
   })
 
   it('초까지 넣어, 같은 화면에서 연달아 남긴 피드백이 서로를 덮지 않는다', () => {
-    const a = feedbackFolderName(new Date(2026, 6, 29, 15, 30, 12), '/db/studio/schema')
-    const b = feedbackFolderName(new Date(2026, 6, 29, 15, 30, 13), '/db/studio/schema')
-    expect(a).toBe('20260729-153012-db-studio-schema')
+    const a = feedbackFolderName(new Date(2026, 6, 29, 15, 30, 12), '/db/design/schema')
+    const b = feedbackFolderName(new Date(2026, 6, 29, 15, 30, 13), '/db/design/schema')
+    expect(a).toBe('20260729-153012-db-design-schema')
     expect(a).not.toBe(b)
   })
 
@@ -124,7 +176,7 @@ describe('보낸 내용 검증', () => {
       error: '화면 위치(location)가 없습니다'
     })
     expect(
-      parseFeedbackPayload({ ...payload(), location: { route: 'db/studio', label: '', context: [] } }).ok
+      parseFeedbackPayload({ ...payload(), location: { route: 'db/design', label: '', context: [] } }).ok
     ).toBe(false)
   })
 
@@ -198,8 +250,8 @@ describe('note.md', () => {
     const md = renderNoteMarkdown(
       payload({
         location: {
-          route: '/db/studio/schema',
-          label: 'DB › Studio › Schema',
+          route: '/db/design/schema',
+          label: 'DB › Design › Schema',
           context: [{ label: 'Design', value: '주문 도메인' }]
         },
         marks: [
@@ -220,7 +272,7 @@ describe('note.md', () => {
       }),
       { at, imageFile: 'shot.png', sourceRoot: '/Users/me/rockury' }
     )
-    expect(md).toContain('# 화면 피드백 · DB › Studio › Schema')
+    expect(md).toContain('# 화면 피드백 · DB › Design › Schema')
     expect(md).toContain('- 남긴 시각: 2026-07-29 15:30:12')
     expect(md).toContain('- Design: 주문 도메인')
     expect(md).toContain('- 소스 폴더: `/Users/me/rockury`')

@@ -8,6 +8,11 @@ import { getDb } from './db'
 export interface TableRecord {
   id: string
   designId: string
+  /**
+   * 소속 스키마(PostgreSQL 은 schema, MySQL 은 database, SQLite 는 `main`).
+   * 비면 그 설계의 기본 스키마 — 예전 행은 전부 비어 있고, 그 상태로도 동작이 안 바뀐다.
+   */
+  schema?: string
   name: string
   comment: string
   columns: unknown[]
@@ -21,6 +26,7 @@ export interface TableRecord {
 interface TableRow {
   id: string
   design_id: string
+  schema_name: string
   name: string
   comment: string
   columns: string
@@ -32,12 +38,14 @@ interface TableRow {
 export function listTables(): TableRecord[] {
   const rows = getDb()
     .prepare(
-      'SELECT id, design_id, name, comment, columns, constraints, is_view, view_sql FROM tables ORDER BY design_id, position'
+      'SELECT id, design_id, schema_name, name, comment, columns, constraints, is_view, view_sql FROM tables ORDER BY design_id, position'
     )
     .all() as unknown as TableRow[]
   return rows.map((r) => ({
     id: r.id,
     designId: r.design_id,
+    // 빈 문자열은 "기본 스키마" 다 — undefined 로 되돌려 예전 데이터와 같은 값이 되게 한다.
+    schema: r.schema_name || undefined,
     name: r.name,
     comment: r.comment,
     columns: JSON.parse(r.columns),
@@ -56,7 +64,7 @@ export function listTables(): TableRecord[] {
 export function replaceTablesForDesign(designId: string, records: TableRecord[]): void {
   const d = getDb()
   const insert = d.prepare(
-    'INSERT INTO tables (id, design_id, name, comment, position, columns, constraints, is_view, view_sql) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO tables (id, design_id, schema_name, name, comment, position, columns, constraints, is_view, view_sql) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   )
   d.exec('BEGIN')
   try {
@@ -68,6 +76,7 @@ export function replaceTablesForDesign(designId: string, records: TableRecord[])
       insert.run(
         t.id,
         designId,
+        t.schema ?? '',
         t.name,
         t.comment ?? '',
         i,

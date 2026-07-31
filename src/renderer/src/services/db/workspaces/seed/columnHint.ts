@@ -1,4 +1,4 @@
-import { KIND_LABEL, typeLabel } from '../../console/data/columnMeta'
+import { KIND_LABEL, typeLabel } from '../../remote/data/columnMeta'
 import { checkColumnIds, keyBadgesOf } from '../definition/derive'
 import { fkRefText } from '../definition/fkPolicy'
 import type { Column, KeyType, TableDef } from '../definition/types'

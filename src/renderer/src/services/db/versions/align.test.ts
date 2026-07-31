@@ -3,7 +3,7 @@ import type { TableDef } from '../workspaces/definition/types'
 import { alignSnapshotToActual } from './align'
 import { diffSnapshots, isEmptyDiff } from './diff'
 
-/** Studio 저작 스타일(순번 id) orders 테이블. */
+/** Design 에서 저작한 스타일(순번 id) orders 테이블. */
 const authoredOrders = (): TableDef => ({
   id: 'o1',
   designId: 'd1',

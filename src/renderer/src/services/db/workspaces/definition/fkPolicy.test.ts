@@ -39,7 +39,7 @@ describe('fkPolicyChips', () => {
   })
 
   it('실 DB 가 NO ACTION 을 실제로 돌려주면 흐리되 `기본값`으로 — 미지정이라 단정하지 않는다', () => {
-    // 운영부(Console)는 카탈로그가 값을 채워 주므로 "안 썼음"과 "NO ACTION 이라 썼음"을 구분 못 한다.
+    // 운영부(Remote)는 카탈로그가 값을 채워 주므로 "안 썼음"과 "NO ACTION 이라 썼음"을 구분 못 한다.
     const chips = fkPolicyChips(fk({ onDelete: 'NO ACTION', onUpdate: 'NO ACTION' }))
     expect(chips.every((c) => c.implicit)).toBe(true)
     expect(chips.every((c) => !c.unset)).toBe(true)

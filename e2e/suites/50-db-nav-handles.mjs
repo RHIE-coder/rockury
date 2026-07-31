@@ -29,7 +29,9 @@ export async function run(ctx) {
   )
   check(`DB: Overview 모듈이 없다 (${modules.join(',')})`, !modules.includes('overview'))
   check('DB: Reference 는 남아 있다', modules.includes('reference'))
-  check('DB: 첫 착지가 설계부(Studio)다', modules[0] === 'studio')
+  check('DB: 첫 착지가 설계부(Design)다', modules[0] === 'design')
+  // 2026-07-30 — Connections 는 Remote 와 나란한 모듈이 아니라 Remote 의 첫 뷰로 들어갔다.
+  check('DB: Connections 는 모듈 줄에 없다', !modules.includes('connections'))
 
   // ── 상단 한 줄 ────────────────────────────────────────────
   // L4 도구줄이 컨텍스트 바와 같은 h-11/bg-panel 을 쓰므로 클래스가 아니라 역할 훅으로 센다.
@@ -93,10 +95,51 @@ export async function run(ctx) {
   }
 
   // ── 운영부에서도 자리는 그대로 ─────────────────────────────
-  await click('[data-nav-module="console"]')
+  await click('[data-nav-module="remote"]')
   await page.waitForTimeout(500)
-  check('DB › Console: 연결 셀렉터가 있다', (await page.locator('[data-context-selector="conn"]').count()) === 1)
-  check('DB › Console: 설계 뱃지도 자리를 지킨다', (await page.locator('[data-context-selector="design"]').count()) === 1)
+  check('DB › Remote: 연결 셀렉터가 있다', (await page.locator('[data-context-selector="conn"]').count()) === 1)
+  check('DB › Remote: 설계 뱃지도 자리를 지킨다', (await page.locator('[data-context-selector="design"]').count()) === 1)
+  // Connections 는 Remote 의 **맨 왼쪽** 뷰다(사용자 결정) — 기억이 없는 첫 방문의 착지점.
+  const consoleViews = await page.$$eval('[data-nav-view]', (els) =>
+    els.map((e) => e.getAttribute('data-nav-view'))
+  )
+  check(`DB › Remote: 첫 뷰가 Connections (${consoleViews.join(',')})`, consoleViews[0] === 'connections')
+
+  // 2026-07-30 사용자 피드백 — 모듈에 **다시** 들어오면 마지막에 보던 뷰로 돌아온다.
+  // (그전에는 늘 첫 뷰로 되돌아가 "자꾸 connections 에 들어온다"는 제보가 왔다.)
+  await click('[data-nav-view="data"]')
+  await page.waitForTimeout(300)
+  await click('[data-nav-module="versions"]')
+  await page.waitForTimeout(300)
+  await click('[data-nav-module="remote"]')
+  await page.waitForTimeout(400)
+  check(
+    'DB › Remote: 다시 들어오면 마지막에 보던 뷰(Data)로 돌아온다',
+    (await page.locator('[data-nav-view="data"][data-state="active"]').count()) === 1
+  )
+  // 모듈마다 **따로** 기억한다 — Remote 의 기억이 Migration 의 자리를 덮지 않는다.
+  // (앞 스위트들이 이미 돌아다녔으므로 "첫 방문"에 기대지 않고 여기서 자리를 직접 만든다.)
+  await click('[data-nav-module="migration"]')
+  await page.waitForTimeout(300)
+  await click('[data-nav-view="plan"]')
+  await page.waitForTimeout(300)
+  await click('[data-nav-module="remote"]')
+  await page.waitForTimeout(300)
+  check(
+    'DB › Remote: Migration 을 다녀와도 Remote 의 기억은 그대로 Data',
+    (await page.locator('[data-nav-view="data"][data-state="active"]').count()) === 1
+  )
+  await click('[data-nav-module="migration"]')
+  await page.waitForTimeout(300)
+  check(
+    'DB › Migration: 자기 기억(Plan)으로 돌아온다',
+    (await page.locator('[data-nav-view="plan"][data-state="active"]').count()) === 1
+  )
+  // 뒤 스위트가 기대하는 자리로 돌려놓는다 — 기억이 남으므로 명시적으로 되돌린다.
+  await click('[data-nav-module="remote"]')
+  await page.waitForTimeout(300)
+  await click('[data-nav-view="connections"]')
+  await page.waitForTimeout(300)
 
   // ── ⑷ 다른 서비스는 예전 바 그대로 ─────────────────────────
   await click('[data-nav-service="api"]')

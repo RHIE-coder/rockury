@@ -1,6 +1,6 @@
 /**
  * DDL 한 줄 → 구문 강조 토큰(순수 함수 → 테스트 의무).
- * Studio SqlForm 과 Console › Definition SQL 뷰가 공유한다(하이라이터 단일 소스).
+ * Design SqlForm 과 Remote › Definition SQL 뷰가 공유한다(하이라이터 단일 소스).
  * className 은 앱 시맨틱 토큰: id=fg · string=success · keyword=accent · type=accent-2 · number=info.
  */
 

@@ -2,13 +2,13 @@ import { useState, type ReactNode } from 'react'
 import { cn } from '@renderer/lib/utils'
 import { ConstraintListPanel } from './ConstraintListPanel'
 import { TableListPanel } from './TableListPanel'
-import { flattenConstraints } from './console/constraintsView'
-import type { KindFilter } from './console/constraintsView'
+import { flattenConstraints } from './remote/constraintsView'
+import type { KindFilter } from './remote/constraintsView'
 import type { TableDef } from './workspaces/definition/types'
 
 /**
- * 사이드 패널 — [테이블/뷰 목록 | 제약 목록] 탭. Studio·Console 의 Definition·Diagram·Data 가
- * **같은 사이드바를 쓰도록** 묶은 곳(원형은 Console › Data 사이드바).
+ * 사이드 패널 — [테이블/뷰 목록 | 제약 목록] 탭. Design·Remote 의 Definition·Diagram·Data 가
+ * **같은 사이드바를 쓰도록** 묶은 곳(원형은 Remote › Data 사이드바).
  * 제약 항목을 누르면 그 제약이 걸린 테이블로 이동한다 — 제약에서 테이블을 찾아가는 길.
  */
 export function TableSidePanel({
@@ -29,7 +29,7 @@ export function TableSidePanel({
   rowExtra?: (t: TableDef) => ReactNode
   emptyText?: string
   footer?: ReactNode
-  /** 주면 `그룹` 탭이 생긴다(Diagram 전용 — 정본 §db-console.diagram.group-panel). */
+  /** 주면 `그룹` 탭이 생긴다(Diagram 전용 — 정본 §db-remote.diagram.group-panel). */
   groupTab?: ReactNode
   groupCount?: number
 }) {

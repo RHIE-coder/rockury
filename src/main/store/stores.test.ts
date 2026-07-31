@@ -203,6 +203,13 @@ describe('connections + environments 바인딩', () => {
     updateConnection(skipped.id, { autoCheckDisabled: false })
     expect(getConnection(skipped.id)?.autoCheckDisabled).toBe(false)
 
+    // 범위(보고 있는 스키마 목록) 왕복 — 안 적고 만든 연결은 빈 배열, 곧 "기본 스키마 하나".
+    expect(conn.schemas).toEqual([])
+    updateConnection(skipped.id, { schemas: ['public', 'auth'] })
+    expect(getConnection(skipped.id)?.schemas).toEqual(['public', 'auth'])
+    updateConnection(skipped.id, { schemas: [] })
+    expect(getConnection(skipped.id)?.schemas).toEqual([])
+
     // 바인딩 멱등: 같은 (conn, design) → 같은 id
     const b1 = ensureBinding(conn.id, 'design1', 'v1')
     const b2 = ensureBinding(conn.id, 'design1')
@@ -335,6 +342,29 @@ describe('tables — 설계 스코프 교체 (replaceTablesForDesign)', () => {
     expect(listTables().filter((t) => t.designId === 'scope_y')).toHaveLength(1)
   })
 
+  it('스키마가 저장 왕복에서 살아남고, 안 적은 테이블은 기본 스키마(undefined)로 돌아온다', () => {
+    // 예전 행은 schema_name 이 빈 문자열로 채워진다 — 그것이 곧 "기본 스키마"이며,
+    // 여기서 undefined 로 되돌아와야 `schemaRef` 의 빈-스키마 규칙과 맞물린다.
+    replaceTablesForDesign('scope_ns', [
+      { ...tbl('scope_ns', 'n1', 'users'), schema: 'auth' },
+      tbl('scope_ns', 'n2', 'posts')
+    ])
+    const got = listTables().filter((t) => t.designId === 'scope_ns')
+    expect(got.map((t) => [t.name, t.schema])).toEqual([
+      ['users', 'auth'],
+      ['posts', undefined]
+    ])
+  })
+
+  it('같은 이름 테이블이 스키마만 달리해 공존한다 — 범위를 켜면 실제로 생기는 모양', () => {
+    replaceTablesForDesign('scope_dup', [
+      { ...tbl('scope_dup', 'd1', 'users'), schema: 'public' },
+      { ...tbl('scope_dup', 'd2', 'users'), schema: 'auth' }
+    ])
+    const got = listTables().filter((t) => t.designId === 'scope_dup')
+    expect(got.map((t) => t.schema)).toEqual(['public', 'auth'])
+  })
+
   it('뷰 표식(isView)이 저장 왕복에서 살아남는다 — 설계 목록의 테이블/뷰 구분 근거', () => {
     const view = { ...tbl('scope_v', 'v1', 'v_active_products'), isView: true }
     replaceTablesForDesign('scope_v', [view, tbl('scope_v', 'v2', 'products')])
@@ -381,7 +411,7 @@ describe('seedSets — 시드 세트 설계 스코프 저장', () => {
     rows
   })
 
-  it('CASE-studio-030: 선언(자연키·무시 컬럼·설계에 없는 행 처리)과 행이 왕복에서 보존된다', () => {
+  it('CASE-design-030: 선언(자연키·무시 컬럼·설계에 없는 행 처리)과 행이 왕복에서 보존된다', () => {
     const rows = [
       { id: 'r1', values: { code: 'admin', name: '관리자', pw: '{{ADMIN_PASSWORD_HASH}}', memo: null } },
       { id: 'r2', values: { code: 'viewer', name: '조회자' } }
@@ -392,7 +422,7 @@ describe('seedSets — 시드 세트 설계 스코프 저장', () => {
     expect(got[0]).toEqual(seedSet('seed_x', 'roles', rows))
   })
 
-  it('CASE-studio-031: 대상 설계만 교체 — 다른 설계 시드 불변 + 저장 순서 유지', () => {
+  it('CASE-design-031: 대상 설계만 교체 — 다른 설계 시드 불변 + 저장 순서 유지', () => {
     replaceSeedSetsForDesign('seed_x', [seedSet('seed_x', 'roles'), seedSet('seed_x', 'permissions')])
     replaceSeedSetsForDesign('seed_y', [seedSet('seed_y', 'codes')])
     const yBefore = listSeedSets().filter((s) => s.designId === 'seed_y')
@@ -438,7 +468,7 @@ describe('versions (컷 · 조회 · 삭제)', () => {
   })
 })
 
-describe('diagramLayouts (Console 실 ERD 레이아웃 영속)', () => {
+describe('diagramLayouts (Remote 실 ERD 레이아웃 영속)', () => {
   const CONN2 = 'conn_diagram'
 
   it('미저장이면 null', () => {
@@ -479,7 +509,7 @@ describe('diagramLayouts (Console 실 ERD 레이아웃 영속)', () => {
     expect(getLayout(CONN2)?.positions).toEqual({ 't:users': { x: 99, y: 99 } })
   })
 
-  // CASE-console-05D — 그룹 영속 왕복
+  // CASE-remote-05D — 그룹 영속 왕복
   it('그룹(이름·색·소속·접힘)이 왕복한다. 그룹 열이 없던 옛 행은 빈 목록으로 읽힌다', () => {
     // 그룹 없이 저장된 기존 행 → 빈 목록
     expect(getLayout(CONN2)?.groups).toEqual([])

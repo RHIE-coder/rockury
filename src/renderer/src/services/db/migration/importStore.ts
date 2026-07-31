@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { useNav } from '@renderer/nav/useNav'
-import { normalizeSchema } from '../console/introspection'
+import { normalizeSchema } from '../remote/introspection'
 import { alignSnapshotToActual } from '../versions/align'
 import { diffSnapshots, type SchemaDiff } from '../versions/diff'
 import { useVersionsStore, type VersionSnapshot } from '../versions/store'
@@ -174,7 +174,7 @@ export const useImportStore = create<ImportState>()((set, get) => ({
         tables: actual.tables.map((t) => (t.designId === designId ? t : { ...t, designId }))
       }
 
-      // 2b) 새 설계면 Draft(Studio 편집본)도 채운다 — 안 그러면 Studio 가 빈 껍데기.
+      // 2b) 새 설계면 Draft(Design 편집본)도 채운다 — 안 그러면 Design 이 빈 껍데기.
       //     Draft 는 전역 tables 테이블(PK=id)에 들어가므로 설계 스코프로 id 를 접두해 충돌을 막는다.
       if (isNew) {
         const draftTables = scopeTableIds(snapshot.tables, designId)
@@ -197,7 +197,7 @@ export const useImportStore = create<ImportState>()((set, get) => ({
         summary: `운영 DB 가져오기 → ${num} (${snapshot.tables.length}개 테이블)`
       })
 
-      // 6) 가져온 설계를 활성으로 → Versions/Studio 에서 바로 보인다.
+      // 6) 가져온 설계를 활성으로 → Versions/Design 에서 바로 보인다.
       useNav.getState().setContextValue('design', designId)
       // 7) 드리프트 뷰 갱신(기준선 == 실제 → 드리프트 0 으로 정합).
       void useMigrationStore.getState().loadDrift(connection.id, designId)

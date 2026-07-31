@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { buildSelect } from '../console/data/sqlBuilder'
+import { buildSelect } from '../remote/data/sqlBuilder'
 import type { DialectId } from '../dialects'
 import type { TableDef } from '../workspaces/definition/types'
 import { planSeedApply, type SeedApplyPlan } from '../workspaces/seed/seedApplyPlan'

@@ -145,7 +145,7 @@ const GRID_CLS = 'grid auto-rows-min gap-3 [grid-template-columns:repeat(auto-fi
 
 /**
  * Connections 모듈(운영부 · depth 2) — 원시 접속 카드 그리드(설계 무관) + 그룹 분류.
- * 카드 클릭 = 활성 Connection(컨텍스트 바 동기화) → Console/Migration 이 이걸 대상으로 동작.
+ * 카드 클릭 = 활성 Connection(컨텍스트 바 동기화) → Remote/Migration 이 이걸 대상으로 동작.
  * 카드 드래그 = 그룹 넣기/빼기/순서 변경 — 고스트가 마우스를 따라오고, 놓일 자리는 점선 플레이스홀더로 미리 보인다.
  */
 export function ConnectionsView() {
@@ -502,7 +502,7 @@ export function ConnectionsView() {
           </div>
           <h3 className="text-[15px] font-semibold text-fg">아직 연결이 없어요</h3>
           <p className="max-w-md text-[13px] leading-relaxed text-muted">
-            모니터링·조회할 DB 접속을 등록하세요. 설계에 묶지 않아도 Console 에서 바로 쓸 수 있고, 배포/마이그레이션이 필요하면 나중에 설계에 바인딩합니다.
+            모니터링·조회할 DB 접속을 등록하세요. 설계에 묶지 않아도 Remote 에서 바로 쓸 수 있고, 배포/마이그레이션이 필요하면 나중에 설계에 바인딩합니다.
           </p>
           <Button size="sm" className="mt-1" onClick={() => openCreate()}>
             <Plus /> 첫 연결 만들기

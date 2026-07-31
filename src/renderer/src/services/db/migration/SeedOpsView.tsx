@@ -15,7 +15,7 @@ import { candidateKey, useSeedOpsStore, type SeedOpsContext } from './seedOpsSto
 
 /**
  * Migration › Seed — **설계 시드를 실 DB 에 반영**하고, **실 DB 행을 설계로 되먹인다**.
- * 정본: `docs/spec/db-studio.md` Section `db-studio.seed.apply-contract`.
+ * 정본: `docs/spec/db-design.md` Section `db-design.seed.apply-contract`.
  *
  * 계산은 순수 모듈이 하고 이 화면은 계획을 보이고 확인을 받는다 —
  * 쓰기는 전부 트랜잭션 게이트(영향 행수 확인 → 커밋/롤백)를 지난다.
@@ -356,7 +356,7 @@ export function SeedOpsView(): ReactElement {
     return (
       <Guard
         title="이 설계엔 시드 세트가 없어요"
-        sub="Studio › Seed 에서 기준 데이터를 먼저 저작하세요."
+        sub="Design › Seed 에서 기준 데이터를 먼저 저작하세요."
       />
     )
 

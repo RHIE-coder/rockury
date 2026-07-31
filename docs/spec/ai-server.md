@@ -118,7 +118,7 @@
 - **AC-1** MCP 쓰기 도구가 **성공했을 때만** 메인이 열린 모든 창에 `store:changed`
   (`{domain: 'designs'|'tables'|'versions', designId}`)를 보낸다 — `isError` 결과는 이벤트 없음.
 - **AC-2** 이벤트를 받은 렌더러 스토어(designs/definition/versions)는 해당 domain·designId
-  스코프만 다시 읽는다 — 열린 Studio 화면에 `set_schema` 결과가 즉시 보인다(e2e).
+  스코프만 다시 읽는다 — 열린 Design 화면에 `set_schema` 결과가 즉시 보인다(e2e).
 - **AC-3** 자기 메아리 금지: 렌더러발 저장(IPC)은 `store:changed` 를 유발하지 않고,
   리하이드레이션으로 갱신된 tables 는 write-through 를 되쏘지 않는다 — 쓰기 1회당 저장 1회(루프 0).
 

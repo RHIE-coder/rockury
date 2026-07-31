@@ -19,7 +19,7 @@ import {
 } from './seedSet'
 import type { SeedSet } from './types'
 
-/** CASE-studio-001~004 (docs/qa/db-studio.md) */
+/** CASE-design-001~004 (docs/qa/db-design.md) */
 
 const col = (id: string, name: string, over: Partial<TableDef['columns'][number]> = {}) => ({
   id,
@@ -43,7 +43,7 @@ const table = (name: string, cols: TableDef['columns'], pk: string[] = [], over:
   ...over
 })
 
-describe('CASE-studio-001 자연키 기본값', () => {
+describe('CASE-design-001 자연키 기본값', () => {
   it('PK 컬럼들을 선언 순서대로 준다', () => {
     const t = table('roles', [col('c1', 'code'), col('c2', 'name')], ['c1'])
     expect(defaultNaturalKey(t)).toEqual(['code'])
@@ -92,7 +92,7 @@ describe('CASE-studio-001 자연키 기본값', () => {
   })
 })
 
-describe('CASE-studio-002 컬럼 역할(짝짓기/포함/무시) — 한 축 3상태', () => {
+describe('CASE-design-002 컬럼 역할(짝짓기/포함/무시) — 한 축 3상태', () => {
   const base: SeedSet = {
     designId: 'd1',
     tableName: 'roles',
@@ -176,7 +176,7 @@ describe('CASE-studio-002 컬럼 역할(짝짓기/포함/무시) — 한 축 3�
   })
 })
 
-describe('CASE-studio-003 세트 완전성', () => {
+describe('CASE-design-003 세트 완전성', () => {
   it('자연키가 없으면 no-natural-key', () => {
     expect(seedSetStatus({ naturalKey: [] })).toBe('no-natural-key')
   })
@@ -185,7 +185,7 @@ describe('CASE-studio-003 세트 완전성', () => {
   })
 })
 
-describe('CASE-studio-004 세트 등록 후보', () => {
+describe('CASE-design-004 세트 등록 후보', () => {
   const roles = table('roles', [col('c1', 'code')], ['c1'])
   const perms = table('permissions', [col('c2', 'code')], ['c2'])
   const v = table('v_summary', [col('c3', 'x')], [], { isView: true })
@@ -218,7 +218,7 @@ describe('createSeedSet', () => {
   })
 })
 
-describe('CASE-studio-008 자연키를 UNIQUE 가 뒷받침하는가', () => {
+describe('CASE-design-008 자연키를 UNIQUE 가 뒷받침하는가', () => {
   const uk = (id: string, name: string, cols: string[]): TableDef['constraints'][number] => ({
     id,
     kind: 'uk',
@@ -259,7 +259,7 @@ describe('CASE-studio-008 자연키를 UNIQUE 가 뒷받침하는가', () => {
   })
 })
 
-describe('CASE-studio-065 짝짓기 기준 자격 · 반영 준비', () => {
+describe('CASE-design-065 짝짓기 기준 자격 · 반영 준비', () => {
   it('DB 가 값을 만드는 컬럼은 기준이 될 수 없다', () => {
     expect(canBeMatchKey(col('c', 'code'))).toBe(true)
     expect(canBeMatchKey(col('c', 'id', { defaultValue: 'AUTO_INCREMENT' }))).toBe(false)

@@ -7,7 +7,7 @@ import { partitionAutoCheck } from './autoCheck'
 /**
  * Connection(원시 접속) 렌더러 스토어(§IA · 결정 B).
  *
- * 설계와 무관한 전역 목록. Console(모니터링/조회/쿼리)이 활성 Connection 을 기준으로 동작한다.
+ * 설계와 무관한 전역 목록. Remote(모니터링/조회/쿼리)가 활성 Connection 을 기준으로 동작한다.
  * 영속(CRUD)은 main SQLite(window.rockury.connections), 연결 상태(statusMap)는 휘발.
  * 컨텍스트 바 'conn' 셀렉터 옵션은 designs/store 처럼 이 스토어가 직접 주입한다.
  */
@@ -23,6 +23,11 @@ export interface ConnectionDef {
   user: string
   sslEnabled: boolean
   sslConfig?: Record<string, unknown>
+  /**
+   * 범위(scope) — 이 연결에서 지금 보고 있는 스키마 목록.
+   * 빈 배열이면 "기본 스키마 하나"다(예전 연결·단일 스키마 사용자). §db-remote.scope
+   */
+  schemas: string[]
   autoCheckDisabled: boolean
   groupId: string | null
   sortOrder: number
@@ -74,6 +79,8 @@ interface ConnectionsState {
   testExisting: (id: string) => Promise<void>
   testAll: () => Promise<void>
   reveal: (id: string) => Promise<string>
+  /** 범위 갈아끼우기 — 낙관 반영 후 영속. 실 DB 재조회는 이 값을 보는 쪽(remote store)이 한다. */
+  setSchemas: (id: string, schemas: string[]) => Promise<void>
   setStatus: (id: string, status: ConnStatus) => void
   openCreate: () => void
   openEdit: (conn: ConnectionDef) => void
@@ -156,6 +163,17 @@ export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
       return await window.rockury.connections.revealPassword(id)
     } catch {
       return ''
+    }
+  },
+
+  setSchemas: async (id, schemas) => {
+    const prev = get().connections.find((c) => c.id === id)?.schemas ?? []
+    set((s) => ({ connections: s.connections.map((c) => (c.id === id ? { ...c, schemas } : c)) }))
+    try {
+      await window.rockury.connections.update(id, { schemas })
+    } catch {
+      // 저장 실패 시 화면을 되돌린다 — 안 그러면 "골랐는데 다음에 열면 없다"가 된다.
+      set((s) => ({ connections: s.connections.map((c) => (c.id === id ? { ...c, schemas: prev } : c)) }))
     }
   },
 

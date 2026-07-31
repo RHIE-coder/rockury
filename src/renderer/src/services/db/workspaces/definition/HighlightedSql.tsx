@@ -1,6 +1,6 @@
 import { tokenizeSqlLine } from './sqlHighlight'
 
-/** DDL 한 줄을 구문 강조해 렌더. 빈 줄은 공백 하나(레이아웃 유지). Studio·Console SQL 뷰 공용. */
+/** DDL 한 줄을 구문 강조해 렌더. 빈 줄은 공백 하나(레이아웃 유지). Design·Remote SQL 뷰 공용. */
 export function HighlightedSqlLine({ line }: { line: string }) {
   const tokens = tokenizeSqlLine(line)
   if (tokens.length === 0) return <span>{' '}</span>

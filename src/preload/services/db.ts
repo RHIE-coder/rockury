@@ -93,7 +93,7 @@ export interface CreateVersionInput {
 /**
  * DB 서비스가 렌더러에 여는 창구.
  *   designs/tables/versions/seedSets/envVars — 로컬 SQLite 메타 저장소(설계부) · raw invoke
- *   connections/connectionGroups — 원시 접속(1급) CRUD + 연결 테스트 — Console 구동 (봉투)
+ *   connections/connectionGroups — 원시 접속(1급) CRUD + 연결 테스트 — Remote 구동 (봉투)
  *   environments — (connection×design) 바인딩 — Migration 전용 (봉투)
  *   introspection/query/savedQueries/collections/migration/diagram — 실 DB 역설계·실행·마이그레이션 (봉투)
  *
@@ -146,7 +146,7 @@ export const dbApi = {
       ipcRenderer.invoke('versions:create', input),
     delete: (id: string): Promise<void> => ipcRenderer.invoke('versions:delete', id)
   },
-  // 운영부 — 원시 접속(1급). 설계 무관, Console 구동.
+  // 운영부 — 원시 접속(1급). 설계 무관, Remote 구동.
   connections: {
     list: (): Promise<ConnectionRecord[]> => unwrap(ipcRenderer.invoke('connections:list')),
     create: (form: ConnectionFormData): Promise<ConnectionRecord> =>
@@ -193,8 +193,15 @@ export const dbApi = {
   },
   // 운영부 — 실 DB 역설계(introspection). 활성 Connection 의 스키마를 IR 로 읽는다.
   introspection: {
-    run: (connectionId: string): Promise<IntrospectedSchema> =>
-      unwrap(ipcRenderer.invoke('introspection:run', connectionId))
+    /** `schemas` 를 주면 그 범위를, 안 주면 연결에 저장된 범위를 읽는다. */
+    run: (connectionId: string, schemas?: string[]): Promise<IntrospectedSchema> =>
+      unwrap(ipcRenderer.invoke('introspection:run', connectionId, schemas)),
+    /** 이 연결에서 고를 수 있는 스키마 목록(시스템 스키마 제외). */
+    schemas: (connectionId: string): Promise<string[]> =>
+      unwrap(ipcRenderer.invoke('introspection:schemas', connectionId)),
+    /** 이 서버의 카탈로그(database) 목록 — PostgreSQL 만 채워져 온다. */
+    catalogs: (connectionId: string): Promise<string[]> =>
+      unwrap(ipcRenderer.invoke('introspection:catalogs', connectionId))
   },
   // 운영부 — 쿼리 실행 + 트랜잭션 파괴 게이트(활성 Connection 대상).
   query: {
@@ -268,7 +275,7 @@ export const dbApi = {
     listLogs: (envId: string): Promise<MigrationLogRecord[]> =>
       unwrap(ipcRenderer.invoke('migration:listLogs', envId))
   },
-  // 운영부 — Console 실 ERD 레이아웃(연결별 노드 위치·뷰포트) 영속.
+  // 운영부 — Remote 실 ERD 레이아웃(연결별 노드 위치·뷰포트) 영속.
   diagram: {
     getLayout: (connectionId: string): Promise<DiagramLayoutRecord | null> =>
       unwrap(ipcRenderer.invoke('diagram:getLayout', connectionId)),

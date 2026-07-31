@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Eye, Search, Table2 } from 'lucide-react'
+import { Eye, Layers, Search, Table2 } from 'lucide-react'
 import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { groupTablesForList } from './tableList'
@@ -7,7 +7,7 @@ import type { TableDef } from './workspaces/definition/types'
 
 /**
  * 테이블 목록 패널 — Definition·Diagram 이 공유하는 **하나뿐인** 목록 표현.
- * Console › Data 사이드바를 원형 삼아 테이블과 뷰(view)를 섹션으로 가른다.
+ * Remote › Data 사이드바를 원형 삼아 테이블과 뷰(view)를 섹션으로 가른다.
  * (Data 자체는 편집 가능 여부 자물쇠 등 자기 사정이 있어 아직 자체 목록을 쓴다 — 통합은 후속.)
  */
 export function TableListPanel({
@@ -54,34 +54,70 @@ export function TableListPanel({
           </p>
         ) : (
           <>
-            {g.tables.length > 0 && (
-              <SectionHeader icon={Table2} label="테이블" count={g.tables.length} first />
-            )}
-            {g.tables.map((t) => (
-              <TableListRow
-                key={t.id}
-                table={t}
-                active={t.id === activeId}
-                onPick={() => onPick(t)}
-                extra={rowExtra?.(t)}
-              />
-            ))}
-            {g.views.length > 0 && (
-              <SectionHeader icon={Eye} label="뷰" count={g.views.length} first={g.tables.length === 0} />
-            )}
-            {g.views.map((t) => (
-              <TableListRow
-                key={t.id}
-                table={t}
-                active={t.id === activeId}
-                onPick={() => onPick(t)}
-                extra={rowExtra?.(t)}
-              />
+            {g.groups.map((grp, gi) => (
+              <div key={grp.schema || '·'}>
+                {/* 스키마가 섞여 있을 때만 머리를 그린다 — 하나뿐이면 시끄럽다. */}
+                {g.multiSchema && <SchemaHeader schema={grp.schema} count={grp.tables.length + grp.views.length} first={gi === 0} />}
+                {grp.tables.length > 0 && (
+                  <SectionHeader
+                    icon={Table2}
+                    label="테이블"
+                    count={grp.tables.length}
+                    first={gi === 0 && !g.multiSchema}
+                  />
+                )}
+                {grp.tables.map((t) => (
+                  <TableListRow
+                    key={t.id}
+                    table={t}
+                    active={t.id === activeId}
+                    onPick={() => onPick(t)}
+                    extra={rowExtra?.(t)}
+                  />
+                ))}
+                {grp.views.length > 0 && (
+                  <SectionHeader
+                    icon={Eye}
+                    label="뷰"
+                    count={grp.views.length}
+                    first={grp.tables.length === 0 && gi === 0 && !g.multiSchema}
+                  />
+                )}
+                {grp.views.map((t) => (
+                  <TableListRow
+                    key={t.id}
+                    table={t}
+                    active={t.id === activeId}
+                    onPick={() => onPick(t)}
+                    extra={rowExtra?.(t)}
+                  />
+                ))}
+              </div>
             ))}
           </>
         )}
       </div>
       {footer}
+    </div>
+  )
+}
+
+/**
+ * 스키마 머리 — 여러 스키마가 한 목록에 있을 때만 그린다.
+ * 테이블/뷰 머리보다 진하게 둔다: 이름이 겹치는 테이블을 가르는 것이 여기라, 이 줄이 안 보이면
+ * 목록이 "이름순이 깨진 한 덩어리"로 읽힌다.
+ */
+function SchemaHeader({ schema, count, first }: { schema: string; count: number; first?: boolean }) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1.5 px-2 pb-1 font-mono text-[11px] font-bold text-fg',
+        first ? 'pt-2' : 'mt-2 border-t-2 border-line pt-2.5'
+      )}
+    >
+      <Layers className="size-3 text-accent" />
+      {schema || '기본'}
+      <span className="font-sans text-[10.5px] font-semibold text-muted">{count}</span>
     </div>
   )
 }

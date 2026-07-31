@@ -44,9 +44,9 @@ export interface FeedbackLogEntry {
 
 /** 어느 화면에서 남긴 피드백인지. Rockury 는 URL 이 없으므로 nav 경로가 그 자리를 대신한다. */
 export interface FeedbackLocation {
-  /** nav 경로 — `/db/studio/schema` 꼴. 폴더 이름의 재료이자 화면 식별자. */
+  /** nav 경로 — `/db/design/schema` 꼴. 폴더 이름의 재료이자 화면 식별자. */
   route: string
-  /** 사람이 읽는 경로 — 'DB › Studio › Schema'. */
+  /** 사람이 읽는 경로 — 'DB › Design › Schema'. */
   label: string
   /** 상단 컨텍스트 바 선택값(Design·Env 등). 같은 화면도 무엇을 보고 있었는지로 갈린다. */
   context: { label: string; value: string }[]
@@ -108,6 +108,41 @@ export function probePoints(bounds: FeedbackRect): Array<[number, number]> {
     [x + width * 0.3, y + height * 0.7],
     [x + width * 0.7, y + height * 0.7]
   ]
+}
+
+/**
+ * 오버레이가 열려 있는 동안 키 하나를 어떻게 다룰지.
+ * - `toggle` 도구 열기/닫기 · `send` 보내기 · `close` 한 겹 닫기
+ * - `shield` 앱에 못 닿게 삼킨다(화면 얼리기) · `pass` 그대로 흘려보낸다
+ */
+export type FeedbackKeyAction = 'toggle' | 'send' | 'close' | 'shield' | 'pass'
+
+/** 판정에 필요한 것만 추린 키 이벤트. DOM 없이 테스트하려고 좁혔다. */
+export interface FeedbackKeyEvent {
+  key: string
+  metaKey: boolean
+  ctrlKey: boolean
+  shiftKey: boolean
+}
+
+/**
+ * 키를 오버레이가 먹을지, 앱까지 흘려보낼지.
+ *
+ * 이 판정이 틀리면 **지적하려던 화면이 지적하는 도중에 사라진다.** Radix 계열 겹층
+ * (모달·팝오버)은 Escape 를 document 캡처 단계에서 듣고 스스로 닫는다 — 오버레이가
+ * 열려 있는 동안 앱이 키를 아예 못 보게 해야 하는 이유가 그것이다(2026-07-30 사용자 제보).
+ * 유일한 예외가 메모창이라, 오버레이 안에서 난 키만 통과시킨다.
+ */
+export function feedbackKeyAction(
+  e: FeedbackKeyEvent,
+  ctx: { open: boolean; fromOverlay: boolean }
+): FeedbackKeyAction {
+  const mod = e.metaKey || e.ctrlKey
+  if (mod && e.shiftKey && e.key.toLowerCase() === 'f') return 'toggle'
+  if (!ctx.open) return 'pass'
+  if (mod && e.key === 'Enter') return 'send'
+  if (e.key === 'Escape') return 'close'
+  return ctx.fromOverlay ? 'pass' : 'shield'
 }
 
 // React 트리에는 배선용 껍데기 컴포넌트가 잔뜩 섞여 있다. 그대로 넘기면 사슬이 노이즈로

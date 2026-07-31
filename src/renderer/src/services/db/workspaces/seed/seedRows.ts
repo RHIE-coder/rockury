@@ -1,11 +1,11 @@
-import { extractKeywords } from '../../console/query/keywords'
+import { extractKeywords } from '../../remote/query/keywords'
 import type { SeedRow } from './types'
 
 /**
  * 시드 **행** 판정(순수) — 자연키 구성·행 검증·변수 추출·행 짝짓기.
- * 정본: `docs/spec/db-studio.md` Section `db-studio.seed.grid` / `.variables` / `.version-diff`.
+ * 정본: `docs/spec/db-design.md` Section `db-design.seed.grid` / `.variables` / `.version-diff`.
  *
- * 변수 문법(`{{NAME}}`)은 저장쿼리 파라미터화와 **같은 정본**(`console/query/keywords`)을 쓴다 —
+ * 변수 문법(`{{NAME}}`)은 저장쿼리 파라미터화와 **같은 정본**(`remote/query/keywords`)을 쓴다 —
  * 사용자가 두 문법을 따로 배우지 않게. bare `{{x}}` 만 변수, `'{{x}}'` 는 리터럴.
  */
 

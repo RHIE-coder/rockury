@@ -39,7 +39,7 @@ interface Ctx {
 
 /**
  * 공통 가드 — Migration 은 실제(Connection)를 설계 버전과 대조하므로 **둘 다** 필요하다.
- * (Console 은 Connection 만으로 되지만, 마이그레이션은 설계가 있어야 diff 대상이 생긴다.)
+ * (Remote 는 Connection 만으로 되지만, 마이그레이션은 설계가 있어야 diff 대상이 생긴다.)
  */
 function useCtx(): { ctx: Ctx | null; fallback: ReactElement | null } {
   const design = useActiveDesign()

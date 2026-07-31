@@ -1,7 +1,7 @@
 import type { Constraint, FkAction } from './types'
 
 /**
- * 외래키(FK) 표기의 **단일 정본** — 설계부(Studio)와 운영부(Console)가 같은 문자열·같은 규칙으로
+ * 외래키(FK) 표기의 **단일 정본** — 설계부(Design)와 운영부(Remote)가 같은 문자열·같은 규칙으로
  * FK 를 그리도록 여기 한 곳에서만 만든다(순수 함수 → 테스트 의무).
  *
  * 통일 규칙:
@@ -12,7 +12,7 @@ import type { Constraint, FkAction } from './types'
  *      ddl.ts 는 값이 없으면 절을 아예 안 쓰므로 실제로는 DB 기본값 NO ACTION 이 걸린다.)
  *  4. 흐림만으로는 "값이 빠졌다"로 오독된다 → 흐린 칩에는 **왜 흐린지 `note` 를 눈에 보이게** 붙인다.
  *     `미지정`(설계부에서 아직 안 고름) / `기본값`(값은 있고 그게 DB 기본 동작)로 나눈다.
- *     운영부(Console)는 카탈로그가 "안 썼음"과 "NO ACTION 이라 썼음"을 구분해 저장하지 않으므로
+ *     운영부(Remote)는 카탈로그가 "안 썼음"과 "NO ACTION 이라 썼음"을 구분해 저장하지 않으므로
  *     (postgres `confupdtype='a'`, mysql `NO ACTION`) 항상 `기본값` 쪽이다 — 미지정이라 단정하지 않는다.
  */
 

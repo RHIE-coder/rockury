@@ -7,7 +7,7 @@ import { MW_KINDS, defaultPortOf, parseCommandLine, quickCommandsOf } from './co
 /**
  * 미들웨어 접속·콘솔.
  *
- * DB 서비스의 Connections/Console 패턴을 빌린다(새로 발명하지 않는다 — `middleware.scope` AC-2).
+ * DB 서비스의 Connections/Remote 패턴을 빌린다(새로 발명하지 않는다 — `middleware.scope` AC-2).
  * 클라이언트는 **의존성 0**으로 메인 프로세스가 규약을 직접 태운다(`middleware/redis.ts`).
  *
  * 아직 못 붙는 종류를 목록에서 **빼지 않고 못 붙는다고 표시**한다 — 빼면 "지원 안 하나?"를

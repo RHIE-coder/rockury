@@ -24,15 +24,15 @@ const BASELINE_DIR = join(dirname(fileURLToPath(import.meta.url)), 'baseline')
 
 const sample = [
   { check: 'contrast', formFactor: 'boot', text: 'A' },
-  { check: 'contrast', formFactor: 'db/console/query', text: 'B' },
+  { check: 'contrast', formFactor: 'db/remote/query', text: 'B' },
   { check: 'contrast', formFactor: 'uiux/canvas', text: 'C' },
-  { check: 'tap-target', formFactor: 'db/studio/seed', text: 'D' },
+  { check: 'tap-target', formFactor: 'db/design/seed', text: 'D' },
   { check: 'contrast', formFactor: 'infra/cloud', text: 'E' }
 ]
 
 describe('화면 기준선 서비스별 분할', () => {
   it('formFactor 첫 마디로 소유 서비스를 정한다', () => {
-    expect(serviceOf('db/console/query')).toBe('db')
+    expect(serviceOf('db/remote/query')).toBe('db')
     expect(serviceOf('uiux/canvas')).toBe('uiux')
     expect(serviceOf('ai/agents')).toBe('ai')
     // 서비스 이름이 아니면 공용 — 부팅 화면은 어느 서비스 것도 아니다.

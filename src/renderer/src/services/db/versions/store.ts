@@ -41,7 +41,7 @@ const toDef = (r: {
   createdAt: r.createdAt
 })
 
-/** Studio 가 보고 있는 시점 — 편집 가능한 작업본. */
+/** Design 이 보고 있는 시점 — 편집 가능한 작업본. */
 export const DRAFT_LENS = 'draft'
 
 interface VersionsState {
@@ -49,13 +49,13 @@ interface VersionsState {
   byDesign: Record<string, VersionDef[]>
   loaded: Record<string, boolean>
   /**
-   * **Studio 렌즈** — 지금 어느 시점의 설계를 보고 있는가.
+   * **Design 렌즈** — 지금 어느 시점의 설계를 보고 있는가.
    * `'draft'`(편집 가능) 또는 커밋 버전 번호(읽기 전용).
    *
    * 예전엔 상단 컨텍스트 바의 셀렉터였다. 그런데 컨텍스트 바의 다른 칸(Design·Connection)은
    * "무엇을 대상으로 하느냐"인데 이것만 "그 대상을 언제 시점으로 보느냐"라 성격이 달랐고,
-   * 실제로 읽는 화면도 Studio 셋뿐이라 운영부에서는 아무 일도 안 했다.
-   * 그래서 상태를 이 서비스 스토어로 내리고, 손잡이는 Studio 도구줄에 둔다(2026-07-29 사용자 결정).
+   * 실제로 읽는 화면도 Design 셋뿐이라 운영부에서는 아무 일도 안 했다.
+   * 그래서 상태를 이 서비스 스토어로 내리고, 손잡이는 Design 도구줄에 둔다(2026-07-29 사용자 결정).
    */
   lens: string
   setLens: (lens: string) => void
@@ -105,12 +105,12 @@ export const useVersionsStore = create<VersionsState>()((set, get) => ({
   }
 }))
 
-/** 지금 Studio 가 보고 있는 시점. */
+/** 지금 Design 이 보고 있는 시점. */
 export function useVersionLens(): string {
   return useVersionsStore((s) => s.lens)
 }
 
-/** 커밋된 버전을 보고 있으면 true — 그동안 Studio 는 읽기 전용이다. */
+/** 커밋된 버전을 보고 있으면 true — 그동안 Design 은 읽기 전용이다. */
 export function isReadOnlyLens(lens: string): boolean {
   return !!lens && lens !== DRAFT_LENS
 }

@@ -23,6 +23,32 @@ export function quoteId(d: DialectId, name: string): string {
 const q = quoteId
 
 /**
+ * 테이블의 **한정 이름** — `qualify` 가 켜졌고 스키마가 있을 때만 `"스키마"."테이블"`.
+ *
+ * 왜 늘 붙이지 않나: 스키마가 하나뿐인 설계·연결에서 갑자기 `"public"."users"` 가 되면
+ * 지금까지 쓰던 DDL 과 글자가 달라진다(파일로 저장해 비교하는 쓰임이라 전부 diff 로 뜬다).
+ * 붙일지는 **부르는 쪽이 "이 목록에 스키마가 둘 이상인가"** 로 정한다.
+ * SQLite 는 스키마 개념이 없어(`main` 하나) 언제나 안 붙인다.
+ */
+export function qualifiedTable(d: DialectId, t: TableDef, qualify: boolean): string {
+  if (!qualify || !t.schema || d === 'sqlite') return q(d, t.name)
+  return `${q(d, t.schema)}.${q(d, t.name)}`
+}
+
+/** FK 가 가리키는 대상의 한정 이름 — 참조 스키마가 없으면 그 제약이 걸린 테이블과 같은 스키마. */
+function qualifiedRef(d: DialectId, from: TableDef, k: Constraint, qualify: boolean): string {
+  const schema = k.refSchema ?? from.schema
+  if (!qualify || !schema || d === 'sqlite') return q(d, k.refTable ?? '?')
+  return `${q(d, schema)}.${q(d, k.refTable ?? '?')}`
+}
+
+/** DDL 생성 선택지. */
+export interface DdlOptions {
+  /** 스키마 한정 이름을 쓸지 — 보통 "이 목록에 스키마가 둘 이상인가". 기본 false. */
+  qualify?: boolean
+}
+
+/**
  * MySQL 표기 타입을 타 방언 타입으로 변환.
  * 설계 방언 그대로 출력할 땐 identity — 이 매핑은 추후 명시적 "포팅"(새 설계 생성)
  * 엔진으로 옮겨질 로직의 씨앗이다.
@@ -74,7 +100,7 @@ function colList(d: DialectId, t: TableDef, con: Constraint, withDirection: bool
  * `OR REPLACE` 는 MySQL/MariaDB/PostgreSQL 만 지원한다(SQLite 는 DROP 후 재생성해야 함) →
  * 방언이 받는 구문만 낸다. 본문이 비면 자리만 만들고 무엇이 비었는지 주석으로 알린다.
  */
-function generateViewDdl(t: TableDef, d: DialectId): string {
+function generateViewDdl(t: TableDef, d: DialectId, qualify: boolean): string {
   const body = (t.viewSql ?? '').trim().replace(/;\s*$/, '')
   const head = d === 'sqlite' ? 'CREATE VIEW' : 'CREATE OR REPLACE VIEW'
   // 이름·방언은 SQL 본문과 화면 머리에 이미 있다 — 주석으로 되풀이하지 않는다.
@@ -83,15 +109,17 @@ function generateViewDdl(t: TableDef, d: DialectId): string {
   // (introspection 은 뷰 본문을 가져오지 않는다). 어느 쪽인지 모르므로 둘 다 알린다.
   if (!body)
     out.push('-- 뷰 본문(SELECT)이 비어 있어요 — 설계에서 선언한 뷰면 Definition 에서 채우세요(실 DB 역설계는 본문을 가져오지 않습니다).')
-  out.push(`${head} ${q(d, t.name)} AS`)
+  out.push(`${head} ${qualifiedTable(d, t, qualify)} AS`)
   out.push(`${body || 'SELECT 1'};`)
   // PG 는 뷰 설명도 COMMENT ON 으로 따로 붙는다(테이블 경로와 같은 규칙).
-  if (d === 'postgresql' && t.comment) out.push('', `COMMENT ON VIEW ${q(d, t.name)} IS '${esc(t.comment)}';`)
+  if (d === 'postgresql' && t.comment)
+    out.push('', `COMMENT ON VIEW ${qualifiedTable(d, t, qualify)} IS '${esc(t.comment)}';`)
   return out.join('\n')
 }
 
-export function generateDdl(t: TableDef, d: DialectId): string {
-  if (t.isView) return generateViewDdl(t, d)
+export function generateDdl(t: TableDef, d: DialectId, opts: DdlOptions = {}): string {
+  const qualify = opts.qualify ?? false
+  if (t.isView) return generateViewDdl(t, d, qualify)
 
   const pre: string[] = []
   const comments: string[] = []
@@ -108,7 +136,8 @@ export function generateDdl(t: TableDef, d: DialectId): string {
         pre.push(`CREATE TYPE ${q(d, name)} AS ENUM (${vals});`)
       }
     }
-    if (t.comment) comments.push(`COMMENT ON TABLE ${q(d, t.name)} IS '${esc(t.comment)}';`)
+    if (t.comment)
+      comments.push(`COMMENT ON TABLE ${qualifiedTable(d, t, qualify)} IS '${esc(t.comment)}';`)
   }
 
   // SQLite: 단일 컬럼 PK + AUTO_INCREMENT → INTEGER PRIMARY KEY AUTOINCREMENT 인라인
@@ -147,7 +176,9 @@ export function generateDdl(t: TableDef, d: DialectId): string {
 
     if (isMy(d) && c.comment) seg.push(`COMMENT '${esc(c.comment)}'`)
     if (d === 'postgresql' && c.comment) {
-      comments.push(`COMMENT ON COLUMN ${q(d, t.name)}.${q(d, c.name)} IS '${esc(c.comment)}';`)
+      comments.push(
+        `COMMENT ON COLUMN ${qualifiedTable(d, t, qualify)}.${q(d, c.name)} IS '${esc(c.comment)}';`
+      )
     }
     return seg.join(' ') + trailing
   }
@@ -169,7 +200,7 @@ export function generateDdl(t: TableDef, d: DialectId): string {
         const refCols = (k.refColumns ?? []).map((rc) => q(d, rc)).join(', ')
         let line =
           `  CONSTRAINT ${name} FOREIGN KEY ${colList(d, t, k, false)}` +
-          ` REFERENCES ${q(d, k.refTable ?? '?')} (${refCols})`
+          ` REFERENCES ${qualifiedRef(d, t, k, qualify)} (${refCols})`
         if (k.onDelete) line += ` ON DELETE ${k.onDelete}`
         if (k.onUpdate) line += ` ON UPDATE ${k.onUpdate}`
         consLines.push(line)
@@ -182,7 +213,7 @@ export function generateDdl(t: TableDef, d: DialectId): string {
         if (isMy(d)) {
           consLines.push(`  INDEX ${name} ${colList(d, t, k, true)}`)
         } else {
-          indexes.push(`CREATE INDEX ${name} ON ${q(d, t.name)} ${colList(d, t, k, true)};`)
+          indexes.push(`CREATE INDEX ${name} ON ${qualifiedTable(d, t, qualify)} ${colList(d, t, k, true)};`)
         }
         break
     }
@@ -194,7 +225,7 @@ export function generateDdl(t: TableDef, d: DialectId): string {
 
   const out: string[] = []
   if (pre.length) out.push(...pre, '')
-  out.push(`CREATE TABLE ${q(d, t.name)} (`)
+  out.push(`CREATE TABLE ${qualifiedTable(d, t, qualify)} (`)
   out.push([...t.columns.map(buildColumn), ...consLines].join(',\n'))
   out.push(close)
   if (comments.length) out.push('', ...comments)

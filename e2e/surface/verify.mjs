@@ -140,7 +140,7 @@ try {
   app = await electron.launch({ executablePath: electronBin, args: [MAIN, `--user-data-dir=${USER_DATA}`], timeout: 30_000 })
   page = await app.firstWindow()
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
-  page.on('console', (m) => { if (m.type() === 'error') errors.push('console.error: ' + m.text()) })
+  page.on('remote', (m) => { if (m.type() === 'error') errors.push('console.error: ' + m.text()) })
   // 미저장 가드 등 confirm 은 수락(순회가 막히지 않게).
   page.on('dialog', (d) => d.accept().catch(() => {}))
   // ⭐ 검사 창을 **주 디스플레이 + 고정 크기**로 못박는다 — 판정이 결정적이어야 하기 때문.
@@ -167,7 +167,7 @@ try {
         ' 주 디스플레이 작업영역이 그보다 작으면 판정이 기준선과 어긋나므로 검증불가로 둡니다.'
     )
   }
-  await page.waitForSelector('text=Studio', { timeout: 15_000 })
+  await page.waitForSelector('text=Design', { timeout: 15_000 })
   // 웹폰트 로드 전 측정하면 글자 폭이 달라져 잘림 판정이 또 흔들린다 → 폰트까지 기다린다.
   await page.evaluate(() => document.fonts?.ready.then(() => true))
   await page.waitForTimeout(400) // 초기 렌더 안정화

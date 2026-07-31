@@ -3,7 +3,7 @@ import type { Constraint, TableDef } from '../definition/types'
 import { planSeedImport } from './seedImportPlan'
 import type { SeedRow, SeedSet } from './types'
 
-/** CASE-studio-080~084 (docs/qa/db-studio.md) */
+/** CASE-design-080~084 (docs/qa/db-design.md) */
 
 const col = (id: string, name: string, over: Partial<TableDef['columns'][number]> = {}) => ({
   id,
@@ -62,7 +62,7 @@ const usersTable = table(
   [pk('k1', ['c1'])]
 )
 
-describe('CASE-studio-080 실 DB 에만 있는 행 → 새 후보', () => {
+describe('CASE-design-080 실 DB 에만 있는 행 → 새 후보', () => {
   it('새 행을 후보로 만들고 별칭을 제안한다', () => {
     const p = planSeedImport({
       sets: [set('users', [])],
@@ -97,7 +97,7 @@ describe('CASE-studio-080 실 DB 에만 있는 행 → 새 후보', () => {
   })
 })
 
-describe('CASE-studio-081 값이 다른 행 → 변경 후보', () => {
+describe('CASE-design-081 값이 다른 행 → 변경 후보', () => {
   it('무엇이 어떻게 다른지 담는다(기준 컬럼은 제외 — 그래서 짝지어진 행이다)', () => {
     const p = planSeedImport({
       sets: [set('users', [row('r1', 'admin', { code: 'admin', name: '옛 이름' })])],
@@ -119,7 +119,7 @@ describe('CASE-studio-081 값이 다른 행 → 변경 후보', () => {
   })
 })
 
-describe('CASE-studio-082 설계에만 있는 행', () => {
+describe('CASE-design-082 설계에만 있는 행', () => {
   it('실 DB 에 없는 설계 행을 알린다(채택 대상이 아니라 사실 보고)', () => {
     const p = planSeedImport({
       sets: [set('users', [row('r1', 'admin', { code: 'admin' })])],
@@ -131,7 +131,7 @@ describe('CASE-studio-082 설계에만 있는 행', () => {
   })
 })
 
-describe('CASE-studio-083 FK 값을 참조 표기로 되돌린다', () => {
+describe('CASE-design-083 FK 값을 참조 표기로 되돌린다', () => {
   const profilesTable = table(
     'user_profiles',
     [col('p0', 'id', { defaultValue: 'AUTO_INCREMENT' }), col('p1', 'user_id'), col('p2', 'code')],
@@ -166,7 +166,7 @@ describe('CASE-studio-083 FK 값을 참조 표기로 되돌린다', () => {
   })
 })
 
-describe('CASE-studio-084 준비 안 된 세트', () => {
+describe('CASE-design-084 준비 안 된 세트', () => {
   it('짝짓기 기준이 없으면 가져오지 않고 이유를 남긴다', () => {
     const p = planSeedImport({
       sets: [set('users', [], { naturalKey: [] })],

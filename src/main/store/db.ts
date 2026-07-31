@@ -57,7 +57,7 @@ function seed(d: DatabaseSync): void {
     )
   )
 
-  // 버전 이력 시드 — Studio 의 v0.3.14 드리프트 배지와 아귀를 맞춘다.
+  // 버전 이력 시드 — Design 의 v0.3.14 드리프트 배지와 아귀를 맞춘다.
   const insertVersion = d.prepare(
     'INSERT INTO versions (id, design_id, number, note, snapshot, locked, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
   )

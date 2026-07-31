@@ -69,5 +69,5 @@
 - **CASE-pdev-063** 정리 명령이 워크트리를 지울 때 **커밋 안 된 변경이 있으면 멈추고 알린다** — 작업물을 말없이 날리지 않는다.
 
 ## 범위 밖
-- 각 서비스의 기능 동작 — 해당 서비스 TestPlan(`db-studio`·`db-console`·`db-connections`·`ai-server`)의 몫.
+- 각 서비스의 기능 동작 — 해당 서비스 TestPlan(`db-design`·`db-remote`·`db-connections`·`ai-server`)의 몫.
 - 병합 충돌이 "실제로" 줄었는지 — 여러 브랜치를 실제로 굴려야 나오는 결과라 자동 검증 대상이 아니다. 분할이 구조적으로 충돌 지점을 없앴는지는 파일 소유권 표(`AGENTS.md`)로 확인한다.

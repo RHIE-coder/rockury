@@ -1,9 +1,18 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { registry } from './registry'
+import {
+  emptyRecall,
+  normalizeRecall,
+  recallModule,
+  recallView,
+  rememberModule,
+  rememberView,
+  type NavRecall
+} from './recall'
 import type { Module, Service, View } from './types'
 
-/** 기본 진입 서비스 — 이번 마일스톤에서 가장 구체화된 DB 서비스로 시작. */
+/** 기억이 아직 없는 첫 실행의 진입 서비스 — 가장 구체화된 DB 서비스로 시작. */
 const DEFAULT_SERVICE_ID = 'db'
 
 function findService(serviceId: string): Service {
@@ -17,6 +26,16 @@ function findModule(service: Service, moduleId: string | null): Module {
 function findView(module: Module, viewId: string | null): View | null {
   if (!module.views?.length) return null
   return module.views.find((v) => v.id === viewId) ?? module.views[0]
+}
+
+/** 지금 선 자리(서비스/모듈/뷰)를 한 번에 기억에 새긴다. */
+function remember(
+  recall: NavRecall,
+  serviceId: string,
+  moduleId: string,
+  viewId: string | null
+): NavRecall {
+  return rememberView(rememberModule(recall, serviceId, moduleId), serviceId, moduleId, viewId)
 }
 
 /**
@@ -38,9 +57,11 @@ interface NavState {
   viewId: string | null
   /** 상단 컨텍스트 바의 선택값 (selectorId → optionId). 서비스별로 초기화된다. */
   contextValues: Record<string, string>
-  /** 서비스 전환 → 첫 모듈, 첫 뷰(있으면), 컨텍스트 기본값으로 초기화 */
+  /** 서비스·모듈마다 "마지막에 본 자리". 다시 들어올 때 첫 항목 대신 여기로 돌아온다. */
+  recall: NavRecall
+  /** 서비스 전환 → 마지막에 보던 모듈·뷰(없으면 첫 모듈·첫 뷰), 컨텍스트 기본값 채움 */
   selectService: (serviceId: string) => void
-  /** 모듈 전환 → 첫 뷰(있으면)로 초기화 */
+  /** 모듈 전환 → 그 모듈에서 마지막에 보던 뷰(없으면 첫 뷰) */
   selectModule: (moduleId: string) => void
   /** 뷰 전환 */
   selectView: (viewId: string) => void
@@ -62,14 +83,18 @@ export const useNav = create<NavState>()(
       moduleId: '',
       viewId: null,
       contextValues: {},
+      recall: emptyRecall(),
 
       selectService: (serviceId) => {
         const service = findService(serviceId)
-        const module = service.modules[0]
+        // 기억한 id 가 그 사이 없어졌으면 find* 가 첫 항목으로 떨어뜨린다 — 폴백이 곧 예전 규칙.
+        const module = findModule(service, recallModule(get().recall, serviceId))
+        const view = findView(module, recallView(get().recall, serviceId, module.id))
         set((s) => ({
           serviceId,
           moduleId: module.id,
-          viewId: module.views?.[0]?.id ?? null,
+          viewId: view?.id ?? null,
+          recall: remember(s.recall, serviceId, module.id, view?.id ?? null),
           // 컨텍스트 선택(예: Design)은 유지한다 — 서비스를 오가도 다시 고르지 않도록.
           // 아직 안 고른 셀렉터에만 서비스 기본값을 채운다.
           contextValues: { ...defaultContext(service), ...s.contextValues }
@@ -77,12 +102,24 @@ export const useNav = create<NavState>()(
       },
 
       selectModule: (moduleId) => {
-        const service = findService(get().serviceId)
+        const { serviceId, recall } = get()
+        const service = findService(serviceId)
         const module = findModule(service, moduleId)
-        set({ moduleId: module.id, viewId: module.views?.[0]?.id ?? null })
+        const view = findView(module, recallView(recall, serviceId, module.id))
+        set({
+          moduleId: module.id,
+          viewId: view?.id ?? null,
+          recall: remember(recall, serviceId, module.id, view?.id ?? null)
+        })
       },
 
-      selectView: (viewId) => set({ viewId }),
+      selectView: (viewId) =>
+        set((s) => {
+          // 아직 아무것도 안 누른 첫 화면이면 moduleId 가 '' 다(= "첫 모듈" 폴백) —
+          // 기억의 열쇠로는 실제 모듈 id 를 써야 하므로 여기서 풀어 준다.
+          const module = findModule(findService(s.serviceId), s.moduleId)
+          return { viewId, recall: rememberView(s.recall, s.serviceId, module.id, viewId) }
+        }),
 
       setContextValue: (selectorId, optionId) =>
         set((s) => ({ contextValues: { ...s.contextValues, [selectorId]: optionId } }))
@@ -90,8 +127,20 @@ export const useNav = create<NavState>()(
     {
       name: 'rockury.nav',
       storage: createJSONStorage(() => localStorage),
-      // 선택 상태만 저장(액션 제외). 화면 위치는 저장하지 않아 앱은 항상 기본 진입.
-      partialize: (s) => ({ contextValues: s.contextValues })
+      // 선택 상태만 저장(액션 제외). 화면 위치도 저장한다 — 앱을 껐다 켜도 보던 자리로
+      // 돌아온다(2026-07-30 사용자 피드백). 그전에는 저장하지 않아 늘 기본 진입이었다.
+      partialize: (s) => ({
+        contextValues: s.contextValues,
+        recall: s.recall,
+        serviceId: s.serviceId,
+        moduleId: s.moduleId,
+        viewId: s.viewId
+      }),
+      // 저장본은 이 기능이 없던 시절 것일 수 있다 — 기억 지도만 걸러 받는다.
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<NavState>
+        return { ...current, ...saved, recall: normalizeRecall(saved.recall) }
+      }
     }
   )
 )

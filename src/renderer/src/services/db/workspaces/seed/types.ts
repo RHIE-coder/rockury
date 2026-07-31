@@ -1,6 +1,6 @@
 /**
- * Studio › Seed 도메인 타입 — **시드 세트**(= 시드 관리의 단위: 대상 테이블 · 자연키 ·
- * 무시 컬럼 · "설계에 없는 행" 처리). 정본 명세 `docs/spec/db-studio.md` Surface `db-studio.seed`.
+ * Design › Seed 도메인 타입 — **시드 세트**(= 시드 관리의 단위: 대상 테이블 · 자연키 ·
+ * 무시 컬럼 · "설계에 없는 행" 처리). 정본 명세 `docs/spec/db-design.md` Surface `db-design.seed`.
  *
  * 왜 컬럼을 id 가 아니라 **이름**으로 가리키나: 시드 행은 결국 실 DB 에 심어지고, 실 DB 에는
  * 설계의 순번 id 가 존재하지 않는다(이름이 곧 정체성). 스키마쪽 `versions/align.ts` 가 경계
@@ -42,7 +42,7 @@ export interface SeedRow {
 }
 
 /**
- * PK(대체키) 를 **누가 만드는가** — 반영 계약의 핵심 선언(spec `db-studio.seed.apply-contract` AC-2).
+ * PK(대체키) 를 **누가 만드는가** — 반영 계약의 핵심 선언(spec `db-design.seed.apply-contract` AC-2).
  *  - `db`   : DB 가 만든다(자동증가·`DEFAULT uuid()`) → 시드는 PK 를 담지 않는다.
  *  - `seed` : 시드가 값을 준다 — 셀에 직접 쓰거나 `pkTemplate` 으로 **결정적으로** 만든다.
  * 랜덤 생성은 허용하지 않는다: 재실행마다 값이 달라져 같은 행이 두 벌 생긴다.

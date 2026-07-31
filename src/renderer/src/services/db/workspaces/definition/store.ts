@@ -56,7 +56,7 @@ interface DefinitionState {
   addTable: (designId: string) => void
   /** 뷰 신설 — 본문 SELECT 는 비운 채 만들고 사람이 채운다(컬럼도 사람이 적는다). */
   addView: (designId: string) => void
-  updateTable: (patch: Partial<Pick<TableDef, 'name' | 'comment' | 'viewSql'>>) => void
+  updateTable: (patch: Partial<Pick<TableDef, 'name' | 'schema' | 'comment' | 'viewSql'>>) => void
   /** 활성 대상의 테이블 ↔ 뷰 전환. 뷰로 바꾸면 제약은 뜻이 없어 비운다. */
   toggleView: () => void
   deleteTable: (id: string) => void
@@ -380,7 +380,7 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
 
 /**
  * 활성 Design 스코프의 테이블 목록.
- * Studio 렌즈(도구줄 시점 손잡이)가 'draft'면 편집 가능한 작업본,
+ * Design 렌즈(도구줄 시점 손잡이)가 'draft'면 편집 가능한 작업본,
  * 커밋 버전이면 그 스냅샷(읽기 전용)을 반환한다. 설계 미선택이면 빈 배열.
  */
 export function useDesignTables(): TableDef[] {
@@ -397,8 +397,8 @@ export function useDesignTables(): TableDef[] {
   return draft.filter((t) => t.designId === design.id)
 }
 
-/** Studio 가 읽기 전용인가 — 커밋된 버전을 렌즈로 보고 있으면 true. */
-export function useStudioReadOnly(): boolean {
+/** Design 이 읽기 전용인가 — 커밋된 버전을 렌즈로 보고 있으면 true. */
+export function useDesignReadOnly(): boolean {
   return isReadOnlyLens(useVersionLens())
 }
 

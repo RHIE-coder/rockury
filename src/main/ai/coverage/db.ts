@@ -23,7 +23,7 @@ export const dbCoverage: ServiceCoverage = {
     create_version: ['versions:create']
   },
   excluded: {
-    // ── Studio › Seed(시드 세트): 지금은 앱 화면 전용 ──
+    // ── Design › Seed(시드 세트): 지금은 앱 화면 전용 ──
     //   시드는 실 DB 에 심어질 기준 데이터이고, 그 값에 환경 변수 자리표시자가 섞인다.
     //   에이전트가 시드를 쓰는 것은 반영 파이프라인((b) 설계→운영 UPSERT)의 안전장치가 선 뒤에
     //   함께 설계한다 — 읽기도 그때 같은 도구로 노출한다(반쪽 노출로 의미가 왜곡되는 것을 피함).
@@ -55,6 +55,8 @@ export const dbCoverage: ServiceCoverage = {
     'connections:testById': '실 DB 접속 시도 — 연결 도구 설계 시 함께 검토',
     'connections:revealPassword': '저장 비밀번호 평문 반환 — 로컬 편집 화면 전용, 원격 노출 절대 금지',
     'introspection:run': '실 DB 접속 실행 — 연결 도구 설계 시 함께 검토(읽기지만 접속 부하 유발)',
+    'introspection:schemas': '실 DB 접속 실행 — 범위 선택기가 고를 목록을 채우는 조회(사람 조작 전용)',
+    'introspection:catalogs': '실 DB 접속 실행 — 범위 선택기의 database 층 목록(사람 조작 전용)',
     'query:run': '실 DB 쿼리 실행 — 파괴 게이트(tx) 통과 설계 후 후속 단계 검토',
     'query:runParams': '실 DB 쿼리 실행 — 파괴 게이트(tx) 통과 설계 후 후속 단계 검토',
     'query:explain': '실 DB 접속 실행 — 쿼리 도구 설계 시 함께 검토',

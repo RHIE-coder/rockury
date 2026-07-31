@@ -15,7 +15,7 @@ export const SERVICE_IDS = ['uiux', 'api', 'db', 'infra', 'ai']
 export const SHELL_KEY = 'shell'
 
 /**
- * finding 의 `formFactor` 첫 마디로 소유 서비스를 정한다 — `db/console/query` → `db`.
+ * finding 의 `formFactor` 첫 마디로 소유 서비스를 정한다 — `db/remote/query` → `db`.
  * 서비스 이름이 아니면(`boot` 등) 공용(shell)으로 본다.
  */
 export function serviceOf(formFactor) {

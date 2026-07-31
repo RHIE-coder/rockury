@@ -34,7 +34,7 @@ export function registerStoreIpc(): void {
     replaceTablesForDesign(designId, records)
   )
 
-  // Studio › Seed — 시드 세트도 tables 와 같은 설계 스코프 규칙으로 저장한다.
+  // Design › Seed — 시드 세트도 tables 와 같은 설계 스코프 규칙으로 저장한다.
   ipcMain.handle('seedSets:list', () => listSeedSets())
   ipcMain.handle('seedSets:replaceForDesign', (_event, designId: string, records: SeedSetRecord[]) =>
     replaceSeedSetsForDesign(designId, records)

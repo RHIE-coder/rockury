@@ -35,6 +35,12 @@ export interface Constraint {
   columns: ConstraintColumnRef[]
   // ── fk 전용 ──
   refTable?: string
+  /**
+   * 참조 대상의 스키마. 비면 **이 제약이 걸린 테이블과 같은 스키마**다.
+   * 이름만으로 참조를 찾으면 두 스키마에 같은 이름 테이블이 있을 때 조용히 엉뚱한 곳에 붙는다 —
+   * 찾는 일은 직접 하지 말고 `db/schemaRef` 의 `resolveRef` 를 쓴다.
+   */
+  refSchema?: string
   refColumns?: string[]
   onDelete?: FkAction
   onUpdate?: FkAction
@@ -46,6 +52,14 @@ export interface TableDef {
   id: string
   /** 소속 Design id — 테이블은 항상 한 설계에 속한다(§IA Design). 방언도 설계가 소유. */
   designId: string
+  /**
+   * 소속 스키마. 값의 의미가 벤더마다 다르다 — PostgreSQL 은 schema(`public`·`auth`),
+   * MySQL/MariaDB 는 database(교차 database 조인·FK 가 되므로 PostgreSQL 의 schema 와 **같은 자리**),
+   * SQLite 는 `main`. 비면 그 연결·설계의 기본 스키마다(예전 데이터·단일 스키마 사용자).
+   * 카탈로그(PostgreSQL 의 database)는 여기 없다 — 한 화면은 언제나 카탈로그 하나이고,
+   * 그것은 연결의 속성이다(§db-remote.scope).
+   */
+  schema?: string
   name: string
   comment: string
   columns: Column[]

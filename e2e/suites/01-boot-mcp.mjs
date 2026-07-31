@@ -13,8 +13,8 @@ export async function run(ctx) {
   let page = ctx.page
   await page.evaluate(() => localStorage.clear())
   await page.reload()
-  await page.waitForSelector('text=Studio', { timeout: 15_000 })
-  check('앱 부팅 + DB 서비스 셸 렌더', (await body()).includes('Studio'))
+  await page.waitForSelector('text=Design', { timeout: 15_000 })
+  check('앱 부팅 + DB 서비스 셸 렌더', (await body()).includes('Design'))
 
   // ── MCP 서버(메인 프로세스 내장) — 상태 IPC → initialize → tools/list → tools/call + 인증 거부 ──
   {

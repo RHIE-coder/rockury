@@ -1,7 +1,7 @@
 [
   {
     "check": "contrast",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "text",
     "text": "UK",
     "bounds": {
@@ -15,7 +15,7 @@
   },
   {
     "check": "truncation",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "button",
     "text": "ENUM('pending','confirmed','shipped','delivered','cancelled')",
     "bounds": {
@@ -29,7 +29,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "text",
     "text": "CHK",
     "bounds": {
@@ -43,7 +43,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "text",
     "text": "UK",
     "bounds": {
@@ -57,7 +57,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "text",
     "text": "CHECK",
     "bounds": {
@@ -71,7 +71,7 @@
   },
   {
     "check": "overlap",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "button",
     "bounds": {
       "x": 391.6171875,
@@ -84,7 +84,7 @@
   },
   {
     "check": "overlap",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "button",
     "bounds": {
       "x": 391.6171875,
@@ -97,7 +97,7 @@
   },
   {
     "check": "overlap",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "button",
     "bounds": {
       "x": 391.6171875,
@@ -110,7 +110,7 @@
   },
   {
     "check": "overlap",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "button",
     "bounds": {
       "x": 391.6171875,
@@ -123,7 +123,7 @@
   },
   {
     "check": "overlap",
-    "formFactor": "db/studio/definition",
+    "formFactor": "db/design/definition",
     "role": "button",
     "bounds": {
       "x": 391.6171875,
@@ -136,7 +136,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/diagram",
+    "formFactor": "db/design/diagram",
     "role": "text",
     "text": "parent_id → id",
     "bounds": {
@@ -150,7 +150,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/diagram",
+    "formFactor": "db/design/diagram",
     "role": "text",
     "text": "D:SET NULL",
     "bounds": {
@@ -164,7 +164,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/diagram",
+    "formFactor": "db/design/diagram",
     "role": "text",
     "text": "U:CASCADE",
     "bounds": {
@@ -178,7 +178,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/diagram",
+    "formFactor": "db/design/diagram",
     "role": "text",
     "text": "UK",
     "bounds": {
@@ -192,7 +192,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/diagram",
+    "formFactor": "db/design/diagram",
     "role": "text",
     "text": "UK",
     "bounds": {
@@ -206,7 +206,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/diagram",
+    "formFactor": "db/design/diagram",
     "role": "text",
     "text": "UK",
     "bounds": {
@@ -220,7 +220,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/diagram",
+    "formFactor": "db/design/diagram",
     "role": "text",
     "text": "UK",
     "bounds": {
@@ -234,7 +234,7 @@
   },
   {
     "check": "contrast",
-    "formFactor": "db/studio/diagram",
+    "formFactor": "db/design/diagram",
     "role": "link",
     "text": "React Flow",
     "bounds": {

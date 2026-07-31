@@ -143,7 +143,7 @@ export function TimelineView() {
         latest={latest}
         tableCount={tables.length}
         seedRowCount={seeds.reduce((n, s) => n + s.rows.length, 0)}
-        // 시드도 버전에 동봉한다 — 시드는 서비스 정책의 바탕이라 Diff 대상(spec db-studio.seed.version-diff).
+        // 시드도 버전에 동봉한다 — 시드는 서비스 정책의 바탕이라 Diff 대상(spec db-design.seed.version-diff).
         snapshot={{ tables, seeds }}
       />
     </div>

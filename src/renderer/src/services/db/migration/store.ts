@@ -3,7 +3,7 @@ import type { DialectId } from '../dialects'
 import { alignSnapshotToActual } from '../versions/align'
 import { diffSnapshots, type SchemaDiff } from '../versions/diff'
 import { useVersionsStore, type VersionSnapshot } from '../versions/store'
-import { normalizeSchema } from '../console/introspection'
+import { normalizeSchema } from '../remote/introspection'
 import { generateMigration, type MigrationPlan } from './ddlDiff'
 
 /** migration_logs 레코드(구조적 — main/store/migration 과 동일). */

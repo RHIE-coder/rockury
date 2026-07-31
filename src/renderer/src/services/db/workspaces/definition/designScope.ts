@@ -1,9 +1,11 @@
+import { DEFAULT_SCHEMA } from '../../schemaRef'
 import type { Column, Constraint, TableDef } from './types'
 
 /** 저장소 레코드(preload TableRecord)에서 필요한 필드만 — 매퍼가 preload 를 import 하지 않게. */
 interface TableRecordLike {
   id: string
   designId: string
+  schema?: string
   name: string
   comment: string
   columns: unknown[]
@@ -20,6 +22,10 @@ export function toTableDef(r: TableRecordLike): TableDef {
   return {
     id: r.id,
     designId: r.designId,
+    // 스키마를 안 적은 행은 **기본 스키마**로 올린다(2026-07-30 사용자 결정: `public` 고정).
+    // 여기서 채워 두면 설계 전체가 한 스키마로 통일돼, 단일 스키마 설계의 DDL 은 예전과
+    // 글자 하나까지 같다(스키마가 하나뿐이면 한정 이름을 안 쓴다 — `db-design.definition.sql`).
+    schema: r.schema || DEFAULT_SCHEMA,
     name: r.name,
     comment: r.comment,
     columns: r.columns as Column[],

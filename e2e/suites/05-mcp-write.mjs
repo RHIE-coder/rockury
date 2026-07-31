@@ -47,8 +47,8 @@ export async function run(ctx) {
     await page.waitForSelector('text=v0.3.16', { timeout: 5_000 })
     check('MCP 쓰기: 타임라인 즉시 반영(v0.3.16 — 수동 재조회 없음)', (await body()).includes('v0.3.16'))
 
-    // set_schema — Studio Definition 이 열린 채 get_schema 왕복으로 테이블 추가 → 즉시 반영.
-    await click('button:has-text("Studio")')
+    // set_schema — Design Definition 이 열린 채 get_schema 왕복으로 테이블 추가 → 즉시 반영.
+    await click('button:has-text("Design")')
     await click('button:has-text("Definition")')
     await page.waitForSelector('text=orders', { timeout: 5_000 })
     const gs = JSON.parse((await callTool('get_schema', { designId: 'commerce-core' }, 44)).content[0].text)
@@ -65,7 +65,7 @@ export async function run(ctx) {
     )
     check('MCP 쓰기: set_schema 성공', setRes?.isError !== true)
     await page.waitForSelector('text=mcp_probe', { timeout: 5_000 })
-    check('MCP 쓰기: Studio Definition 즉시 반영(mcp_probe)', (await body()).includes('mcp_probe'))
+    check('MCP 쓰기: Design Definition 즉시 반영(mcp_probe)', (await body()).includes('mcp_probe'))
 
     // 쓰기 오류 규율 — 미상 설계는 프로토콜 오류가 아닌 isError + 해결 안내.
     const bad = await callTool('set_schema', { designId: 'no-such', tables: [] }, 46)

@@ -128,7 +128,7 @@ export async function createContext() {
       ctx.page = await ctx.app.firstWindow()
       acceptDialogs(ctx.page)
       await pinWindow(ctx.app)
-      await ctx.page.waitForSelector('text=Studio', { timeout: 15_000 })
+      await ctx.page.waitForSelector('text=Design', { timeout: 15_000 })
       return ctx.page
     },
     /**

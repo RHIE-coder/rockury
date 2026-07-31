@@ -4,7 +4,7 @@ import { planSeedApply, type SeedApplyInput } from './seedApplyPlan'
 import { deterministicUuid, pkSeedString, renderPkTemplate } from './seedPk'
 import type { SeedRow, SeedSet } from './types'
 
-/** CASE-studio-070~078 (docs/qa/db-studio.md) */
+/** CASE-design-070~078 (docs/qa/db-design.md) */
 
 const col = (id: string, name: string, over: Partial<TableDef['columns'][number]> = {}) => ({
   id,
@@ -74,7 +74,7 @@ const plan = (over: Partial<SeedApplyInput>) =>
     ...over
   })
 
-describe('CASE-studio-070 없는 행은 넣는다', () => {
+describe('CASE-design-070 없는 행은 넣는다', () => {
   it('INSERT 문을 파라미터 바인드로 만든다(문자열 조립 금지)', () => {
     const p = plan({ sets: [set('users', [row('r1', 'admin', { code: 'admin', name: '관리자' })])] })
     expect(p.blockers).toEqual([])
@@ -91,7 +91,7 @@ describe('CASE-studio-070 없는 행은 넣는다', () => {
   })
 })
 
-describe('CASE-studio-071 있는 행은 값만 맞춘다', () => {
+describe('CASE-design-071 있는 행은 값만 맞춘다', () => {
   it('다른 값만 UPDATE 하고 WHERE 는 짝짓기 기준이다(PK 가 아니다)', () => {
     const p = plan({
       sets: [set('users', [row('r1', 'admin', { code: 'admin', name: '최고 관리자' })])],
@@ -132,7 +132,7 @@ describe('CASE-studio-071 있는 행은 값만 맞춘다', () => {
   })
 })
 
-describe('CASE-studio-072 변수 치환', () => {
+describe('CASE-design-072 변수 치환', () => {
   const usersWithPw = table(
     'users',
     [col('c1', 'id', { defaultValue: 'AUTO_INCREMENT' }), col('c2', 'code'), col('c3', 'pw')],
@@ -164,7 +164,7 @@ describe('CASE-studio-072 변수 치환', () => {
   })
 })
 
-describe('CASE-studio-073 참조 해석', () => {
+describe('CASE-design-073 참조 해석', () => {
   const profilesTable = table(
     'user_profiles',
     [col('p0', 'id', { defaultValue: 'AUTO_INCREMENT' }), col('p1', 'user_id'), col('p2', 'code')],
@@ -238,7 +238,7 @@ describe('CASE-studio-073 참조 해석', () => {
   })
 })
 
-describe('CASE-studio-074 PK 방어선', () => {
+describe('CASE-design-074 PK 방어선', () => {
   const seededUsers = (rows: SeedRow[]) =>
     set('users', rows, { pkStrategy: 'seed', pkTemplate: 'u-{alias}' })
 
@@ -302,7 +302,7 @@ describe('CASE-studio-074 PK 방어선', () => {
   })
 })
 
-describe('CASE-studio-075 삭제 후보(전권)', () => {
+describe('CASE-design-075 삭제 후보(전권)', () => {
   it('전권 세트에서 실 DB 에만 있는 행을 삭제 후보로 만든다', () => {
     const p = plan({
       sets: [set('users', [row('r1', undefined, { code: 'admin' })], { strength: 'authoritative' })],
@@ -323,7 +323,7 @@ describe('CASE-studio-075 삭제 후보(전권)', () => {
   })
 })
 
-describe('CASE-studio-076 반영 전제 미충족', () => {
+describe('CASE-design-076 반영 전제 미충족', () => {
   it('짝짓기 기준이 없으면 막는다', () => {
     const p = plan({ sets: [set('users', [row('r1', undefined, { code: 'a' })], { naturalKey: [] })] })
     expect(p.blockers[0]).toMatchObject({ kind: 'not-ready' })
@@ -336,7 +336,7 @@ describe('CASE-studio-076 반영 전제 미충족', () => {
   })
 })
 
-describe('CASE-studio-077 결정적 PK 생성', () => {
+describe('CASE-design-077 결정적 PK 생성', () => {
   it('같은 입력이면 항상 같은 UUID — 재실행해도 값이 안 바뀐다', () => {
     expect(deterministicUuid('d1:users:admin')).toBe(deterministicUuid('d1:users:admin'))
     expect(deterministicUuid('d1:users:admin')).not.toBe(deterministicUuid('d1:users:viewer'))

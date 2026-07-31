@@ -5,8 +5,8 @@
 > (세션 시작 시 자동 로드) — 여기 중복해 적지 않는다. 값·능력은 `.harness/steward/config.yaml`.
 
 Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 · **화이트 테마 고정**.
-현재 집중: **DB 서비스**. 설계부(Studio/Versions)·운영부(Environments/Console/Migration) 모두
-로컬 SQLite(`node:sqlite`) + 실 드라이버(mysql2/pg/node:sqlite) 위에 구현됨. Diagram(Console 실 ERD·Studio 가상 편집 ERD)까지 완료. 남은 것은 선택적 향상(Studio Mocking/Documenting/Validation·Reference 등).
+현재 집중: **DB 서비스**. 설계부(Design/Versions)·운영부(Environments/Remote/Migration) 모두
+로컬 SQLite(`node:sqlite`) + 실 드라이버(mysql2/pg/node:sqlite) 위에 구현됨. Diagram(Remote 실 ERD·Design 가상 편집 ERD)까지 완료. 남은 것은 선택적 향상(Design Mocking/Documenting/Validation·Reference 등).
 설계 근거·결정 → `docs/before-steward-background/db-service-ia.md` · 로드맵/진행·재개점 → `docs/before-steward-background/ops-implementation-plan.md`.
 살아있는 기획/테스트 정본(steward) → `docs/spec/` · `docs/qa/`.
 

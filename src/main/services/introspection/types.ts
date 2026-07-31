@@ -1,13 +1,15 @@
 /**
  * Introspection IR — 벤더 중립 역설계 결과(§ops-plan Phase 2a).
  * main 어댑터(mysql/pg/sqlite)가 이 형태로 생산하고, IPC 로 렌더러에 넘긴 뒤
- * 렌더러 `console/introspection.normalizeSchema` 가 TableDef 로 접는다.
+ * 렌더러 `remote/introspection.normalizeSchema` 가 TableDef 로 접는다.
  * (렌더러의 동일 형태와 구조적으로 일치 — JSON 페이로드라 중복 선언 허용, preload 관례와 동일.)
  */
 export type IntroDbType = 'postgresql' | 'mysql' | 'mariadb' | 'sqlite'
 export type FkAction = 'RESTRICT' | 'CASCADE' | 'SET NULL' | 'SET DEFAULT' | 'NO ACTION'
 
 export interface RawTable {
+  /** 소속 스키마 — PostgreSQL 은 schema, MySQL 은 database, SQLite 는 `main`. */
+  schema: string
   name: string
   comment: string
   /** 뷰(view/matview)면 true. 일반 테이블은 false/undefined. */
@@ -15,6 +17,7 @@ export interface RawTable {
 }
 
 export interface RawColumn {
+  schema: string
   table: string
   name: string
   type: string
@@ -25,6 +28,7 @@ export interface RawColumn {
 }
 
 export interface RawKey {
+  schema: string
   table: string
   name: string
   kind: 'pk' | 'uk' | 'idx'
@@ -34,9 +38,12 @@ export interface RawKey {
 }
 
 export interface RawForeignKey {
+  schema: string
   table: string
   name: string
   column: string
+  /** 참조 대상의 스키마 — 같은 스키마여도 채운다(비교하는 쪽이 추측하지 않게). */
+  refSchema: string
   refTable: string
   refColumn: string
   ordinal: number
@@ -46,6 +53,8 @@ export interface RawForeignKey {
 
 export interface IntrospectedSchema {
   dialect: IntroDbType
+  /** 이번에 읽은 스키마들. 화면이 "무엇을 보고 있나"를 알기 위한 것. */
+  schemas: string[]
   tables: RawTable[]
   columns: RawColumn[]
   keys: RawKey[]

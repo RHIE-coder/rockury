@@ -17,7 +17,8 @@ export async function run(ctx) {
   check('Migration › Logs: 기준선 로그 체인', (await body()).includes('기준선'))
 
   // ⭐ Environment 관리 UI — 연결 카드에서 설계 바인딩 열람(운영↔설계 결속이 화면에 드러남).
-  await click('button:has-text("Connections")')
+  await click('[data-nav-module="remote"]') // Connections 는 Remote 의 첫 뷰(2026-07-30)
+  await click('[data-nav-view="connections"]')
   await page.waitForSelector('text=E2E-mysql', { timeout: 8_000 })
   await page.locator('button[title="설계 바인딩 관리"]').first().click()
   await page.waitForSelector('text=설계 바인딩 ·', { timeout: 8_000 })
@@ -35,7 +36,7 @@ export async function run(ctx) {
     })
   )
   await page.reload()
-  await page.waitForSelector('text=Studio', { timeout: 15_000 })
+  await page.waitForSelector('text=Design', { timeout: 15_000 })
   await click('button:has-text("Migration")')
   await click('button:has-text("Compare")')
   await page.waitForSelector('text=실 DB 간 스키마 비교', { timeout: 8_000 })

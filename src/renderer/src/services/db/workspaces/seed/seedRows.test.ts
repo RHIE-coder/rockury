@@ -10,11 +10,11 @@ import {
 } from './seedRows'
 import type { SeedRow } from './types'
 
-/** CASE-studio-010~013 (docs/qa/db-studio.md) */
+/** CASE-design-010~013 (docs/qa/db-design.md) */
 
 const row = (id: string, values: Record<string, string | null>): SeedRow => ({ id, values })
 
-describe('CASE-studio-010 자연키 구성', () => {
+describe('CASE-design-010 자연키 구성', () => {
   it('선언 순서대로 이어 하나의 키를 만든다 — 순서가 다르면 키도 다르다', () => {
     const r = row('r1', { org: 'acme', code: 'admin' })
     expect(naturalKeyOf(r, ['org', 'code'])).not.toBe(naturalKeyOf(r, ['code', 'org']))
@@ -43,7 +43,7 @@ describe('CASE-studio-010 자연키 구성', () => {
   })
 })
 
-describe('CASE-studio-011 행 검증(빈 자연키·중복)', () => {
+describe('CASE-design-011 행 검증(빈 자연키·중복)', () => {
   it('정상 행은 문제가 없다', () => {
     const issues = validateSeedRows([row('r1', { code: 'admin' }), row('r2', { code: 'viewer' })], ['code'])
     expect(issues).toEqual({})
@@ -87,7 +87,7 @@ describe('CASE-studio-011 행 검증(빈 자연키·중복)', () => {
   })
 })
 
-describe('CASE-studio-012 변수 자리표시자', () => {
+describe('CASE-design-012 변수 자리표시자', () => {
   it('bare {{X}} 만 뽑고 따옴표 안은 제외한다', () => {
     const rows = [
       row('r1', { pw: '{{ADMIN_PASSWORD_HASH}}', note: "'{{LITERAL}}'" }),
@@ -113,7 +113,7 @@ describe('CASE-studio-012 변수 자리표시자', () => {
   })
 })
 
-describe('CASE-studio-013 행 짝짓기', () => {
+describe('CASE-design-013 행 짝짓기', () => {
   it('자연키로 양쪽/왼쪽만/오른쪽만 을 가른다(base 순 → target 전용 순)', () => {
     const base = [row('b1', { code: 'admin' }), row('b2', { code: 'gone' })]
     const target = [row('t1', { code: 'admin' }), row('t2', { code: 'new' })]
@@ -137,7 +137,7 @@ describe('CASE-studio-013 행 짝짓기', () => {
   })
 })
 
-describe('CASE-studio-014 필수 컬럼 빈 셀', () => {
+describe('CASE-design-014 필수 컬럼 빈 셀', () => {
   it('NOT NULL·기본값 없는 컬럼이 비면 그 행·컬럼을 지목한다', () => {
     const rows = [
       row('r1', { email: 'a@b.c', code: 'X' }),

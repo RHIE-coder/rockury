@@ -5,6 +5,7 @@ import {
   badgeCenter,
   badgeHit,
   feedbackFailureMessage,
+  feedbackKeyAction,
   markLabel,
   type FeedbackRect
 } from '@shared/devFeedback'
@@ -53,16 +54,25 @@ type DraftMark = {
 }
 
 /**
- * 이벤트를 오버레이 안에서 끊는다 — **열린 모달 위에 그릴 수 있으려면 필요하다.**
+ * 조작을 오버레이 안에서 끊는다 — **열린 모달 위에서 이 도구를 쓰려면 필요하다.**
  *
- * Radix 모달(Dialog)은 `document` 에 두 개를 걸어 둔다: 바깥에서 포인터를 누르면 닫고
- * (`pointerdown`), 포커스가 바깥으로 나가면 되돌린다(`focusin`). 오버레이는 그 모달의
- * 자식이 아니므로 둘 다 "바깥"으로 취급된다 — 그리려고 누르면 모달이 닫히고, 메모창에
- * 글자를 넣으려 하면 포커스를 빼앗긴다. React 핸들러는 그 document 리스너보다 먼저 도니
- * 여기서 끊으면 모달은 우리 조작을 아예 못 본다.
+ * Radix 겹층(모달·팝오버 등 `DismissableLayer`)은 `document` 에 두 개를 걸어 둔다:
+ * 바깥에서 포인터를 누르면 닫고(`pointerdown`), 포커스가 바깥으로 나가면 되돌린다
+ * (`focusin`). 오버레이는 그 겹층의 자식이 아니므로 우리 조작은 전부 "바깥"으로 취급된다.
+ *
+ * **오버레이 루트 한 곳에 건다.** 처음엔 그림판(SVG)에만 걸었는데, 정작 동그라미를 친 뒤
+ * 메모를 적으려고 입력칸을 누르는 순간 지적하려던 모달이 닫혔다(2026-07-30 사용자 제보).
+ * 손잡이·도구막대·목록도 같은 구멍이었다 — 새는 자리를 하나씩 막는 대신, 오버레이 안에서
+ * 난 것은 무엇이든 밖으로 안 나가게 루트에서 끊는다. React 핸들러는 이 이벤트가 document
+ * 까지 올라가기 전에 돌므로, 겹층은 우리 조작을 아예 못 본다.
  */
 function stopAtOverlay(e: React.SyntheticEvent): void {
   e.stopPropagation()
+}
+
+/** 이 이벤트가 오버레이 안에서 났나. 창(window) 단계에서 앱 키와 우리 키를 가르는 데 쓴다. */
+function fromOverlay(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(`[${FEEDBACK_ATTR}]`) !== null
 }
 
 /** 포인터 캡처는 부가 기능이다. 실패해도 그리기 자체는 계속돼야 한다. */
@@ -218,29 +228,36 @@ export function FeedbackOverlay(): React.JSX.Element {
     }
   }, [open])
 
+  // 키는 **창(window) 캡처**에서 받는다 — 이 도구가 앱보다 먼저 봐야 하기 때문이다.
+  // Radix 겹층은 Escape 를 `document` 캡처에서 듣고 스스로 닫는데, 창 캡처는 그보다 앞선다.
+  // 버블로 받던 동안에는 Escape 로 메모창을 접으려는 순간 지적하려던 모달이 같이 닫혔다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
-        e.preventDefault()
+      const action = feedbackKeyAction(e, { open, fromOverlay: fromOverlay(e.target) })
+      if (action === 'pass') return
+      // 여기서 끊는 것이 곧 '화면 얼리기'다 — 열려 있는 동안 앱은 키를 못 본다.
+      // 막지 않으면 얼려 놓고 찍는 그림 뒤에서 앱 상태가 조용히 바뀐다.
+      e.preventDefault()
+      e.stopPropagation()
+      if (action === 'toggle') {
         setOpen((v) => !v)
         return
       }
       // 키보드로도 보낼 수 있어야 한다. 창 끌기 영역 같은 창 수준 장치는 마우스만 먹으므로,
       // 버튼이 유일한 길이면 그 한 겹이 막히는 순간 도구 전체가 죽는다(2026-07-29 실측).
-      if (open && (e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault()
+      if (action === 'send') {
         void sendRef.current()
         return
       }
-      if (e.key === 'Escape' && open) {
+      if (action === 'close') {
         // 한 겹씩 닫는다: 메모창 → 목록 → 오버레이. 실수로 표시를 통째로 날리지 않게.
         if (editingId !== null) setEditingId(null)
         else if (listOpen) setListOpen(false)
         else close()
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [open, editingId, listOpen, close])
 
   useEffect(() => {
@@ -278,9 +295,7 @@ export function FeedbackOverlay(): React.JSX.Element {
   const downRef = useRef<{ badgeId: number | null; x: number; y: number; moved: boolean } | null>(null)
 
   const onDrawDown = (e: React.PointerEvent): void => {
-    // 열린 모달의 "바깥을 눌렀다" 판정으로 넘어가면, 그리려고 누른 순간 지적하려던 모달이
-    // 닫힌다 — 그림판에서 시작한 누르기는 모달에게 알리지 않는다.
-    stopAtOverlay(e)
+    // 바깥으로 새지 않게 끊는 일은 루트가 한다(stopAtOverlay 주석 참고).
     if (editingId !== null) {
       setEditingId(null)
       return
@@ -409,7 +424,15 @@ export function FeedbackOverlay(): React.JSX.Element {
 
   if (!open) {
     return (
-      <div {...{ [FEEDBACK_ATTR]: '' }} style={{ position: 'fixed', inset: 0, zIndex: 2000, pointerEvents: 'none' }}>
+      <div
+        {...{ [FEEDBACK_ATTR]: '' }}
+        // 닫혀 있어도 끊는다 — 모달이 떠 있을 때 손잡이를 누르면, 도구가 열리기도 전에
+        // 그 누르기가 "바깥을 눌렀다"로 전달돼 지적하려던 모달이 먼저 사라진다.
+        onPointerDown={stopAtOverlay}
+        onMouseDown={stopAtOverlay}
+        onClick={stopAtOverlay}
+        style={{ position: 'fixed', inset: 0, zIndex: 2000, pointerEvents: 'none' }}
+      >
         <button
           type="button"
           aria-label="화면 피드백 남기기"
@@ -461,6 +484,11 @@ export function FeedbackOverlay(): React.JSX.Element {
       // **모달 위에서는 동그라미가 아예 안 그려진다** — 도구막대는 스스로 auto 를 켜 놔서
       // 버튼만 눌리고, "왜 안 그려지지"로 보였다(2026-07-30 사용자 제보).
       // 안 걸린 화면에서는 원래도 auto 라 달라지는 것이 없다.
+      // 오버레이 안에서 난 조작은 무엇이든 여기서 끊는다 — 그림판·도구막대·목록·메모창이
+      // 전부 이 아래에 있으므로, 새는 자리를 하나씩 막지 않고 한 곳에서 막는다.
+      onPointerDown={stopAtOverlay}
+      onMouseDown={stopAtOverlay}
+      onClick={stopAtOverlay}
       onFocusCapture={stopAtOverlay}
       onBlurCapture={stopAtOverlay}
       style={{

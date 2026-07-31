@@ -3,6 +3,7 @@ import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/ui/hover-card'
 import { cn } from '@renderer/lib/utils'
+import { resolveRef } from '../../schemaRef'
 import { useActiveDesign } from '../../designs/store'
 import { useActiveTable, useDefinitionStore, useDesignTables } from './store'
 import { keyBadgesOf } from './derive'
@@ -24,7 +25,8 @@ export function FkBadge({ colId, pos }: { colId: string; pos?: number }) {
   const con = table.constraints.find(
     (k) => k.kind === 'fk' && k.columns.some((r) => r.columnId === colId)
   )
-  const target = con ? tables.find((t) => t.name === con.refTable) : undefined
+  // 이름만으로 찾으면 다른 스키마의 동명 테이블로 간다 — 참조 해석은 `schemaRef` 한 곳에서만.
+  const target = con ? resolveRef(tables, table, con) : undefined
   const colName = table.columns.find((c) => c.id === colId)?.name ?? ''
   const idx = con ? con.columns.findIndex((r) => r.columnId === colId) : -1
   const refCol = (con?.refColumns ?? [])[idx] || '?'
@@ -86,9 +88,11 @@ export function FkBadge({ colId, pos }: { colId: string; pos?: number }) {
  */
 export function RefTableCard({ con }: { con: Constraint }) {
   const design = useActiveDesign()
+  const table = useActiveTable()
   const tables = useDesignTables()
   const jump = useDefinitionStore((s) => s.jumpToTable)
-  const target = tables.find((t) => t.name === con.refTable)
+  // 참조는 이 제약이 걸린 테이블을 기준으로 푼다 — `refSchema` 가 비면 그 테이블과 같은 스키마다.
+  const target = table ? resolveRef(tables, table, con) : undefined
   if (!target) return null
 
   const badges = keyBadgesOf(target)

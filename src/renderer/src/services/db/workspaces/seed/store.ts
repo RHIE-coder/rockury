@@ -143,7 +143,7 @@ export const useSeedStore = create<SeedState>()((set) => ({
 
 /**
  * 활성 Design 스코프의 시드 세트.
- * Studio 렌즈(도구줄 시점 손잡이)가 'draft'면 편집 가능한 작업본, 커밋 버전이면 그 스냅샷의 시드
+ * Design 렌즈(도구줄 시점 손잡이)가 'draft'면 편집 가능한 작업본, 커밋 버전이면 그 스냅샷의 시드
  * (읽기 전용)를 반환한다 — Definition 의 `useDesignTables` 와 같은 규칙.
  * 시드 개념이 없던 옛 스냅샷은 빈 목록으로 읽는다.
  */

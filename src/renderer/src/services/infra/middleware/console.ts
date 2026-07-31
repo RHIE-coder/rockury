@@ -3,7 +3,7 @@
  * 명세: `docs/spec/infra-architecture.md` §middleware.
  *
  * 미들웨어(= 앱과 앱 사이에서 메시지·캐시를 나르는 서버)는 아키텍처 그림의 노드이면서
- * 동시에 **접속해서 안을 들여다보는 작은 콘솔**이다 — 성격이 DB 서비스의 Console 과 같다.
+ * 동시에 **접속해서 안을 들여다보는 작은 콘솔**이다 — 성격이 DB 서비스의 Remote 와 같다.
  */
 
 export interface MwKind {

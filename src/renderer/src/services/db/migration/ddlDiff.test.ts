@@ -148,3 +148,52 @@ describe('generateMigration — 제약', () => {
     expect(plan.unsupported.some((u) => u.includes('제약 삭제'))).toBe(true)
   })
 })
+
+// 4단계 — 스키마가 섞이면 반영 계획도 한정 이름을 쓴다(§db-remote.scope).
+describe('generateMigration — 스키마 한정', () => {
+  const scoped = (schema: string, name: string): TableDef => ({
+    id: `t:${schema}.${name}`,
+    designId: 'd',
+    schema,
+    name,
+    comment: '',
+    columns: [{ id: `c:${schema}.${name}.id`, name: 'id', type: 'BIGINT', nullable: false, defaultValue: null, comment: '' }],
+    constraints: []
+  })
+  const snap = (tables: TableDef[]) => ({ tables }) as never
+
+  it('스키마가 하나뿐이면 한정 이름을 안 쓴다 — 예전 계획과 글자가 같아야 한다', () => {
+    const plan = generateMigration(snap([]), snap([scoped('public', 'users')]), 'postgresql')
+    expect(plan.statements[0].sql).toContain('CREATE TABLE "users"')
+    expect(plan.statements[0].sql).not.toContain('"public"."users"')
+    expect(plan.statements[0].table).toBe('users')
+  })
+
+  it('스키마가 섞이면 DDL·표시 이름 둘 다 한정 이름', () => {
+    const plan = generateMigration(
+      snap([scoped('public', 'posts')]),
+      snap([scoped('public', 'posts'), scoped('auth', 'accounts')]),
+      'postgresql'
+    )
+    const created = plan.statements.find((s) => s.kind === 'create')!
+    expect(created.sql).toContain('CREATE TABLE "auth"."accounts"')
+    expect(created.table).toBe('auth.accounts')
+  })
+
+  it('삭제도 한정 이름으로 — 다른 스키마의 동명 테이블을 지우면 안 된다', () => {
+    const plan = generateMigration(
+      snap([scoped('auth', 'members'), scoped('public', 'members')]),
+      snap([scoped('public', 'members')]),
+      'postgresql'
+    )
+    const drop = plan.statements.find((s) => s.kind === 'drop')!
+    expect(drop.sql).toBe('DROP TABLE "auth"."members";')
+  })
+
+  it('스키마 이동은 SET SCHEMA 로 낸다 — 안 내면 옛 스키마에 그대로 남는다', () => {
+    const before = scoped('public', 'members')
+    const after = { ...before, schema: 'auth' }
+    const plan = generateMigration(snap([before, scoped('auth', 'x')]), snap([after, scoped('auth', 'x')]), 'postgresql')
+    expect(plan.statements.some((s) => s.sql === 'ALTER TABLE "public"."members" SET SCHEMA "auth";')).toBe(true)
+  })
+})

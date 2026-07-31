@@ -10,7 +10,7 @@ import {
 import { TableSidePanel } from '../../TableSidePanel'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { DRAFT_LENS, useVersionLens, useVersionsStore } from '../../versions/store'
-import { useDefinitionStore, useDesignTables, useStudioReadOnly } from './store'
+import { useDefinitionStore, useDesignTables, useDesignReadOnly } from './store'
 import { TableForm } from './TableForm'
 import { SqlForm } from './SqlForm'
 
@@ -146,11 +146,11 @@ function ReadOnlyBanner({ version }: { version: string }) {
   )
 }
 
-/** Studio › Definition 워크스페이스 — [테이블·뷰/제약 사이드 패널 | Table/SQL 폼]. 활성 Design 스코프. */
+/** Design › Definition 워크스페이스 — [테이블·뷰/제약 사이드 패널 | Table/SQL 폼]. 활성 Design 스코프. */
 export function DefinitionWorkspace() {
   const design = useActiveDesign()
   const tables = useDesignTables()
-  const readOnly = useStudioReadOnly()
+  const readOnly = useDesignReadOnly()
   const versionId = useVersionLens()
   const form = useDefinitionStore((s) => s.form)
   const addTable = useDefinitionStore((s) => s.addTable)

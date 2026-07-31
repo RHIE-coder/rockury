@@ -2,7 +2,7 @@ import { getDb } from './db'
 
 /**
  * Diagram 레이아웃 저장소(§ops-plan 2e · v2) — ERD 의 노드 위치·뷰포트·**그룹**을
- * 스코프별로 영속한다. 스코프 키(`connection_id`)는 Console = 연결 id, Studio = `design:<설계 id>`.
+ * 스코프별로 영속한다. 스코프 키(`connection_id`)는 Remote = 연결 id, Design = `design:<설계 id>`.
  * 노드 키는 introspection 의 결정적 id(`t:<테이블명>`)라 스키마 새로고침에도 매칭된다(이름이 유일).
  * 위치/뷰포트/그룹은 JSON 문자열로 UPSERT.
  *
@@ -22,7 +22,7 @@ export interface Viewport {
 
 /**
  * 다이어그램 그룹(레이어) 한 개.
- * ⚠ 렌더러의 `services/db/console/diagram/group.ts` `DiagramGroup` 과 **같은 모양**이어야 한다
+ * ⚠ 렌더러의 `services/db/remote/diagram/group.ts` `DiagramGroup` 과 **같은 모양**이어야 한다
  * (구조가 갈라지면 IPC 로 받은 레코드를 그룹 계산에 넘기는 자리에서 타입검사가 깨진다 — 의도된 가드).
  */
 export interface DiagramGroupRecord {
@@ -116,7 +116,7 @@ export function saveLayout(input: SaveLayoutInput): DiagramLayoutRecord {
 }
 
 /**
- * `자동 배치` — 위치·뷰포트만 지우고 **그룹은 남긴다**(정본 §db-console.diagram.layout AC-4).
+ * `자동 배치` — 위치·뷰포트만 지우고 **그룹은 남긴다**(정본 §db-remote.diagram.layout AC-4).
  * 소속은 위치와 무관한 명시 멤버십이라, 자동 배치 한 번에 묶음이 흩어지면 안 된다.
  * 남길 그룹이 없으면 행 자체를 지운다(빈 행을 남기지 않는다).
  */

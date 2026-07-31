@@ -18,7 +18,7 @@ import type { SeedSet } from './types'
 
 /**
  * 시드 세트 등록 모달 — 설계 테이블 중에서 고른다.
- * 뷰와 이미 세트가 있는 테이블은 후보에서 빠진다(spec db-studio.seed.set-list AC-2).
+ * 뷰와 이미 세트가 있는 테이블은 후보에서 빠진다(spec db-design.seed.set-list AC-2).
  * 검색은 공용 순수 로직(`db/tableList`)을 재사용한다.
  */
 export function SeedSetDialog({

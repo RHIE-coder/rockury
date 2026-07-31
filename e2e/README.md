@@ -7,7 +7,7 @@
 ```bash
 npm run db:up                 # docker test-db(mysql/mariadb/postgresql) — 기본 전제
 npm run build
-npm run e2e -- --only=03-studio-definition,04-studio-seed    # 건드린 스위트만
+npm run e2e -- --only=03-design-definition,04-design-seed    # 건드린 스위트만
 ```
 **e2e 는 사용자가 지시할 때만 돈다**(2026-07-30 지시 — 그전엔 커밋 훅이 자동으로 돌렸다).
 스위트를 **쓰는** 의무는 그대로다 — 새 앱 흐름은 여기 스위트로 쌓는다.

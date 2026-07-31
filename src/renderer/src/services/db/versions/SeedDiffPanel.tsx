@@ -5,7 +5,7 @@ import { isEmptySeedDiff, type SeedDiff } from './seedDiff'
 /**
  * 시드 diff 렌더러 — 세트별 카드(선언 변경 + 행 변경).
  * 표기(상태 태그·변경 줄·요약 칩)는 스키마 diff 패널의 정본 컴포넌트를 그대로 쓴다(중복 구현 금지).
- * 정본: `docs/spec/db-studio.md` Section `db-studio.seed.version-diff`.
+ * 정본: `docs/spec/db-design.md` Section `db-design.seed.version-diff`.
  */
 
 export function SeedDiffPanel({ diff }: { diff: SeedDiff }) {

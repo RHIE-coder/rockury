@@ -59,16 +59,18 @@ describe('groupTablesForList', () => {
 
   it('테이블과 뷰를 갈라 담고 각 묶음의 순서를 유지한다', () => {
     const g = groupTablesForList(mixed)
-    expect(g.tables.map((t) => t.name)).toEqual(['users', 'orders'])
-    expect(g.views.map((t) => t.name)).toEqual(['v_user_summary', 'v_active_products'])
+    expect(g.groups).toHaveLength(1)
+    expect(g.multiSchema).toBe(false)
+    expect(g.groups[0].tables.map((t) => t.name)).toEqual(['users', 'orders'])
+    expect(g.groups[0].views.map((t) => t.name)).toEqual(['v_user_summary', 'v_active_products'])
   })
 
   it('전체 개수와 검색 후 개수를 함께 준다', () => {
     const g = groupTablesForList(mixed, 'v_')
     expect(g.total).toBe(4)
     expect(g.shown).toBe(2)
-    expect(g.tables).toEqual([])
-    expect(g.views).toHaveLength(2)
+    expect(g.groups[0].tables).toEqual([])
+    expect(g.groups[0].views).toHaveLength(2)
   })
 
   it('검색 결과가 없으면 두 묶음 모두 비지만 total 은 남는다', () => {
@@ -79,7 +81,48 @@ describe('groupTablesForList', () => {
 
   it('뷰 표식이 없는 목록(설계부 기존 데이터)은 전부 테이블로 본다', () => {
     const g = groupTablesForList(tables)
-    expect(g.views).toEqual([])
-    expect(g.tables).toHaveLength(3)
+    expect(g.groups[0].views).toEqual([])
+    expect(g.groups[0].tables).toHaveLength(3)
+  })
+})
+
+// 범위(scope)를 켜면 여러 스키마가 한 목록에 섞인다. 표시가 없으면 `card`(entity)와
+// `cards`(public)가 아무 구분 없이 나란히 선다(2026-07-30 사용자 실측: "내가 어떻게 구분하냐").
+describe('groupTablesForList — 여러 스키마', () => {
+  const scoped = (schema: string, name: string, isView = false): TableDef => ({
+    ...table(name, ['id'], isView),
+    id: `${schema}.${name}`,
+    schema
+  })
+
+  const multi = [
+    scoped('public', 'cards'),
+    scoped('entity', 'card'),
+    scoped('public', 'v_stats', true),
+    scoped('entity', 'price')
+  ]
+
+  it('스키마 이름순으로 묶고, 묶음 안에서 테이블/뷰를 가른다', () => {
+    const g = groupTablesForList(multi)
+    expect(g.multiSchema).toBe(true)
+    expect(g.groups.map((x) => x.schema)).toEqual(['entity', 'public'])
+    expect(g.groups[0].tables.map((t) => t.name)).toEqual(['card', 'price'])
+    expect(g.groups[1].tables.map((t) => t.name)).toEqual(['cards'])
+    expect(g.groups[1].views.map((t) => t.name)).toEqual(['v_stats'])
+  })
+
+  it('스키마 이름으로도 검색된다 — "auth 것만 보기"가 검색 한 번으로 된다', () => {
+    const g = groupTablesForList(multi, 'entity')
+    expect(g.shown).toBe(2)
+    expect(g.groups.map((x) => x.schema)).toEqual(['entity'])
+  })
+
+  it('검색으로 한 스키마만 남아도 머리는 계속 그린다 — 지금 보는 것이 어디인지 알아야 한다', () => {
+    // multiSchema 판정은 검색 결과가 아니라 전체 목록 기준.
+    expect(groupTablesForList(multi, 'entity').multiSchema).toBe(true)
+  })
+
+  it('스키마가 하나뿐이면 머리를 안 그린다(시끄럽다)', () => {
+    expect(groupTablesForList([scoped('public', 'a'), scoped('public', 'b')]).multiSchema).toBe(false)
   })
 })

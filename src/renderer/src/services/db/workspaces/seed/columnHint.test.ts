@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Constraint, TableDef } from '../definition/types'
 import { isRequiredForSeed, requiredSeedColumns, seedColumnHints } from './columnHint'
 
-/** CASE-studio-005~007 (docs/qa/db-studio.md) */
+/** CASE-design-005~007 (docs/qa/db-design.md) */
 
 const col = (id: string, name: string, over: Partial<TableDef['columns'][number]> = {}) => ({
   id,
@@ -23,7 +23,7 @@ const table = (cols: TableDef['columns'], constraints: Constraint[] = []): Table
   constraints
 })
 
-describe('CASE-studio-005 시드가 채워야 하는 컬럼 판정', () => {
+describe('CASE-design-005 시드가 채워야 하는 컬럼 판정', () => {
   it('NOT NULL + 기본값 없음 → 필수', () => {
     expect(isRequiredForSeed(col('c', 'email'))).toBe(true)
   })
@@ -53,7 +53,7 @@ describe('CASE-studio-005 시드가 채워야 하는 컬럼 판정', () => {
   })
 })
 
-describe('CASE-studio-006 컬럼 머리 배지', () => {
+describe('CASE-design-006 컬럼 머리 배지', () => {
   const pk: Constraint = { id: 'k1', kind: 'pk', name: 'PRIMARY', columns: [{ columnId: 'c1' }] }
   const fk: Constraint = {
     id: 'k2',
@@ -104,7 +104,7 @@ describe('CASE-studio-006 컬럼 머리 배지', () => {
   })
 })
 
-describe('CASE-studio-007 컬럼 상세(툴팁) — 화면 왕복 없이 다 담는다', () => {
+describe('CASE-design-007 컬럼 상세(툴팁) — 화면 왕복 없이 다 담는다', () => {
   const t = table(
     [
       col('c1', 'id', { type: 'CHAR(36)', comment: '사용자 PK' }),

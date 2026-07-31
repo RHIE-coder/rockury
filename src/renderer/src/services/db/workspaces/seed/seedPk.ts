@@ -1,10 +1,10 @@
-import { columnKind } from '../../console/data/cellKind'
+import { columnKind } from '../../remote/data/cellKind'
 import type { Column } from '../definition/types'
 import { isVariableCell, naturalKeyLabel } from './seedRows'
 import type { SeedRow, SeedSet } from './types'
 
 /**
- * 시드가 정하는 PK 값 만들기(순수) — spec `db-studio.seed.apply-contract` AC-2.
+ * 시드가 정하는 PK 값 만들기(순수) — spec `db-design.seed.apply-contract` AC-2.
  *
  * **결정적이어야 한다**(같은 입력 → 항상 같은 값). 랜덤이면 반영을 두 번 돌릴 때 값이 달라져
  * 같은 행이 두 벌 생기고, 세 환경을 같은 PK 로 맞추는 목적도 깨진다. 그래서 여기엔

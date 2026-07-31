@@ -13,7 +13,7 @@ import {
 } from './seedRef'
 import type { SeedRow, SeedSet } from './types'
 
-/** CASE-studio-060~065 (docs/qa/db-studio.md) */
+/** CASE-design-060~065 (docs/qa/db-design.md) */
 
 const row = (id: string, alias: string | undefined, values: Record<string, string | null>): SeedRow => ({
   id,
@@ -58,7 +58,7 @@ const table = (name: string, cols: TableDef['columns'], constraints: Constraint[
   constraints
 })
 
-describe('CASE-studio-060 참조 표기 읽기·쓰기', () => {
+describe('CASE-design-060 참조 표기 읽기·쓰기', () => {
   it('`@테이블#별칭` 을 읽는다', () => {
     expect(parseSeedRef('@users#admin')).toEqual({ table: 'users', alias: 'admin' })
     expect(parseSeedRef('  @users#admin  ')).toEqual({ table: 'users', alias: 'admin' })
@@ -93,7 +93,7 @@ describe('CASE-studio-060 참조 표기 읽기·쓰기', () => {
   })
 })
 
-describe('CASE-studio-061 기본 별칭 만들기', () => {
+describe('CASE-design-061 기본 별칭 만들기', () => {
   it('짝짓기 기준 값에서 슬러그를 만든다', () => {
     expect(defaultAlias(['admin@acme.com'])).toBe('admin-acme-com')
     expect(defaultAlias(['acme', 'manager'])).toBe('acme-manager')
@@ -110,7 +110,7 @@ describe('CASE-studio-061 기본 별칭 만들기', () => {
   })
 })
 
-describe('CASE-studio-062 별칭 검증', () => {
+describe('CASE-design-062 별칭 검증', () => {
   it('비어 있는 별칭은 오류가 아니다 — 참조 대상이 아닌 행이 대부분이다', () => {
     expect(validateAliases([row('r1', undefined, {}), row('r2', '', {})])).toEqual({})
   })
@@ -129,7 +129,7 @@ describe('CASE-studio-062 별칭 검증', () => {
   })
 })
 
-describe('CASE-studio-063 참조 검증', () => {
+describe('CASE-design-063 참조 검증', () => {
   const usersTable = table('users', [col('c1', 'code')])
   const profilesTable = table(
     'user_profiles',
@@ -181,7 +181,7 @@ describe('CASE-studio-063 참조 검증', () => {
   })
 })
 
-describe('CASE-studio-064 순환 참조', () => {
+describe('CASE-design-064 순환 참조', () => {
   it('순환이 없으면 빈 목록', () => {
     const a = set('a', [row('r1', 'one', { b_id: '@b#two' })])
     const b = set('b', [row('r2', 'two', {})])

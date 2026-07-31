@@ -1,8 +1,8 @@
 # 운영부(ops) 구현 플랜 & 세션 인수인계
 
 > 목적: 컨텍스트 clear 후 이 문서 + `docs/before-steward-background/db-service-ia.md` 만 읽고 바로 이어서 작업하기 위한 재개점.
-> 최종 갱신: 2026-07-23 (**Phase 0~3 + Connection 1급 분리 + Console 심화(rky 이식) + Diagram(Console 실 ERD·Studio 가상 편집 ERD)** 완료. 남은 것: Studio Seed/Mocking/Documenting/Validation·Reference 등 선택적 향상. Overview 는 2026-07-30 결정 D 로 삭제)
-> Console 심화: Query(CodeMirror+스키마 자동완성+포매터, EXPLAIN, 히스토리) · Data(필터/정렬/페이지크기, 타입별 셀 에디터+NULL+FK 룩업+JSON, Export) · **Collection**(저장쿼리 폴더 DnD 트리 + 컬렉션 Run-All=tx 게이트). rky 결함(문자열SQL/비트랜잭션/반쪽 히스토리)은 반복하지 않고 파라미터 바인드·tx·정상 히스토리로 이식.
+> 최종 갱신: 2026-07-23 (**Phase 0~3 + Connection 1급 분리 + Remote 심화(rky 이식) + Diagram(Remote 실 ERD·Design 가상 편집 ERD)** 완료. 남은 것: Design Seed/Mocking/Documenting/Validation·Reference 등 선택적 향상. Overview 는 2026-07-30 결정 D 로 삭제)
+> Remote 심화: Query(CodeMirror+스키마 자동완성+포매터, EXPLAIN, 히스토리) · Data(필터/정렬/페이지크기, 타입별 셀 에디터+NULL+FK 룩업+JSON, Export) · **Collection**(저장쿼리 폴더 DnD 트리 + 컬렉션 Run-All=tx 게이트). rky 결함(문자열SQL/비트랜잭션/반쪽 히스토리)은 반복하지 않고 파라미터 바인드·tx·정상 히스토리로 이식.
 
 ---
 
@@ -11,8 +11,8 @@
 DB 서비스의 **설계부(design)** 는 로컬 SQLite 저장소 위에 실제 동작한다. **운영부(ops)도 대부분 실동작**.
 
 **결정 B — Connection 1급 분리(IA 원안 복원)**: 접속은 이제 **Connection**(설계 무관 1급 엔티티)이다.
-- **Connections 모듈**(구 Environments): 원시 접속 CRUD + 연결 테스트. **설계 없이** Console 을 쓸 수 있다(모니터링/조회 유스케이스 — 사용자 요구).
-- **Console**(Object/Data/Query)은 **활성 Connection** 으로 동작(컨텍스트 바 `conn` 셀렉터). dbType 은 연결 자체 속성.
+- **Connections 모듈**(구 Environments): 원시 접속 CRUD + 연결 테스트. **설계 없이** Remote 를 쓸 수 있다(모니터링/조회 유스케이스 — 사용자 요구).
+- **Remote**(Object/Data/Query)는 **활성 Connection** 으로 동작(컨텍스트 바 `conn` 셀렉터). dbType 은 연결 자체 속성.
 - **Environment = (connection × design) 바인딩**(target/appliedVersion 보유). **Migration 전용** — 활성 Connection + 활성 Design 으로 자동 확보(`environments.ensure`). 별도 UI/셀렉터 없음.
 - main: `store/connections.ts`+`services/connectionService.ts`(+`ipc/connections.ts`), `store/environments.ts`+`environmentService`는 바인딩(ensure/setTarget/setApplied)으로 축소. introspection/query 서비스는 connectionId 로 접속.
 - 렌더러: `connections/`(store 전역 하이드레이션 + 옵션 주입, ConnectionsView, ConnectionDialog(dbType 자유선택)). 구 `environments/` 렌더러 삭제.
@@ -32,9 +32,9 @@ DB 서비스의 **설계부(design)** 는 로컬 SQLite 저장소 위에 실제 
 ### 렌더러 (설계부 기능)
 - **벤더 네이티브 설계**: dialect는 Design의 고정 속성. `services/db/dialects.ts`, 타입 카탈로그+자동완성 `services/db/typeCatalog.ts`.
 - **Design 스토어**: `services/db/designs/store.ts` (IPC 하이드레이션), 생성/관리 다이얼로그.
-- **Definition**(Studio): `services/db/workspaces/definition/` — 표/SQL 편집, 컬럼/제약, 다중컬럼 CHECK 파생칩+CHK마커, 테이블 write-through 영속.
+- **Definition**(Design): `services/db/workspaces/definition/` — 표/SQL 편집, 컬럼/제약, 다중컬럼 CHECK 파생칩+CHK마커, 테이블 write-through 영속.
 - **Versions**: `services/db/versions/` — `store.ts`, `semver.ts`, `diff.ts`(스냅샷 diff 엔진), `TimelineView`(컷), `VersionDiffView`(diff①), `CutVersionDialog`, `VersionSync`.
-- **버전 렌즈**: Studio 도구줄의 시점 손잡이(Definition·Diagram·Seed). Draft=편집 / 커밋버전=읽기전용. 상태는 `versions/store.ts` 의 `lens`, `useDesignTables`/`useStudioReadOnly`가 그것을 읽는다. (2026-07-29 컨텍스트 바 셀렉터에서 내려옴 — IA 결정 C.)
+- **버전 렌즈**: Design 도구줄의 시점 손잡이(Definition·Diagram·Seed). Draft=편집 / 커밋버전=읽기전용. 상태는 `versions/store.ts` 의 `lens`, `useDesignTables`/`useDesignReadOnly`가 그것을 읽는다. (2026-07-29 컨텍스트 바 셀렉터에서 내려옴 — IA 결정 C.)
 - **컨텍스트 바**: `shell/ContextBar.tsx` — Design / Version(설계) / Env(운영) ambient 셀렉터. 옵션은 `nav/contextOptions.ts` 런타임 레지스트리.
 - nav 선택은 localStorage 영속(`useNav` persist), 설계·버전·테이블은 SQLite 영속.
 
@@ -56,14 +56,14 @@ DB 서비스의 **설계부(design)** 는 로컬 SQLite 저장소 위에 실제 
   - pg 는 파티션 자식(`relispartition`) 제외. FK 규칙은 어댑터가 `FkAction` 으로 정규화(`toFkAction`). 인덱스 방향은 mysql만 정확, pg/sqlite는 ASC 고정(2a 한계). **CHECK 제약은 미수집(follow-up)**.
 - **오케스트레이터**: `services/introspectionService.ts` — 환경 설정으로 접속→어댑터→IR(조회 전용, 매번 open/close). IPC `ipc/introspection.ts`(`introspection:run`, 봉투) + `index.ts` 배선.
 - **preload**: `window.rockury.introspection.run(envId)`.
-- **렌더러(순수 정규화 + 소비자)**: `services/db/console/introspection.ts` — **순수 `normalizeSchema(IR, designId) → TableDef[]`**(id=이름 기반 결정적, +`introspection.test.ts`) + `columnKeyKinds`. `console/store.ts`(환경별 캐시) · `console/ObjectView.tsx`(테이블 펼침·컬럼/키 배지·FK 참조) → Console › Object 배선.
-- **검증**: 순수 8케이스(vitest). 어댑터 실 DB 통합 `introspection.integration.test.ts`(4벤더, **기본 skip** — `INTROSPECT_IT=1` 로 실행). e2e: 카드→active Env→Console › Object 역설계(users/user_roles) 확인.
-- **다음 토대**: 이 `TableDef[]` 가 Diagram(2e real·Studio 가상 편집)·3b Drift(`versions/diff.ts` 재사용)의 공통 입력. (Diagram 완료)
+- **렌더러(순수 정규화 + 소비자)**: `services/db/remote/introspection.ts` — **순수 `normalizeSchema(IR, designId) → TableDef[]`**(id=이름 기반 결정적, +`introspection.test.ts`) + `columnKeyKinds`. `console/store.ts`(환경별 캐시) · `console/ObjectView.tsx`(테이블 펼침·컬럼/키 배지·FK 참조) → Remote › Object 배선.
+- **검증**: 순수 8케이스(vitest). 어댑터 실 DB 통합 `introspection.integration.test.ts`(4벤더, **기본 skip** — `INTROSPECT_IT=1` 로 실행). e2e: 카드→active Env→Remote › Object 역설계(users/user_roles) 확인.
+- **다음 토대**: 이 `TableDef[]` 가 Diagram(2e real·Design 가상 편집)·3b Drift(`versions/diff.ts` 재사용)의 공통 입력. (Diagram 완료)
 
 ### 운영부 Phase 2c — Query (이번 세션 구현 완료)
 - **main**: `services/queryService.ts` — `run`(즉시 실행, 멀티문+타임아웃, open→close) + ⭐**트랜잭션 파괴 게이트**(`txBegin`→`txExec`(영향행수)→`txCommit`/`txRollback`; 세션을 txId 로 보관, open 시 stale 자동 롤백 스윕). `services/query/splitStatements.ts`(순수 — 문자열/주석/괄호 인지 분리, **rky 주석 결함 수정**, +test). `ipc/query.ts`(봉투) + `index.ts` 배선.
 - **preload**: `window.rockury.query.{run,txBegin,txExec,txCommit,txRollback}`.
-- **렌더러**: `console/query/classify.ts`(순수 — read/dml/ddl + destructive(WHERE 없는 UPDATE/DELETE·DROP·TRUNCATE) 판정, +test) · `console/query/store.ts`(분류→라우팅: read 즉시 / dml 게이트 / ddl 자동커밋경고) · `console/QueryView.tsx`(SQL 편집·실행·⌘↵·결과 그리드·**파괴적 확인 바**). Console › Query 배선.
+- **렌더러**: `console/query/classify.ts`(순수 — read/dml/ddl + destructive(WHERE 없는 UPDATE/DELETE·DROP·TRUNCATE) 판정, +test) · `console/query/store.ts`(분류→라우팅: read 즉시 / dml 게이트 / ddl 자동커밋경고) · `console/QueryView.tsx`(SQL 편집·실행·⌘↵·결과 그리드·**파괴적 확인 바**). Remote › Query 배선.
 - **검증**: 순수 splitStatements 10 + classify 10 (vitest). e2e: SELECT 결과 그리드 + WHERE 없는 UPDATE → 커밋 대기 바 → 롤백.
 - **미포함(향후)**: EXPLAIN 패널(rky `explainSql` 있음), 쿼리 히스토리 영속·dedup, 저장 쿼리/폴더, CodeMirror+자동완성+포매터, 결과 가상화. pg/sqlite 실행 경로는 아직 e2e 미커버(mysql 만) — 수동 확인.
 
@@ -141,8 +141,8 @@ React 19.2 · Electron 43 · Vite 7 · electron-vite 5 · @vitejs/plugin-react 5
 - 검증: 4벤더 test-db testConnection→serverVersion. 재시작 후 환경 잔존.
 - 주의: appliedVersion은 Phase 3 전까지 수동/null.
 
-### Phase 2 — Console (실제를 읽는다)
-- **2a. Introspection(핵심 신규)** ✅ 완료: 벤더별 역설계 → `TableDef` 정규화 → Console › Object. (CHECK 미수집·인덱스 방향 pg/sqlite ASC 고정은 follow-up)
+### Phase 2 — Remote (실제를 읽는다)
+- **2a. Introspection(핵심 신규)** ✅ 완료: 벤더별 역설계 → `TableDef` 정규화 → Remote › Object. (CHECK 미수집·인덱스 방향 pg/sqlite ASC 고정은 follow-up)
 - **2b. Data** ✅ 완료: pending 버퍼 + SQL 프리뷰 + PK 게이트 + **파라미터 바인드** + tx 게이트 재사용. (타입별 셀 에디터·타임존·필터/정렬·가상화는 향후)
 - **2c. Query** ✅ 완료: queryService(run+트랜잭션 게이트+타임아웃) + splitStatements/classify + QueryView. (EXPLAIN·히스토리·저장쿼리·CodeMirror·가상화·dedup 은 향후)
 - **2d. Object**: introspection 기반 객체 브라우저.
@@ -159,12 +159,12 @@ React 19.2 · Electron 43 · Vite 7 · electron-vite 5 · @vitejs/plugin-react 5
 ---
 
 ## 6. 즉시 다음 단계
-Phase 0/1/2a/2b/2c/3 완료 — 운영부 전 모듈(Environments/Console/Migration)이 실 DB 위에서 동작.
+Phase 0/1/2a/2b/2c/3 완료 — 운영부 전 모듈(Environments/Remote/Migration)이 실 DB 위에서 동작.
 **남은 것은 선택적 향상들** (핵심 흐름은 모두 구현·검증됨):
-- **Diagram** ✅ 완료(Console 실 ERD + Studio 가상 편집 ERD): `@xyflow/react` + dagre. Console(2e)은 introspection `TableDef[]` 읽기 전용, Studio 는 설계 테이블 편집(테이블/컬럼/FK 생성·수정·삭제, 드래그로 관계 연결). 위치는 스코프별(`connection_id` / `design:<id>`) 영속. 검색·필터·PNG/SVG 내보내기 공용. 순수 로직 테스트 동반.
+- **Diagram** ✅ 완료(Remote 실 ERD + Design 가상 편집 ERD): `@xyflow/react` + dagre. Remote(2e)는 introspection `TableDef[]` 읽기 전용, Design 은 설계 테이블 편집(테이블/컬럼/FK 생성·수정·삭제, 드래그로 관계 연결). 위치는 스코프별(`connection_id` / `design:<id>`) 영속. 검색·필터·PNG/SVG 내보내기 공용. 순수 로직 테스트 동반.
 - **Migration 심화**: 드리프트 Backward 자동 버전화(현재 기준선 갱신만), conflict 머지 UX(겹치는 드리프트), Validation(반영 후 일치 검증).
-- **Console 심화**: 2c EXPLAIN 패널(`explainSql` 유틸 이식)·쿼리 히스토리·저장 쿼리·CodeMirror·결과 가상화 / 2b 타입별 셀 에디터·타임존·필터·정렬.
-- **설계부 잔여**: Studio Mocking/Documenting/Validation, Reference — 아직 placeholder. (Diagram·Seed 는 완료 · Overview 는 결정 D 로 삭제)
+- **Remote 심화**: 2c EXPLAIN 패널(`explainSql` 유틸 이식)·쿼리 히스토리·저장 쿼리·CodeMirror·결과 가상화 / 2b 타입별 셀 에디터·타임존·필터·정렬.
+- **설계부 잔여**: Design Mocking/Documenting/Validation, Reference — 아직 placeholder. (Diagram·Seed 는 완료 · Overview 는 결정 D 로 삭제)
 - **정리**: 2a CHECK 제약·인덱스 방향(pg/sqlite), pg/sqlite 쿼리·편집·반영 경로 e2e(현재 mysql 만).
 
 재개 시: `npm run db:up` → 위 중 택1 → 순수 로직 `*.test.ts` 동반 → typecheck·test·build·e2e.

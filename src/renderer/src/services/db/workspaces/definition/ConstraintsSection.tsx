@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger
 } from '@renderer/ui/dropdown-menu'
 import { Input } from '@renderer/ui/input'
+import { resolveRef } from '../../schemaRef'
 import {
   Select,
   SelectContent,
@@ -98,8 +99,8 @@ function EditorColumnRow({
 
   const usedIds = con.columns.map((r) => r.columnId)
   const options = table.columns.filter((c) => c.id === ref.columnId || !usedIds.includes(c.id))
-  // FK 참조 대상은 같은 설계 스코프에서만 해석.
-  const refTableDef = useDesignTables().find((t) => t.name === con.refTable)
+  // FK 참조 대상은 같은 설계 스코프에서만 해석 — 이름만으로 찾으면 동명 테이블로 간다.
+  const refTableDef = resolveRef(useDesignTables(), table, con)
 
   const setColumns = (patch: Partial<Constraint>) => updateConstraint(con.id, patch)
 

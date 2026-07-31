@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { SeedRow, SeedSet } from '../workspaces/seed/types'
 import { diffSeeds, isEmptySeedDiff } from './seedDiff'
 
-/** CASE-studio-020~027 (docs/qa/db-studio.md) */
+/** CASE-design-020~027 (docs/qa/db-design.md) */
 
 const row = (id: string, values: Record<string, string | null>): SeedRow => ({ id, values })
 
@@ -16,7 +16,7 @@ const set = (over: Partial<SeedSet> = {}): SeedSet => ({
   ...over
 })
 
-describe('CASE-studio-020 세트 단위 차이', () => {
+describe('CASE-design-020 세트 단위 차이', () => {
   it('세트 추가를 잡고 행 수를 추가로 센다', () => {
     const d = diffSeeds([], [set({ rows: [row('r1', { code: 'admin' }), row('r2', { code: 'viewer' })] })])
     expect(d.sets).toHaveLength(1)
@@ -49,7 +49,7 @@ describe('CASE-studio-020 세트 단위 차이', () => {
   })
 })
 
-describe('CASE-studio-021 행 단위 차이', () => {
+describe('CASE-design-021 행 단위 차이', () => {
   it('행 추가·삭제·값 변경을 잡는다', () => {
     const base = [set({ rows: [row('b1', { code: 'admin', name: '관리자' }), row('b2', { code: 'gone', name: '없어짐' })] })]
     const target = [set({ rows: [row('t1', { code: 'admin', name: '최고 관리자' }), row('t2', { code: 'new', name: '신규' })] })]
@@ -81,7 +81,7 @@ describe('CASE-studio-021 행 단위 차이', () => {
   })
 })
 
-describe('CASE-studio-022 무시 컬럼 제외', () => {
+describe('CASE-design-022 무시 컬럼 제외', () => {
   it('무시 컬럼 값만 다른 행은 차이가 아니다', () => {
     const d = diffSeeds(
       [set({ ignoredColumns: ['id', 'created_at'], rows: [row('b1', { code: 'a', id: '1', created_at: '2024' })] })],
@@ -101,7 +101,7 @@ describe('CASE-studio-022 무시 컬럼 제외', () => {
   })
 })
 
-describe('CASE-studio-023 변수 이름 비교', () => {
+describe('CASE-design-023 변수 이름 비교', () => {
   it('같은 변수 이름끼리는 차이가 아니다(공백 표기 차이 포함)', () => {
     const d = diffSeeds(
       [set({ rows: [row('b1', { code: 'admin', pw: '{{ADMIN_PASSWORD_HASH}}' })] })],
@@ -129,7 +129,7 @@ describe('CASE-studio-023 변수 이름 비교', () => {
   })
 })
 
-describe('CASE-studio-024 선언 변경', () => {
+describe('CASE-design-024 선언 변경', () => {
   it("짝짓기 기준·무시 컬럼·'설계에 없는 행' 처리 변경을 잡는다", () => {
     const d = diffSeeds(
       [set({ naturalKey: ['code'], ignoredColumns: [], strength: 'ensure' })],
@@ -144,7 +144,7 @@ describe('CASE-studio-024 선언 변경', () => {
   })
 })
 
-describe('CASE-studio-025 옛 스냅샷 폴백', () => {
+describe('CASE-design-025 옛 스냅샷 폴백', () => {
   it('seeds 없는(undefined) 스냅샷은 빈 목록으로 읽는다', () => {
     expect(isEmptySeedDiff(diffSeeds(undefined, undefined))).toBe(true)
   })
@@ -156,7 +156,7 @@ describe('CASE-studio-025 옛 스냅샷 폴백', () => {
   })
 })
 
-describe('CASE-studio-026 자연키 없는 세트', () => {
+describe('CASE-design-026 자연키 없는 세트', () => {
   it('행 단위로 비교하지 않는다 — 행을 근거 없이 추가/삭제로 부풀리지 않는다', () => {
     const d = diffSeeds(
       [set({ naturalKey: [], rows: [row('b1', { code: 'a' })] })],
@@ -200,7 +200,7 @@ describe('CASE-studio-026 자연키 없는 세트', () => {
   })
 })
 
-describe('CASE-studio-027 요약 집계', () => {
+describe('CASE-design-027 요약 집계', () => {
   it('시드 변경만 있어도 비어 있지 않다', () => {
     const d = diffSeeds(
       [set({ rows: [row('b1', { code: 'a', name: '이전' })] })],

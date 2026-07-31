@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { currentLensOption, lensOptions } from './lensOptions'
 
-/** Studio 렌즈 드롭다운 항목 만들기 — 입력(버전 목록) → 출력(항목 목록)만 본다. */
+/** Design 렌즈 드롭다운 항목 만들기 — 입력(버전 목록) → 출력(항목 목록)만 본다. */
 
 const versions = [
   { number: 'v0.3.15', note: '시드 추가' },

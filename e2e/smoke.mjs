@@ -2,7 +2,7 @@
 // (누적 회귀 자산 — 지우지 않고 더한다). 새 앱 흐름은 알맞은 스위트에 check 를 더하거나
 // `suites/` 에 새 파일을 놓기만 하면 된다 — **등록 목록이 없다**(아래 자동 발견).
 //
-// 실행: npm run e2e -- --only=03-studio-definition,04-studio-seed   ← **작업 중엔 이것만**
+// 실행: npm run e2e -- --only=03-design-definition,04-design-seed   ← **작업 중엔 이것만**
 //       npm run e2e -- --list                   스위트 목록만 출력
 //       npm run e2e -- --no-db                  test-db 필요한 스위트는 건너뜀(미검증으로 표시)
 //       npm run e2e -- --continue               스위트가 깨져도 다음 스위트까지 계속
@@ -91,7 +91,7 @@ let failed = false
 let aborted = null
 
 try {
-  await ctx.page.waitForSelector('text=Studio', { timeout: 15_000 })
+  await ctx.page.waitForSelector('text=Design', { timeout: 15_000 })
 
   for (const [i, m] of modules.entries()) {
     if (ONLY && !ONLY.includes(m.name)) {

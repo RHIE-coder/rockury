@@ -3,8 +3,8 @@ import mysql from 'mysql2/promise'
 import pg from 'pg'
 import { DatabaseSync } from 'node:sqlite'
 import * as path from 'node:path'
-import { introspectMysql } from './mysql'
-import { introspectPg } from './postgres'
+import { introspectMysql, listMysqlSchemas } from './mysql'
+import { introspectPg, listPgCatalogs, listPgSchemas } from './postgres'
 import { introspectSqlite } from './sqlite'
 import type { IntrospectedSchema } from './types'
 
@@ -81,9 +81,71 @@ describe.skipIf(!IT)('introspection 통합(test-db)', () => {
   it('sqlite (파일, readOnly)', () => {
     const db = new DatabaseSync(SQLITE_FILE, { readOnly: true })
     try {
-      assertCoreSchema(introspectSqlite(db))
+      const s = introspectSqlite(db)
+      assertCoreSchema(s)
+      expect(s.schemas).toEqual(['main'])
     } finally {
       db.close()
+    }
+  })
+
+  // 범위(scope) — 여러 스키마를 한 번에 읽고, 안 고른 스키마는 안 들어온다.
+  it('postgresql: 스키마 두 개를 함께 읽는다 + 교차 스키마 FK 가 refSchema 를 달고 나온다', async () => {
+    const client = new pg.Client({ host: 'localhost', port: 15432, database: 'testdb', user: 'test', password: 'test' })
+    await client.connect()
+    try {
+      await client.query('CREATE SCHEMA IF NOT EXISTS scope_a')
+      await client.query('CREATE SCHEMA IF NOT EXISTS scope_b')
+      await client.query('CREATE TABLE IF NOT EXISTS scope_a.owners (id bigint PRIMARY KEY)')
+      // 이름이 같은 테이블을 양쪽에 둔다 — 이름만으로 이으면 여기서 틀린다.
+      await client.query('CREATE TABLE IF NOT EXISTS scope_b.owners (id bigint PRIMARY KEY)')
+      await client.query(
+        `CREATE TABLE IF NOT EXISTS scope_b.items (
+           id bigint PRIMARY KEY,
+           owner_id bigint REFERENCES scope_a.owners(id))`
+      )
+
+      const both = await introspectPg(client, ['scope_a', 'scope_b'])
+      expect(both.schemas).toEqual(['scope_a', 'scope_b'])
+      expect(both.tables.filter((t) => t.name === 'owners').map((t) => t.schema).sort()).toEqual([
+        'scope_a',
+        'scope_b'
+      ])
+      const fk = both.foreignKeys.find((f) => f.table === 'items')!
+      expect([fk.schema, fk.refSchema, fk.refTable]).toEqual(['scope_b', 'scope_a', 'owners'])
+
+      // 한쪽만 고르면 다른 쪽은 안 들어온다 — 그래도 FK 는 밖(scope_a)을 가리킨 채로 남는다.
+      const only = await introspectPg(client, ['scope_b'])
+      expect(only.tables.map((t) => t.schema)).toEqual(['scope_b', 'scope_b'])
+      expect(only.foreignKeys.find((f) => f.table === 'items')?.refSchema).toBe('scope_a')
+
+      expect(await listPgSchemas(client)).toEqual(expect.arrayContaining(['public', 'scope_a', 'scope_b']))
+      expect(await listPgCatalogs(client)).toContain('testdb')
+    } finally {
+      await client.query('DROP SCHEMA IF EXISTS scope_b CASCADE')
+      await client.query('DROP SCHEMA IF EXISTS scope_a CASCADE')
+      await client.end()
+    }
+  })
+
+  it('mysql: database 두 개를 함께 읽는다(MySQL 의 database 가 곧 스키마 자리)', async () => {
+    const conn = await mysql.createConnection({ host: 'localhost', port: 13306, user: 'root', password: 'root' })
+    try {
+      await conn.query('CREATE DATABASE IF NOT EXISTS scope_a')
+      await conn.query('CREATE DATABASE IF NOT EXISTS scope_b')
+      await conn.query('CREATE TABLE IF NOT EXISTS scope_a.owners (id BIGINT PRIMARY KEY)')
+      await conn.query('CREATE TABLE IF NOT EXISTS scope_b.owners (id BIGINT PRIMARY KEY)')
+
+      const both = await introspectMysql(conn, 'mysql', ['scope_a', 'scope_b'])
+      expect(both.tables.map((t) => `${t.schema}.${t.name}`).sort()).toEqual([
+        'scope_a.owners',
+        'scope_b.owners'
+      ])
+      expect(await listMysqlSchemas(conn)).toEqual(expect.arrayContaining(['scope_a', 'scope_b']))
+    } finally {
+      await conn.query('DROP DATABASE IF EXISTS scope_b')
+      await conn.query('DROP DATABASE IF EXISTS scope_a')
+      await conn.end()
     }
   })
 })

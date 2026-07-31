@@ -1,4 +1,4 @@
-import { pkColumns } from '../../console/data/sqlBuilder'
+import { pkColumns } from '../../remote/data/sqlBuilder'
 import type { TableDef } from '../definition/types'
 import { formatSeedRef } from './seedRef'
 import { defaultAlias } from './seedRef'
@@ -7,7 +7,7 @@ import { isDbGenerated, seedApplyReadiness } from './seedSet'
 import type { SeedSet } from './types'
 
 /**
- * **운영 → 설계 되먹임 계획**(순수) — 정본 `db-studio.seed.apply-contract` AC-6.
+ * **운영 → 설계 되먹임 계획**(순수) — 정본 `db-design.seed.apply-contract` AC-6.
  *
  * 실 DB 에서 읽은 행을 설계에 들일 **후보**로 만든다. 자동으로 넣지 않는다 — 운영 DB 에는
  * 설계로 올려선 안 되는 행(임시 계정·환경 전용)이 섞이고, 그 판단은 사람만 할 수 있다.

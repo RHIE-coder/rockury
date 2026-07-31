@@ -64,7 +64,7 @@
 - **CASE-ai-071** 기존: AI 화면 — 게이트웨이 열림 표시·등록 명령(URL 포함)·키 기본 마스킹·재발급 실 흐름(구 키 즉시 401·새 키 접속). (agents.gateway AC-1/AC-2, agents.token AC-1/AC-2) [자동]
 - **CASE-ai-074** 재등록 명령: 상태 payload 의 claude/codex 재등록 명령이 `remove`(rockury) 를 add 앞에 두고 현재 키를 담는다 — 재발급 후에도 새 키로 갱신됨. (agents.token AC-3) → `src/main/ai/registration.test.ts` [자동]
 - **CASE-ai-075** e2e: AI 화면에 "접속 키를 바꾼 뒤" 재등록 안내 + Claude/Codex 재등록 복사 버튼이 보이고, 재발급 후 재등록 명령이 새 키를 담는다. (agents.token AC-3) → `e2e/suites/02-ai-agents.mjs` [자동]
-- **CASE-ai-072** 신설: 쓰기 리하이드레이션 — Studio 화면을 연 채 MCP `set_schema` 호출 → 신규 테이블명이 화면 텍스트에 즉시 나타남(수동 재조회 없이). (tools.write AC-3, tools.rehydration AC-1/AC-2) [자동]
+- **CASE-ai-072** 신설: 쓰기 리하이드레이션 — Design 화면을 연 채 MCP `set_schema` 호출 → 신규 테이블명이 화면 텍스트에 즉시 나타남(수동 재조회 없이). (tools.write AC-3, tools.rehydration AC-1/AC-2) [자동]
 - **CASE-ai-073** 신설: `create_version` 호출 → Versions 타임라인에 새 버전 번호 텍스트 등장 + tools/list 에 쓰기 5종 노출 확인. (tools.write AC-5, tools.rehydration AC-2) [자동]
 
 ## Scenario S9 — 부분 수정·위생 검사·선택 요구 (신설 — 3단계)

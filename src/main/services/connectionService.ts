@@ -23,7 +23,7 @@ import {
 
 /**
  * Connection 서비스(§IA · 결정 B) — 원시 접속의 CRUD + 연결 테스트.
- * 비밀번호 암복호화는 여기서만. 설계와 무관 — Console 이 이걸로 실 DB 를 조회한다.
+ * 비밀번호 암복호화는 여기서만. 설계와 무관 — Remote 가 이걸로 실 DB 를 조회한다.
  */
 export interface ConnectionFormData {
   name: string
@@ -35,6 +35,8 @@ export interface ConnectionFormData {
   password: string
   sslEnabled: boolean
   sslConfig?: Record<string, unknown>
+  /** 범위 — 이 연결에서 보고 있는 스키마 목록. 빈 배열이면 기본 스키마 하나(§db-remote.scope). */
+  schemas?: string[]
   autoCheckDisabled?: boolean
 }
 
@@ -61,6 +63,7 @@ export const connectionService = {
       encryptedPassword: form.password ? encrypt(form.password) : '',
       sslEnabled: form.sslEnabled,
       sslConfig: form.sslConfig,
+      schemas: form.schemas,
       autoCheckDisabled: form.autoCheckDisabled
     })
   },
@@ -77,6 +80,7 @@ export const connectionService = {
       encryptedPassword: form.password ? encrypt(form.password) : undefined,
       sslEnabled: form.sslEnabled,
       sslConfig: form.sslConfig,
+      schemas: form.schemas,
       autoCheckDisabled: form.autoCheckDisabled
     })
   },

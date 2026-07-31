@@ -12,7 +12,9 @@ export async function run(ctx) {
   const { check, click, body } = ctx
   let page = ctx.page
   // ── 운영부: Connection(1급) 생성 + mysql test-db 연결 테스트 (설계 불필요) ──
-  await click('button:has-text("Connections")')
+  // Connections 는 Remote 모듈의 첫 뷰다(2026-07-30) — 모듈 → 뷰 두 번 눌러 들어간다.
+  await click('[data-nav-module="remote"]')
+  await click('[data-nav-view="connections"]')
   await page.waitForTimeout(300)
   await click('button:has-text("새 연결")')
   await page.waitForSelector('text=연결 이름', { timeout: 5_000 })
@@ -119,13 +121,13 @@ export async function run(ctx) {
     await page.waitForTimeout(300)
   }
 
-  // 카드 클릭 → active Connection → Console › Object 로 실 DB 역설계(Phase 2a)
+  // 카드 클릭 → active Connection → Remote › Object 로 실 DB 역설계(Phase 2a)
   await click('div[role="button"]:has-text("E2E-mysql")')
   await page.waitForTimeout(200)
-  await click('button:has-text("Console")')
+  await click('button:has-text("Remote")')
   await click('button:has-text("Object")')
   await page.waitForSelector('text=user_roles', { timeout: 15_000 })
   const obj = await body()
-  check('Console › Object: 실 DB 역설계(users/user_roles)', obj.includes('users') && obj.includes('user_roles'))
+  check('Remote › Object: 실 DB 역설계(users/user_roles)', obj.includes('users') && obj.includes('user_roles'))
 
 }

@@ -10,7 +10,7 @@ import { useDesignVersions, useVersionLens, useVersionsStore } from './store'
  *
  * 자리는 상단 모듈 줄의 **‘설계’ 뱃지 손잡이 안**, 설계 이름 바로 뒤다. 시점은 설계에 귀속되므로
  * 그 소속을 자리로 말한다 — 따로 선 칩이면 "고를 게 하나 더"로 읽히고, 실제로 그렇게 읽혀서
- * 한 번 걷어냈다(2026-07-29 상단 바 → Studio 도구줄, 2026-07-30 설계 뱃지 손잡이로).
+ * 한 번 걷어냈다(2026-07-29 상단 바 → Design 도구줄, 2026-07-30 설계 뱃지 손잡이로).
  *
  * 값은 이 서비스 스토어(`versions/store.ts` 의 `lens`)가 든다. 셸의 `contextValues` 가 아니라
  * 서비스가 직접 그리는 칸(`ContextSelector.Render`)인 이유는 두 가지다 — 시점 목록은 활성 설계에

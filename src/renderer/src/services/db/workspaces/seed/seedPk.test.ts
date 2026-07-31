@@ -18,7 +18,7 @@ const col = (name: string, type: string): Column =>
   ({ id: `c-${name}`, name, type, nullable: false }) as Column
 
 /**
- * 시드 PK 생성 규칙(순수) — 정본 `docs/spec/db-studio.md` Section `db-studio.seed.apply-contract` AC-2.
+ * 시드 PK 생성 규칙(순수) — 정본 `docs/spec/db-design.md` Section `db-design.seed.apply-contract` AC-2.
  * 핵심 계약은 **결정적**(같은 입력 → 항상 같은 값)이라는 것이고, 저작 화면 미리보기가 반영 계획과
  * 같은 값을 보여야 한다는 것이다.
  */

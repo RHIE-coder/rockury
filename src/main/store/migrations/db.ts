@@ -58,6 +58,7 @@ export const dbMigration: ServiceMigration = {
     CREATE TABLE IF NOT EXISTS tables (
       id          TEXT PRIMARY KEY,
       design_id   TEXT NOT NULL,
+      schema_name TEXT NOT NULL DEFAULT '',
       name        TEXT NOT NULL,
       comment     TEXT NOT NULL DEFAULT '',
       position    INTEGER NOT NULL DEFAULT 0,
@@ -89,7 +90,7 @@ export const dbMigration: ServiceMigration = {
       updated_at TEXT NOT NULL
     );
 
-    -- Connection: 원시 접속(엔드포인트/자격증명), 설계 무관. Console 을 구동.
+    -- Connection: 원시 접속(엔드포인트/자격증명), 설계 무관. Remote 를 구동.
     CREATE TABLE IF NOT EXISTS connections (
       id                 TEXT PRIMARY KEY,
       name               TEXT NOT NULL,
@@ -101,6 +102,7 @@ export const dbMigration: ServiceMigration = {
       encrypted_password TEXT NOT NULL DEFAULT '',
       ssl_enabled        INTEGER NOT NULL DEFAULT 0,
       ssl_config         TEXT,
+      schemas            TEXT NOT NULL DEFAULT '[]',
       auto_check_disabled INTEGER NOT NULL DEFAULT 0,
       group_id           TEXT,
       sort_order         INTEGER NOT NULL DEFAULT 0,
@@ -223,7 +225,7 @@ export const dbMigration: ServiceMigration = {
     );
     CREATE INDEX IF NOT EXISTS idx_collection_items_coll ON collection_items(collection_id);
 
-    -- Studio › Seed: 시드 세트(설계가 정의하는 기준 데이터). 테이블당 하나 → (design_id, table_name) PK.
+    -- Design › Seed: 시드 세트(설계가 정의하는 기준 데이터). 테이블당 하나 → (design_id, table_name) PK.
     -- 컬럼을 이름으로 가리킨다(실 DB 에선 이름이 정체성) → 스키마 컬럼 id 와 조인하지 않는다.
     CREATE TABLE IF NOT EXISTS seed_sets (
       design_id       TEXT NOT NULL,
@@ -249,7 +251,7 @@ export const dbMigration: ServiceMigration = {
     );
 
     -- ERD 레이아웃 — 스코프별 노드 위치/뷰포트/그룹(JSON). 노드 키는 t:<테이블명>.
-    -- 스코프 키: Console = 연결 id, Studio = design:<설계 id>.
+    -- 스코프 키: Remote = 연결 id, Design = design:<설계 id>.
     CREATE TABLE IF NOT EXISTS diagram_layouts (
       connection_id TEXT PRIMARY KEY,
       positions     TEXT NOT NULL DEFAULT '{}',
@@ -295,6 +297,16 @@ export const dbMigration: ServiceMigration = {
     // tables.view_sql — 설계부에서 선언한 뷰의 본문 SELECT(`CREATE VIEW … AS` 뒷부분).
     // is_view 만으로는 뷰를 실 DB 에 만들 수 없다 — 본문이 있어야 DDL 이 성립한다.
     addColumnIfMissing(d, 'tables', 'view_sql', `TEXT NOT NULL DEFAULT ''`)
+
+    // tables.schema_name — 소속 스키마(PostgreSQL schema · MySQL database · SQLite main).
+    // 기본값이 빈 문자열이라 **예전 행은 전부 "기본 스키마"로 올라온다** — 값을 채워 넣는
+    // 데이터 이전 없이 동작이 그대로다(`db/schemaRef` 가 빈 스키마를 같은 스키마로 다룬다).
+    // `schema` 는 SQLite 예약어가 아니지만 다른 방언에선 걸려서 `schema_name` 으로 둔다.
+    addColumnIfMissing(d, 'tables', 'schema_name', `TEXT NOT NULL DEFAULT ''`)
+
+    // connections.schemas — 그 연결에서 지금 보고 있는 스키마 목록(범위). JSON 배열.
+    // 비면 "기본 스키마 하나"다 — 예전 연결은 지금과 똑같이 동작한다.
+    addColumnIfMissing(d, 'connections', 'schemas', `TEXT NOT NULL DEFAULT '[]'`)
 
     // diagram_layouts.groups — 다이어그램 그룹(레이어): 이름·색·소속 테이블·접힘.
     // 배치와 같은 행에 둔다 — 스코프(연결/설계)가 같고 언제나 함께 읽고 쓰기 때문.

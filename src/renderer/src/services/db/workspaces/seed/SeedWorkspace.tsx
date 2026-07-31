@@ -5,10 +5,10 @@ import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
-import { autoColumnWidths } from '../../console/data/colWidth'
+import { autoColumnWidths } from '../../remote/data/colWidth'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { useVersionLens } from '../../versions/store'
-import { useDesignTables, useStudioReadOnly } from '../definition/store'
+import { useDesignTables, useDesignReadOnly } from '../definition/store'
 import type { Column, TableDef } from '../definition/types'
 import { missingRequiredCells, isVariableCell, seedVariables, validateSeedRows, type SeedRowIssue } from './seedRows'
 import { seedColumnHints } from './columnHint'
@@ -50,8 +50,8 @@ import {
 } from './types'
 
 /**
- * Studio › Seed — 기준 데이터(시드) 저작 화면. 정본: `docs/spec/db-studio.md` Surface `db-studio.seed`.
- * 실 DB 를 건드리지 않는다 — 저장은 로컬 설계 저장소뿐(Studio 공통 불변식).
+ * Design › Seed — 기준 데이터(시드) 저작 화면. 정본: `docs/spec/db-design.md` Surface `db-design.seed`.
+ * 실 DB 를 건드리지 않는다 — 저장은 로컬 설계 저장소뿐(Design 공통 불변식).
  */
 
 /** 컬럼 머리에 보일 타입 라벨 글자 상한 — 넘으면 잘라 그리고 전체는 툴팁으로. */
@@ -663,7 +663,7 @@ function SeedGrid({
             <th className="w-10 border-b border-r border-line px-2 py-1.5 text-[10px] font-semibold text-muted">
               #
             </th>
-            {/* 행 삭제 칸 — Console › Data 와 같은 문법: 행번호 바로 옆 고정 칸에 **항상 보이는** 휴지통.
+            {/* 행 삭제 칸 — Remote › Data 와 같은 문법: 행번호 바로 옆 고정 칸에 **항상 보이는** 휴지통.
                 (회귀: 호버해야 나타나는 버튼이라 표 오른쪽 끝의 빈 컬럼으로만 보였다.
                  본문 <td> 와 **같은 자리**여야 한다 — 헤더만 옮기면 표가 한 칸씩 어긋난다.) */}
             {!readOnly && <th className="w-8 border-b border-r border-line" />}
@@ -881,7 +881,7 @@ function SeedGridRow({
           )}
         </span>
       </td>
-      {/* 행 삭제 — 항상 보인다(호버로만 나타나면 버튼이 있는 줄 모른다). Console › Data 와 같은 자리·같은 색. */}
+      {/* 행 삭제 — 항상 보인다(호버로만 나타나면 버튼이 있는 줄 모른다). Remote › Data 와 같은 자리·같은 색. */}
       {!readOnly && (
         <td className="border-b border-r border-line px-1 py-1 text-center">
           <button
@@ -957,13 +957,13 @@ function SeedGridRow({
   )
 }
 
-/** Studio › Seed 워크스페이스 — [시드 세트 목록 | 선언 바 + 행 그리드]. 활성 Design 스코프. */
+/** Design › Seed 워크스페이스 — [시드 세트 목록 | 선언 바 + 행 그리드]. 활성 Design 스코프. */
 export function SeedWorkspace() {
   const design = useActiveDesign()
   const tables = useDesignTables()
   const sets = useDesignSeedSets()
   const active = useActiveSeedSet()
-  const readOnly = useStudioReadOnly()
+  const readOnly = useDesignReadOnly()
   const versionId = useVersionLens()
   const activeKey = useSeedStore((s) => s.activeKey)
   const setActive = useSeedStore((s) => s.setActive)

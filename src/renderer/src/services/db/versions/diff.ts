@@ -97,6 +97,9 @@ function constraintFieldChanges(
   if (ac !== bc) out.push({ field: '컬럼', before: ac || '—', after: bc || '—' })
   if ((a.refTable ?? '') !== (b.refTable ?? ''))
     out.push({ field: '참조 테이블', before: a.refTable || '—', after: b.refTable || '—' })
+  // 이름은 그대로인데 스키마만 바뀌는 경우가 있다 — 안 잡으면 조용히 다른 테이블을 가리키게 된다.
+  if ((a.refSchema ?? '') !== (b.refSchema ?? ''))
+    out.push({ field: '참조 스키마', before: a.refSchema || '—', after: b.refSchema || '—' })
   if ((a.refColumns ?? []).join(',') !== (b.refColumns ?? []).join(','))
     out.push({ field: '참조 컬럼', before: (a.refColumns ?? []).join(', ') || '—', after: (b.refColumns ?? []).join(', ') || '—' })
   if ((a.onDelete ?? '') !== (b.onDelete ?? ''))

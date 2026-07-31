@@ -7,13 +7,13 @@ import {
   groupConstraintsByTable,
   KIND_FILTERS,
   type KindFilter
-} from './console/constraintsView'
+} from './remote/constraintsView'
 import type { Constraint, TableDef } from './workspaces/definition/types'
 
 /**
  * 제약 목록 패널 — Definition·Diagram·Data 가 공유하는 **하나뿐인** 제약 목록 표현.
  * 종류 필터(ALL/PK/FK/UK/IDX/CHECK) + 테이블별 그룹. 항목을 누르면 그 테이블로 이동한다.
- * 집계·정렬은 순수 로직(`console/constraintsView`)이 하고 여기서는 그리기만 한다.
+ * 집계·정렬은 순수 로직(`remote/constraintsView`)이 하고 여기서는 그리기만 한다.
  */
 export function ConstraintListPanel({
   tables,

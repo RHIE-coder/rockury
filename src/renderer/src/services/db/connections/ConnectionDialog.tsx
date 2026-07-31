@@ -25,7 +25,7 @@ interface TestState {
 
 /**
  * 연결 생성/수정 다이얼로그(§IA · 결정 B). Connection 은 설계 무관 —
- * **dbType 을 여기서 자유 선택**(설계 방언에 고정되지 않음). Console 이 이 접속을 쓴다.
+ * **dbType 을 여기서 자유 선택**(설계 방언에 고정되지 않음). Remote 가 이 접속을 쓴다.
  */
 export function ConnectionDialog() {
   const open = useConnectionsStore((s) => s.dialogOpen)
@@ -136,7 +136,7 @@ export function ConnectionDialog() {
         <DialogHeader>
           <DialogTitle>{editing ? '연결 편집' : '새 연결'}</DialogTitle>
           <DialogDescription>
-            DB 접속 정보입니다. 설계와 무관하게 이 연결만으로 Console(조회·쿼리)을 쓸 수 있어요.
+            DB 접속 정보입니다. 설계와 무관하게 이 연결만으로 Remote(조회·쿼리)을 쓸 수 있어요.
           </DialogDescription>
         </DialogHeader>
 

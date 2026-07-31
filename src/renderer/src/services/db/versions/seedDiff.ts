@@ -4,7 +4,7 @@ import type { ChangeStatus, FieldChange } from './diff'
 
 /**
  * 시드 diff — 두 버전 스냅샷의 **시드 델타**(세트 추가/삭제·선언 변경·행 추가/삭제/값 변경).
- * 정본: `docs/spec/db-studio.md` Section `db-studio.seed.version-diff`.
+ * 정본: `docs/spec/db-design.md` Section `db-design.seed.version-diff`.
  *
  * 스키마 diff(`diff.ts`)와 **따로** 계산한다: 스키마 diff 는 실 DB 역설계 결과와도 비교되는데
  * (Migration Drift·Plan) 실 DB 에는 "시드 선언"이 없어, 한 함수로 묶으면 설계↔실DB 비교에서

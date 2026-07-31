@@ -4,7 +4,7 @@ import { getDb } from './db'
 /**
  * Environment — 배포 바인딩(§IA · 결정 B). Connection 을 Design + 타깃/적용 버전에 묶는다.
  * Migration(Drift/Plan/Run) 전용 상태. (connection_id, design_id) 조합당 하나(자동 관리).
- * Console 은 Connection 만으로 동작하므로 여긴 관여하지 않는다.
+ * Remote 는 Connection 만으로 동작하므로 여긴 관여하지 않는다.
  */
 export interface EnvironmentRecord {
   id: string

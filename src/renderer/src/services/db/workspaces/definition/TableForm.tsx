@@ -26,8 +26,9 @@ import { cn } from '@renderer/lib/utils'
 import { useActiveDesign } from '../../designs/store'
 import { dialectInfo } from '../../dialects'
 import { defaultSuggestions, isKnownType, typeSuggestions } from '../../typeCatalog'
-import { useActiveTable, useDefinitionStore, useDesignTables, useStudioReadOnly } from './store'
+import { useActiveTable, useDefinitionStore, useDesignTables, useDesignReadOnly } from './store'
 import { checkColumnIds, keyBadgesOf, type KeyBadge } from './derive'
+import { DEFAULT_SCHEMA } from '../../schemaRef'
 import { EditableText } from './EditableText'
 import { ConstraintsSection } from './ConstraintsSection'
 import { ViewBodySection } from './ViewBodySection'
@@ -286,7 +287,7 @@ export function TableForm() {
   const deleteTable = useDefinitionStore((s) => s.deleteTable)
   const toggleView = useDefinitionStore((s) => s.toggleView)
   const setEditing = useDefinitionStore((s) => s.setEditing)
-  const readOnly = useStudioReadOnly()
+  const readOnly = useDesignReadOnly()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   // 부모(DefinitionWorkspace)가 설계 선택·테이블 존재를 보장하지만 방어적으로 가드.
@@ -348,6 +349,17 @@ export function TableForm() {
                 <Eye className="size-3" />뷰
               </span>
             )}
+            {/* 스키마 — 이름 앞 칸. 기본 스키마 하나만 쓰는 설계에서는 흐리게 두어 눈에 안 걸리고,
+                여러 스키마를 쓰기 시작하면 그 자리에서 바로 옮길 수 있다(§db-design.definition.schema). */}
+            <EditableText
+              editKey="table:schema"
+              value={table.schema ?? DEFAULT_SCHEMA}
+              readOnly={readOnly}
+              onCommit={(v) => updateTable({ schema: v.trim() || DEFAULT_SCHEMA })}
+              className="w-auto text-[15px] font-semibold text-muted"
+              inputClassName="h-8 w-40 text-[15px] font-semibold"
+            />
+            <span className="text-[15px] font-semibold text-muted">.</span>
             <EditableText
               editKey="table:name"
               value={table.name}

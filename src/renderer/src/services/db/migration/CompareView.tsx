@@ -11,7 +11,7 @@ import {
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { dialectInfo } from '../dialects'
 import { useActiveConnection, useConnectionsStore } from '../connections/store'
-import { normalizeSchema } from '../console/introspection'
+import { normalizeSchema } from '../remote/introspection'
 import { diffSnapshots, type SchemaDiff } from '../versions/diff'
 import { SchemaDiffPanel } from '../versions/SchemaDiffPanel'
 

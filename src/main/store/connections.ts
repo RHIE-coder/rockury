@@ -4,7 +4,7 @@ import { getDb } from './db'
 /**
  * Connection — 원시 접속 정보(엔드포인트/자격증명)의 1급 엔티티(§IA · 결정 B).
  *
- * 설계와 무관하게 존재한다. Console(Object/Data/Query = 모니터링/조회)는 이것만으로 동작한다.
+ * 설계와 무관하게 존재한다. Remote(Object/Data/Query = 모니터링/조회)는 이것만으로 동작한다.
  * 배포/마이그레이션은 Environment(=Connection+Design+버전) 바인딩이 담당한다.
  * 비밀번호는 암호문만 저장하고 렌더러 레코드에는 노출하지 않는다.
  */
@@ -20,6 +20,12 @@ export interface ConnectionRecord {
   user: string
   sslEnabled: boolean
   sslConfig?: Record<string, unknown>
+  /**
+   * 범위(scope) — 이 연결에서 지금 보고 있는 스키마 목록.
+   * 빈 배열이면 "기본 스키마 하나"다(PostgreSQL `current_schema()` · MySQL `DATABASE()`) —
+   * 예전 연결은 전부 빈 배열이라 지금과 똑같이 동작한다.
+   */
+  schemas: string[]
   autoCheckDisabled: boolean
   groupId: string | null
   sortOrder: number
@@ -46,6 +52,7 @@ export interface CreateConnectionInput {
   encryptedPassword: string
   sslEnabled: boolean
   sslConfig?: Record<string, unknown>
+  schemas?: string[]
   autoCheckDisabled?: boolean
 }
 
@@ -59,6 +66,7 @@ export type UpdateConnectionInput = Partial<{
   encryptedPassword: string
   sslEnabled: boolean
   sslConfig: Record<string, unknown>
+  schemas: string[]
   autoCheckDisabled: boolean
 }>
 
@@ -73,6 +81,7 @@ interface ConnRow {
   encrypted_password: string
   ssl_enabled: number
   ssl_config: string | null
+  schemas: string | null
   auto_check_disabled: number
   group_id: string | null
   sort_order: number
@@ -88,6 +97,20 @@ interface GroupRow {
   updated_at: string
 }
 
+/**
+ * 저장된 범위를 문자열 배열로 편다. 깨진 JSON·기대 밖 모양은 **빈 배열**로 떨어뜨린다 —
+ * 범위를 못 읽었다고 앱이 안 켜지는 것보다, 기본 스키마 하나로 여는 편이 낫다.
+ */
+function parseSchemas(raw: string | null): string[] {
+  if (!raw) return []
+  try {
+    const v: unknown = JSON.parse(raw)
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 function toRecord(r: ConnRow): ConnectionRecord {
   return {
     id: r.id,
@@ -99,6 +122,7 @@ function toRecord(r: ConnRow): ConnectionRecord {
     user: r.db_user,
     sslEnabled: r.ssl_enabled === 1,
     sslConfig: r.ssl_config ? (JSON.parse(r.ssl_config) as Record<string, unknown>) : undefined,
+    schemas: parseSchemas(r.schemas),
     autoCheckDisabled: r.auto_check_disabled === 1,
     groupId: r.group_id ?? null,
     sortOrder: r.sort_order,
@@ -139,8 +163,8 @@ export function createConnection(input: CreateConnectionInput): ConnectionRecord
   d.prepare(
     `INSERT INTO connections
        (id, name, db_type, host, port, database_name, db_user, encrypted_password,
-        ssl_enabled, ssl_config, auto_check_disabled, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ssl_enabled, ssl_config, schemas, auto_check_disabled, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.name,
@@ -152,6 +176,7 @@ export function createConnection(input: CreateConnectionInput): ConnectionRecord
     input.encryptedPassword,
     input.sslEnabled ? 1 : 0,
     input.sslConfig ? JSON.stringify(input.sslConfig) : null,
+    JSON.stringify(input.schemas ?? []),
     input.autoCheckDisabled ? 1 : 0,
     max + 1,
     now,
@@ -177,6 +202,7 @@ export function updateConnection(id: string, patch: UpdateConnectionInput): Conn
   if (patch.encryptedPassword !== undefined) set('encrypted_password', patch.encryptedPassword)
   if (patch.sslEnabled !== undefined) set('ssl_enabled', patch.sslEnabled ? 1 : 0)
   if (patch.sslConfig !== undefined) set('ssl_config', JSON.stringify(patch.sslConfig))
+  if (patch.schemas !== undefined) set('schemas', JSON.stringify(patch.schemas))
   if (patch.autoCheckDisabled !== undefined) set('auto_check_disabled', patch.autoCheckDisabled ? 1 : 0)
 
   if (sets.length > 0) {

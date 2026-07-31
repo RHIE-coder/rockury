@@ -4,7 +4,7 @@ import { envelope } from '../envelope'
 
 /**
  * Connection IPC(§IA · 결정 B) — 원시 접속 CRUD + 연결 테스트(봉투 패턴).
- * 설계와 무관 — Console 이 이걸로 실 DB 를 조회한다.
+ * 설계와 무관 — Remote 가 이걸로 실 DB 를 조회한다.
  */
 export function registerConnectionIpc(): void {
   ipcMain.handle('connections:list', () => envelope(() => connectionService.list()))
