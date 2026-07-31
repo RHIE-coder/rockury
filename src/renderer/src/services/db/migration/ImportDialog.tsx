@@ -109,7 +109,21 @@ export function ImportDialog() {
                 </div>
               )}
             </div>
-          ) : null}
+          ) : (
+            // 못 읽었다 — 여기서 되돌릴 손잡이를 준다. 없으면 가져오기 버튼이 영원히 꺼진 채
+            // 이유도 안 보이는 막힌 화면이 된다(닫고 다시 여는 것 말고 길이 없었다).
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-[12.5px] text-fg">실 DB 를 읽지 못했습니다</span>
+                <span className="truncate font-mono text-[11px] text-destructive">
+                  {st.error ?? '알 수 없는 오류'}
+                </span>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => void st.prepare()}>
+                다시 시도
+              </Button>
+            </div>
+          )}
 
           {/* 새 설계 이름(새 설계 모드 전용) */}
           {isNew && (
@@ -157,7 +171,8 @@ export function ImportDialog() {
             <span>이 버전이 <b className="text-fg">{conn.name}</b> 의 적용 버전·드리프트 기준선이 되고, 연결↔설계 결속도 자동으로 세워집니다.</span>
           </p>
 
-          {st.error && (
+          {/* 컷 실패 문구. 역설계 실패는 위 칸이 이미 말했으므로 여기서 되풀이하지 않는다. */}
+          {st.error && st.actual && (
             <div className="rounded-lg bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{st.error}</div>
           )}
         </div>

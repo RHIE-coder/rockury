@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { errorMessage } from '@shared/errorMessage'
 import { useNav } from '@renderer/nav/useNav'
 import { normalizeSchema } from '../remote/introspection'
 import { alignSnapshotToActual } from '../versions/align'
@@ -99,6 +100,8 @@ export const useImportStore = create<ImportState>()((set, get) => ({
   prepare: async () => {
     const { connection, design } = get()
     if (!connection) return
+    // 다시 시도로도 들어온다 — 읽는 중 표시를 여기서 세운다(직전 실패 문구는 지운다).
+    set({ phase: 'preparing', error: null })
     try {
       // 활성 설계의 최신 버전 + 스냅샷 캐시(모드 토글 시 재-introspect 없이 재계산).
       let latest: string | null = null
@@ -119,7 +122,8 @@ export const useImportStore = create<ImportState>()((set, get) => ({
       // 기본 모드로 파생값(번호·diff) 계산.
       get().chooseMode(get().mode)
     } catch (e) {
-      set({ phase: 'ready', error: e instanceof Error ? e.message : String(e) })
+      // actual 은 null 로 남는다 → 화면이 "못 읽었다 + 다시 시도"를 그린다(가져오기는 막힌 상태).
+      set({ phase: 'ready', error: errorMessage(e, '실 DB 를 읽지 못했습니다.') })
     }
   },
 
@@ -204,7 +208,7 @@ export const useImportStore = create<ImportState>()((set, get) => ({
 
       set({ open: false, phase: 'idle' })
     } catch (e) {
-      set({ phase: 'ready', error: e instanceof Error ? e.message : String(e) })
+      set({ phase: 'ready', error: errorMessage(e, '가져오기에 실패했습니다.') })
     }
   }
 }))

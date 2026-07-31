@@ -38,4 +38,13 @@ describe('envelope', () => {
     })
     expect(res).toEqual({ success: false, error: 'bare string' })
   })
+
+  it('message 가 빈 드라이버 오류도 사유를 담는다 (mysql2 ECONNREFUSED 회귀)', async () => {
+    // 빈 문자열을 그대로 담으면 화면이 `error && (…)` 로 falsy 판정해 오류를 안 그린다.
+    const res = await envelope(() => {
+      throw Object.assign(new Error(''), { code: 'ECONNREFUSED', address: '127.0.0.1', port: 33306 })
+    })
+    expect(res.success).toBe(false)
+    expect(res.error).toBe('ECONNREFUSED (127.0.0.1:33306)')
+  })
 })
