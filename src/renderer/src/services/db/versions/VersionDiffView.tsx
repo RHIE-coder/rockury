@@ -73,30 +73,33 @@ export function VersionDiffView() {
   )
 
   return (
-    <div className="mx-auto max-w-[880px] px-5 py-5">
-      <div className="mb-3 flex items-center gap-2 text-[16px] font-bold tracking-tight text-fg">
-        <GitCompare className="size-4 text-muted" />
-        버전 비교
-      </div>
+    // 셸의 워크스페이스 칸은 overflow-hidden 이라 스크롤 상자는 각 뷰가 세운다(AppShell).
+    <div className="h-full overflow-auto">
+      <div className="mx-auto max-w-[880px] px-5 py-5">
+        <div className="mb-3 flex items-center gap-2 text-[16px] font-bold tracking-tight text-fg">
+          <GitCompare className="size-4 text-muted" />
+          버전 비교
+        </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel px-3 py-2.5">
-        {verSelect(base, setBaseId, '이전')}
-        <ArrowRight className="size-4 text-muted" />
-        {verSelect(target, setTargetId, '이후')}
-      </div>
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel px-3 py-2.5">
+          {verSelect(base, setBaseId, '이전')}
+          <ArrowRight className="size-4 text-muted" />
+          {verSelect(target, setTargetId, '이후')}
+        </div>
 
-      {diff && (
-        <SchemaDiffPanel
-          diff={diff}
-          // 시드에 변화가 있으면 "스키마는 동일"이라고만 말한다 — 화면 전체가 '변경 없음'으로 읽히지 않게.
-          emptyText={
-            seedDiff && !isEmptySeedDiff(seedDiff)
-              ? '스키마는 동일하고, 아래 시드만 바뀌었어요'
-              : '두 버전의 스키마·시드가 동일해요'
-          }
-        />
-      )}
-      {seedDiff && <SeedDiffPanel diff={seedDiff} />}
+        {diff && (
+          <SchemaDiffPanel
+            diff={diff}
+            // 시드에 변화가 있으면 "스키마는 동일"이라고만 말한다 — 화면 전체가 '변경 없음'으로 읽히지 않게.
+            emptyText={
+              seedDiff && !isEmptySeedDiff(seedDiff)
+                ? '스키마는 동일하고, 아래 시드만 바뀌었어요'
+                : '두 버전의 스키마·시드가 동일해요'
+            }
+          />
+        )}
+        {seedDiff && <SeedDiffPanel diff={seedDiff} />}
+      </div>
     </div>
   )
 }

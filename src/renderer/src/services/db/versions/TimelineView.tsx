@@ -99,53 +99,56 @@ export function TimelineView() {
   const info = dialectInfo(design.dialect)
 
   return (
-    <div className="mx-auto max-w-[880px] px-5 py-5">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[16px] font-bold tracking-tight text-fg">
-            <Milestone className="size-4 text-muted" />
-            버전 타임라인
-            <span className="flex items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10.5px] font-medium text-fg">
-              <span className="size-1.5 rounded-full" style={{ background: info.dot }} />
-              {design.name}
-            </span>
-          </div>
-          <p className="mt-0.5 text-[12px] text-muted">
-            설계의 불변 스냅샷 · 단조 증가 · 컷된 버전은 편집 불가
-          </p>
-        </div>
-        <Button size="sm" className="ml-auto" onClick={() => setCutOpen(true)}>
-          <GitCommitHorizontal />
-          버전 컷
-        </Button>
-      </div>
-
-      <div className="overflow-hidden rounded-[10px] border border-line">
-        {versions.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
-            <Milestone className="size-6 text-muted/60" />
-            <div className="text-[13px] font-semibold text-fg">아직 컷된 버전이 없어요</div>
-            <p className="max-w-72 text-[12px] text-muted">
-              지금 스키마를 첫 버전으로 고정해 계보를 시작하세요.
+    // 셸의 워크스페이스 칸은 overflow-hidden 이라 스크롤 상자는 각 뷰가 세운다(AppShell).
+    <div className="h-full overflow-auto">
+      <div className="mx-auto max-w-[880px] px-5 py-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[16px] font-bold tracking-tight text-fg">
+              <Milestone className="size-4 text-muted" />
+              버전 타임라인
+              <span className="flex items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10.5px] font-medium text-fg">
+                <span className="size-1.5 rounded-full" style={{ background: info.dot }} />
+                {design.name}
+              </span>
+            </div>
+            <p className="mt-0.5 text-[12px] text-muted">
+              설계의 불변 스냅샷 · 단조 증가 · 컷된 버전은 편집 불가
             </p>
           </div>
-        ) : (
-          versions.map((v, i) => (
-            <VersionRow key={v.id} v={v} designId={design.id} latest={i === 0} />
-          ))
-        )}
-      </div>
+          <Button size="sm" className="ml-auto" onClick={() => setCutOpen(true)}>
+            <GitCommitHorizontal />
+            버전 컷
+          </Button>
+        </div>
 
-      <CutVersionDialog
-        open={cutOpen}
-        onClose={() => setCutOpen(false)}
-        designId={design.id}
-        latest={latest}
-        tableCount={tables.length}
-        seedRowCount={seeds.reduce((n, s) => n + s.rows.length, 0)}
-        // 시드도 버전에 동봉한다 — 시드는 서비스 정책의 바탕이라 Diff 대상(spec db-design.seed.version-diff).
-        snapshot={{ tables, seeds }}
-      />
+        <div className="overflow-hidden rounded-[10px] border border-line">
+          {versions.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
+              <Milestone className="size-6 text-muted/60" />
+              <div className="text-[13px] font-semibold text-fg">아직 컷된 버전이 없어요</div>
+              <p className="max-w-72 text-[12px] text-muted">
+                지금 스키마를 첫 버전으로 고정해 계보를 시작하세요.
+              </p>
+            </div>
+          ) : (
+            versions.map((v, i) => (
+              <VersionRow key={v.id} v={v} designId={design.id} latest={i === 0} />
+            ))
+          )}
+        </div>
+
+        <CutVersionDialog
+          open={cutOpen}
+          onClose={() => setCutOpen(false)}
+          designId={design.id}
+          latest={latest}
+          tableCount={tables.length}
+          seedRowCount={seeds.reduce((n, s) => n + s.rows.length, 0)}
+          // 시드도 버전에 동봉한다 — 시드는 서비스 정책의 바탕이라 Diff 대상(spec db-design.seed.version-diff).
+          snapshot={{ tables, seeds }}
+        />
+      </div>
     </div>
   )
 }
