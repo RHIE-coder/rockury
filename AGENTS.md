@@ -1,234 +1,75 @@
-# Rockury — 프로젝트 규칙 (모든 코딩 에이전트 공용 정본)
+# Rockury — 코딩 에이전트 지침
 
-> 이 파일이 프로젝트 지침의 **단일 정본**이다. Claude Code 는 `CLAUDE.md` 가 이 파일을 `@import` 한다.
-> **작업 진행 방식**(경로 판정·작업 단계·응답 규율·쉬운 말)은 **steward 하네스**가 관장한다
-> (세션 시작 시 자동 로드) — 여기 중복해 적지 않는다. 값·능력은 `.harness/steward/config.yaml`.
+Electron + electron-vite · React 19 · TypeScript 7 · Tailwind v4 + Radix · Zustand 5 ·
+로컬 저장소는 `node:sqlite`. **화이트 테마 고정**(다크 모드 없음).
+다섯 서비스로 나뉜다: `uiux` · `api` · `db` · `infra` · `ai`.
 
-Electron + electron-vite · React 19 + TS 7 · Tailwind v4 + Radix · Zustand 5 · **화이트 테마 고정**.
-현재 집중: **DB 서비스**. 설계부(Design/Versions)·운영부(Environments/Remote/Migration) 모두
-로컬 SQLite(`node:sqlite`) + 실 드라이버(mysql2/pg/node:sqlite) 위에 구현됨. Diagram(Remote 실 ERD·Design 가상 편집 ERD)까지 완료. 남은 것은 선택적 향상(Design Mocking/Documenting/Validation·Reference 등).
-설계 근거·결정 → `docs/before-steward-background/db-service-ia.md` · 로드맵/진행·재개점 → `docs/before-steward-background/ops-implementation-plan.md`.
-살아있는 기획/테스트 정본(steward) → `docs/spec/` · `docs/qa/`.
+> 이 파일은 **매 세션 통째로 읽힌다.** 그래서 여기엔 ⑴ 코드를 읽어서는 알 수 없고
+> ⑵ 기계가 안 막아 주며 ⑶ 거의 모든 작업에 걸리는 것만 둔다.
+> 나머지는 아래 "더 읽을 곳"으로 미룬다 — 길어지면 정작 중요한 줄이 묻힌다.
+>
+> 작업 진행 방식(경로 판정·단계·응답 규율)은 **steward 하네스**가 세션 시작 때 넣어 준다.
 
-## 응답
-- **간결·핵심만.** 해결하면 뭘 했는지 1~2줄. 요청 없으면 설명 안 붙인다. (steward "쉬운 말" 규율 위에서.)
+## 📮 화면 피드백이 먼저다
 
-## 📮 화면 피드백 받기 (에이전트가 먼저 볼 것)
-사용자가 **화면에 대해** 뭔가를 말하면(“여기 이상해”, “이 버튼 좀…”) 먼저
-**`.harness/feedback/` 에 최근 폴더가 있는지 본다.** 있으면 `note.md` 와 `shot.png` 를 읽는다 —
-스크린샷을 다시 떠 달라고 요청하지 말 것. 폴더 하나가 곧 제보 하나이며 안에 다 들어 있다:
-표시가 그려진 화면 그림 · 표시마다의 메모 · **그 자리의 DOM 요소와 React 컴포넌트 사슬**
-(= 소스 파일을 바로 특정하는 주소) · 그때 나 있던 콘솔 오류 · nav 경로 · 컨텍스트 선택값.
-폴더 이름은 `<날짜>-<시각>-<화면>` 이라 **가장 최근 것이 마지막 줄**이다. 읽고 고쳤으면 폴더를 지운다.
+사용자가 **화면에 대해** 뭔가를 말하면(“여기 이상해”, “이 버튼 좀…”) 코드를 보기 전에
+**`.harness/feedback/` 에 폴더가 있는지 본다.** 있으면 `note.md` 와 `shot.png` 를 읽는다 —
+**스크린샷을 다시 떠 달라고 하지 말 것.** 폴더 하나가 제보 하나이고 안에 다 들어 있다:
+표시가 그려진 그림 · 표시마다의 메모 · 그 자리의 DOM 요소와 React 컴포넌트 사슬(= 소스 파일
+주소) · 그때 난 콘솔 오류 · nav 경로. 폴더 이름이 `<날짜>-<시각>-<화면>` 이라 **가장 최근
+것이 마지막 줄**이다. 읽고 고쳤으면 폴더를 지운다.
 
-남기는 쪽(사용자): **개발 서버(`npm run dev`)로 띄운 앱**에서 우측 가장자리 손잡이를 누르거나
-`⌘/Ctrl+Shift+F` → 문제가 보이는 곳에 동그라미 → 메모 → 보내기.
-구현은 `src/renderer/src/devtools/feedback/`(오버레이) + `src/main/ipc/devFeedback.ts`(저장) +
-`src/shared/devFeedback.ts`(순수 로직·테스트 대상). **빌드본에는 오버레이가 아예 없다** —
-e2e·화면 품질 게이트가 순회하며 찍는 대상에 도구가 섞이면 기준선이 흔들리기 때문이다.
-그래서 이 오버레이는 e2e 커버리지 밖이고, 대신 순수 로직을 단위 테스트로 덮는다.
-피드백 폴더는 gitignore 대상(쓰고 버리는 입력).
+## 🗣 화면 문구 — 자명한 것을 되풀이하지 않는다
 
-## 🗣 화면 문구 — 자명한 것을 글로 되풀이하지 않는다 (2026-07-30 사용자 정정 2회)
-같은 지적이 두 번 나왔다("장황하다", "왜이렇게 설명충이야"). 걸린 것 셋: 상세 서랍 머리의
-"테이블을 고르면 상세가 여기 뜹니다"(= 서랍이 하는 일을 설명), DDL 첫 줄의
-`-- card_texts (PostgreSQL 16)`(= 바로 아래 CREATE 문과 상단 컨텍스트 바에 이미 있는 것),
-같은 출처 표시("실 DB 역설계 · 읽기")를 위아래 두 줄에 한 번씩.
-- **빈 상태는 명사구 한 줄** — "선택된 테이블 없음". "…을 누르거나 …에서 고르세요" 식 안내문 금지.
-- **머리(제목·부제)엔 이름만.** 그 자리가 무슨 일을 하는지 설명하는 문장을 머리에 두지 않는다.
-- **같은 정보는 한 화면에 한 번.** 위 칸이 이미 말했으면 아래 칸에서 지운다
-  (`SqlView labeled={false}` — 서랍 머리가 이름·출처를 이미 보이므로 안쪽 머리를 없앤다).
-- **기계로 못 막아 규칙으로 남긴다** — "자명한가"는 문장 모양이 아니라 그 화면의 문맥 판정이다.
-  문자열 검사로는 정상 문구까지 걸린다(db 서비스만 세도 68곳). 그래서 회귀는 대상별 테스트로
-  못박는다(예: `ddl.test.ts` 의 "자명한 것을 주석으로 되풀이하지 않는다").
-  **기계 승격 대기**: surface-verify 판정기(`e2e/surface/checks.mjs`)에 문구 검사를 넣으면 전 화면을
-  자동으로 훑는다 — 다섯 서비스 기준선 재수립이 딸려오므로 사용자 판단을 기다린다.
+기계가 못 잡는 규율이라 여기 둔다(같은 지적을 두 번 받았다: "장황하다", "설명충").
 
-## 🌿 Git (MUST)
-- **`main` 은 통합 전용이다 — 직접 작업하지 않고 병합만 받는다.**
-  각 서비스는 자기 브랜치 `feat/<서비스 id>` 에서 일한다: `feat/uiux` · `feat/api` · `feat/db` ·
-  `feat/infra` · `feat/ai`. (2026-07-27 사용자 지시로 개정 — 그전 규칙은 "main 직접 작업"이었고,
-  5서비스 병렬 개발을 켜면서 뒤집었다.)
-- 예외: **어느 서비스에도 안 속하는 것**(공용 파일 구조, `AGENTS.md`, 의존성 추가)은 `main` 에서 한다.
-- 커밋/푸시는 사용자가 요청할 때만. 커밋 메시지 끝에 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- **빈 상태는 명사구 한 줄** — "선택된 테이블 없음". "…을 누르거나 …에서 고르세요" 식 금지.
+- **머리(제목·부제)엔 이름만.** 그 자리가 무슨 일을 하는지 설명하는 문장을 두지 않는다.
+- **같은 정보는 한 화면에 한 번.** 위 칸이 이미 말했으면 아래 칸에서 지운다.
 
-## 👥 병렬 개발 규칙 (5서비스 동시 작업)
-다섯 에이전트(UI/UX · API · DB · Infra · AI)가 각자 워크트리(= 한 저장소를 여러 폴더에
-동시에 펼쳐 놓는 git 기능)에서 동시에 일한다. 준비: `node scripts/parallel/setup.mjs`
-(현황 `… status` · 정리 `… remove`). 폴더는 저장소 **바깥**의 숨김 폴더
-`../.worktrees/rockury/<서비스 id>` 에 생긴다 — 저장소 안에 두면 빌드·테스트·검색이 `**` 로
-훑을 때 자기 사본을 파고들고, 숨김 폴더라 상위 폴더 목록이 어질러지지 않는다.
-저장소 밖이므로 `.gitignore` 는 필요 없다(git 시야가 저장소 밖까지 미치지 않는다).
+## ✅ 테스트
 
-### 서비스 id — 서비스당 토큰 하나
-`uiux` · `api` · `db` · `infra` · `ai`. 이 토큰 하나가 nav registry 의 `Service.id`,
-IPC 채널 접두어, 폴더·파일 이름, 브랜치 이름에 전부 그대로 쓰인다 —
-토큰을 둘로 늘리면 "내 파일이 어느 쪽이냐"가 흐려진다.
+- **순수/도메인 로직을 더하거나 고치면 같은 커밋에 `*.test.ts` 를 동반한다.** 대상은 "입력→출력이
+  결정적인" 모든 것(diff·DDL 생성·SQL 빌더·introspection 매핑 등). 테스트는 대상 모듈 **옆에**.
+- **버그를 고치면 그 버그를 재현하는 회귀 테스트를 함께** 넣는다.
+- 화면 컴포넌트·스토어 자체는 강제 대상이 아니다 — 그 안의 순수 로직을 분리해 테스트하고,
+  실 앱 흐름은 `e2e/suites/` 로 덮는다.
+- **"나중에 테스트 추가" 금지.** 건너뛰려면 먼저 사용자에게 확인받는다.
+- 완료 게이트 `npm run typecheck && npm test && npm run build` — pre-commit 훅이 강제한다.
 
-**`ai` 와 `mcp` 를 헷갈리지 말 것.** `ai` 는 **서비스**(AI 기능 전체가 자랄 자리)이고,
-MCP(에이전트 연동)는 그 서비스가 지금 가진 **기능 하나**다. 그래서
-`src/main/ai/**`(MCP 프로토콜 서버 구현)과 `docs/spec/ai-server.md` 는 `mcp` 가 맞고,
-서비스를 가리키는 자리(폴더·채널 접두어·브랜치)는 전부 `ai` 다 —
-MCP 게이트웨이를 다루는 채널도 `ai:mcpStatus` 처럼 서비스 접두어를 쓴다.
+**e2e 는 사용자가 시킬 때만 돌린다.** 지시 없이 `npm run e2e` 를 부르지 않는다(커밋도 e2e 없이
+통과한다). 지시가 오면 범위를 밝혀 `npm run e2e -- --only=<스위트,...>`, 전체는 `--all`.
+커밋과 함께면 `RUN_E2E=1 git commit …`.
+— **돌리는 시점 이야기일 뿐, 새 앱 흐름에 스위트를 쓰는 의무는 그대로다.**
 
-### 내 파일이 어디까지인가 (`<svc>` = 서비스 id)
-| 무엇 | 내 파일 |
-|---|---|
-| 화면 | `src/renderer/src/services/<svc>/**` |
-| 메인 IPC 채널 | `src/main/ipc/<svc>/**` |
-| 로컬 DB 스키마 | `src/main/store/migrations/<svc>.ts` |
-| MCP 노출 지도 | `src/main/ai/coverage/<svc>.ts` |
-| 렌더러 창구(preload) | `src/preload/services/<svc>.ts` |
-| 앱 구동 e2e 흐름 | `e2e/suites/NN-*.mjs` (내 서비스 영역 스위트 — 러너가 자동 발견하니 등록 불필요) |
-| 화면 품질 기준선 | `e2e/surface/baseline/<svc>.json` (생성물 — 손으로 고치지 않는다) |
-| 기획·테스트 정본 | `docs/spec/<svc>-*.md` · `docs/qa/<svc>-*.md` |
+## 🌿 Git
 
-### 건드리지 않는 공용 파일
-아래는 **새 서비스를 만들 때만** 바뀐다. 기능을 더할 때 열 일이 없다 — 열게 되면 대개
-설계가 잘못된 것이다: `nav/registry.ts` · `main/index.ts` · `main/ipc/registry.ts` ·
-`store/db.ts` · `store/migrations/index.ts` · `ai/coverage/index.ts` ·
-`preload/index.ts` · `preload/services/index.ts` · `e2e/smoke.mjs` · `e2e/lib/harness.mjs` ·
-`src/renderer/src/ui/**`(공용 컴포넌트 — 고쳐야 하면 `main` 에서, 다섯 서비스에 영향).
+- **`main` 은 통합 전용** — 각 서비스는 `feat/<svc>` 에서 일하고 완성분만 병합한다.
+  예외: 어느 서비스에도 안 속하는 것(공용 파일 구조·`AGENTS.md`·의존성 추가)은 `main` 에서.
+- **커밋·푸시는 사용자가 요청할 때만.** 커밋 메시지 끝에 AI 작성 표시(`Co-Authored-By`)를
+  붙인다 — 구체적인 값은 도구가 세션마다 준다(여기 적으면 모델이 바뀔 때마다 낡는다).
+- `--no-verify` 우회는 사용자 승인 없이 쓰지 않는다.
 
-### 네임스페이스 (충돌 방지)
-- **IPC 채널**: `<svc>:<동작>` (예: `infra:listContainers`, `ai:mcpStatus`). 기존 DB 채널은 무접두어 그대로 둔다(레거시 예외).
-- **SQLite 테이블**: `<svc>_` 접두어. 두 서비스가 같은 테이블을 선언하면 앱이 안 켜진다(런타임 검사).
-- **preload 최상위 키**: 서비스마다 달라야 한다. 겹치면 조립이 실패한다.
-- **MCP 도구 이름**: `<svc>_<동작>` (예: `api_get_spec`, `infra_reconcile`). 접두어가 없으면
-  다섯 서비스가 `create_version`·`list_versions` 같은 흔한 이름에서 **실제로 부딪힌다**
-  (api·db 가 정확히 그랬다). 도구는 IPC 채널과 달리 **한 목록에 평평하게 놓이므로** 이름이
-  유일해야 한다. 기존 DB 도구는 무접두어 그대로 둔다(IPC 채널과 같은 레거시 예외).
-- **디자인 토큰**: 새 색·간격은 `styles/globals.css` 의 `@theme` 에 **선언하고 쓴다.**
-  Tailwind v4 는 미선언 키의 유틸리티를 **아무 말 없이 안 만든다** — 선언 없이 `bg-danger-soft`
-  를 쓰면 그 자리가 전부 투명하게 그려진다(2026-07-29 api 에서 24곳이 그랬다).
-  `tokens.test.ts` 가 강제한다.
+## 🧱 설계 제약 (코드만 봐선 안 보이는 것)
 
-### 병합
-1. **받기** — `main` 이 움직였으면 본진에서 `node scripts/parallel/setup.mjs sync` 한 번.
-   뒤처진 워크트리만 빨리감기하고, **앞서 있거나 갈라진 것은 건드리지 않고 안내만** 한다
-   (`reset --hard` 는 어떤 경로로도 실행되지 않는다 — 작업물 보호).
-   갈라졌다고 나오면 그 폴더에서 `git rebase main` 후 다시.
-2. **올리기** — 기능이 끝나면 게이트(`npm run typecheck && npm test && npm run build`) 통과 후
-   본진에서 `git merge --ff-only feat/<서비스>`. `main` 은 다른 폴더가 열고 있으므로 병합은 본진 몫이다.
-3. 새 파일 위주라 충돌이 거의 없다 — 충돌이 잦으면 공용 파일을 건드리고 있다는 신호다.
-
-### Claude Code 가 만드는 임시 워크트리
-`claude --worktree <이름>` 이나 서브에이전트 `isolation: worktree` 는 **저장소 안**
-`.claude/worktrees/` 에 임시 워크트리를 만든다(위의 상설 5개와는 별개 — 잠깐 쓰고 버리는 용도).
-`.gitignore` 에 등재돼 있어 `git status` 를 더럽히지 않는다.
-그 워크트리에는 추적 안 되는 파일이 안 따라가므로 **`.worktreeinclude`** 에 적어 둔다 —
-지금은 `.harness-main`(steward 활성 스위치)이 들어 있다. 빠지면 하네스가 **꺼진 채로**
-작업하게 되고(경로 판정·테스트 의무·게이트 전부 누락) 그 사실이 조용히 지나간다.
-
-### 워크트리로 격리되지 않는 것 (한 번에 한 명)
-- **앱을 손으로 띄워 확인** — 로컬 DB(`userData/rockury.db`) 파일 하나를 공유하고, 앱은 단일 인스턴스
-  잠금이 걸려 있다. **앱은 언제나 하나만 뜬다** — 두 번째로 띄우면 그 프로세스는 스스로 종료하고
-  먼저 떠 있던 창이 앞으로 나온다. 여기서 함정: 두 번째 사람 눈엔 "창이 떴다"로 보이는데
-  **그 창은 남의 워크트리 코드**다(내 변경이 없다). 그래서 두 가지를 붙여 뒀다 —
-  ⑴ 두 번째 실행이 터미널에 어느 폴더 앱이 떠 있는지 알리고 종료한다(`src/main/instanceNotice.ts`),
-  ⑵ 개발 모드 타이틀바에 소스 폴더 배지가 뜬다(`rockury` / `rockury:api` …, 배포본엔 없음).
-  검증은 앱을 띄우지 말고 `npm test` 로 — 병렬 안전하다(e2e 는 지시가 있을 때만, 이것도 병렬 안전).
-- **`npm run db:reset`** — 도커 테스트 DB 는 고정 포트(13306/13307/15432) 공유. 남이 쓰는 중에 리셋하면 그 사람 테스트가 깨진다.
-- **의존성 추가(`package.json`/lock)** — `main` 에서 한 명만. 나머지는 rebase 로 받아간다.
-- e2e(`npm run e2e`)는 임시 userData + MCP 포트 0 이라 **동시에 돌려도 안전하다**(돌리는 시점은 사용자 지시).
-
-## ✅ 테스트 의무 (MUST — 예외 없음)
-테스트 없이 로직을 머지하지 않는다.
-1. **순수/도메인 로직 추가·변경 → 같은 커밋에 `*.test.ts` 동반.** 대상 예: diff/스냅샷, semver,
-   DDL 생성, 타입 카탈로그, 파생(derive), SQL 빌더/안전 판정, introspection 매핑 등 "입력→출력이
-   결정적인" 모든 것. 테스트는 대상 모듈 **옆에** `foo.test.ts`(vitest, node). 예: `src/renderer/src/services/db/**/*.test.ts`.
-2. 완료 게이트: `npm run typecheck && npm test && npm run build`. 여기까지가 커밋 조건이고
-   **pre-commit 훅이 강제**한다(steward gate 단계도 같은 셋).
-   **e2e 는 이 게이트에 없다 — 사용자가 명시적으로 지시할 때만 돌린다.**
-   (2026-07-30 사용자 지시: "내가 따로 명시적으로 e2e 테스트를 지시하기 전까지는 이제 하지마."
-   같은 지적이 세 번 나왔다 — 글자 하나 고치고도 전수 조사를 돌렸다. 그전 규칙은 훅 자동 실행이었고,
-   그 자동 실행을 뗐다. `runScope.test.ts` 가 훅에 자동 실행이 다시 붙는 것을 막는다.)
-   - **돌리지 않는다**: 지시 없이 `npm run e2e` 를 부르지 않는다. 커밋도 훅이 e2e 없이 통과한다.
-   - **지시가 오면**: 범위를 밝혀 `npm run e2e -- --only=<스위트,...>`, 전체는 `--all`(또는 `E2E_FULL=1`).
-     커밋과 함께 돌릴 때는 `RUN_E2E=1 git commit ...`(전체) · `RUN_E2E=--only=<스위트> git commit ...`.
-     docker test-db 전제 — 없으면 `npm run db:up`, 빼려면 `E2E_ARGS=--no-db`.
-   - **그래도 스위트는 계속 쓴다** — "안 돌린다"는 실행 시점 이야기다. 새 앱 흐름을 만들면
-     `e2e/suites/` 에 검사를 더하는 의무는 그대로다(아래 불변식 3).
-   - 범위 없이 `npm run e2e` 를 부르면 러너가 거부한다(종료코드 2 + 다음 수 안내 —
-     `e2e/lib/runScope.mjs`). 문서에 적어 두는 것만으로는 안 지켜져서 기계로 옮겼다.
-3. 버그를 고치면 그 버그를 재현하는 **회귀 테스트를 먼저/함께** 추가.
-4. UI 컴포넌트/스토어 자체는 강제 대상 아님 — 그 안의 **순수 로직은 분리해 테스트**, 실 앱 흐름은 `e2e/` 로 덮는다.
-5. **"나중에 테스트 추가" 금지 — 로직과 테스트는 한 묶음.** 건너뛰려면 **먼저 사용자에게 명시적으로 확인**받는다.
-
-## 🔒 절대 불변식 (기계가 강제 — 어기면 CI/테스트 실패)
-1. **테스트·스크립트는 실 사용자 데이터를 절대 파괴하지 않는다.** 앱 로컬 DB
-   (`~/Library/Application Support/Rockury/rockury.db`)를 테스트가 지우거나 그 경로로 앱을 띄우면 **안 된다**.
-   e2e 는 격리된 임시 userData(`--user-data-dir=<mkdtemp>`)로 띄우고 그 임시 디렉터리만 정리한다.
-   `e2e/isolation.test.ts` 가 **`e2e/**/*.mjs` 전체**를 재귀로 검사해 강제(실 경로 참조/실 DB rmSync/격리
-   없는 launch 시 `npm test` 실패) — 파일을 쪼개 가드를 빠져나가지 못한다. 검사 대상 목록은
-   하드코딩이 아니라 폴더 스캔이라, 새 스위트 파일은 등록 없이 자동으로 검사에 들어온다.
-2. **커밋 게이트는 git pre-commit 훅이 강제**(`scripts/git-hooks/pre-commit`, `core.hooksPath` 로 추적·공유).
-   typecheck && test && build 통과해야 커밋. **e2e 는 기본으로 안 돈다** — 사용자 지시가 있을 때
-   `RUN_E2E=1`(전체) 또는 `RUN_E2E=--only=<스위트>` 로만 켠다(`runScope.test.ts` 가 자동 실행 부활을 막는다).
-   `npm install` 시 `prepare` 가 훅 경로 자동 설정.
-   **`--no-verify` 우회는 사용자 승인 없이 쓰지 않는다.**
-3. **e2e 는 버리는 1회용이 아니라 누적 회귀 자산이다.** (지시 없이 **돌리지** 않는 것과, 새 흐름에
-   스위트를 **쓰는** 의무는 별개다 — 쓰는 쪽은 그대로다.) 구조는 러너(`e2e/smoke.mjs`) + 하네스
-   (`e2e/lib/harness.mjs`) + **스위트(`e2e/suites/NN-*.mjs`)**. 새 실 앱 흐름은 알맞은 스위트에 체크를
-   더하거나 새 스위트 파일을 `e2e/suites/` 에 놓고, **지우지 않는다**. 러너가 그 폴더를 읽어 파일
-   이름 순으로 돌리므로 **등록 목록이 없다** — 공용 파일을 건드리지 않고 스위트를 더할 수 있다
-   (`isolation.test.ts` 가 하드코딩 회귀를 막는다). 파일 이름의 번호가 곧 실행 순서이고 그 순서는
-   상태 의존 순서(앞이 만든 설계·연결을 뒤가 쓴다)이므로 임의로 바꾸지 않는다.
-   **번호는 서비스별 구간에서 고른다** — 등록 목록이 없다는 것은 번호를 누가 쓰는지도 아무도
-   모른다는 뜻이라, 2026-07-29 에 infra·uiux·api 셋이 동시에 13번을 잡았다. 구간을 나눠 그 길을 막았다:
-
-   | 구간 | 주인 |
-   |---|---|
-   | `01`–`12` | **기존 블록**(공용·db·ai 혼재) — 내부 순서가 상태 의존이라 **재배치하지 않는다** |
-   | `13`–`19` | infra |
-   | `20`–`29` | uiux |
-   | `30`–`49` | api |
-   | `50`–`59` · `60`–`69` | 나중에 db · ai 가 더할 흐름(기존 것은 01–12 에 그대로 둔다) |
-
-   (2026-07-29 api 구간을 `30`–`39` → `30`–`49` 로 넓혔다. 열 칸을 다 써서 넘칠 때
-   **말없이 옆 칸을 쓰면** 그 서비스가 자기 첫 스위트를 놓는 순간 `main` 에서 깨진다 —
-   구간 표를 만든 이유가 바로 그것이라, 넘치면 표를 고치는 것이 규칙이다.
-   `isolation.test.ts` 가 이제 **구간 밖 번호를 `npm test` 에서 막는다** — 사람이
-   표를 기억하는 데 기대지 않는다.)
-
-   중복 번호와 `meta.name` ↔ 파일 이름 어긋남은 **`isolation.test.ts` 가 `npm test` 에서 막는다** —
-   사람이 `ls` 로 알아채는 데 기대지 않는다.
-   `meta.needsDb: true` 인 스위트는 test-db 필요 — `--no-db` 로 건너뛰면 **"미검증"으로 표시**된다
-   (조용한 통과 금지). 스위트별 상태·체크 결과는 체크 하나마다
-   `.harness/steward/artifacts/e2e-checkpoint.json` 에 기록되어, 중간에 죽어도 어디까지 돌았고
-   무엇이 미실행인지 남는다. (steward `ui-preview` 능력도 검증 드라이브를 스위트로 승격하도록 규정.)
-   **UI 품질 게이트(`e2e/surface/verify.mjs`)는 셸 훅(`data-nav-service/module/view`)으로 전 서비스×모듈×뷰를
-   자동 순회**하므로 새 화면은 nav 에 등록만 하면 커버리지에 자동으로 들어온다 — 이 data-nav 훅을 지우면
-   순회가 깨지고 안전핀(MIN_LEAVES)이 검증불가(2)로 실패한다. 훅을 지우지 말 것.
-   **검사 창은 주 디스플레이 + 1440×900 으로 못박혀 있다** — 커서가 있는 화면(좁은 세로 모니터 등)에
-   창이 뜨면 macOS 가 폭을 잘라 잘림 판정이 실행마다 뒤집혔다(flake 실측). 크기를 못 만들면
-   조용히 다른 폼팩터로 재지 않고 검증불가로 실패한다. 창 크기를 바꾸면 기준선 재수립 필요.
-4. **MCP 서버는 앱 능력과 함께 자란다(스테일 금지).** MCP(에이전트 연동) 서버는 메인 프로세스 내장
-   (`src/main/ai/`, 명세 `docs/spec/ai-server.md`). `src/main/ipc/**` 의 모든 채널은
-   **`src/main/ai/coverage/<서비스>.ts`** 에 **노출(도구 대응) 또는 제외(사유)** 로 등재돼야 하며
-   `coverage.test.ts` 가 하위 폴더까지 재귀로 스캔해 강제한다 — 새 IPC 채널을 미등재로 두거나,
-   지운 채널을 지도에 남기면 `npm test` 실패. 새 채널을 만들면 MCP 도구를 함께 갱신하거나
-   의식적으로 제외 사유를 적는다. 두 서비스가 같은 채널을 등재해도 실패한다(조용한 덮어쓰기 방지).
-
-## 검증 인프라
-- 단위: `npm test`(vitest). watch: `npm run test:watch`.
-- e2e 스모크(**사용자 지시가 있을 때만 실행**): `npm run build && npm run e2e -- --only=<스위트,...>`
-  (Playwright `_electron`). 함정·패턴은 `e2e/README.md`.
-  옵션: `--only=<스위트,...>`(기본 — 지시받은 범위만) · `--list` · `--no-db`(test-db 스위트 건너뜀) ·
-  `--continue`(깨져도 계속) · `--all`(전체 — 전체를 돌려 달라는 지시가 있을 때만).
-  결과 기록: `.harness/steward/artifacts/e2e-checkpoint.json`.
-- UI 품질: `npm run surface-verify`(전 화면 순회 · 기준선 `e2e/surface/baseline.json`).
-- 실 DB: `npm run db:up`(docker mysql:13306 / mariadb:13307 / postgresql:15432 + sqlite 파일).
-  docker 는 기본 전제. Docker Desktop 자격 헬퍼가 PATH 에 없어도 스크립트가 표준 위치를 덧붙여 찾는다.
-
-## 앱 구동 e2e 함정 (실측)
-- **접근성 쿼리(`getByRole` 등)는 이 Electron 창을 크래시**시킨다 → **CSS/text 로케이터만** 사용.
-- Radix 메뉴아이템→Dialog 는 `setTimeout(onSelect,0)` 로 열어야 body `pointer-events:none` 잔존 회피.
-
-## 코드 관례
-- 로컬 저장소는 `node:sqlite`(내장). 네이티브 모듈(better-sqlite3 등) 도입 금지 — `electron-rebuild` 회피가 의도된 선택.
-  **순수 JS 패키지는 이 금지에 안 걸린다** — 막는 것은 빌드가 필요한 네이티브 바인딩이다.
-  (2026-07-29 `@grpc/grpc-js`·`@grpc/proto-loader` 추가 — gRPC 는 HTTP/2 프레이밍이라 손으로 못 짠다.
-  둘 다 순수 JS 라 `electron-rebuild` 가 필요 없다.)
-- zustand 5: `create<T>()(...)` **curried** 형태 사용.
+- **네이티브 모듈 금지** — 로컬 저장소는 내장 `node:sqlite` 다. better-sqlite3 류를 넣지 않는다
+  (`electron-rebuild` 회피가 의도된 선택). **순수 JS 패키지는 이 금지에 안 걸린다** — 막는 것은
+  빌드가 필요한 네이티브 바인딩이다.
+- zustand 5 는 `create<T>()(...)` **curried** 형태로 쓴다.
 - 주석·식별자는 주변 코드 스타일(한국어 주석 다수)에 맞춘다.
+- 자명하지 않은 결정(정책·트레이드오프·우회·마법값)에는 **"왜"를 주석 한 줄로** 남긴다.
+  코드가 이미 말하는 "무엇"을 반복하는 주석은 쓰지 않는다.
+
+## 📚 더 읽을 곳 (필요할 때만)
+
+| 언제 | 어디 |
+|---|---|
+| 워크트리에서 일한다 · 새 서비스/IPC 채널/e2e 스위트를 만든다 | `docs/agents/parallel-dev.md` |
+| 가드가 걸렸는데 이유를 모른다 · 가드를 고친다 | `docs/agents/guardrails.md` |
+| e2e 를 쓴다(앱 구동 함정·패턴) | `e2e/README.md` |
+| 이 기능이 무엇이어야 하나 · 무엇을 검증하나 | `docs/spec/<svc>-*.md` · `docs/qa/<svc>-*.md` |
+| 합의된 용어의 뜻 | `docs/glossary.md` |
+| DB 서비스가 왜 이 모양인가(설계 근거·로드맵) | `docs/before-steward-background/` |
+
+명령: `npm run dev` · `npm test`(watch `test:watch`) · `npm run build` ·
+`npm run surface-verify`(화면 품질) · `npm run db:up`(도커 테스트 DB).

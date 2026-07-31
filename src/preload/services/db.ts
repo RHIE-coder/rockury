@@ -98,7 +98,7 @@ export interface CreateVersionInput {
  *   introspection/query/savedQueries/collections/migration/diagram — 실 DB 역설계·실행·마이그레이션 (봉투)
  *
  * 새 창구가 필요하면 이 파일에만 더한다 — `src/preload/index.ts` 나 다른 서비스 파일은
- * 건드리지 않는다(병렬 개발 파일 소유권, AGENTS.md).
+ * 건드리지 않는다(파일 소유권 — `docs/agents/parallel-dev.md`).
  */
 export const dbApi = {
   designs: {

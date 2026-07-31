@@ -135,7 +135,7 @@ function printNextSteps(todo) {
   say()
   for (const p of todo) say(`  ${C.dim}cd${C.x} ${p.dir} ${C.dim}&&${C.x} claude    ${C.dim}# ${p.label} 담당${C.x}`)
   say()
-  say(`${C.b}공유 자원 규칙${C.x} ${C.dim}(워크트리로 격리되지 않는 것들 — AGENTS.md 병렬 개발 규칙)${C.x}`)
+  say(`${C.b}공유 자원 규칙${C.x} ${C.dim}(워크트리로 격리되지 않는 것들 — docs/agents/parallel-dev.md)${C.x}`)
   say(`  · 앱을 손으로 띄워 확인하는 건 ${C.b}한 번에 한 명${C.x} — 로컬 DB 파일 하나를 공유하고, 앱은 단일 인스턴스다.`)
   say(`  · ${C.b}npm run db:reset${C.x} 도 한 번에 한 명 — 도커 테스트 DB 는 고정 포트 공유다.`)
   say(`  · 의존성 추가(package.json)는 ${C.b}main 에서 한 명${C.x}만, 나머지는 rebase 로 받아간다.`)

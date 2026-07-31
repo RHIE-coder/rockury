@@ -85,6 +85,8 @@ export async function run(ctx) {
 
     // ── 오조작 방지: 환경을 고르기 전에는 못 보낸다 (guard AC-1) ──
     await click('[data-nav-module="runner"]')
+    // 모듈은 마지막에 보던 뷰로 돌아온다(2026-07-30) — 원하는 뷰는 명시해서 들어간다.
+    await click('[data-nav-view="send"]')
     await page.waitForTimeout(400)
     await click('[data-api-send-pick="echo"]')
     await page.waitForTimeout(300)
@@ -96,6 +98,8 @@ export async function run(ctx) {
     await page.waitForTimeout(300)
     await click('[data-api-env-card="E2E-DEV"] button[data-api-env-select]')
     await click('[data-nav-module="runner"]')
+    // 모듈은 마지막에 보던 뷰로 돌아온다(2026-07-30) — 원하는 뷰는 명시해서 들어간다.
+    await click('[data-nav-view="send"]')
     await page.waitForTimeout(400)
     check('환경을 고른 뒤에도 필수 파라미터가 비면 여전히 막힌다', await page.locator('button[data-api-send]').isDisabled())
 
@@ -235,6 +239,8 @@ export async function run(ctx) {
       check('운영 환경을 고르면 상시 경고 띠가 뜬다', (await page.locator('[data-api-prod-band]').count()) === 1)
 
       await click('[data-nav-module="runner"]')
+      // 모듈은 마지막에 보던 뷰로 돌아온다(2026-07-30) — 원하는 뷰는 명시해서 들어간다.
+      await click('[data-nav-view="send"]')
       await page.waitForTimeout(400)
       await click('[data-api-send-pick="echo"]')
       await page.locator('input[data-api-call-param="userId"]').fill('u_2')
