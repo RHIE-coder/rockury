@@ -1,4 +1,5 @@
 import type { TableDef } from '../../workspaces/definition/types'
+import type { TableRef } from '../../schemaRef'
 import type { DialectId } from '../../dialects'
 
 /**
@@ -17,6 +18,19 @@ export interface Statement {
 export function quoteIdent(dialect: SqlDialect, name: string): string {
   if (dialect === 'postgresql' || dialect === 'sqlite') return `"${name.replace(/"/g, '""')}"`
   return `\`${name.replace(/`/g, '``')}\``
+}
+
+/**
+ * SQL 에 쓸 테이블 이름 — 스키마를 알면 **반드시 한정한다**(`스키마.테이블`).
+ *
+ * 왜 "알면 반드시"인가: 이름만 넣으면 연결이 처음 붙은 기본 스키마에서 찾는다. 범위(scope)로
+ * 다른 스키마를 보고 있으면 없다고 하거나(2026-08-01 피드백 — `Table 'testdb.customers'
+ * doesn't exist`), **더 나쁘게는 같은 이름의 다른 테이블을 조용히 읽는다.**
+ * 스키마가 하나뿐일 때 붙는 한정은 뜻이 안 바뀌므로, "여럿일 때만" 같은 조건을 두지 않는다.
+ */
+export function quoteTable(dialect: SqlDialect, t: TableRef): string {
+  const q = (n: string): string => quoteIdent(dialect, n)
+  return t.schema ? `${q(t.schema)}.${q(t.name)}` : q(t.name)
 }
 
 const ph = (dialect: SqlDialect, i: number): string => (dialect === 'postgresql' ? `$${i}` : '?')
@@ -41,11 +55,11 @@ export interface SelectOptions {
 }
 
 /** SELECT * … [WHERE …] [ORDER BY …] LIMIT/OFFSET. WHERE 값은 파라미터 바인드(문자열 조립 금지). */
-export function buildSelect(dialect: SqlDialect, table: string, opts: SelectOptions): Statement {
+export function buildSelect(dialect: SqlDialect, table: TableRef, opts: SelectOptions): Statement {
   const q = (n: string): string => quoteIdent(dialect, n)
   const params: unknown[] = []
   let i = 1
-  let sql = `SELECT * FROM ${q(table)}`
+  let sql = `SELECT * FROM ${quoteTable(dialect, table)}`
 
   const clauses = (opts.filters ?? [])
     .filter((f) => f.column && (NO_VALUE_OPS.includes(f.op) || f.value !== ''))
@@ -66,7 +80,7 @@ export function buildSelect(dialect: SqlDialect, table: string, opts: SelectOpti
 
 export function buildInsert(
   dialect: SqlDialect,
-  table: string,
+  table: TableRef,
   values: Record<string, unknown>
 ): Statement {
   const cols = Object.keys(values)
@@ -80,12 +94,15 @@ export function buildInsert(
       return ph(dialect, i++)
     })
     .join(', ')
-  return { sql: `INSERT INTO ${q(table)} (${cols.map(q).join(', ')}) VALUES (${valSql})`, params }
+  return {
+    sql: `INSERT INTO ${quoteTable(dialect, table)} (${cols.map(q).join(', ')}) VALUES (${valSql})`,
+    params
+  }
 }
 
 export function buildUpdate(
   dialect: SqlDialect,
-  table: string,
+  table: TableRef,
   pkColumns: string[],
   pkValues: Record<string, unknown>,
   changes: Record<string, unknown>
@@ -108,12 +125,12 @@ export function buildUpdate(
       return `${q(pk)} = ${ph(dialect, i++)}`
     })
     .join(' AND ')
-  return { sql: `UPDATE ${q(table)} SET ${setSql} WHERE ${whereSql}`, params }
+  return { sql: `UPDATE ${quoteTable(dialect, table)} SET ${setSql} WHERE ${whereSql}`, params }
 }
 
 export function buildDelete(
   dialect: SqlDialect,
-  table: string,
+  table: TableRef,
   pkColumns: string[],
   pkValues: Record<string, unknown>
 ): Statement {
@@ -127,7 +144,7 @@ export function buildDelete(
       return `${q(pk)} = ${ph(dialect, i++)}`
     })
     .join(' AND ')
-  return { sql: `DELETE FROM ${q(table)} WHERE ${whereSql}`, params }
+  return { sql: `DELETE FROM ${quoteTable(dialect, table)} WHERE ${whereSql}`, params }
 }
 
 /** 테이블의 PK 컬럼명(순서 유지). PK 제약의 컬럼 참조를 컬럼명으로 해석. */

@@ -82,7 +82,9 @@ async function fetchCurrent(
 
   for (const set of ctx.sets) {
     if (!seedApplyReadiness(set, byName.get(set.tableName)).ready) continue
-    const st = buildSelect(ctx.dialect, set.tableName, { limit: ROW_FETCH_CAP, offset: 0 })
+    // 이름만 — 설계 테이블의 `schema` 는 설계부 기본값(`public`)이라 대상 DB 의 실제 스키마가
+    // 아니다(자세한 이유는 seedApplyPlan 의 `target`). 반영 계획이 쓰는 이름과 같아야 한다.
+    const st = buildSelect(ctx.dialect, { name: set.tableName }, { limit: ROW_FETCH_CAP, offset: 0 })
     const res = await window.rockury.query.runParams(ctx.connectionId, st.sql, st.params)
     const rows = (res.rows ?? []) as Record<string, unknown>[]
     current[set.tableName] = rows

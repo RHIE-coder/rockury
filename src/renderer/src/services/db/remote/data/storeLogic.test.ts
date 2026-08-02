@@ -24,7 +24,7 @@ const rows = [
 ]
 
 beforeEach(() => {
-  useDataStore.setState({ table: 'u', columns: ['id', 'name'], rows, edits: {}, deletes: {}, inserts: [] })
+  useDataStore.setState({ table: { name: 'u' }, columns: ['id', 'name'], rows, edits: {}, deletes: {}, inserts: [] })
 })
 
 describe('buildStatements 순서/규칙', () => {
@@ -51,5 +51,23 @@ describe('buildStatements 순서/규칙', () => {
 
   it('빈 pending → 문 없음', () => {
     expect(useDataStore.getState().buildStatements('mysql', tableDef)).toEqual([])
+  })
+
+  // 회귀(2026-08-01 화면 피드백): 범위를 켜서 보는 표는 그 스키마에 있다. 커밋문이 이름만
+  // 쓰면 연결의 기본 스키마로 나가 없는 테이블을 고치려 들거나 남의 표를 고친다.
+  it('테이블에 스키마가 있으면 커밋문도 한정 이름을 쓴다', () => {
+    const scoped: TableDef = { ...tableDef, schema: 'service1' }
+    const key = rowKey(pk, rows[0])
+    useDataStore.setState({
+      edits: { [key]: { name: 'A' } },
+      deletes: { [rowKey(pk, rows[1])]: true },
+      inserts: [{ tempId: 'n0', values: { name: 'c' } }]
+    })
+    const stmts = useDataStore.getState().buildStatements('mysql', scoped)
+    expect(stmts.map((s) => s.sql)).toEqual([
+      'DELETE FROM `service1`.`u` WHERE `id` = ?',
+      'UPDATE `service1`.`u` SET `name` = ? WHERE `id` = ?',
+      'INSERT INTO `service1`.`u` (`name`) VALUES (?)'
+    ])
   })
 })

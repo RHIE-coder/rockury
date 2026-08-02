@@ -28,9 +28,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import type { Constraint, TableDef } from '../workspaces/definition/types'
 import { downloadText } from '../download'
 import { useActiveConnection } from '../connections/store'
+import { sameTable } from '../schemaRef'
 import { useRemoteStore } from './store'
 import { columnKeyKinds, splitTablesAndViews } from './introspection'
-import { canEdit, pkColumns, type Filter } from './data/sqlBuilder'
+import { canEdit, pkColumns, quoteTable, type Filter, type SqlDialect } from './data/sqlBuilder'
 import { columnKind } from './data/cellKind'
 import { autoColumnWidths, COL_WIDTH_DEFAULTS } from './data/colWidth'
 import { compactJson, jsonError, prettyJson, summarizeJson } from './data/jsonCell'
@@ -156,7 +157,7 @@ export function DataView() {
   useEffect(() => {
     setHidden(new Set())
     setColW({})
-  }, [d.table])
+  }, [d.table?.schema, d.table?.name])
 
   const NUM_COL_W = 56
   const ACT_COL_W = 32
@@ -169,7 +170,9 @@ export function DataView() {
   const { tables: baseTables, views } = splitTablesAndViews(all)
   const constraints = flattenConstraints(all)
 
-  const selected: TableDef | null = all.find((t) => t.name === d.table) ?? null
+  // 스키마까지 맞춰 되찾는다 — 이름만으로 찾으면 동명 표 중 목록의 첫 번째가 잡힌다.
+  const active = d.table
+  const selected: TableDef | null = (active && all.find((t) => sameTable(t, active))) || null
   const editable = selected ? canEdit(selected) : false
   const pk = selected ? pkColumns(selected) : []
   const fks = selected ? fkMap(selected) : {}
@@ -267,7 +270,7 @@ export function DataView() {
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
               {baseTables.map((t) => (
-                <TableRow key={t.id} t={t} active={t.name === d.table} onPick={() => pickTable(t)} />
+                <TableRow key={t.id} t={t} active={!!active && sameTable(t, active)} onPick={() => pickTable(t)} />
               ))}
               {views.length > 0 && (
                 <div className="mt-1 flex items-center gap-1.5 border-t border-line px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
@@ -275,7 +278,7 @@ export function DataView() {
                 </div>
               )}
               {views.map((t) => (
-                <TableRow key={t.id} t={t} active={t.name === d.table} onPick={() => pickTable(t)} isView />
+                <TableRow key={t.id} t={t} active={!!active && sameTable(t, active)} onPick={() => pickTable(t)} isView />
               ))}
               {all.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">테이블 없음</div>}
             </div>
@@ -285,7 +288,7 @@ export function DataView() {
             {/* 목록 표현은 Definition·Diagram 과 같은 공용 패널을 쓴다(구현 하나). */}
             <ConstraintListPanel
               tables={all}
-              activeTableName={d.table || null}
+              activeTableName={d.table?.name ?? null}
               onPickTable={pickTable}
               filter={cfilter}
               onFilterChange={setCfilter}
@@ -1038,8 +1041,7 @@ function FkLookup({ connectionId, dialect, sourceCol, refTo, onPick, onClose }: 
           where = ` WHERE CAST(${qid(refTo.column)} AS ${textType}) LIKE ${ph}`
           params.push(`%${q.trim()}%`)
         }
-        // 스키마 한정 이름 — 안 붙이면 연결의 기본 스키마에서 찾아 다른 테이블을 읽는다.
-        const target = refTo.schema ? `${qid(refTo.schema)}.${qid(refTo.table)}` : qid(refTo.table)
+        const target = quoteTable(dialect as SqlDialect, { schema: refTo.schema, name: refTo.table })
         const sql = `SELECT * FROM ${target}${where} ORDER BY ${qid(refTo.column)} LIMIT ${FK_PAGE} OFFSET ${page * FK_PAGE}`
         const r = await window.rockury.query.runParams(connectionId, sql, params)
         setRows(r.rows)

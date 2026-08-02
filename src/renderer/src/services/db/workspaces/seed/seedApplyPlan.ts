@@ -212,6 +212,13 @@ export function planSeedApply(input: SeedApplyInput): SeedApplyPlan {
   const summary = { inserts: 0, updates: 0, deleteCandidates: 0, unchanged: 0 }
 
   const tableByName = new Map(input.tables.map((t) => [t.name, t]))
+  /**
+   * 시드 문장은 **이름만** 쓴다 — 설계 테이블의 `schema` 를 붙이면 안 된다.
+   * 그 값은 설계부 기본값(`public`, `db/schemaRef.DEFAULT_SCHEMA`)이라 대상 DB 에 같은 이름이
+   * 있으리란 보장이 없다(MySQL 에 `public` 데이터베이스는 없다). 반영 대상 스키마를 고르는
+   * 일은 아직 정해지지 않았다 — 정해지기 전까지 연결의 기본 스키마에 맡긴다.
+   */
+  const target = (name: string): { name: string } => ({ name })
   const pkOf = (name: string): string[] => {
     const t = tableByName.get(name)
     return t ? pkColumns(t) : []
@@ -324,7 +331,7 @@ export function planSeedApply(input: SeedApplyInput): SeedApplyPlan {
           table: set.tableName,
           label,
           changedColumns,
-          statement: buildUpdate(input.dialect, set.tableName, set.naturalKey, keyValues, changes)
+          statement: buildUpdate(input.dialect, target(set.tableName), set.naturalKey, keyValues, changes)
         })
         summary.updates++
         continue
@@ -399,7 +406,7 @@ export function planSeedApply(input: SeedApplyInput): SeedApplyPlan {
         kind: 'insert',
         table: set.tableName,
         label,
-        statement: buildInsert(input.dialect, set.tableName, insertValues)
+        statement: buildInsert(input.dialect, target(set.tableName), insertValues)
       })
       summary.inserts++
     }
@@ -415,7 +422,7 @@ export function planSeedApply(input: SeedApplyInput): SeedApplyPlan {
           kind: 'delete-candidate',
           table: set.tableName,
           label: set.naturalKey.map((c) => asText(dbRow[c]) ?? '∅').join(' · '),
-          statement: buildDelete(input.dialect, set.tableName, set.naturalKey, keyValues)
+          statement: buildDelete(input.dialect, target(set.tableName), set.naturalKey, keyValues)
         })
         summary.deleteCandidates++
       }

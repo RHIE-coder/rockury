@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { TableDef } from '../../workspaces/definition/types'
+import type { TableRef } from '../../schemaRef'
 import type { DialectId } from '../../dialects'
 import {
   buildDelete,
@@ -32,7 +33,12 @@ interface NewRow {
 }
 
 interface DataState {
-  table: string | null
+  /**
+   * 지금 고른 테이블 — **이름만으로는 못 가린다.** 범위(scope)에 스키마가 둘 이상 켜져 있으면
+   * 같은 이름 테이블이 여럿 올라오고(`service1.customers` · `service2.customers`),
+   * 이름으로 되찾으면 목록의 첫 번째가 잡혀 **엉뚱한 표의 행을 보여 준다**(§db/schemaRef).
+   */
+  table: TableRef | null
   columns: string[]
   rows: Record<string, unknown>[]
   page: number
@@ -105,7 +111,13 @@ export const useDataStore = create<DataState>()((set, get) => ({
         // 이미 정리됐을 수 있음
       }
     }
-    set({ table: tableDef.name, page: 0, orderBy: null, filters: [], ...clearPending() })
+    set({
+      table: { schema: tableDef.schema, name: tableDef.name },
+      page: 0,
+      orderBy: null,
+      filters: [],
+      ...clearPending()
+    })
     await get().load(envId, dialect, tableDef)
   },
 
@@ -113,7 +125,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
     set({ loading: true, error: null })
     try {
       const { pageSize, page, orderBy, filters } = get()
-      const { sql, params } = buildSelect(dialect, tableDef.name, {
+      const { sql, params } = buildSelect(dialect, tableDef, {
         limit: pageSize,
         offset: page * pageSize,
         orderBy: orderBy ?? undefined,
@@ -209,7 +221,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
       const row = byKey.get(key)
       if (!row) continue
       const pkValues = Object.fromEntries(pk.map((c) => [c, row[c]]))
-      stmts.push(buildDelete(dialect, tableDef.name, pk, pkValues))
+      stmts.push(buildDelete(dialect, tableDef, pk, pkValues))
     }
     // 수정(삭제 대상 제외)
     for (const [key, changes] of Object.entries(s.edits)) {
@@ -218,12 +230,12 @@ export const useDataStore = create<DataState>()((set, get) => ({
       const row = byKey.get(key)
       if (!row) continue
       const pkValues = Object.fromEntries(pk.map((c) => [c, row[c]]))
-      stmts.push(buildUpdate(dialect, tableDef.name, pk, pkValues, changes))
+      stmts.push(buildUpdate(dialect, tableDef, pk, pkValues, changes))
     }
     // 삽입
     for (const ins of s.inserts) {
       if (Object.keys(ins.values).length === 0) continue
-      stmts.push(buildInsert(dialect, tableDef.name, ins.values))
+      stmts.push(buildInsert(dialect, tableDef, ins.values))
     }
     return stmts
   },

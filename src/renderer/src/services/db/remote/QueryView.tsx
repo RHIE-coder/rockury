@@ -42,6 +42,8 @@ import type { TableDef } from '../workspaces/definition/types'
 import type { DialectId } from '../dialects'
 import { downloadText } from '../download'
 import { useActiveConnection } from '../connections/store'
+import { qualifiedName, type TableRef } from '../schemaRef'
+import { quoteTable, type SqlDialect } from './data/sqlBuilder'
 import { useRemoteStore } from './store'
 import { columnKeyKinds } from './introspection'
 import { badgeLabels } from './data/columnMeta'
@@ -112,7 +114,7 @@ export function QueryView() {
 
   const [showSchema, setShowSchema] = useState(true)
   const [treeFilter, setTreeFilter] = useState('')
-  const [preview, setPreview] = useState<string | null>(null)
+  const [preview, setPreview] = useState<TableRef | null>(null)
   const [ctx, setCtx] = useState<{ x: number; y: number; id: string; kind: 'folder' | 'query' } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -467,7 +469,7 @@ function QueryTreeRow({ node, active, editing, collapsed, dropTarget, onSelect, 
 }
 
 /** 스키마 사이드 패널 — 테이블/컬럼 트리 + 검색 + 클릭 삽입 + 테이블 미리보기. */
-function SchemaPanel({ tables, onInsert, onPreview, onClose }: { tables: TableDef[]; onInsert: (name: string) => void; onPreview: (table: string) => void; onClose: () => void }) {
+function SchemaPanel({ tables, onInsert, onPreview, onClose }: { tables: TableDef[]; onInsert: (name: string) => void; onPreview: (table: TableRef) => void; onClose: () => void }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const query = q.trim().toLowerCase()
@@ -491,7 +493,7 @@ function SchemaPanel({ tables, onInsert, onPreview, onClose }: { tables: TableDe
               <div className="flex items-center gap-1 px-2 py-1 text-[12px]">
                 <button type="button" onClick={() => setOpen((o) => ({ ...o, [t.name]: !expanded }))} className="text-muted">{expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}</button>
                 <button type="button" onClick={() => onInsert(t.name)} className={cn('min-w-0 flex-1 truncate text-left font-mono', t.isView ? 'text-accent' : 'font-semibold text-fg', 'hover:text-accent')} title="에디터에 삽입">{t.name}</button>
-                <button type="button" onClick={() => onPreview(t.name)} className="text-muted hover:text-accent" title="미리보기(SELECT * LIMIT 50)"><Table2 className="size-3" /></button>
+                <button type="button" onClick={() => onPreview({ schema: t.schema, name: t.name })} className="text-muted hover:text-accent" title="미리보기(SELECT * LIMIT 50)"><Table2 className="size-3" /></button>
                 <span className="text-[10.5px] text-muted">{t.columns.length}</span>
               </div>
               {expanded && t.columns.map((c) => {
@@ -555,16 +557,17 @@ function JsonTree({ data, depth = 0, label }: { data: unknown; depth?: number; l
 }
 
 /** 테이블 미리보기 모달 — SELECT * … LIMIT 50. */
-function TablePreviewModal({ connectionId, dialect, table, onClose }: { connectionId: string; dialect: string; table: string; onClose: () => void }) {
+function TablePreviewModal({ connectionId, dialect, table, onClose }: { connectionId: string; dialect: string; table: TableRef; onClose: () => void }) {
   const [rows, setRows] = useState<Record<string, unknown>[]>([])
   const [cols, setCols] = useState<string[]>([])
   const [err, setErr] = useState<string | null>(null)
-  const qc = dialect === 'mysql' || dialect === 'mariadb' ? '`' : '"'
   const ref = useRef(table)
   useEffect(() => {
     void (async () => {
       try {
-        const r = await window.rockury.query.run(connectionId, `SELECT * FROM ${qc}${ref.current}${qc} LIMIT 50`)
+        // 스키마까지 한정한다 — 이름만 쓰면 연결의 기본 스키마에서 찾아 없다고 하거나 남의 표를 읽는다.
+        const target = quoteTable(dialect as SqlDialect, ref.current)
+        const r = await window.rockury.query.run(connectionId, `SELECT * FROM ${target} LIMIT 50`)
         setRows(r.rows)
         setCols(r.columns)
       } catch (e) {
@@ -576,7 +579,7 @@ function TablePreviewModal({ connectionId, dialect, table, onClose }: { connecti
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl">
-        <DialogHeader><DialogTitle>미리보기 · {table} (상위 50행)</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>미리보기 · {qualifiedName(table)} (상위 50행)</DialogTitle></DialogHeader>
         {err ? (
           <div className="rounded bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{err}</div>
         ) : (
