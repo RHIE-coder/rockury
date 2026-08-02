@@ -16,6 +16,7 @@ import {
   parseFeedbackPayload,
   probePoints,
   renderNoteMarkdown,
+  sketchFileName,
   slugifyRoute,
   type FeedbackPayload
 } from './devFeedback'
@@ -30,11 +31,23 @@ function payload(over: Partial<FeedbackPayload> = {}): FeedbackPayload {
   return {
     location: { route: '/db/design/schema', label: 'DB › Design › Schema', context: [] },
     viewport: { width: 1440, height: 900 },
-    marks: [{ memo: '여백이 좁다', bounds: { x: 10, y: 20, width: 30, height: 40 }, target: null }],
+    marks: [
+      {
+        kind: 'shape',
+        memo: '여백이 좁다',
+        bounds: { x: 10, y: 20, width: 30, height: 40 },
+        target: null,
+        sketchFile: null
+      }
+    ],
     logs: [],
     ...over
   }
 }
+
+/** 1×1 투명 PNG. 그림이 "형식이 맞는가"만 보는 검증에 실물 크기는 필요 없다. */
+const TINY_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
 describe('표시 번호와 배지', () => {
   it('스무 개까지는 동그라미 숫자, 넘으면 괄호 숫자로 떨어진다', () => {
@@ -219,6 +232,65 @@ describe('보낸 내용 검증', () => {
     if (!res.ok) return
     expect(res.value.marks[0].target).toBeNull()
   })
+
+  it('갈래를 안 보내는 옛 본문도 받는다 — 그리기만 있던 시절의 표시는 전부 그린 표시다', () => {
+    const res = parseFeedbackPayload({
+      ...payload(),
+      marks: [{ memo: 'x', bounds: { x: 0, y: 0, width: 1, height: 1 } }]
+    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.value.marks[0].kind).toBe('shape')
+  })
+
+  it('콕 집은 표시는 핀으로 들어온다', () => {
+    const res = parseFeedbackPayload({
+      ...payload(),
+      marks: [{ kind: 'pin', memo: 'x', bounds: { x: 0, y: 0, width: 22, height: 22 } }]
+    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.value.marks[0].kind).toBe('pin')
+  })
+})
+
+describe('제안 그림', () => {
+  it('번호는 배지 번호와 같은 순서다', () => {
+    expect(sketchFileName(0)).toBe('sketch-1.png')
+    expect(sketchFileName(2)).toBe('sketch-3.png')
+  })
+
+  it('그림이 붙은 표시만 파일 목록에 오르고, 본문에는 이름만 남는다', () => {
+    const one = payload().marks[0]
+    const res = parseFeedbackPayload({
+      ...payload(),
+      marks: [{ ...one, sketch: null }, { ...one, sketch: TINY_PNG }]
+    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.sketches).toEqual([{ file: 'sketch-2.png', dataUrl: TINY_PNG }])
+    expect(res.value.marks[0].sketchFile).toBeNull()
+    expect(res.value.marks[1].sketchFile).toBe('sketch-2.png')
+    // 그림 자체(base64)는 본문에 안 담는다 — 담으면 note.json 이 사람이 못 여는 크기가 된다.
+    expect(JSON.stringify(res.value)).not.toContain('base64')
+  })
+
+  it('형식이 틀리면 조용히 버리지 않고 거절한다 — 그렸는데 파일이 없으면 원인을 못 찾는다', () => {
+    const res = parseFeedbackPayload({
+      ...payload(),
+      marks: [{ ...payload().marks[0], sketch: 'data:image/jpeg;base64,AAAA' }]
+    })
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.error).toContain('①')
+  })
+
+  it('상한을 넘는 그림은 거절한다 — 무한정 받아 메모리를 밀어내지 않게', () => {
+    const huge = `data:image/png;base64,${'A'.repeat(9 * 1024 * 1024)}`
+    expect(parseFeedbackPayload({ ...payload(), marks: [{ ...payload().marks[0], sketch: huge }] }).ok).toBe(
+      false
+    )
+  })
 })
 
 describe('저장 실패 안내', () => {
@@ -256,8 +328,10 @@ describe('note.md', () => {
         },
         marks: [
           {
+            kind: 'shape',
             memo: '버튼이 잘린다',
             bounds: { x: 10.4, y: 20.6, width: 30, height: 40 },
+            sketchFile: null,
             target: {
               tag: 'button',
               className: 'rounded px-2',
@@ -290,10 +364,59 @@ describe('note.md', () => {
 
   it('메모를 안 적었으면 그렇다고 적는다', () => {
     const md = renderNoteMarkdown(
-      payload({ marks: [{ memo: '   ', bounds: { x: 0, y: 0, width: 1, height: 1 }, target: null }] }),
+      payload({
+        marks: [
+          {
+            kind: 'shape',
+            memo: '   ',
+            bounds: { x: 0, y: 0, width: 1, height: 1 },
+            target: null,
+            sketchFile: null
+          }
+        ]
+      }),
       { at, imageFile: null }
     )
     expect(md).toContain('## ① (메모 없음)')
+  })
+
+  // 안 밝히면 배지 지름(22px)이 "이만한 영역이 문제"로 읽힌다 — 핀의 뜻은 한 점이다.
+  it('핀은 영역이 아니라 한 점이라고 밝힌다', () => {
+    const md = renderNoteMarkdown(
+      payload({
+        marks: [
+          {
+            kind: 'pin',
+            memo: '여기',
+            bounds: { x: 89, y: 189, width: 22, height: 22 },
+            target: null,
+            sketchFile: null
+          }
+        ]
+      }),
+      { at, imageFile: null }
+    )
+    expect(md).toContain('- 콕 집은 자리: x=100 y=200')
+    expect(md).not.toContain('표시한 영역')
+  })
+
+  it('제안 그림이 있으면 그 파일을 가리킨다 — 없으면 그 줄 자체가 없다', () => {
+    const withSketch = renderNoteMarkdown(
+      payload({
+        marks: [
+          {
+            kind: 'pin',
+            memo: '이렇게',
+            bounds: { x: 0, y: 0, width: 22, height: 22 },
+            target: null,
+            sketchFile: 'sketch-1.png'
+          }
+        ]
+      }),
+      { at, imageFile: null }
+    )
+    expect(withSketch).toContain('- 제안 그림: sketch-1.png')
+    expect(renderNoteMarkdown(payload(), { at, imageFile: null })).not.toContain('제안 그림')
   })
 
   it('콘솔 오류가 있으면 뒤에 붙는다', () => {

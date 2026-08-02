@@ -12,46 +12,43 @@ import {
 import { FEEDBACK_ATTR, targetInBounds } from './inspect'
 import { recentLogs } from './consoleTap'
 import { useFeedbackLocation } from './navLocation'
+import { boundsOfShape, eraserHit, polylinesOf, svgPath } from './draw'
+import { SketchPad } from './SketchPad'
+import { ToolStrip } from './ToolStrip'
+import { BTN, PANEL } from './styles'
+import {
+  MARK_COLOR,
+  MARK_HALO,
+  MARK_WIDTH,
+  SKETCH_BADGE_COLOR,
+  type DraftMark,
+  type DrawTool,
+  type Point,
+  type Shape,
+  type Tool
+} from './types'
 
 /**
  * 개발용 화면 피드백 오버레이.
  *
- * 쓰는 법: 우측 가장자리 손잡이를 누르거나 ⌘/Ctrl+Shift+F → 문제가 보이는 곳에 동그라미를
- * 치고 메모 → 보내기. 소스 폴더의 `.harness/feedback/<시각>-<화면>/` 에 그림·메모·요소
- * 정보·콘솔 오류가 떨어지고, 에이전트는 그 폴더만 읽는다.
+ * 쓰는 법: 우측 가장자리 손잡이를 누르거나 ⌘/Ctrl+Shift+F → 문제가 보이는 자리를 콕 누르거나
+ * (핀) 끌어서 그리고(표시) 메모 → 보내기. 소스 폴더의 `.harness/feedback/<시각>-<화면>/` 에
+ * 그림·메모·요소 정보·콘솔 오류가 떨어지고, 에이전트는 그 폴더만 읽는다.
  *
  * 두 가지가 이 화면 설계를 지배한다:
  *  (1) **자리 다툼** — 도구가 앉은 자리는 피드백을 못 남기는 자리가 된다. 그래서 손잡이는
  *      어느 화면에서도 비어 있는 우측 가장자리 세로 중앙에 두고 끌어 옮길 수 있게 했으며,
  *      도구막대는 가로 전체를 먹지 않는 가운데 알약으로 두고 위아래를 바꿀 수 있게 했다.
  *  (2) **앱의 공용 UI 부품과 디자인 토큰을 일부러 안 쓴다** — 이 도구가 필요한 순간은 화면이나
- *      부품, 토큰이 깨져 있을 때다. 거기에 얹으면 정작 그때 같이 죽는다. 그래서 전부 인라인 스타일.
+ *      부품, 토큰이 깨져 있을 때다. 거기에 얹으면 정작 그때 같이 죽는다(styles.ts 참고).
  */
-
-// 표시 색 — 앱 팔레트와 절대 섞이지 않는 값으로 못박는다(화이트 테마 위에서 확실히 튄다).
-const MARK_COLOR = '#eb4e63'
-// 어두운 배경 위에서도 표시가 보이도록 아래에 까는 흰 테두리.
-const MARK_HALO = 'rgba(255,255,255,0.92)'
-const MARK_WIDTH = 3
 
 const HANDLE_TOP_KEY = 'rockury.devFeedback.handleTop'
 const DOCK_KEY = 'rockury.devFeedback.dock'
-// 포인터가 이만큼 움직이면 누르기가 아니라 끌기로 본다.
+// 포인터가 이만큼 움직이면 누르기가 아니라 끌기로 본다. 누르기는 핀, 끌기는 그리기다.
 const DRAG_SLOP = 6
-// 이보다 작게 그린 자국은 실수로 스친 것으로 보고 버린다.
+// 이보다 작게 그린 자국은 자국이라 보지 않고 핀으로 떨어뜨린다.
 const MIN_STROKE = 12
-
-type Point = { x: number; y: number }
-
-/** 아직 저장되지 않은, 화면 위에서 편집 중인 표시 하나. */
-type DraftMark = {
-  id: number
-  /** 창(뷰포트) 좌표. 그리는 동안 화면을 얼려두므로 캡처 이미지와 그대로 맞물린다. */
-  points: Point[]
-  bounds: FeedbackRect
-  memo: string
-  target: ReturnType<typeof targetInBounds>
-}
 
 /**
  * 조작을 오버레이 안에서 끊는다 — **열린 모달 위에서 이 도구를 쓰려면 필요하다.**
@@ -100,20 +97,22 @@ function store(key: string, value: string): void {
   }
 }
 
-function pathOf(points: Point[]): string {
-  return points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x} ${p.y}`).join(' ')
-}
-
-function boundsOf(points: Point[]): FeedbackRect {
-  const xs = points.map((p) => p.x)
-  const ys = points.map((p) => p.y)
-  const x = Math.min(...xs)
-  const y = Math.min(...ys)
-  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
-}
-
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v))
+}
+
+/**
+ * 콕 집은 자리의 `bounds` — 배지 지름만 한 정사각형을 그 점에 가운데 맞춘다.
+ * 왜 0×0 이 아닌가: `badgeCenter` 도 `targetInBounds` 도 좌상단에서 반지름만큼 안으로 들어간
+ * 점을 본다. 0×0 이면 배지가 집은 자리에서 반지름만큼 어긋나고, 요소 탐침도 같이 어긋난다.
+ */
+function pinBounds(p: Point): FeedbackRect {
+  return {
+    x: p.x - BADGE_RADIUS,
+    y: p.y - BADGE_RADIUS,
+    width: BADGE_RADIUS * 2,
+    height: BADGE_RADIUS * 2
+  }
 }
 
 /**
@@ -128,7 +127,10 @@ function afterPaint(): Promise<void> {
 }
 
 /** 메모 입력창을 표시 옆에 붙인다. 아래에 자리가 없으면 위로 올린다. */
-function bubblePosition(bounds: FeedbackRect, dock: 'top' | 'bottom'): {
+function bubblePosition(
+  bounds: FeedbackRect,
+  dock: 'top' | 'bottom'
+): {
   top: number
   left: number
   width: number
@@ -142,7 +144,9 @@ function bubblePosition(bounds: FeedbackRect, dock: 'top' | 'bottom'): {
   const topLimit = dock === 'top' ? TITLEBAR_H + 64 : 8
   const bottomLimit = dock === 'bottom' ? vh - 64 : vh - 8
   const top =
-    below + height < bottomLimit ? below : clamp(bounds.y - height - 10, topLimit, bottomLimit - height)
+    below + height < bottomLimit
+      ? below
+      : clamp(bounds.y - height - 10, topLimit, bottomLimit - height)
   return { top, left: clamp(bounds.x, 8, Math.max(8, vw - width - 8)), width }
 }
 
@@ -160,34 +164,22 @@ const NO_DRAG: React.CSSProperties = { WebkitAppRegion: 'no-drag' }
  *  타이틀바 자체를 지적할 수 없다. 창 끌기 문제는 NO_DRAG 가 따로 막는다. */
 const TITLEBAR_H = 36
 
-const PANEL: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.97)',
-  border: '1px solid rgba(15,23,42,0.12)',
-  boxShadow: '0 8px 24px rgba(15,23,42,0.18)',
-  color: '#0f172a'
-}
-
-const BTN: React.CSSProperties = {
-  background: 'transparent',
-  border: 0,
-  borderRadius: 8,
-  padding: '6px 10px',
-  font: '500 12px/1 system-ui, sans-serif',
-  color: '#334155',
-  cursor: 'pointer'
-}
-
 export function FeedbackOverlay(): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [marks, setMarks] = useState<DraftMark[]>([])
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [stroke, setStroke] = useState<Point[] | null>(null)
+  const [draft, setDraft] = useState<Shape | null>(null)
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [listOpen, setListOpen] = useState(false)
   const [capturing, setCapturing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [handleTop, setHandleTop] = useState(50)
   const [dock, setDock] = useState<'top' | 'bottom'>('top')
+  const [tool, setTool] = useState<Tool>('pen')
+  const [color, setColor] = useState<string>(MARK_COLOR)
+  const [width, setWidth] = useState<number>(MARK_WIDTH)
+  /** 스케치판이 열린 표시. 열려 있는 동안 화면 위 그리기는 통째로 덮인다. */
+  const [sketchFor, setSketchFor] = useState<number | null>(null)
 
   const nextId = useRef(1)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -202,10 +194,11 @@ export function FeedbackOverlay(): React.JSX.Element {
   const close = useCallback(() => {
     setOpen(false)
     setMarks([])
-    setStroke(null)
+    setDraft(null)
     setEditingId(null)
     setHoverId(null)
     setListOpen(false)
+    setSketchFor(null)
   }, [])
 
   // 화면 얼리기. 그리는 도중 애니메이션이나 스크롤로 화면이 움직이면 표시가 엉뚱한 요소를
@@ -250,19 +243,21 @@ export function FeedbackOverlay(): React.JSX.Element {
         return
       }
       if (action === 'close') {
-        // 한 겹씩 닫는다: 메모창 → 목록 → 오버레이. 실수로 표시를 통째로 날리지 않게.
-        if (editingId !== null) setEditingId(null)
+        // 한 겹씩 닫는다: 스케치판 → 메모창 → 목록 → 오버레이. 실수로 표시를 통째로 날리지 않게.
+        if (sketchFor !== null) setSketchFor(null)
+        else if (editingId !== null) setEditingId(null)
         else if (listOpen) setListOpen(false)
         else close()
       }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [open, editingId, listOpen, close])
+  }, [open, editingId, listOpen, sketchFor, close])
 
   useEffect(() => {
-    if (editingId !== null) inputRef.current?.focus()
-  }, [editingId])
+    // 스케치판이 떠 있으면 그쪽이 주인공이다 — 뒤에 숨은 입력창으로 포커스를 끌어오지 않는다.
+    if (editingId !== null && sketchFor === null) inputRef.current?.focus()
+  }, [editingId, sketchFor])
 
   // --- 손잡이: 누르면 열고, 끌면 위치를 옮겨 기억한다 ---
   const dragState = useRef<{ startY: number; startTop: number; moved: boolean } | null>(null)
@@ -289,15 +284,35 @@ export function FeedbackOverlay(): React.JSX.Element {
     else setOpen(true)
   }
 
-  // --- 그리기 ---
-  // 배지도 그림판 위에 있어서, 배지를 "누른 것"과 그 자리에서 "그리기 시작한 것"을 갈라야
-  // 한다. 눌렀다 안 움직이면 열기, 움직이면 그리기 (손잡이와 같은 규칙).
-  const downRef = useRef<{ badgeId: number | null; x: number; y: number; moved: boolean } | null>(null)
+  /** 표시 하나를 새로 달고 곧바로 메모를 열게 한다 — 핀과 그린 자국이 같은 길로 들어온다. */
+  const addMark = (mark: Pick<DraftMark, 'kind' | 'shape' | 'bounds'>): void => {
+    const id = nextId.current++
+    setMarks((prev) => [
+      ...prev,
+      { ...mark, id, memo: '', target: targetInBounds(mark.bounds), sketch: null }
+    ])
+    setEditingId(id)
+  }
+
+  // --- 콕 집기 · 그리기 ---
+  // 배지도 그림판 위에 있어서, 세 가지를 갈라야 한다: 배지를 "누른 것"(= 메모 다시 열기),
+  // 빈 자리를 "누른 것"(= 핀), 그 자리에서 "끈 것"(= 그리기). 가르는 자는 하나다 —
+  // 누른 자리에서 DRAG_SLOP 이상 움직였는가. 손잡이도 같은 규칙을 쓴다.
+  const downRef = useRef<{ badgeId: number | null; x: number; y: number; moved: boolean } | null>(
+    null
+  )
 
   const onDrawDown = (e: React.PointerEvent): void => {
     // 바깥으로 새지 않게 끊는 일은 루트가 한다(stopAtOverlay 주석 참고).
     if (editingId !== null) {
       setEditingId(null)
+      return
+    }
+    // 지우개는 자국을 만들지 않고 이미 그린 것을 집어 지운다. 배지가 먼저다 —
+    // 핀은 자국이 없어 배지로만 잡히고, 배지는 자기 자국 위에 겹쳐 앉아 있다.
+    if (tool === 'eraser') {
+      const hit = badgeHit(marks, e.clientX, e.clientY) ?? eraserHit(marks, e.clientX, e.clientY)
+      if (hit !== null) setMarks((prev) => prev.filter((m) => m.id !== hit))
       return
     }
     capturePointer(e.currentTarget, e.pointerId)
@@ -308,11 +323,11 @@ export function FeedbackOverlay(): React.JSX.Element {
       y: e.clientY,
       moved: false
     }
-    setStroke([{ x: e.clientX, y: e.clientY }])
+    setDraft({ tool: tool as DrawTool, points: [{ x: e.clientX, y: e.clientY }], color, width })
   }
 
   const onDrawMove = (e: React.PointerEvent): void => {
-    if (!stroke) {
+    if (!draft) {
       // 안 그리는 동안에는 배지 위 미리보기를 띄운다.
       if (editingId === null) setHoverId(badgeHit(marks, e.clientX, e.clientY))
       return
@@ -323,28 +338,46 @@ export function FeedbackOverlay(): React.JSX.Element {
     if (down && !down.moved && Math.hypot(e.clientX - down.x, e.clientY - down.y) >= DRAG_SLOP) {
       down.moved = true
     }
-    const last = stroke[stroke.length - 1]
-    if (Math.hypot(e.clientX - last.x, e.clientY - last.y) < 2) return
-    setStroke([...stroke, { x: e.clientX, y: e.clientY }])
+    const p = { x: e.clientX, y: e.clientY }
+    setDraft((prev) => {
+      if (!prev) return prev
+      // 펜은 지나온 길이 곧 모양이고, 나머지는 시작점과 지금 점 둘로 정해진다.
+      if (prev.tool === 'pen') {
+        const last = prev.points[prev.points.length - 1]
+        if (Math.hypot(p.x - last.x, p.y - last.y) < 2) return prev
+        return { ...prev, points: [...prev.points, p] }
+      }
+      return { ...prev, points: [prev.points[0], p] }
+    })
   }
 
   const onDrawUp = (): void => {
     const down = downRef.current
+    const shape = draft
     downRef.current = null
-    if (!stroke) return
-    const points = stroke
-    setStroke(null)
-    // 배지를 콕 눌렀으면 새 표시가 아니라 그 메모를 다시 연다.
-    if (down?.badgeId != null && !down.moved) {
-      setEditingId(down.badgeId)
+    setDraft(null)
+    if (!down) return
+
+    if (!down.moved) {
+      // 배지를 콕 눌렀으면 새 표시가 아니라 그 메모를 다시 연다.
+      if (down.badgeId != null) {
+        setEditingId(down.badgeId)
+        return
+      }
+      // 빈 자리를 콕 눌렀다 = "여기". 자국 없이 자리만 집는다.
+      // 좁은 것을 가리키려고 그 둘레를 크게 두르면 엉뚱한 상위 감싸개가 잡히던 문제를 없앤다.
+      addMark({ kind: 'pin', shape: null, bounds: pinBounds({ x: down.x, y: down.y }) })
       return
     }
-    if (points.length < 3) return
-    const bounds = boundsOf(points)
-    if (bounds.width < MIN_STROKE && bounds.height < MIN_STROKE) return
-    const id = nextId.current++
-    setMarks((prev) => [...prev, { id, points, bounds, memo: '', target: targetInBounds(bounds) }])
-    setEditingId(id)
+
+    // 움직이긴 했는데 자국이라 하기엔 너무 짧으면 **핀으로 떨어뜨린다.** 버리면 6~12px
+    // 사이가 아무 일도 안 일어나는 죽은 구간이 되는데, 그 손짓의 뜻은 어차피 "여기"다.
+    const bounds = shape ? boundsOfShape(shape) : null
+    if (!shape || !bounds || (bounds.width < MIN_STROKE && bounds.height < MIN_STROKE)) {
+      addMark({ kind: 'pin', shape: null, bounds: pinBounds({ x: down.x, y: down.y }) })
+      return
+    }
+    addMark({ kind: 'shape', shape, bounds })
   }
 
   const send = async (): Promise<void> => {
@@ -360,8 +393,9 @@ export function FeedbackOverlay(): React.JSX.Element {
     setEditingId(null)
     setListOpen(false)
     setHoverId(null)
+    setSketchFor(null)
     // 도구막대·메모창을 화면에서 걷어낸 뒤 찍는다 — 메인이 창을 그대로 찍으므로,
-    // 여기 남아 있는 것은 그림에 그대로 들어간다. 표시(동그라미·배지)만 남긴다.
+    // 여기 남아 있는 것은 그림에 그대로 들어간다. 표시(자국·배지)만 남긴다.
     setCapturing(true)
     try {
       await afterPaint()
@@ -371,7 +405,13 @@ export function FeedbackOverlay(): React.JSX.Element {
           width: document.documentElement.clientWidth,
           height: document.documentElement.clientHeight
         },
-        marks: marks.map((m) => ({ memo: m.memo, bounds: m.bounds, target: m.target })),
+        marks: marks.map((m) => ({
+          kind: m.kind,
+          memo: m.memo,
+          bounds: m.bounds,
+          target: m.target,
+          sketch: m.sketch
+        })),
         logs: recentLogs()
       })
       setToast(res.hasImage ? res.saved : `${res.saved} (이미지 없이)`)
@@ -392,6 +432,7 @@ export function FeedbackOverlay(): React.JSX.Element {
 
   const editing = marks.find((m) => m.id === editingId) ?? null
   const bubble = editing ? bubblePosition(editing.bounds, dock) : null
+  const sketching = sketchFor !== null ? (marks.find((m) => m.id === sketchFor) ?? null) : null
 
   /**
    * 저장 결과 안내. **열린 상태와 닫힌 상태 양쪽에서 그린다.**
@@ -469,11 +510,6 @@ export function FeedbackOverlay(): React.JSX.Element {
     )
   }
 
-  const strokes = [
-    ...marks.map((m) => ({ points: m.points, key: m.id })),
-    ...(stroke ? [{ points: stroke, key: -1 }] : [])
-  ]
-
   return (
     // 열려 있는 동안에는 창 전체가 no-drag 다 — 그려야 하니 창 끌기가 이겨선 안 된다.
     // (닫힌 상태의 껍데기에는 걸지 않는다. 걸면 타이틀바로 창을 못 끌게 된다.)
@@ -481,7 +517,7 @@ export function FeedbackOverlay(): React.JSX.Element {
       {...{ [FEEDBACK_ATTR]: '' }}
       // pointerEvents 를 여기서 못박는 이유: Radix 모달(Dialog)이 열려 있으면 그 층이
       // `body` 에 `pointer-events:none` 을 건다. 물려받으면 그림판(SVG)이 포인터를 못 받아
-      // **모달 위에서는 동그라미가 아예 안 그려진다** — 도구막대는 스스로 auto 를 켜 놔서
+      // **모달 위에서는 자국이 아예 안 그려진다** — 도구막대는 스스로 auto 를 켜 놔서
       // 버튼만 눌리고, "왜 안 그려지지"로 보였다(2026-07-30 사용자 제보).
       // 안 걸린 화면에서는 원래도 auto 라 달라지는 것이 없다.
       // 오버레이 안에서 난 조작은 무엇이든 여기서 끊는다 — 그림판·도구막대·목록·메모창이
@@ -508,7 +544,7 @@ export function FeedbackOverlay(): React.JSX.Element {
           height: '100%',
           width: '100%',
           touchAction: 'none',
-          cursor: hoverId !== null ? 'pointer' : 'crosshair'
+          cursor: tool === 'eraser' ? 'pointer' : hoverId !== null ? 'pointer' : 'crosshair'
         }}
         onPointerDown={onDrawDown}
         onPointerMove={onDrawMove}
@@ -516,26 +552,32 @@ export function FeedbackOverlay(): React.JSX.Element {
         onPointerCancel={onDrawUp}
         onPointerLeave={() => setHoverId(null)}
       >
-        {strokes.map((s) => (
-          <g key={s.key}>
-            <path
-              d={pathOf(s.points)}
-              fill="none"
-              stroke={MARK_HALO}
-              strokeWidth={MARK_WIDTH + 3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d={pathOf(s.points)}
-              fill="none"
-              stroke={MARK_COLOR}
-              strokeWidth={MARK_WIDTH}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </g>
-        ))}
+        {/* 자국 — 스케치판이 굽는 PNG 와 같은 기하(draw.ts)를 읽는다. 각자 그리면 화면에서
+            본 것과 저장된 그림이 조용히 어긋난다. */}
+        {[...marks.map((m) => m.shape), draft].map((shape, si) =>
+          shape
+            ? polylinesOf(shape).map((line, li) => (
+                <g key={`s-${si}-${li}`}>
+                  <path
+                    d={svgPath(line)}
+                    fill="none"
+                    stroke={MARK_HALO}
+                    strokeWidth={shape.width + 3}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d={svgPath(line)}
+                    fill="none"
+                    stroke={shape.color}
+                    strokeWidth={shape.width}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </g>
+              ))
+            : null
+        )}
         {marks.map((m, i) => {
           const c = badgeCenter(m.bounds)
           const active = hoverId === m.id || editingId === m.id
@@ -545,7 +587,35 @@ export function FeedbackOverlay(): React.JSX.Element {
               {active && !capturing ? (
                 <circle cx={c.x} cy={c.y} r={BADGE_RADIUS + 4} fill={MARK_COLOR} opacity={0.25} />
               ) : null}
-              <circle cx={c.x} cy={c.y} r={BADGE_RADIUS} fill={MARK_COLOR} stroke={MARK_HALO} strokeWidth={2} />
+              {/* 핀은 자국이 없어 배지 하나만 뜬다 — 조준 링을 둘러 "이 한 점"임을 보인다. */}
+              {m.kind === 'pin' ? (
+                <>
+                  <circle
+                    cx={c.x}
+                    cy={c.y}
+                    r={BADGE_RADIUS + 5}
+                    fill="none"
+                    stroke={MARK_HALO}
+                    strokeWidth={4}
+                  />
+                  <circle
+                    cx={c.x}
+                    cy={c.y}
+                    r={BADGE_RADIUS + 5}
+                    fill="none"
+                    stroke={MARK_COLOR}
+                    strokeWidth={2}
+                  />
+                </>
+              ) : null}
+              <circle
+                cx={c.x}
+                cy={c.y}
+                r={BADGE_RADIUS}
+                fill={MARK_COLOR}
+                stroke={MARK_HALO}
+                strokeWidth={2}
+              />
               <text
                 x={c.x}
                 y={c.y + 1}
@@ -556,6 +626,18 @@ export function FeedbackOverlay(): React.JSX.Element {
               >
                 {markLabel(i)}
               </text>
+              {/* 그림이 딸린 표시는 배지 어깨에 점 하나 — 목록을 안 열어도 어느 것에 그림이
+                  붙었는지 보인다. 저장되는 그림에는 넣지 않는다(도구의 표식이지 지적이 아니다). */}
+              {m.sketch && !capturing ? (
+                <circle
+                  cx={c.x + BADGE_RADIUS - 1}
+                  cy={c.y - BADGE_RADIUS + 1}
+                  r={4}
+                  fill={SKETCH_BADGE_COLOR}
+                  stroke={MARK_HALO}
+                  strokeWidth={1.5}
+                />
+              ) : null}
             </g>
           )
         })}
@@ -563,8 +645,11 @@ export function FeedbackOverlay(): React.JSX.Element {
 
       {toastNode}
 
-      {/* 아래는 전부 "도구" — 창을 찍는 동안에는 그림에 들어가지 않도록 걷어낸다. */}
-      {capturing ? null : (
+      {/* 아래는 전부 "도구" — 창을 찍는 동안에는 그림에 들어가지 않도록 걷어낸다.
+          스케치판이 떠 있을 때도 걷는다: 뒤에 가려 안 보이는데 DOM 에 남아 있으면 탭 이동이
+          보이지도 않는 버튼으로 새고, 도구 버튼이 두 벌이 되어 어느 쪽이 지금 쓰는 것인지
+          알 수 없다. */}
+      {capturing || sketching ? null : (
         <>
           {/* 배지 위 미리보기. 눌러서 열지 않고도 무엇을 적었는지 확인만 하고 지나갈 수 있다. */}
           {hovered ? (
@@ -676,6 +761,15 @@ export function FeedbackOverlay(): React.JSX.Element {
               </button>
             </div>
 
+            <ToolStrip
+              tool={tool}
+              onTool={setTool}
+              color={color}
+              onColor={setColor}
+              width={width}
+              onWidth={setWidth}
+            />
+
             {/* 표시가 여럿이면 배지를 하나씩 확인하는 것보다 목록이 빠르다. */}
             {listOpen && marks.length > 0 ? (
               <div
@@ -716,6 +810,17 @@ export function FeedbackOverlay(): React.JSX.Element {
                     </span>
                     <span style={{ flex: 1, minWidth: 0, font: '400 12px/1.4 system-ui, sans-serif' }}>
                       {m.memo.trim() || '(메모 없음)'}
+                      {m.sketch ? (
+                        <span
+                          style={{
+                            marginLeft: 4,
+                            color: SKETCH_BADGE_COLOR,
+                            font: '400 10px/1.6 system-ui, sans-serif'
+                          }}
+                        >
+                          그림 있음
+                        </span>
+                      ) : null}
                     </span>
                     <span style={{ color: '#94a3b8', font: '400 10px/1.6 system-ui, sans-serif' }}>
                       {m.target?.components[0] ?? m.target?.tag ?? '빈 자리'}
@@ -735,9 +840,8 @@ export function FeedbackOverlay(): React.JSX.Element {
                 font: '400 11px/1.6 system-ui, sans-serif'
               }}
             >
-              {marks.length === 0
-                ? '문제가 보이는 곳에 동그라미를 치세요'
-                : '⌘/Ctrl+Enter 로도 보낼 수 있어요'}
+              {/* 몸짓이 모드를 가르므로, 처음 여는 사람이 배워야 할 것은 이 한 줄이 전부다. */}
+              {marks.length === 0 ? '콕 누르면 핀 · 끌면 그리기' : '⌘/Ctrl+Enter 로도 보낼 수 있어요'}
             </span>
           </div>
 
@@ -800,7 +904,17 @@ export function FeedbackOverlay(): React.JSX.Element {
                   outline: 'none'
                 }}
               />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6 }}>
+                {/* 말로 안 되는 것은 그림으로 — 메모와 나란히 두는 이유는 둘이 같은 한 가지
+                    요청의 두 표현이기 때문이다. */}
+                <button
+                  type="button"
+                  style={editing.sketch ? { ...BTN, color: SKETCH_BADGE_COLOR } : BTN}
+                  onClick={() => setSketchFor(editing.id)}
+                >
+                  {editing.sketch ? '그림 고치기' : '그림 그리기'}
+                </button>
+                <span style={{ flex: 1 }} />
                 <button
                   type="button"
                   style={BTN}
@@ -819,6 +933,21 @@ export function FeedbackOverlay(): React.JSX.Element {
           ) : null}
         </>
       )}
+
+      {/* 스케치판 — 열려 있는 동안 화면 위 그리기를 통째로 덮는다(뒤에 그려지면 안 된다). */}
+      {sketching && !capturing ? (
+        <SketchPad
+          label={markLabel(marks.findIndex((m) => m.id === sketching.id))}
+          initial={sketching.sketch}
+          onCancel={() => setSketchFor(null)}
+          onDone={(dataUrl) => {
+            setMarks((prev) =>
+              prev.map((m) => (m.id === sketching.id ? { ...m, sketch: dataUrl } : m))
+            )
+            setSketchFor(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

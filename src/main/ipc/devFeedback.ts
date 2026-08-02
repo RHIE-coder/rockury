@@ -2,7 +2,12 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { envelope } from './envelope'
-import { feedbackFolderName, parseFeedbackPayload, renderNoteMarkdown } from '../../shared/devFeedback'
+import {
+  PNG_DATA_URL_PREFIX,
+  feedbackFolderName,
+  parseFeedbackPayload,
+  renderNoteMarkdown
+} from '../../shared/devFeedback'
 
 /** 이 빌드가 나온 소스 루트 (electron.vite.config.ts 가 박아 넣는다). */
 declare const __SOURCE_ROOT__: string
@@ -22,6 +27,11 @@ declare const __SOURCE_ROOT__: string
  */
 
 const FEEDBACK_ROOT = join(__SOURCE_ROOT__, '.harness', 'feedback')
+
+/** 데이터 URL 의 base64 부분만 잘라 파일로 쓸 바이트를 만든다. */
+function pngBytes(dataUrl: string): Buffer {
+  return Buffer.from(dataUrl.slice(PNG_DATA_URL_PREFIX.length), 'base64')
+}
 
 /** 화면 이미지를 뜬다. 실패해도 null 로 삼키고 표시·메모는 그대로 저장한다. */
 async function capturePng(win: BrowserWindow | null): Promise<Buffer | null> {
@@ -52,6 +62,10 @@ export function registerDevFeedbackIpc(): void {
 
       await mkdir(dir, { recursive: true })
       if (png) await writeFile(join(dir, 'shot.png'), png)
+      // 제안 그림 — 이름은 검증이 정했다(표시 번호와 같은 순서). note.json 엔 이름만 남는다.
+      for (const sketch of parsed.sketches) {
+        await writeFile(join(dir, sketch.file), pngBytes(sketch.dataUrl))
+      }
       await writeFile(
         join(dir, 'note.md'),
         renderNoteMarkdown(parsed.value, {

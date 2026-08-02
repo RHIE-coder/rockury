@@ -27,11 +27,19 @@ export interface FeedbackTarget {
   rect: FeedbackRect
 }
 
-/** 화면 위에 그린 표시 하나 + 거기 붙인 메모. */
+/** 표시의 갈래 — 몸짓이 가른다. 콕 누르면 자리 하나(핀), 끌면 그려서 두른 영역(shape). */
+export type FeedbackMarkKind = 'pin' | 'shape'
+
+/** 화면 위에 남긴 표시 하나 + 거기 붙인 메모. */
 export interface FeedbackMark {
+  /** 핀이면 `bounds` 는 넓이가 아니라 **자리**다(배지 지름만 한 정사각형). */
+  kind: FeedbackMarkKind
   memo: string
   bounds: FeedbackRect
   target: FeedbackTarget | null
+  /** 딸린 제안 그림의 **파일 이름**. 그림 자체(base64)는 여기 담지 않는다 — 담으면
+   *  note.json 이 사람이 열 수 없는 크기가 되고 같은 그림이 두 벌 저장된다. */
+  sketchFile: string | null
 }
 
 /** 피드백 직전까지 렌더러 콘솔에 쌓인 오류·경고 한 줄. */
@@ -59,7 +67,50 @@ export interface FeedbackPayload {
   logs: FeedbackLogEntry[]
 }
 
-export type ParseResult = { ok: true; value: FeedbackPayload } | { ok: false; error: string }
+/**
+ * 렌더러가 보내는 표시. 저장된 것(`FeedbackMark`)과 갈리는 칸은 그림 하나뿐이다 —
+ * 보낼 때는 그림 자체(PNG 데이터 URL), 저장된 뒤에는 그 파일 이름.
+ */
+export interface FeedbackMarkInput {
+  kind: FeedbackMarkKind
+  memo: string
+  bounds: FeedbackRect
+  target: FeedbackTarget | null
+  sketch: string | null
+}
+
+export interface FeedbackPayloadInput {
+  location: FeedbackLocation
+  viewport: { width: number; height: number }
+  marks: FeedbackMarkInput[]
+  logs: FeedbackLogEntry[]
+}
+
+/** 메인이 파일로 떨굴 그림 한 장. 이름은 검증이 정하고, 쓰기는 저장 핸들러가 한다. */
+export interface ParsedSketch {
+  file: string
+  dataUrl: string
+}
+
+export type ParseResult =
+  | { ok: true; value: FeedbackPayload; sketches: ParsedSketch[] }
+  | { ok: false; error: string }
+
+/** 제안 그림은 PNG 데이터 URL 로 온다. 다른 형식은 받지 않는다. */
+export const PNG_DATA_URL_PREFIX = 'data:image/png;base64,'
+/** 그림 한 장의 상한. 흰 바탕에 선 몇 개라 훨씬 작지만, 무한정 받아 메인 프로세스
+ *  메모리를 밀어내지는 않게 막는다. */
+export const MAX_SKETCH_CHARS = 8 * 1024 * 1024
+
+/** PNG 데이터 URL 인가. 형식과 크기 둘 다 본다. */
+export function isPngDataUrl(v: unknown, maxChars: number): v is string {
+  return typeof v === 'string' && v.startsWith(PNG_DATA_URL_PREFIX) && v.length <= maxChars
+}
+
+/** N 번째 표시에 딸린 그림의 파일 이름. 번호는 배지 번호와 같은 순서다(① → 1). */
+export function sketchFileName(index: number): string {
+  return `sketch-${index + 1}.png`
+}
 
 /** 표시 하나에 붙는 동그라미 번호. 화면 배지와 note.md 가 같은 기호를 쓴다. */
 const MARK_LABELS = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'
@@ -296,11 +347,24 @@ export function parseFeedbackPayload(raw: unknown): ParseResult {
   }
 
   const marks: FeedbackMark[] = []
-  for (const m of raw.marks) {
+  const sketches: ParsedSketch[] = []
+  for (const [i, m] of raw.marks.entries()) {
     if (!isRecord(m)) return { ok: false, error: '표시 형식이 잘못됐습니다' }
     const bounds = parseRect(m.bounds)
     if (!bounds) return { ok: false, error: '표시 영역이 잘못됐습니다' }
-    marks.push({ memo: str(m.memo, 1000), bounds, target: parseTarget(m.target) })
+    // 갈래를 안 보내는 옛 본문도 받는다 — 그리기만 있던 시절의 표시는 전부 'shape' 다.
+    const kind: FeedbackMarkKind = m.kind === 'pin' ? 'pin' : 'shape'
+    // 그림은 있을 때만 검증한다. 형식이 틀리면 조용히 버리지 않고 거절한다 —
+    // 그렸는데 파일이 없으면 "왜 안 왔지"의 원인을 알 길이 없다.
+    let sketchFile: string | null = null
+    if (m.sketch != null && m.sketch !== '') {
+      if (!isPngDataUrl(m.sketch, MAX_SKETCH_CHARS)) {
+        return { ok: false, error: `${markLabel(i)} 표시의 그림 형식이 잘못됐습니다` }
+      }
+      sketchFile = sketchFileName(i)
+      sketches.push({ file: sketchFile, dataUrl: m.sketch })
+    }
+    marks.push({ kind, memo: str(m.memo, 1000), bounds, target: parseTarget(m.target), sketchFile })
   }
 
   return {
@@ -310,7 +374,8 @@ export function parseFeedbackPayload(raw: unknown): ParseResult {
       viewport: { width: viewport.width, height: viewport.height },
       marks,
       logs: parseLogs(raw.logs)
-    }
+    },
+    sketches
   }
 }
 
@@ -364,7 +429,19 @@ export function renderNoteMarkdown(
     lines.push(`## ${markLabel(i)} ${memo}`)
     lines.push('')
     const b = mark.bounds
-    lines.push(`- 표시한 영역: x=${round(b.x)} y=${round(b.y)} (${round(b.width)} × ${round(b.height)})`)
+    // 핀은 넓이가 아니라 자리다. 안 밝히면 배지 지름(22px)이 "이만한 영역이 문제"로 읽힌다.
+    if (mark.kind === 'pin') {
+      lines.push(
+        `- 콕 집은 자리: x=${round(b.x + b.width / 2)} y=${round(b.y + b.height / 2)} (영역이 아니라 한 점)`
+      )
+    } else {
+      lines.push(
+        `- 표시한 영역: x=${round(b.x)} y=${round(b.y)} (${round(b.width)} × ${round(b.height)})`
+      )
+    }
+    if (mark.sketchFile) {
+      lines.push(`- 제안 그림: ${mark.sketchFile} ("이렇게 생겼으면 좋겠다"고 직접 그린 것)`)
+    }
     const t = mark.target
     if (!t) {
       lines.push('- 가리킨 요소: 찾지 못함 (빈 자리를 표시했을 수 있음)')

@@ -1,8 +1,8 @@
 import { ipcRenderer } from 'electron'
 import { unwrap } from '../envelope'
-import type { FeedbackPayload } from '../../shared/devFeedback'
+import type { FeedbackPayloadInput } from '../../shared/devFeedback'
 
-export type { FeedbackPayload } from '../../shared/devFeedback'
+export type { FeedbackPayload, FeedbackPayloadInput } from '../../shared/devFeedback'
 
 /** 저장 결과 — 어느 폴더에 떨어졌는지와 그림이 함께 저장됐는지. */
 export interface SaveDevFeedbackResult {
@@ -23,7 +23,7 @@ export const shellApi = {
   },
   /** 개발용 화면 피드백 — 배포본에서는 메인이 거절한다. */
   devFeedback: {
-    save: (payload: FeedbackPayload): Promise<SaveDevFeedbackResult> =>
+    save: (payload: FeedbackPayloadInput): Promise<SaveDevFeedbackResult> =>
       unwrap(ipcRenderer.invoke('shell:saveDevFeedback', payload))
   }
 }
