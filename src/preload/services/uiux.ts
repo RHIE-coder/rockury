@@ -7,9 +7,11 @@ import type {
   SpecTree,
   SpecVersionRow
 } from '../../main/store/uiuxSpecs'
+import type { UiuxChangedEvent } from '../../main/ai/uiuxTools'
 
 // 메인 프로세스 타입을 렌더러 쪽으로 그대로 통과시킨다 — 화면이 main 을 직접 import 하지 않게.
 export type { NodeInput, SpecLevel, SpecNoteRow, SpecProjectRow, SpecTree, SpecVersionRow }
+export type { UiuxChangedEvent }
 
 /**
  * UI/UX 서비스가 렌더러에 여는 창구.
@@ -64,6 +66,16 @@ export const uiuxApi = {
       note?: string
       snapshot: string
     }): Promise<{ id: string }> => ipcRenderer.invoke('uiux:createVersion', input),
-    deleteVersion: (id: string): Promise<void> => ipcRenderer.invoke('uiux:deleteVersion', id)
+    deleteVersion: (id: string): Promise<void> => ipcRenderer.invoke('uiux:deleteVersion', id),
+
+    /**
+     * 에이전트(MCP) 쓰기 알림 — 열린 화면이 그 스코프만 다시 읽는다. 해지 함수를 돌려준다.
+     * 화면발 저장은 이 이벤트를 만들지 않으므로(도구를 안 거친다) 도착한 변경은 전부 화면 밖에서 온 것이다.
+     */
+    onChanged: (fn: (e: UiuxChangedEvent) => void): (() => void) => {
+      const listener = (_e: unknown, payload: UiuxChangedEvent): void => fn(payload)
+      ipcRenderer.on('uiux:changed', listener)
+      return () => ipcRenderer.removeListener('uiux:changed', listener)
+    }
   }
 }

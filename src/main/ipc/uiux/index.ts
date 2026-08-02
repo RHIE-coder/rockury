@@ -1,4 +1,6 @@
+import { BrowserWindow } from 'electron'
 import { registerUiuxSpecsIpc } from './specs'
+import { setUiuxChangeNotifier } from '../../ai/uiuxTools'
 
 /**
  * UI/UX 서비스의 IPC 채널.
@@ -10,4 +12,11 @@ import { registerUiuxSpecsIpc } from './specs'
  */
 export function registerUiuxIpc(): void {
   registerUiuxSpecsIpc()
+
+  // MCP 쓰기 → 열린 화면이 따라오게 한다(spec `uiux-ia.md` §8).
+  // 창 전파를 공용 진입점(`main/index.ts`)이 아니라 여기서 거는 이유는 API 서비스와 같다 —
+  // 그 파일은 새 서비스를 만들 때만 바뀌는 공용 파일이라, 등록 시점에 우리 쪽에서 주입한다.
+  setUiuxChangeNotifier((e) => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('uiux:changed', e)
+  })
 }

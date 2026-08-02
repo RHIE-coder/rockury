@@ -39,6 +39,32 @@ interface ToolDef {
   handler: (args: Record<string, unknown>) => unknown
 }
 
+/**
+ * 에이전트(MCP) 쓰기 알림 — 열린 화면이 **그 스코프만** 다시 읽게 한다(spec `uiux-ia.md` §8).
+ *
+ * 이 배선이 없으면 §8 의 전제("사람은 화면으로, 에이전트는 MCP 로 같은 데이터를 고친다")가
+ * 반쪽이 된다 — 에이전트가 쓴 것을 사람이 앱을 껐다 켜야 본다. DB·API 가 이미 같은 문제를
+ * `store:changed`·`api:changed` 로 풀었고, 여기만 빠져 있었다.
+ */
+export interface UiuxChangedEvent {
+  /** 무엇을 다시 읽어야 하는가 — 스코프를 가르는 값. */
+  domain: 'nodes' | 'surface' | 'status' | 'tokens' | 'notes'
+  /** 의견(note)은 id 만 받아 프로젝트를 되짚을 길이 없어 빠진다 — 그래서 선택이다. */
+  projectId?: string
+  /** 화면 단위 변경이면 그 화면의 안정 주소. */
+  address?: string
+}
+
+/**
+ * 창 전파는 IPC 등록 시점에 주입된다(`src/main/ipc/uiux/index.ts`).
+ * 여기서 `BrowserWindow` 를 직접 부르지 않는 이유: 이 파일은 도구 정의라 Electron 없이 테스트가 돈다.
+ */
+let notifyUiuxChanged: (e: UiuxChangedEvent) => void = () => {}
+
+export function setUiuxChangeNotifier(fn: (e: UiuxChangedEvent) => void): void {
+  notifyUiuxChanged = fn
+}
+
 const STATUSES = ['designed', 'implemented', 'verified'] as const
 
 /** 주소로 찾되, 못 찾으면 **무엇이 왜 없는지** 알린다 — 빈 결과를 조용히 돌려주면 오타를 못 찾는다. */
@@ -190,6 +216,7 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
           name: String(name),
           description: description ? String(description) : ''
         })
+        notifyUiuxChanged({ domain: 'nodes', projectId: id })
         return { address: String(key), level: 'project', id }
       }
 
@@ -213,6 +240,7 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
         description: description ? String(description) : '',
         kind: kind ? String(kind) : undefined
       })
+      notifyUiuxChanged({ domain: 'nodes', projectId: hit.projectId })
       return { address: `${parentAddress}.${String(key)}`, level, id }
     }
   },
@@ -234,6 +262,7 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
         throw new Error('content.sections 는 배열이어야 합니다 — get_ui_surface 결과를 고쳐 되보내세요.')
       }
       saveSurfaceContent(hit.surfaceId as string, JSON.stringify(content))
+      notifyUiuxChanged({ domain: 'surface', projectId: hit.projectId, address: String(address) })
       return { address: String(address), sectionCount: value.sections.length }
     }
   },
@@ -302,6 +331,7 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
         else next[path] = value
       }
       setProjectTokens(hit.projectId, next)
+      notifyUiuxChanged({ domain: 'tokens', projectId: hit.projectId })
       return { project: String(project), overrides: next }
     }
   },
@@ -351,6 +381,7 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
     },
     handler: ({ id, resolved }) => {
       setNoteResolved(String(id), resolved === undefined ? true : Boolean(resolved))
+      notifyUiuxChanged({ domain: 'notes' })
       return { id: String(id), resolved: resolved === undefined ? true : Boolean(resolved) }
     }
   },
@@ -373,6 +404,7 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
         by ? String(by) : 'agent',
         note ? String(note) : ''
       )
+      notifyUiuxChanged({ domain: 'status', projectId: hit.projectId, address: String(address) })
       return { address: String(address), status: String(status) }
     }
   }

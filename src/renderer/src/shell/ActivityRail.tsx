@@ -2,11 +2,13 @@ import { Settings } from 'lucide-react'
 import { registry } from '../nav/registry'
 import { useNav } from '../nav/useNav'
 import { cx } from '../lib/cx'
+import { AGENT_ACTIVITY_TTL_MS, isActive, useAgentActivity } from './agentActivity'
 
 /** L1 — 서비스 전환용 좌측 세로 레일. */
 export function ActivityRail() {
   const serviceId = useNav((s) => s.serviceId)
   const selectService = useNav((s) => s.selectService)
+  const activity = useAgentActivity((s) => s.at)
 
   return (
     <nav
@@ -16,6 +18,7 @@ export function ActivityRail() {
       {registry.map((service) => {
         const Icon = service.icon
         const active = service.id === serviceId
+        const touched = isActive(activity, service.id, Date.now(), AGENT_ACTIVITY_TTL_MS)
         return (
           <button
             key={service.id}
@@ -36,6 +39,19 @@ export function ActivityRail() {
           >
             <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />
             <span className="leading-none">{service.label}</span>
+
+            {/* 에이전트(MCP)가 방금 이 서비스를 고쳤다는 표시. 활성 칸은 accent 로 꽉 차 있어
+                같은 색 점이 묻히므로 흰 점으로 뒤집는다. 모션 축소 설정이면 깜빡이지 않고 켜져만 있다. */}
+            {touched && (
+              <span
+                data-agent-touched={service.id}
+                title="에이전트가 방금 고쳤어요"
+                className={cx(
+                  'absolute right-2 top-1.5 size-2 rounded-full motion-safe:animate-pulse',
+                  active ? 'bg-white' : 'bg-accent'
+                )}
+              />
+            )}
           </button>
         )
       })}
