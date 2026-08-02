@@ -6,7 +6,7 @@ import { GitBranch, Plus, Eye, LayoutGrid, Lock } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useActiveDesign } from '../../designs/store'
-import { useDefinitionStore, useDesignTables, useDesignReadOnly } from '../definition/store'
+import { useDefinitionStore, useScopedDesignTables, useDesignReadOnly } from '../definition/store'
 import { TableForm } from '../definition/TableForm'
 import { SqlForm } from '../definition/SqlForm'
 import { DiagramSurface } from '../../remote/diagram/DiagramSurface'
@@ -15,14 +15,14 @@ import { buildFkPatch } from './fk'
 
 /**
  * Design › Diagram(설계부 · depth 3) — 활성 설계의 **가상 ERD 편집기**.
- * 표시는 useDesignTables(Draft/커밋 렌즈), 편집은 useDefinitionStore 액션(저장은 자동 write-through).
+ * 표시는 useScopedDesignTables(Draft/커밋 렌즈 + 스키마 범위), 편집은 useDefinitionStore 액션(저장은 자동 write-through).
  * 관계는 컬럼 핸들을 끌어 생성. 배치·그룹·상세 서랍은 Remote ERD 와 **같은 공용 표면**을 쓰고,
  * 저장 스코프만 설계별(`design:<id>`)이다. 정본: `docs/spec/db-design.md` §db-design.diagram.scope.
  */
 export function DesignDiagramWorkspace() {
   const design = useActiveDesign()
   const readOnly = useDesignReadOnly()
-  const scoped = useDesignTables()
+  const scoped = useScopedDesignTables()
   const addTable = useDefinitionStore((s) => s.addTable)
   const addView = useDefinitionStore((s) => s.addView)
 

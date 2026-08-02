@@ -1,3 +1,4 @@
+import { scopeTableIds } from '../../migration/importSchema'
 import { DEFAULT_SCHEMA } from '../../schemaRef'
 import type { Column, Constraint, TableDef } from './types'
 
@@ -33,6 +34,57 @@ export function toTableDef(r: TableRecordLike): TableDef {
     isView: r.isView ?? false,
     viewSql: r.viewSql ?? ''
   }
+}
+
+/** 저장으로 내보낼 필드만 — preload `TableRecord` 의 부분집합(preload 를 import 하지 않으려고). */
+interface TableRecordOut {
+  id: string
+  designId: string
+  schema?: string
+  name: string
+  comment: string
+  columns: unknown[]
+  constraints: unknown[]
+  isView: boolean
+  viewSql: string
+}
+
+/**
+ * 렌더러 도메인 TableDef → 저장소 레코드. **`toTableDef` 의 짝**이다.
+ *
+ * 짝이 없던 동안 저장 쪽에서 `schema` 가 통째로 빠져 있었다(2026-08-03 실측): 여러 스키마를
+ * 가져온 설계도 화면이 한 번 저장하는 순간 전부 기본 스키마로 뭉개졌고, 앱을 다시 열면
+ * `auth.sessions` 가 `public.sessions` 로 보였다. 내보낼 필드를 한 곳에 모아 다시 어긋나지 않게 한다.
+ */
+export function toTableRecord(t: TableDef): TableRecordOut {
+  return {
+    id: t.id,
+    designId: t.designId,
+    schema: t.schema,
+    name: t.name,
+    comment: t.comment,
+    columns: t.columns,
+    constraints: t.constraints,
+    isView: t.isView ?? false,
+    viewSql: t.viewSql ?? ''
+  }
+}
+
+/**
+ * 커밋된 버전 스냅샷을 **Draft 로 앉힐 형태**로 바꾼다.
+ *
+ * id 규칙이 스냅샷마다 다른 것이 까다롭다. 설계부에서 컷한 버전은 Draft 의 id 를 그대로 담아
+ * 이미 `<설계>:` 접두가 붙어 있고, 운영 DB 가져오기로 컷한 버전은 실 DB 이름 기반(`t:public.users`)
+ * 이라 접두가 없다. Draft 는 전역 `tables` 테이블(PK=id)에 들어가므로 접두가 **꼭 한 번** 필요하다 —
+ * 없으면 다른 설계와 부딪히고, 두 번 붙으면 같은 테이블이 새것으로 둔갑한다. 그래서 테이블마다
+ * 접두 여부를 보고 없는 것에만 붙인다(순서는 그대로 — 목록 차례가 뒤집히면 안 된다).
+ */
+export function draftTablesFromSnapshot(tables: readonly TableDef[], designId: string): TableDef[] {
+  const prefix = `${designId}:`
+  return tables.map((t) => {
+    const owned = t.designId === designId ? t : { ...t, designId }
+    return owned.id.startsWith(prefix) ? owned : scopeTableIds([owned], designId)[0]
+  })
 }
 
 /**

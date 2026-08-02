@@ -34,6 +34,7 @@ import { DefinitionToolbar } from './workspaces/definition/DefinitionToolbar'
 import { DesignDiagramWorkspace } from './workspaces/diagram/DesignDiagramWorkspace'
 import { SeedWorkspace } from './workspaces/seed/SeedWorkspace'
 import { DesignDialogs } from './designs/DesignDialogs'
+import { DesignScopeSelector } from './designs/DesignScopeSelector'
 import { useDesignsStore } from './designs/store'
 import { TimelineView } from './versions/TimelineView'
 import { VersionDiffView } from './versions/VersionDiffView'
@@ -115,6 +116,17 @@ export const dbService: Service = {
       area: 'design',
       options: [],
       Render: VersionLens
+    },
+    {
+      // 설계 범위 — 그 설계에서 볼 스키마들. 시점 바로 뒤 칸이다(2026-08-03 사용자 요청:
+      // "Remote 화면처럼 스키마를 고를 항목이 없다 — 버전 옆에 붙여 달라").
+      // 운영부의 `scope` 와 같은 개념이지만 목록의 출처가 다르다: 실 DB 가 아니라 **설계 안
+      // 테이블**에서 뽑는다(연결이 없어도 뜬다). 값은 설계에 저장된다.
+      id: 'design-scope',
+      label: '범위',
+      area: 'design',
+      options: [],
+      Render: DesignScopeSelector
     },
     {
       // 연결(1급)도 런타임 데이터 → connections/store 가 옵션을 주입한다.

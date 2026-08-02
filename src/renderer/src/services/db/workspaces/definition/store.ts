@@ -1,8 +1,16 @@
 import { create } from 'zustand'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
+import { scopedTables } from '../../scope'
 import { autoIncrementToken } from '../../typeCatalog'
 import { isReadOnlyLens, useVersionLens, useVersionsStore } from '../../versions/store'
-import { changedDesignIds, mergeDesignTables, reconcileActiveTable, toTableDef } from './designScope'
+import {
+  changedDesignIds,
+  draftTablesFromSnapshot,
+  mergeDesignTables,
+  reconcileActiveTable,
+  toTableDef,
+  toTableRecord
+} from './designScope'
 import type { Column, Constraint, ConstraintKind, TableDef } from './types'
 // 순환 참조 주의: definition → {designs, versions} 방향만 존재(역방향 import 없음).
 
@@ -397,14 +405,30 @@ export function useDesignTables(): TableDef[] {
   return draft.filter((t) => t.designId === design.id)
 }
 
+/**
+ * **화면에 뿌릴** 테이블 목록 — 설계 범위(스키마 손잡이)까지 걸러 준다.
+ *
+ * `useDesignTables` 와 갈라 두는 이유: 범위는 **보는 일**에만 걸린다. FK 가 가리키는 상대나
+ * 이름 충돌 검사는 범위 밖 테이블까지 봐야 한다 — 거기에도 범위를 먹이면 범위를 좁힌 순간
+ * 멀쩡한 FK 가 "대상 없음"으로 보이고 이름 충돌 검사가 뚫린다.
+ */
+export function useScopedDesignTables(): TableDef[] {
+  const tables = useDesignTables()
+  const design = useActiveDesign()
+  return scopedTables(tables, design?.schemas ?? [])
+}
+
 /** Design 이 읽기 전용인가 — 커밋된 버전을 렌즈로 보고 있으면 true. */
 export function useDesignReadOnly(): boolean {
   return isReadOnlyLens(useVersionLens())
 }
 
-/** 현재 활성 테이블 — 활성 Design 스코프. 스코프 밖이면 첫 테이블로 폴백, 없으면 undefined. */
+/**
+ * 현재 활성 테이블 — 범위 안에서 고른다. 범위 밖이면 첫 테이블로 폴백, 없으면 undefined.
+ * (목록에서 사라진 테이블의 상세가 오른쪽에 남아 있으면 "왜 이게 보이지"가 된다.)
+ */
 export function useActiveTable(): TableDef | undefined {
-  const scoped = useDesignTables()
+  const scoped = useScopedDesignTables()
   const activeId = useDefinitionStore((s) => s.activeTableId)
   return scoped.find((t) => t.id === activeId) ?? scoped[0]
 }
@@ -421,6 +445,29 @@ let rehydrating = false
  * MCP 에이전트가 바꾼 설계의 테이블을 화면 상태에 반영한다 — 대상 설계 슬라이스만
  * 갈아끼우고(다른 설계의 편집 중 상태 보존) write-through 를 되쏘지 않는다.
  */
+/**
+ * 커밋된 버전 스냅샷으로 **Draft 를 통째로 되돌린다**(그 설계 몫만). 되돌린 결과는 다른 편집과
+ * 똑같이 write-through 로 저장된다 — `rehydrateDesignTables` 와 달리 여기서는 저장을 막지 않는다.
+ *
+ * 왜 필요한가: Draft 는 실 DB 로도 버전으로도 되살릴 수 없는 유일한 상태였다. 스냅샷은 온전한데
+ * Draft 만 상한 경우(2026-08-03 실측: 저장 매핑이 스키마를 흘려 전부 `public` 으로 뭉갰다)
+ * 되돌릴 길이 없어, 이미 최신인 설계는 "가져올 변경이 없다"는 이유로 다시 가져오지도 못했다.
+ */
+export function restoreDraftFromSnapshot(designId: string, snapshotTables: readonly TableDef[]): void {
+  const incoming = draftTablesFromSnapshot(snapshotTables, designId)
+  useDefinitionStore.setState((s) => {
+    const tables = mergeDesignTables(s.tables, designId, incoming)
+    const active = reconcileActiveTable(s.activeTableId, tables, incoming)
+    return {
+      tables,
+      activeTableId: active.changed ? active.activeTableId : s.activeTableId,
+      editing: null,
+      openConstraintId: null,
+      returnTo: null
+    }
+  })
+}
+
 export function rehydrateDesignTables(designId: string, incoming: TableDef[]): void {
   const cur = useDefinitionStore.getState()
   if (!cur.loaded) return // 초기 하이드레이션 전이면 init 이 곧 전체를 읽는다
@@ -454,18 +501,7 @@ useDefinitionStore.subscribe((s, prev) => {
     for (const designId of ids) {
       void window.rockury.tables.replaceForDesign(
         designId,
-        snapshot
-          .filter((t) => t.designId === designId)
-          .map((t) => ({
-            id: t.id,
-            designId: t.designId,
-            name: t.name,
-            comment: t.comment,
-            columns: t.columns,
-            constraints: t.constraints,
-            isView: t.isView ?? false,
-            viewSql: t.viewSql ?? ''
-          }))
+        snapshot.filter((t) => t.designId === designId).map(toTableRecord)
       )
     }
   }, 250)

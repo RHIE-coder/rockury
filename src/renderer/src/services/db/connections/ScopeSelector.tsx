@@ -1,23 +1,17 @@
 import { useEffect, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, ChevronDown, Database, Layers, Loader2 } from 'lucide-react'
+import { ChevronDown, Layers } from 'lucide-react'
 import { cx } from '@renderer/lib/cx'
 import { useNav } from '@renderer/nav/useNav'
-import {
-  findConnectionForCatalog,
-  reconcileScope,
-  scopeModel,
-  scopeSummary,
-  shownScope,
-  toggleSchema
-} from '../scope'
+import { reconcileScope, scopeModel, scopeSummary, shownScope, toggleSchema } from '../scope'
 import { useRemoteStore } from '../remote/store'
+import { ScopeMenu } from './ScopeMenu'
 import { useActiveConnection, useConnectionsStore } from './store'
 
 /**
  * **범위 손잡이** — 이 연결에서 볼 스키마를 고른다(§db-remote.scope).
  *
- * 자리는 상단 컨텍스트 바의 Connection 칸 바로 뒤다. **한 자리에서만 고른다** —
+ * 자리는 뷰 탭 줄 오른쪽 끝, 운영 손잡이의 Connection 바로 뒤다. **한 자리에서만 고른다** —
  * Definition·Diagram·Data·Query 가 다 같은 값을 보므로, 뷰마다 손잡이를 두면 같은 연결인데
  * 화면끼리 다른 것을 보게 된다.
  *
@@ -26,6 +20,7 @@ import { useActiveConnection, useConnectionsStore } from './store'
  * 자리라 목록만 보이고 고르면 그 연결로 옮겨 간다. SQLite 는 고를 것이 없어 손잡이가 안 뜬다.
  *
  * 값은 연결에 저장된다(`connections.schemas`) — 앱을 다시 열면 보던 범위로 돌아온다.
+ * (목록·항목은 `ScopeMenu` 가 그린다 — 가져오기 창의 범위 칸과 같은 알맹이다.)
  */
 export function ScopeSelector() {
   const conn = useActiveConnection()
@@ -88,12 +83,6 @@ export function ScopeSelector() {
     void reload(conn.id, conn.id, true, next)
   }
 
-  const goToCatalog = (catalog: string): void => {
-    const target = findConnectionForCatalog(connections, conn, catalog)
-    if (target) setContextValue('conn', target.id)
-    // 갈 연결이 없으면 아무 일도 하지 않는다(아래 메뉴가 그 항목을 흐리게 그리고 이유를 말한다).
-  }
-
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -113,93 +102,19 @@ export function ScopeSelector() {
         </button>
       </DropdownMenu.Trigger>
 
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="start"
-          sideOffset={6}
-          className="z-50 min-w-[240px] rounded-lg border border-line bg-canvas p-1 shadow-lg"
-        >
-          <DropdownMenu.Label className="px-2 py-1.5 text-[11px] font-semibold text-muted">
-            {model.schemaLabel}
-          </DropdownMenu.Label>
-
-          {loading && (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 text-[12px] text-muted">
-              <Loader2 className="size-3.5 animate-spin" /> 읽는 중…
-            </div>
-          )}
-          {error && <div className="px-2 py-1.5 text-[12px] text-destructive">{error}</div>}
-          {!loading && !error && available?.length === 0 && (
-            <div className="px-2 py-1.5 text-[12px] text-muted">고를 {model.schemaLabel} 없음</div>
-          )}
-
-          {(available ?? []).map((s) => {
-            const on = selected.includes(s)
-            // 마지막 하나는 못 끈다 — 다 끄면 읽을 것이 없어 빈 화면이 되고, 그건 고장으로 읽힌다.
-            const locked = on && selected.length === 1
-            return (
-              <DropdownMenu.CheckboxItem
-                key={s}
-                // e2e 가 라벨 문자열이 아니라 역할로 항목을 집게 하는 훅 — 지우면 스모크가 깨진다.
-                data-scope-schema={s}
-                checked={on}
-                disabled={locked}
-                onSelect={(e) => {
-                  e.preventDefault() // 여러 개를 연달아 고르는 자리라 한 번 누를 때마다 닫지 않는다
-                  apply(toggleSchema(selected, s))
-                }}
-                title={locked ? '마지막 하나는 끌 수 없어요' : undefined}
-                className={cx(
-                  'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none',
-                  'data-[highlighted]:bg-panel-strong',
-                  locked && 'cursor-default opacity-60'
-                )}
-              >
-                <Check size={13} className={cx('shrink-0', on ? 'text-accent' : 'invisible')} />
-                <span className="font-mono text-[12px]">{s}</span>
-              </DropdownMenu.CheckboxItem>
-            )
-          })}
-
-          {model.hasCatalogLayer && catalogs.length > 0 && (
-            <>
-              <DropdownMenu.Separator className="my-1 h-px bg-line" />
-              <DropdownMenu.Label className="px-2 py-1.5 text-[11px] font-semibold text-muted">
-                {model.catalogLabel}
-                {/* 왜 여긴 체크가 아니라 이동인지 — 안 적으면 "왜 여러 개를 못 고르지"가 된다. */}
-                <span className="ml-1 font-normal">· 고르면 그 연결로 갑니다</span>
-              </DropdownMenu.Label>
-              {catalogs.map((cat) => {
-                const target = findConnectionForCatalog(connections, conn, cat)
-                const here = target?.id === conn.id
-                return (
-                  <DropdownMenu.Item
-                    key={cat}
-                    disabled={!target}
-                    onSelect={() => goToCatalog(cat)}
-                    title={
-                      target
-                        ? here
-                          ? '지금 보고 있는 데이터베이스예요'
-                          : `연결 "${target.name}" 으로 이동해요`
-                        : '이 데이터베이스에 붙는 연결이 아직 없어요 — Connections 에서 만들어 주세요'
-                    }
-                    className={cx(
-                      'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none',
-                      'data-[highlighted]:bg-panel-strong',
-                      !target && 'cursor-default opacity-45'
-                    )}
-                  >
-                    <Database size={13} className={cx('shrink-0', here ? 'text-accent' : 'text-muted')} />
-                    <span className="font-mono text-[12px]">{cat}</span>
-                    {here && <span className="ml-auto text-[11px] text-muted">지금</span>}
-                  </DropdownMenu.Item>
-                )
-              })}
-            </>
-          )}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
+      <ScopeMenu
+        model={model}
+        current={conn}
+        connections={connections}
+        available={available}
+        selected={selected}
+        catalogs={catalogs}
+        loading={loading}
+        error={error}
+        catalogHint="고르면 그 연결로 갑니다"
+        onToggle={(s) => apply(toggleSchema(selected, s))}
+        onPickCatalog={(target) => setContextValue('conn', target.id)}
+      />
     </DropdownMenu.Root>
   )
 }

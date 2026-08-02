@@ -23,8 +23,10 @@ import { createVersion, deleteVersion, listVersions, type CreateVersionInput } f
 export function registerStoreIpc(): void {
   ipcMain.handle('designs:list', () => listDesigns())
   ipcMain.handle('designs:create', (_event, input: CreateDesignInput) => createDesign(input))
-  ipcMain.handle('designs:update', (_event, id: string, patch: { name: string; description: string }) =>
-    updateDesign(id, patch)
+  ipcMain.handle(
+    'designs:update',
+    (_event, id: string, patch: { name?: string; description?: string; schemas?: string[] }) =>
+      updateDesign(id, patch)
   )
   ipcMain.handle('designs:delete', (_event, id: string) => deleteDesign(id))
 

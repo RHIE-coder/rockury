@@ -85,6 +85,55 @@ export function toggleSchema(current: readonly string[], schema: string): string
 }
 
 /**
+ * ── 설계부의 범위 ──────────────────────────────────────────────────────────
+ * 운영부와 **개념은 같고 기본값이 다르다.** 연결은 안 고르면 "기본 스키마 하나"만 읽지만
+ * (읽어 오는 비용이 실제로 든다), 설계는 이미 손안에 있어 안 고르면 **전부 보인다**.
+ * 그래서 "다 끄면 빈 화면" 같은 함정도 없다 — 다 끈 상태가 곧 안 고른 상태다.
+ */
+
+/** 이 설계에 실제로 들어 있는 스키마들 — 고를 수 있는 목록. 이름순. */
+export function designSchemas(tables: readonly { schema?: string }[]): string[] {
+  const seen = new Set<string>()
+  for (const t of tables) if (t.schema) seen.add(t.schema)
+  return [...seen].sort()
+}
+
+/** 범위로 거른 테이블 — 안 골랐으면(빈 배열) 전부. */
+export function scopedTables<T extends { schema?: string }>(
+  tables: readonly T[],
+  schemas: readonly string[]
+): T[] {
+  if (schemas.length === 0) return [...tables]
+  return tables.filter((t) => t.schema && schemas.includes(t.schema))
+}
+
+/**
+ * 설계 범위 손잡이에 적을 말. 안 골랐으면 스키마 수를 보인다 — "전부"라고만 적으면
+ * 몇 갈래가 섞여 있는지, 애초에 고를 것이 있는지가 안 보인다.
+ */
+export function designScopeSummary(selected: readonly string[], available: readonly string[]): string {
+  if (selected.length === 0) return available.length <= 1 ? (available[0] ?? '스키마') : `전체 ${available.length}`
+  return scopeSummary(selected)
+}
+
+/**
+ * 설계 범위 토글 — 마지막 하나를 끄면 **빈 배열(= 전부 보기)** 로 돌아간다.
+ * 운영부처럼 "마지막은 못 끈다"로 막지 않는 이유: 여기서 빈 배열은 빈 화면이 아니라 전체다.
+ */
+export function toggleDesignSchema(
+  current: readonly string[],
+  schema: string,
+  available: readonly string[]
+): string[] {
+  // 안 고른 상태(=전부)에서 하나를 끄면 "그것만 빼고 전부"가 되어야 한다 —
+  // 전부 보이던 화면에서 하나를 껐는데 그것만 남으면 정반대로 읽힌다.
+  const base = current.length > 0 ? current : available
+  const next = base.includes(schema) ? base.filter((s) => s !== schema) : [...base, schema]
+  // 다시 전부가 됐으면 빈 배열로 접는다 — "전부"의 표현을 하나로 유지한다.
+  return next.length === available.length ? [] : next
+}
+
+/**
  * 이 카탈로그(database)를 보려면 어느 연결로 가야 하나 — PostgreSQL 전용.
  * 같은 서버·같은 포트·같은 계정·같은 방언이면서 그 database 에 붙는 연결을 찾는다.
  * 없으면 `null` — 부르는 쪽이 "만들까요?"를 물어야 한다(말없이 만들지 않는다).

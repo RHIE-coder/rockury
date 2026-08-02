@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye, Layers, Lock, Plus, Table2, TableProperties, X } from 'lucide-react'
+import { ArrowLeft, Eye, Layers, Lock, Plus, RotateCcw, Table2, TableProperties, X } from 'lucide-react'
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { Button } from '@renderer/ui/button'
 import {
@@ -9,14 +9,15 @@ import {
 } from '@renderer/ui/dropdown-menu'
 import { TableSidePanel } from '../../TableSidePanel'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
+import { useRestoreStore } from '../../versions/restoreStore'
 import { DRAFT_LENS, useVersionLens, useVersionsStore } from '../../versions/store'
-import { useDefinitionStore, useDesignTables, useDesignReadOnly } from './store'
+import { useDefinitionStore, useScopedDesignTables, useDesignReadOnly } from './store'
 import { TableForm } from './TableForm'
 import { SqlForm } from './SqlForm'
 
 /** 좌측 서브사이드바 — [테이블/뷰 목록 | 제약 목록] 탭. 클릭 시 active 테이블 전환. */
 function TablesSidebar() {
-  const tables = useDesignTables()
+  const tables = useScopedDesignTables()
   const activeId = useDefinitionStore((s) => s.activeTableId)
   const setActive = useDefinitionStore((s) => s.setActiveTable)
 
@@ -127,21 +128,38 @@ function NoTablesState({ onAdd }: { onAdd: () => void }) {
 }
 
 /** 과거 버전 열람 중임을 알리는 읽기 전용 배너 — Draft 로 복귀 액션 포함. */
-function ReadOnlyBanner({ version }: { version: string }) {
+function ReadOnlyBanner({ designId, version }: { designId: string; version: string }) {
   const setLens = useVersionsStore((s) => s.setLens)
+  const target = useVersionsStore((s) => s.byDesign[designId]?.find((v) => v.number === version))
+  const openRestore = useRestoreStore((s) => s.openRestore)
+
   return (
     <div className="flex items-center gap-2 border-b border-line bg-accent-2-soft px-4 py-1.5 text-[12px] text-accent-2">
       <Lock className="size-3.5" />
       <span className="font-medium">읽기 전용</span>
       <span className="font-mono font-semibold">{version}</span>
       <span className="text-accent-2/80">과거 버전을 보고 있어요 — 편집하려면 Draft 로 전환하세요.</span>
-      <button
-        type="button"
-        onClick={() => setLens(DRAFT_LENS)}
-        className="ml-auto rounded-md bg-accent-2 px-2 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-2/90"
-      >
-        Draft 로 전환
-      </button>
+      <div className="ml-auto flex items-center gap-1.5">
+        {target && (
+          <button
+            type="button"
+            data-restore-draft
+            onClick={() => openRestore(designId, target)}
+            title={`Draft 를 ${version} 시점 그대로 덮어씁니다`}
+            className="rounded-md border border-accent-2/40 px-2 py-0.5 text-[11px] font-medium text-accent-2 transition-colors hover:bg-accent-2/10"
+          >
+            <RotateCcw className="mr-1 inline size-3" />
+            Draft 를 이 버전으로
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setLens(DRAFT_LENS)}
+          className="rounded-md bg-accent-2 px-2 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-2/90"
+        >
+          Draft 로 전환
+        </button>
+      </div>
     </div>
   )
 }
@@ -149,7 +167,7 @@ function ReadOnlyBanner({ version }: { version: string }) {
 /** Design › Definition 워크스페이스 — [테이블·뷰/제약 사이드 패널 | Table/SQL 폼]. 활성 Design 스코프. */
 export function DefinitionWorkspace() {
   const design = useActiveDesign()
-  const tables = useDesignTables()
+  const tables = useScopedDesignTables()
   const readOnly = useDesignReadOnly()
   const versionId = useVersionLens()
   const form = useDefinitionStore((s) => s.form)
@@ -165,7 +183,7 @@ export function DefinitionWorkspace() {
       sidebar={<TablesSidebar />}
     >
       <div className="flex h-full flex-col">
-        {readOnly && versionId && <ReadOnlyBanner version={versionId} />}
+        {readOnly && versionId && <ReadOnlyBanner designId={design.id} version={versionId} />}
         <div className="min-h-0 flex-1">
           {tables.length === 0 ? (
             readOnly ? (

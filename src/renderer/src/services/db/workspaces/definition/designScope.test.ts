@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { changedDesignIds, mergeDesignTables, reconcileActiveTable } from './designScope'
+import {
+  changedDesignIds,
+  draftTablesFromSnapshot,
+  mergeDesignTables,
+  reconcileActiveTable,
+  toTableRecord
+} from './designScope'
 import type { TableDef } from './types'
 
 const t = (designId: string, id: string, name = id): TableDef => ({
@@ -91,5 +97,49 @@ describe('reconcileActiveTable — 리하이드레이션 후 활성 테이블 �
     const incoming = [t('a', 'a9')]
     const merged = [t('b', 'b1'), ...incoming]
     expect(reconcileActiveTable('b1', merged, incoming)).toEqual({ changed: false, activeTableId: 'b1' })
+  })
+})
+
+describe('toTableRecord — 저장으로 내보내는 필드', () => {
+  // 회귀(2026-08-03 실측): 저장 매핑에 schema 가 빠져 있어, 여러 스키마를 가져온 설계도
+  // 화면이 한 번 저장하면 전부 기본 스키마로 뭉개졌다(앱을 다시 열면 auth.sessions → public.sessions).
+  it('스키마를 함께 내보낸다', () => {
+    expect(toTableRecord({ ...t('d1', 'x'), schema: 'auth' }).schema).toBe('auth')
+  })
+
+  it('뷰 표식과 본문도 잃지 않는다 — 기본값으로 채워 내보낸다', () => {
+    const rec = toTableRecord({ ...t('d1', 'v'), isView: true, viewSql: 'SELECT 1' })
+    expect(rec).toMatchObject({ isView: true, viewSql: 'SELECT 1' })
+    expect(toTableRecord(t('d1', 'x'))).toMatchObject({ isView: false, viewSql: '' })
+  })
+})
+
+describe('draftTablesFromSnapshot — 버전 스냅샷을 Draft 로 앉힌다', () => {
+  // 스냅샷의 id 규칙이 출처마다 다르다: 설계부에서 컷하면 이미 `<설계>:` 접두가 붙어 있고,
+  // 운영 DB 가져오기로 컷하면 실 DB 이름 기반이라 접두가 없다.
+  it('접두가 없는 스냅샷(가져오기로 컷)에는 설계 접두를 붙인다', () => {
+    const out = draftTablesFromSnapshot([{ ...t('d1', 't:public.users'), schema: 'public' }], 'd1')
+    expect(out[0].id).toBe('d1:t:public.users')
+  })
+
+  it('이미 접두가 붙은 스냅샷(설계부에서 컷)은 그대로 둔다 — 두 번 붙으면 새 테이블로 둔갑한다', () => {
+    const out = draftTablesFromSnapshot([t('d1', 'd1:t:users')], 'd1')
+    expect(out[0].id).toBe('d1:t:users')
+  })
+
+  it('스키마를 잃지 않는다 — 되돌리는 목적 자체가 그것이다', () => {
+    const out = draftTablesFromSnapshot([{ ...t('d1', 't:auth.sessions'), schema: 'auth' }], 'd1')
+    expect(out[0].schema).toBe('auth')
+  })
+
+  it('다른 설계의 스냅샷을 앉혀도 소속을 이 설계로 고쳐 준다', () => {
+    const out = draftTablesFromSnapshot([t('other', 't:users')], 'd1')
+    expect(out[0].designId).toBe('d1')
+    expect(out[0].id).toBe('d1:t:users')
+  })
+
+  it('목록 차례는 그대로', () => {
+    const out = draftTablesFromSnapshot([t('d1', 't:a'), t('d1', 'd1:t:b'), t('d1', 't:c')], 'd1')
+    expect(out.map((x) => x.name)).toEqual(['t:a', 'd1:t:b', 't:c'])
   })
 })

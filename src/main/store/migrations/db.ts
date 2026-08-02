@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { recoverLostTableSchemas } from './recoverTableSchema'
 import { addColumnIfMissing, type ServiceMigration } from './types'
 
 /**
@@ -307,6 +308,18 @@ export const dbMigration: ServiceMigration = {
     // connections.schemas — 그 연결에서 지금 보고 있는 스키마 목록(범위). JSON 배열.
     // 비면 "기본 스키마 하나"다 — 예전 연결은 지금과 똑같이 동작한다.
     addColumnIfMissing(d, 'connections', 'schemas', `TEXT NOT NULL DEFAULT '[]'`)
+
+    // designs.schemas — 그 설계에서 지금 보고 있는 스키마 목록(범위). 운영부의 connections.schemas 와
+    // 같은 자리다: 여러 스키마를 한 설계로 가져오면 목록이 뒤섞여, 볼 것을 골라야 한다.
+    // 비면 **전부 본다** — 예전 설계는 지금과 똑같이 동작한다(연결 쪽의 "기본 하나"와 다른 이유는
+    // 설계엔 읽어 올 비용이 없어서다. 다 보여 주는 것이 손해가 아니다).
+    addColumnIfMissing(d, 'designs', 'schemas', `TEXT NOT NULL DEFAULT '[]'`)
+
+    // 잃어버린 스키마 되살리기 — 설계부의 저장 매핑이 `schema` 를 흘려(2026-08-03 수정) 여러
+    // 스키마로 짜인 설계가 전부 한 스키마로 뭉개진 채 굳었다. id 에는 스키마가 남아 있으므로
+    // 앱을 켤 때 되찾아 채운다. **사용자가 뭘 누를 필요가 없어야 한다** — 앱이 낸 손해다.
+    // 몇 번을 지나가도 결과가 같아(빈 값만 채운다) 매 실행 지나가도 된다.
+    recoverLostTableSchemas(d)
 
     // diagram_layouts.groups — 다이어그램 그룹(레이어): 이름·색·소속 테이블·접힘.
     // 배치와 같은 행에 둔다 — 스코프(연결/설계)가 같고 언제나 함께 읽고 쓰기 때문.

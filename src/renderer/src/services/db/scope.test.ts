@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest'
 import type { ConnectionDef } from './connections/store'
 import {
   catalogConnectionDraft,
+  designSchemas,
+  designScopeSummary,
   findConnectionForCatalog,
   reconcileScope,
   scopeModel,
   scopeSummary,
+  scopedTables,
   shownScope,
+  toggleDesignSchema,
   toggleSchema
 } from './scope'
 
@@ -144,5 +148,74 @@ describe('catalogConnectionDraft', () => {
       sslEnabled: true,
       sslConfig: undefined
     })
+  })
+})
+
+// ── 설계부의 범위 ─────────────────────────────────────────────────────────────
+// 운영부와 개념은 같지만 **빈 배열의 뜻이 반대**다: 연결은 "기본 하나", 설계는 "전부".
+const t = (schema: string, name: string) => ({ schema, name })
+
+describe('designSchemas — 설계에 실제로 든 스키마', () => {
+  it('중복을 접고 이름순으로 준다', () => {
+    expect(designSchemas([t('public', 'users'), t('auth', 'sessions'), t('public', 'posts')])).toEqual([
+      'auth',
+      'public'
+    ])
+  })
+
+  it('스키마가 안 붙은 행은 세지 않는다', () => {
+    expect(designSchemas([{ schema: undefined }, t('public', 'users')])).toEqual(['public'])
+  })
+})
+
+describe('scopedTables', () => {
+  const tables = [t('public', 'users'), t('auth', 'sessions'), t('billing', 'invoices')]
+
+  it('안 골랐으면 전부 — 설계는 이미 손안에 있어 감출 이유가 없다', () => {
+    expect(scopedTables(tables, [])).toHaveLength(3)
+  })
+
+  it('고른 스키마의 것만 남긴다', () => {
+    expect(scopedTables(tables, ['auth']).map((x) => x.name)).toEqual(['sessions'])
+    expect(scopedTables(tables, ['public', 'billing']).map((x) => x.name)).toEqual(['users', 'invoices'])
+  })
+})
+
+describe('toggleDesignSchema — 마지막을 꺼도 빈 화면이 안 된다', () => {
+  const all = ['auth', 'billing', 'public']
+
+  it('전부 보던 중 하나를 끄면 "그것만 빼고 전부"가 된다', () => {
+    expect(toggleDesignSchema([], 'auth', all)).toEqual(['billing', 'public'])
+  })
+
+  it('하나만 켜 두고 그것을 끄면 전부로 돌아간다(빈 배열)', () => {
+    expect(toggleDesignSchema(['auth'], 'auth', all)).toEqual([])
+  })
+
+  it('다시 전부가 되면 빈 배열로 접는다 — "전부"의 표현은 하나뿐', () => {
+    expect(toggleDesignSchema(['auth', 'billing'], 'public', all)).toEqual([])
+  })
+
+  it('꺼진 것을 켜면 더한다', () => {
+    expect(toggleDesignSchema(['auth'], 'billing', all)).toEqual(['auth', 'billing'])
+  })
+})
+
+describe('designScopeSummary', () => {
+  it('안 골랐으면 몇 갈래인지 보인다 — "전부"만으로는 고를 것이 있는지 모른다', () => {
+    expect(designScopeSummary([], ['auth', 'billing', 'public'])).toBe('전체 3')
+  })
+
+  it('스키마가 하나뿐인 설계는 그 이름을 그대로 — 셀 것이 없다', () => {
+    expect(designScopeSummary([], ['public'])).toBe('public')
+  })
+
+  it('아무 테이블도 없는 새 설계는 자리 이름으로 둔다', () => {
+    expect(designScopeSummary([], [])).toBe('스키마')
+  })
+
+  it('골랐으면 운영부와 같은 말투', () => {
+    expect(designScopeSummary(['auth'], ['auth', 'public'])).toBe('auth')
+    expect(designScopeSummary(['auth', 'public'], ['auth', 'billing', 'public'])).toBe('auth 외 1')
   })
 })

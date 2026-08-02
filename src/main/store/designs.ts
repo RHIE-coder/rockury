@@ -6,6 +6,8 @@ export interface DesignRecord {
   name: string
   description: string
   dialect: string
+  /** 범위(scope) — 이 설계에서 지금 보고 있는 스키마 목록. **빈 배열이면 전부 본다.** */
+  schemas: string[]
   created_at: string
 }
 
@@ -25,23 +27,58 @@ function slugify(name: string): string {
   )
 }
 
-export function listDesigns(): DesignRecord[] {
-  return getDb()
-    .prepare('SELECT id, name, description, dialect, created_at FROM designs ORDER BY created_at ASC')
-    .all() as unknown as DesignRecord[]
+/** 저장된 행(스키마는 JSON 문자열) → 도메인 레코드. */
+interface DesignRow {
+  id: string
+  name: string
+  description: string
+  dialect: string
+  schemas: string | null
+  created_at: string
 }
 
-/** 이름·설명 수정 (dialect 는 고정 속성이라 변경 불가). 갱신된 레코드를 반환. */
-export function updateDesign(id: string, patch: { name: string; description: string }): DesignRecord {
+/** 범위 JSON 파싱 — 깨진 값이면 빈 배열(= 전부 보기). 범위 하나 때문에 설계가 안 열리면 안 된다. */
+function parseSchemas(raw: string | null): string[] {
+  if (!raw) return []
+  try {
+    const v: unknown = JSON.parse(raw)
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+const toRecord = (r: DesignRow): DesignRecord => ({
+  id: r.id,
+  name: r.name,
+  description: r.description,
+  dialect: r.dialect,
+  schemas: parseSchemas(r.schemas),
+  created_at: r.created_at
+})
+
+const SELECT = 'SELECT id, name, description, dialect, schemas, created_at FROM designs'
+
+export function listDesigns(): DesignRecord[] {
+  return (getDb().prepare(`${SELECT} ORDER BY created_at ASC`).all() as unknown as DesignRow[]).map(toRecord)
+}
+
+/**
+ * 설계 수정 (dialect 는 고정 속성이라 변경 불가). 갱신된 레코드를 반환.
+ * 준 것만 고친다 — 범위 손잡이는 이름을 모르고, 이름 편집 창은 범위를 모른다.
+ */
+export function updateDesign(
+  id: string,
+  patch: { name?: string; description?: string; schemas?: string[] }
+): DesignRecord {
   const d = getDb()
-  d.prepare('UPDATE designs SET name = ?, description = ? WHERE id = ?').run(
-    patch.name.trim(),
-    patch.description.trim(),
-    id
-  )
-  return d
-    .prepare('SELECT id, name, description, dialect, created_at FROM designs WHERE id = ?')
-    .get(id) as unknown as DesignRecord
+  const sets: string[] = []
+  const args: (string | null)[] = []
+  if (patch.name !== undefined) (sets.push('name = ?'), args.push(patch.name.trim()))
+  if (patch.description !== undefined) (sets.push('description = ?'), args.push(patch.description.trim()))
+  if (patch.schemas !== undefined) (sets.push('schemas = ?'), args.push(JSON.stringify(patch.schemas)))
+  if (sets.length > 0) d.prepare(`UPDATE designs SET ${sets.join(', ')} WHERE id = ?`).run(...args, id)
+  return toRecord(d.prepare(`${SELECT} WHERE id = ?`).get(id) as unknown as DesignRow)
 }
 
 /** 설계 삭제 — 소속 테이블도 함께 제거(cascade). */
@@ -73,6 +110,7 @@ export function createDesign(input: CreateDesignInput): DesignRecord {
     name: input.name.trim(),
     description: (input.description ?? '').trim(),
     dialect: input.dialect,
+    schemas: [], // 새 설계는 범위를 안 고른 상태 = 전부 보기
     created_at: new Date().toISOString()
   }
   d.prepare(

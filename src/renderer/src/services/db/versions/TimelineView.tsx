@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { GitCommitHorizontal, Layers, Lock, Milestone, Sprout, Trash2 } from 'lucide-react'
+import { GitCommitHorizontal, Layers, Lock, Milestone, RotateCcw, Sprout, Trash2 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { useActiveDesign } from '../designs/store'
 import { dialectInfo } from '../dialects'
 import { useDesignTables } from '../workspaces/definition/store'
 import { useDesignSeedSets } from '../workspaces/seed/store'
 import { CutVersionDialog } from './CutVersionDialog'
+import { useRestoreStore } from './restoreStore'
 import { latestVer } from './semver'
 import { useDesignVersions, useVersionsStore, type VersionDef } from './store'
 
@@ -19,6 +20,7 @@ function fmt(iso: string): string {
 /** 버전 한 줄 — 번호·메모·테이블수·시각 + 삭제(잘못 컷된 버전 회수). 잠긴 버전은 삭제 불가. */
 function VersionRow({ v, designId, latest }: { v: VersionDef; designId: string; latest: boolean }) {
   const remove = useVersionsStore((s) => s.remove)
+  const openRestore = useRestoreStore((s) => s.openRestore)
   const [confirming, setConfirming] = useState(false)
 
   return (
@@ -54,6 +56,17 @@ function VersionRow({ v, designId, latest }: { v: VersionDef; designId: string; 
         </span>
       )}
       <span className="shrink-0 text-[11px] tabular-nums text-muted">{fmt(v.createdAt)}</span>
+      {/* 되돌리기 — 잠긴 버전도 **읽기만** 하므로 막지 않는다(지우는 것과 다르다). */}
+      <Button
+        variant="ghost"
+        size="icon"
+        data-restore-version={v.number}
+        className="size-7 shrink-0 text-muted opacity-0 transition-opacity hover:text-accent-2 group-hover:opacity-100"
+        title={`Draft 를 ${v.number} 로 되돌리기`}
+        onClick={() => openRestore(designId, v)}
+      >
+        <RotateCcw className="size-3.5" />
+      </Button>
       {!v.locked &&
         (confirming ? (
           <span className="flex shrink-0 items-center gap-1">

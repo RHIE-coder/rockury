@@ -105,8 +105,10 @@ export const dbApi = {
     list: (): Promise<DesignRecord[]> => ipcRenderer.invoke('designs:list'),
     create: (input: CreateDesignInput): Promise<DesignRecord> =>
       ipcRenderer.invoke('designs:create', input),
-    update: (id: string, patch: { name: string; description: string }): Promise<DesignRecord> =>
-      ipcRenderer.invoke('designs:update', id, patch),
+    update: (
+      id: string,
+      patch: { name?: string; description?: string; schemas?: string[] }
+    ): Promise<DesignRecord> => ipcRenderer.invoke('designs:update', id, patch),
     delete: (id: string): Promise<void> => ipcRenderer.invoke('designs:delete', id)
   },
   tables: {
