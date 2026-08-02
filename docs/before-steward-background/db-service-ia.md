@@ -131,7 +131,7 @@ Version 은 어느 한 모듈이 "소유"하지 않는다. 설계부가 **생산
 
 nav 는 "깊이는 데이터다" 원칙. 관련 타입은 `src/renderer/src/nav/types.ts`:
 - `Module.area: 'design' | 'ops' | 'common'` — 탭 그룹 칩 + 컨텍스트 활성 판정
-- `Service.context: ContextSelector[]` — ambient 셀렉터. `area` 가 붙으면 모듈 줄의 구획 뱃지로, 없으면 컨텍스트 바로 간다(api·uiux 는 아직 바). `Render` 를 주면 서비스가 그 칸을 직접 그린다(DB 시점 렌즈)
+- `Service.context: ContextSelector[]` — ambient 셀렉터. `area` 가 붙으면 **뷰 탭 줄 오른쪽 끝의 구획 손잡이**로, 없으면 컨텍스트 바로 간다(api·uiux 는 아직 바). `Render` 를 주면 서비스가 그 칸을 직접 그린다(DB 시점 렌즈). 어느 화면이 어느 손잡이를 드는지는 `Module.handles`(안 적으면 자기 구획 하나) — 자리 이력은 컨텍스트 바 → 모듈 줄 구획 뱃지(2026-07-30) → 뷰 탭 줄(2026-08-02)
 - 선택 상태는 `nav/useNav.ts` 의 `contextValues` (서비스 전환 시 기본값으로 리셋)
 
 ---

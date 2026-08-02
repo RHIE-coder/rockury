@@ -3,7 +3,7 @@
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 //
 // 정본: docs/spec/db-remote.md §db-remote.scope. 이 스위트가 못박는 것 —
-//   ⑴ 범위 손잡이가 뜨고, **고른 이름**을 말한다(예전엔 "기본" 이라 적어 사용자가 못 찾았다)
+//   ⑴ 범위 칸이 운영 손잡이(뷰 탭 줄 오른쪽 끝) 안에 뜨고, **고른 이름**을 말한다(예전엔 "기본" 이라 적어 사용자가 못 찾았다)
 //   ⑵ database 여러 개를 켜면 한 화면에 다 들어오고, 동명 테이블이 서로를 안 덮는다
 //   ⑶ 노드 id 가 스키마를 달고 나온다(안 그러면 뒤엣것이 앞엣것을 덮어 테이블이 사라진다)
 //   ⑷ 한쪽을 끄면 그리로 가던 FK 가 **범위 밖 카드**로 남는다(선이 허공에서 끊기지 않는다)
@@ -27,7 +27,7 @@ export async function run(ctx) {
   await click('[data-nav-module="remote"]')
   await page.waitForTimeout(400)
 
-  check('범위: 손잡이가 상단에 있다', (await page.locator('[data-scope-selector]').count()) === 1)
+  check('범위: 운영 손잡이 안에 있다', (await page.locator('[data-area-handle="ops"] [data-scope-selector]').count()) === 1)
 
   /** 손잡이를 열고 그 스키마 항목을 누른다(누를 때마다 다시 읽으므로 창은 열린 채로 둔다). */
   const toggle = async (schema) => {

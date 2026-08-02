@@ -11,13 +11,12 @@ import { DevFeedback } from '../devtools/feedback'
  * Rockury 공통 레이아웃 셸.
  *
  * 활성 경로를 걸으며 존재하는 계층만 렌더한다:
- *   L1 레일(항상) → L2 모듈탭(항상) → L3 뷰탭(모듈에 views 있을 때) →
+ *   L1 레일(항상) → L2 모듈탭(항상) → L3 뷰탭(뷰나 구획 손잡이가 있을 때 — 판단은 ViewTabs 자신이) →
  *   L4 툴바(leaf 에 Toolbar 있을 때) → 워크스페이스
  */
 export function AppShell() {
-  const { service, module, leaf } = useActive()
+  const { service, leaf } = useActive()
 
-  const hasViews = Boolean(module.views?.length)
   const Toolbar = leaf.Toolbar
   const Workspace = leaf.workspace
   const Overlay = service.Overlay
@@ -32,7 +31,7 @@ export function AppShell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <ContextBar />
           <ModuleTabs />
-          {hasViews && <ViewTabs />}
+          <ViewTabs />
           {Toolbar && (
             <ContextualToolbar>
               <Toolbar />

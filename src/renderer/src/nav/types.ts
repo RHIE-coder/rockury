@@ -24,6 +24,15 @@ export type ToolbarComponent = ComponentType
  */
 export type ModuleArea = 'design' | 'ops' | 'common'
 
+/**
+ * 모듈 탭 줄에서 이 모듈이 서는 자리. 안 적으면 `start`(왼쪽부터 차례로) —
+ * **자리를 안 쓴 서비스는 예전과 똑같이 그려진다.**
+ *
+ * `center` 는 "왼쪽 것도 오른쪽 것도 아닌, 둘 사이를 건너는 모듈" 자리다(DB 의 Migration —
+ * 설계와 실 DB 를 견줘 계획을 만든다). 한 줄에 하나만 두는 자리라 눈이 거기서 쉰다.
+ */
+export type ModuleSlot = 'start' | 'center' | 'end'
+
 /** 컨텍스트 셀렉터의 옵션 하나. */
 export interface ContextOption {
   id: string
@@ -50,15 +59,15 @@ export interface ContextAction {
  *
  * 놓이는 자리는 `area` 가 가른다:
  *   - `area` 없음 → 모듈 탭 위의 **컨텍스트 바**(기존 자리)
- *   - `area` 있음 → 모듈 탭 줄의 **그 구획 뱃지 손잡이** 안. 뱃지가 자기 구획의 대상을 든다.
+ *   - `area` 있음 → **뷰 탭 줄 오른쪽 끝의 그 구획 손잡이** 안. 그 구획을 쓰는 화면에서만 뜬다.
  */
 export interface ContextSelector {
   id: string
   label: string
   icon?: LucideIcon
   /**
-   * 이 셀렉터가 붙는 구획. 지정하면 컨텍스트 바가 아니라 모듈 탭 줄의 구획 뱃지 안으로 들어가고,
-   * 그 구획 모듈을 보는 중이 아니어도 자리는 그대로 있다(소속을 자리로 말한다).
+   * 이 셀렉터가 붙는 구획. 지정하면 컨텍스트 바가 아니라 **뷰 탭 줄 오른쪽 끝의 손잡이**로
+   * 들어가고, 그 구획을 쓰는 모듈을 보는 동안에만 뜬다(`Module.handles` · 2026-08-02 사용자 요청).
    * 같은 area 를 여러 셀렉터가 쓰면 한 손잡이 안에 세로선으로 나뉘어 나란히 선다.
    */
   area?: ModuleArea
@@ -101,6 +110,16 @@ export interface Module {
   icon: LucideIcon
   /** 속한 구획(설계/운영/공통). 그룹 구분선·컨텍스트 활성에 쓰인다. 없으면 'common'. */
   area?: ModuleArea
+  /** 탭 줄에서 서는 자리. 없으면 'start'. */
+  slot?: ModuleSlot
+  /**
+   * 이 모듈의 뷰 탭 줄에 세울 **구획 손잡이**(= 그 구획의 대상 셀렉터 묶음). 안 적으면 자기 구획
+   * 하나(`common` 이면 없음)라, 대부분의 모듈은 적을 일이 없다.
+   *
+   * 적는 것은 **두 부서의 대상을 함께 쥐는 모듈**뿐이다 — DB 의 Migration 은 설계와 연결을
+   * 견줘 계획을 만들어서, 자기 구획(`common`)만 따르면 정작 필요한 손잡이가 둘 다 사라진다.
+   */
+  handles?: ModuleArea[]
   /** 있으면 depth 3 (뷰 탭 렌더). 이 경우 workspace 는 무시된다. */
   views?: View[]
   /** views 가 없을 때 렌더되는 depth-2 leaf 워크스페이스. */
@@ -117,8 +136,8 @@ export interface Service {
   modules: Module[]
   /**
    * ambient 셀렉터들(예: Design, Env). `area` 가 없는 것만 상단 컨텍스트 바로 가고,
-   * `area` 가 붙은 것은 모듈 탭 줄의 구획 뱃지 손잡이로 간다. 바로 갈 것이 하나도 없으면
-   * 바 자체가 생략된다(DB 가 그 경우 — 셋 다 구획 뱃지로 갔다).
+   * `area` 가 붙은 것은 뷰 탭 줄의 구획 손잡이로 간다. 바로 갈 것이 하나도 없으면
+   * 바 자체가 생략된다(DB 가 그 경우 — 넷 다 구획 손잡이로 갔다).
    */
   context?: ContextSelector[]
   /** 서비스 전역 오버레이(모달 등) — 서비스가 활성인 동안 항상 마운트된다. */

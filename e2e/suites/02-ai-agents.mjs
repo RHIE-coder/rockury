@@ -114,7 +114,9 @@ export async function run(ctx) {
     await page.waitForTimeout(300)
   }
 
-  // 설계 선택
+  // 설계 선택 — 손잡이는 설계부 화면에만 뜬다(2026-08-02) → 먼저 설계부로 들어간다.
+  await click('[data-nav-module="design"]')
+  await page.waitForTimeout(300)
   await click('[data-context-selector="design"]')
   await click('[role="menuitem"]:has-text("commerce-core")')
   await page.waitForTimeout(300)
