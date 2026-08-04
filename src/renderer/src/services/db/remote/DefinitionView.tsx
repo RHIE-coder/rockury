@@ -18,6 +18,7 @@ import { SqlView } from './definition/SqlView'
 import { useSchemaEditStore } from './schemaEdit/store'
 import { EditableTableDetail } from './schemaEdit/EditableTableDetail'
 import { PreviewBar } from './schemaEdit/PreviewBar'
+import { ConnectionError } from './ConnectionError'
 
 /** [Table|SQL] 표현 토글. */
 function FormToggle({ form, onChange }: { form: 'table' | 'sql'; onChange: (f: 'table' | 'sql') => void }) {
@@ -156,9 +157,12 @@ export function DefinitionView() {
       </div>
 
       {error && !isEditing ? (
-        <div className="m-5 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
-          역설계 실패: {error}
-        </div>
+        <ConnectionError
+          connectionName={conn.name}
+          error={error}
+          retrying={loading}
+          onRetry={() => void load(conn.id, conn.id, true)}
+        />
       ) : loading && !tables && !isEditing ? (
         <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
           <Loader2 className="mr-2 size-4 animate-spin" /> 실 DB 스키마를 읽는 중…

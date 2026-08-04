@@ -47,6 +47,7 @@ import { useActiveConnection } from '../connections/store'
 import { qualifiedName, type TableRef } from '../schemaRef'
 import { quoteTable, type SqlDialect } from './data/sqlBuilder'
 import { useRemoteStore } from './store'
+import { ConnectionError } from './ConnectionError'
 import { columnKeyKinds } from './introspection'
 import { badgeLabels } from './data/columnMeta'
 import { buildSchemaMap, formatSql } from './query/schema'
@@ -94,6 +95,8 @@ export function QueryView() {
   const conn = useActiveConnection()
   const tables = useRemoteStore((s) => (conn ? s.byEnv[conn.id] : undefined))
   const loadIntro = useRemoteStore((s) => s.load)
+  const introError = useRemoteStore((s) => (conn ? s.error[conn.id] : null))
+  const introLoading = useRemoteStore((s) => (conn ? s.loading[conn.id] : false))
   const lib = useCollectionStore()
 
   const sql = useQueryStore((s) => s.sql)
@@ -366,6 +369,16 @@ export function QueryView() {
         )}
         {ddlWarning && !tx && (
           <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-5 py-2 text-[12px] text-muted"><AlertTriangle className="size-3.5" /> DDL 은 즉시 자동 커밋되었습니다(롤백 불가).</div>
+        )}
+        {/* 연결이 안 되면 Run 도 스키마 패널도 안 된다 — 쓰기 전에 알린다(예전엔 아무 말이 없었다). */}
+        {introError && (
+          <ConnectionError
+            variant="inline"
+            connectionName={conn.name}
+            error={introError}
+            retrying={introLoading}
+            onRetry={() => void loadIntro(conn.id, conn.id, true)}
+          />
         )}
         {explain && <ExplainPanel explain={explain} dialect={conn.dbType} />}
         {error && (

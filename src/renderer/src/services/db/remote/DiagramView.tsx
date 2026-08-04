@@ -16,6 +16,7 @@ import { TableDetail } from './definition/TableDetail'
 import { SqlView } from './definition/SqlView'
 import { useSchemaEditStore } from './schemaEdit/store'
 import { DiagramEdit } from './schemaEdit/DiagramEdit'
+import { ConnectionError } from './ConnectionError'
 
 /**
  * Remote › Diagram(운영부 · depth 3, §ops-plan 2e) — 실 DB 를 역설계(introspection)한 ERD.
@@ -126,9 +127,12 @@ export function DiagramView() {
       {isEditing ? (
         <DiagramEdit conn={conn} />
       ) : error ? (
-        <div className="m-5 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
-          역설계 실패: {error}
-        </div>
+        <ConnectionError
+          connectionName={conn.name}
+          error={error}
+          retrying={loading}
+          onRetry={() => void load(conn.id, conn.id, true)}
+        />
       ) : (loading || !layout.loaded) && !tables ? (
         <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
           <Loader2 className="mr-2 size-4 animate-spin" /> 실 DB 스키마를 읽는 중…

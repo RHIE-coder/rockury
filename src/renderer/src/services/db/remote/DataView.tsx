@@ -33,6 +33,7 @@ import { useActiveConnection } from '../connections/store'
 import { sameTable } from '../schemaRef'
 import type { DialectId } from '../dialects'
 import { useRemoteStore } from './store'
+import { ConnectionError } from './ConnectionError'
 import { TableSidePanel } from '../TableSidePanel'
 import { RowDetailDialog } from './RowDetailDialog'
 import { columnKeyKinds } from './introspection'
@@ -101,6 +102,7 @@ export function DataView() {
   const connId = conn?.id ?? null
   const tables = useRemoteStore((s) => (connId ? s.byEnv[connId] : undefined))
   const introLoading = useRemoteStore((s) => (connId ? s.loading[connId] : false))
+  const introError = useRemoteStore((s) => (connId ? s.error[connId] : null))
   const loadIntro = useRemoteStore((s) => s.load)
   const d = useDataStore()
   const dialect = conn?.dbType
@@ -297,7 +299,7 @@ export function DataView() {
           </h2>
           {/* 보고 있는 표 이름·행 수는 아래 도구줄과 쪽 넘김이 이미 말한다 — 여기서 되풀이하지 않는다. */}
           <p className="text-[12px] text-muted">
-            {introLoading ? '실 DB 역설계 중…' : `${all.length}개 테이블`}
+            {introError ? '연결 안 됨' : introLoading ? '실 DB 역설계 중…' : `${all.length}개 테이블`}
           </p>
         </div>
         <span
@@ -309,6 +311,15 @@ export function DataView() {
         </span>
       </div>
 
+      {/* 연결이 안 되면 표 목록이 빈 것과 구분되지 않는다 — "테이블 없음" 은 연결 실패의 답이 아니다. */}
+      {introError ? (
+        <ConnectionError
+          connectionName={conn.name}
+          error={introError}
+          retrying={introLoading}
+          onRetry={() => connId && void loadIntro(connId, connId, true)}
+        />
+      ) : (
       <div className="min-h-0 flex-1">
         <WorkspacePanels
           autoSaveId="db.console.data"
@@ -634,6 +645,7 @@ export function DataView() {
           </div>
         </WorkspacePanels>
       </div>
+      )}
 
       {detailRow != null && selected && (
         // 숨긴 컬럼도 보인다 — 상세는 "이 행 전부"를 읽는 자리다(컬럼 숨김은 표를 좁히려는 설정).

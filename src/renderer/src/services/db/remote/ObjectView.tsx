@@ -8,6 +8,7 @@ import type { ConstraintKind, TableDef } from '../workspaces/definition/types'
 import { useActiveConnection } from '../connections/store'
 import { columnKeyKinds } from './introspection'
 import { useRemoteStore } from './store'
+import { ConnectionError } from './ConnectionError'
 
 const KIND_VARIANT: Record<ConstraintKind, 'pk' | 'uk' | 'fk' | 'idx' | 'check'> = {
   pk: 'pk',
@@ -163,9 +164,12 @@ export function ObjectView() {
       </div>
 
       {error ? (
-        <div className="m-5 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
-          역설계 실패: {error}
-        </div>
+        <ConnectionError
+          connectionName={conn.name}
+          error={error}
+          retrying={loading}
+          onRetry={() => void load(conn.id, conn.id, true)}
+        />
       ) : loading && !tables ? (
         <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
           <Loader2 className="mr-2 size-4 animate-spin" /> 실 DB 스키마를 읽는 중…
