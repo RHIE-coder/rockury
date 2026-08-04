@@ -191,4 +191,52 @@ export async function run(ctx) {
   await click('button:has-text("Cancel")')
   await page.waitForTimeout(200)
 
+  // ── 새로고침이 스키마까지 다시 읽는다 (2026-08-04 사용자 실측 회귀) ──
+  // 밖에서 실 DB 컬럼을 바꾸고 새로고침을 눌렀더니 **모든 칸이 undefined** 로 떴다. 조회는
+  // SELECT * 라 행에는 새 컬럼이 담기는데, 헤더는 캐시된 옛 역설계 결과였다(앱을 껐다 켜야 반영).
+  // Definition·Diagram·Object 는 처음부터 역설계를 다시 읽고 있었고 Data 만 행만 읽고 있었다.
+  {
+    const connId = await page.evaluate(() => window.rockury.nav?.connId ?? null)
+    const conn = connId ?? (await page.evaluate(() => JSON.parse(localStorage.getItem('rockury.nav') ?? '{}')?.state?.contextValues?.conn ?? null))
+    const run = (sql) => page.evaluate(([id, s]) => window.rockury.query.run(id, s), [conn, sql])
+    // 셀 값은 <input> 안에 있어 innerText 로는 안 잡힌다.
+    const cellValues = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('tbody td')].map((td) => {
+          const i = td.querySelector('input')
+          return i ? i.value : td.innerText.trim()
+        })
+      )
+
+    await run('DROP TABLE IF EXISTS refresh_probe')
+    await run('CREATE TABLE refresh_probe (id int primary key, old_col text)')
+    await run("INSERT INTO refresh_probe VALUES (1, 'before')")
+
+    // 새 표가 목록에 뜨게 역설계를 한 번 갱신하고 연다.
+    await click('button:has-text("새로고침")')
+    await page.waitForSelector('[data-table-row="refresh_probe"]', { timeout: 15_000 })
+    await click('[data-table-row="refresh_probe"]')
+    await page.waitForSelector('th:has-text("old_col")', { timeout: 10_000 })
+    check('Remote › Data: 표를 열면 그때의 컬럼이 헤더에 뜬다', (await body()).includes('old_col'))
+
+    // 밖에서 스키마를 바꾼다.
+    await run('ALTER TABLE refresh_probe RENAME COLUMN old_col TO new_col')
+    await run('ALTER TABLE refresh_probe ADD COLUMN extra text')
+    await run("UPDATE refresh_probe SET extra = 'added'")
+
+    await click('button:has-text("새로고침")')
+    await page.waitForSelector('th:has-text("new_col")', { timeout: 10_000 })
+    await page.waitForTimeout(500)
+    const after = await body()
+    const cells = (await cellValues()).join(' ')
+
+    check('Remote › Data: 새로고침이 바뀐 컬럼을 헤더에 반영한다', after.includes('new_col'))
+    check('Remote › Data: 새로고침이 새로 생긴 컬럼도 보인다', after.includes('extra'))
+    check('Remote › Data: 사라진 컬럼은 헤더에서 빠진다', !after.includes('old_col'))
+    check('Remote › Data: 값이 undefined 로 뜨지 않는다', !after.includes('undefined'))
+    check('Remote › Data: 실제 데이터가 그대로 보인다', cells.includes('before') && cells.includes('added'))
+
+    await run('DROP TABLE IF EXISTS refresh_probe')
+  }
+
 }

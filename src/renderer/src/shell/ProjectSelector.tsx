@@ -30,11 +30,13 @@ export function ProjectSelector() {
 
   const currentId = scopeToOptionId(scope)
   const narrowed = scope.kind !== 'all'
+  // 얼굴에는 라벨(`프로젝트`)이 이미 붙어 있어 값에서 그 말을 뺀다 — 안 그러면 "프로젝트 프로젝트 없음".
+  // 드롭다운 항목은 맥락이 없으므로 거기선 `프로젝트 없음` 으로 풀어 쓴다.
   const face =
     scope.kind === 'all'
       ? '전체'
       : scope.kind === 'none'
-        ? '프로젝트 없음'
+        ? '없음'
         : (projects.find((p) => p.id === scope.projectId)?.name ?? '전체')
 
   return (
@@ -46,14 +48,19 @@ export function ProjectSelector() {
             data-project-selector
             aria-label={`프로젝트 범위: ${face}`}
             className={cx(
-              'flex h-6 items-center gap-1.5 rounded-md border px-2 text-[12px] transition',
+              'flex h-7 items-center gap-1.5 rounded-md border px-2 text-[12px] transition',
+              // 좁혀 있으면 강조색으로, 아니어도 **채운 배경 + 라벨**로 존재를 드러낸다.
+              // (2026-08-04 사용자: "어디 있는지 한참 찾았다" — 조용한 것과 안 보이는 것은 다르다.)
               narrowed
-                ? 'border-accent/30 bg-accent-soft font-medium text-accent'
-                : 'border-line bg-canvas text-muted hover:text-fg'
+                ? 'border-accent/40 bg-accent-soft font-medium text-accent'
+                : 'border-line bg-panel-strong text-fg hover:border-accent/40 hover:bg-accent-soft hover:text-accent'
             )}
           >
             <FolderKanban size={13} className="shrink-0" />
-            <span className="max-w-[160px] truncate">{face}</span>
+            <span className={cx('shrink-0', narrowed ? 'text-accent/70' : 'text-muted')}>
+              프로젝트
+            </span>
+            <span className="max-w-[160px] truncate font-medium">{face}</span>
             <ChevronDown size={12} className="shrink-0 opacity-60" />
           </button>
         </DropdownMenu.Trigger>

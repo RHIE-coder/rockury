@@ -12,6 +12,7 @@ import {
   type Statement
 } from './sqlBuilder'
 import { genUuid } from './genValue'
+import { displayColumns } from './displayColumns'
 
 /**
  * Data 브라우저 스토어(§ops-plan Phase 2b) — 선택 테이블 행 조회 + pending 편집 버퍼.
@@ -132,8 +133,12 @@ export const useDataStore = create<DataState>()((set, get) => ({
         filters
       })
       const r = await window.rockury.query.runParams(envId, sql, params)
-      // 컬럼은 introspection 순서를 우선(빈 결과여도 헤더 유지), 없으면 결과 컬럼.
-      const columns = tableDef.columns.length ? tableDef.columns.map((c) => c.name) : r.columns
+      // 역설계 순서를 우선하되 실제 결과와 맞춘다 — 밖에서 스키마가 바뀌면 헤더와 행의 키가
+      // 어긋나 모든 칸이 undefined 로 보인다(displayColumns 주석 참고).
+      const columns = displayColumns(
+        tableDef.columns.map((c) => c.name),
+        r.columns
+      )
       set({ rows: r.rows, columns, loading: false })
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), loading: false })

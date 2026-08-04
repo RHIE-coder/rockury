@@ -31,6 +31,7 @@ import { downloadText } from '../download'
 import { dialectInfo } from '../dialects'
 import { useActiveConnection } from '../connections/store'
 import { sameTable } from '../schemaRef'
+import type { DialectId } from '../dialects'
 import { useRemoteStore } from './store'
 import { TableSidePanel } from '../TableSidePanel'
 import { RowDetailDialog } from './RowDetailDialog'
@@ -204,6 +205,24 @@ export function DataView() {
   // 스키마까지 맞춰 되찾는다 — 이름만으로 찾으면 동명 표 중 목록의 첫 번째가 잡힌다.
   const active = d.table
   const selected: TableDef | null = (active && all.find((t) => sameTable(t, active))) || null
+
+  /**
+   * 새로고침 — **스키마부터 다시 읽고** 그 다음 행을 읽는다.
+   *
+   * 컬럼 헤더는 역설계 결과(`selected.columns`)에서 오고 행은 `SELECT *` 로 온다. 행만 다시
+   * 읽으면 밖에서 컬럼을 바꾼 순간 헤더는 옛 이름인 채 남고, 화면이 없는 키로 값을 꺼내
+   * **모든 칸이 빈 값으로 보인다**(2026-08-04 사용자 실측 — 앱을 껐다 켜야 반영됐다).
+   * Definition·Diagram·Object 의 새로고침은 처음부터 역설계를 다시 읽고 있었다.
+   */
+  const refreshWithSchema = async (id: string, dia: DialectId): Promise<void> => {
+    await loadIntro(id, id, true)
+    if (!active) return
+    const fresh = useRemoteStore.getState().byEnv[id] ?? []
+    const target = fresh.find((t) => sameTable(t, active))
+    // 표 자체가 사라졌으면 옛 행을 그대로 두지 않는다 — 없는 표의 데이터가 남아 있으면 거짓말이다.
+    if (target) await d.selectTable(id, dia, target)
+    else useDataStore.setState({ table: null, rows: [], columns: [] })
+  }
   const editable = selected ? canEdit(selected) : false
   const pk = selected ? pkColumns(selected) : []
   const fks = selected ? fkMap(selected) : {}
@@ -389,8 +408,18 @@ export function DataView() {
                       <Plus /> 행
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" disabled={d.loading} onClick={() => dialect && void d.load(connId!, dialect, selected)}>
-                    {d.loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={d.loading || introLoading}
+                    onClick={() => connId && dialect && void refreshWithSchema(connId, dialect)}
+                  >
+                    {d.loading || introLoading ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <RefreshCw />
+                    )}{' '}
+                    새로고침
                   </Button>
                 </div>
               </div>
