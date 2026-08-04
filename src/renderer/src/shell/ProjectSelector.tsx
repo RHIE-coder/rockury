@@ -74,6 +74,7 @@ export function ProjectSelector() {
             <Option
               id={OPTION_ALL}
               label="전체"
+              state
               currentId={currentId}
               onSelect={(id) => setScope(scopeFromOptionId(id))}
             />
@@ -97,6 +98,7 @@ export function ProjectSelector() {
                 <Option
                   id={OPTION_NONE}
                   label="프로젝트 없음"
+                  state
                   currentId={currentId}
                   onSelect={(id) => setScope(scopeFromOptionId(id))}
                 />
@@ -135,12 +137,15 @@ function Option({
   id,
   label,
   hint,
+  state = false,
   currentId,
   onSelect
 }: {
   id: string
   label: string
   hint?: string
+  /** 프로젝트 이름이 아니라 **상태**(`전체`·`프로젝트 없음`)임을 드러낸다 — 같은 모양이면 그런 이름의 프로젝트로 읽힌다. */
+  state?: boolean
   currentId: string
   onSelect: (id: string) => void
 }) {
@@ -156,7 +161,7 @@ function Option({
         ) : (
           <span className="w-3.5 shrink-0" />
         )}
-        <span className="truncate">{label}</span>
+        <span className={cx('truncate', state && 'italic text-muted')}>{label}</span>
       </span>
       {hint && <span className="shrink-0 font-mono text-[11px] text-muted">{hint}</span>}
     </DropdownMenu.Item>

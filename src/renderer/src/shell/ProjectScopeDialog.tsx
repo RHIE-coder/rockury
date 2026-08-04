@@ -141,8 +141,12 @@ function ItemRow({
   onMove: (item: ScopedItem, projectId: string | null) => Promise<void>
 }) {
   const current = projects.find((p) => p.id === item.projectId) ?? null
-  // 무소속의 뜻이 종류마다 다르다 — 접속류는 "어디서나 보임"이고, 설계류는 "아무 데도 안 속함".
-  const unassignedLabel = item.sharedWhenUnassigned ? '공용' : '없음'
+  /**
+   * 소속이 비어 있는 상태는 **저장소에선 하나**(project_id = NULL)인데 결과가 종류마다 반대다 —
+   * 설계는 프로젝트를 고르면 숨고, 접속은 어디서나 보인다. 그래서 같은 `없음` 을 쓰되 접속류만
+   * 그 결과를 괄호로 덧붙인다. 다른 낱말로 갈라 부르면 같은 값인 줄 모른다(2026-08-04 사용자 지적).
+   */
+  const unassignedLabel = item.sharedWhenUnassigned ? '없음(공용)' : '없음'
 
   return (
     <li className="flex items-center justify-between gap-4 rounded-md px-2 py-1.5 hover:bg-panel">
@@ -170,9 +174,11 @@ function ItemRow({
           >
             <Row
               label={unassignedLabel}
+              state
               selected={item.projectId === null}
               onSelect={() => void onMove(item, null)}
             />
+            {projects.length > 0 && <DropdownMenu.Separator className="my-1 h-px bg-line" />}
             {projects.map((p) => (
               <Row
                 key={p.id}
@@ -191,10 +197,13 @@ function ItemRow({
 function Row({
   label,
   selected,
+  state = false,
   onSelect
 }: {
   label: string
   selected: boolean
+  /** 프로젝트 이름이 아니라 **상태**(`없음`)임을 드러낸다 — 같은 모양이면 그런 이름의 프로젝트로 읽힌다. */
+  state?: boolean
   onSelect: () => void
 }) {
   return (
@@ -207,7 +216,7 @@ function Row({
       ) : (
         <span className="w-3.5 shrink-0" />
       )}
-      <span className="truncate">{label}</span>
+      <span className={cx('truncate', state && 'italic text-muted')}>{label}</span>
     </DropdownMenu.Item>
   )
 }
