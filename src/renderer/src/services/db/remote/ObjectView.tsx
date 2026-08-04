@@ -41,7 +41,9 @@ function TableCard({ table }: { table: TableDef }) {
           {table.constraints.length > 0 && ` · 제약 ${table.constraints.length}`}
         </span>
         {table.comment && (
-          <span className="ml-auto truncate pl-2 text-[11px] italic text-muted">{table.comment}</span>
+          // 기울임을 쓰지 않는다 — 실 DB 주석은 한글이 흔한데, 한글은 이탤릭 자형이 없어
+          // 브라우저가 강제로 기울이고 그 삐져나온 획을 `truncate` 가 깎는다(2026-08-04 실측).
+          <span className="ml-auto truncate pl-2 text-[11px] text-muted">{table.comment}</span>
         )}
       </button>
 

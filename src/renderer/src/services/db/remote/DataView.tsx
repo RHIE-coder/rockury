@@ -811,7 +811,8 @@ function JsonCellButton({
       >
         {s.chip}
       </span>
-      <span className={cn('min-w-0 flex-1 truncate text-[11.5px]', s.shape === 'empty' && 'italic text-muted')}>
+      {/* 기울임 금지 — '빈 값'은 한글이라 강제 기울임의 삐져나온 획을 truncate 가 깎는다(ObjectView 주석 참고). */}
+      <span className={cn('min-w-0 flex-1 truncate text-[11.5px]', s.shape === 'empty' && 'text-muted')}>
         {s.preview || '빈 값'}
       </span>
     </button>
