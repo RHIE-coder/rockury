@@ -174,6 +174,7 @@ export function InboxView() {
       <div className="min-h-0 flex-1">
         <WorkspacePanels
           autoSaveId="api-runner-inbox"
+          collapsible
           sidebarTitle="웹훅 요청"
           sidebar={
             <div className="flex flex-col">

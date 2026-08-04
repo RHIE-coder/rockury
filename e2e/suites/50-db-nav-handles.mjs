@@ -5,7 +5,8 @@
 // 2026-07-30 개편(상단 컨텍스트 바 제거 · Overview 제거)에 더해 2026-08-02 개편을 고정한다:
 // 구획 손잡이가 모듈 줄에서 **뷰 탭 줄 오른쪽 끝**으로 내려가, 그 구획을 쓰는 화면에서만 뜬다.
 // 되돌아가기 쉬운 것들이라 검사로 못박는다 —
-//   ⑴ 구획 뱃지는 "구획이 시작하는 자리"마다 떠야 한다(전환 지점에만 그리면 첫 구획이 뱃지를 잃는다)
+//   ⑴ 구획 뱃지는 구획마다 하나씩, **다리(Migration 으로 이어지는 선) 쪽 끝**에 떠야 한다
+//      (2026-08-03 사용자 요청 — 선을 눈으로 따라가면 그 끝에 부서 이름이 서 있어야 한다)
 //   ⑵ 손잡이는 **자기 구획 화면에만** 뜬다 — 설계 화면에 연결이, 운영 화면에 설계가 떠 있으면 안 된다
 //   ⑶ 단 Migration 은 설계와 실 DB 를 견주므로 **둘 다** 든다(`Module.handles`)
 //   ⑷ 시점 손잡이는 설계부 전 화면에서 **하나만** 있어야 한다(두 곳이 말하면 숫자가 어긋난다)
@@ -30,16 +31,40 @@ export async function run(ctx) {
     els.map((e) => e.getAttribute('data-nav-module'))
   )
   check(`DB: Overview 모듈이 없다 (${modules.join(',')})`, !modules.includes('overview'))
-  check('DB: Reference 는 남아 있다', modules.includes('reference'))
+  // 2026-08-03 — 모듈 줄은 `Design ——Migration—— Remote` 셋뿐이다. Versions·Reference 는 Design 안 뷰로.
+  check(`DB: 모듈 줄은 세 칸이다 (${modules.join(',')})`, modules.join(',') === 'design,migration,remote')
   check('DB: 첫 착지가 설계부(Design)다', modules[0] === 'design')
   // 2026-07-30 — Connections 는 Remote 와 나란한 모듈이 아니라 Remote 의 첫 뷰로 들어갔다.
   check('DB: Connections 는 모듈 줄에 없다', !modules.includes('connections'))
+  const designViews = await page.$$eval('[data-nav-view]', (els) =>
+    els.map((e) => e.getAttribute('data-nav-view'))
+  )
+  check(
+    `DB › Design: Versions·Reference 가 이 줄 안에 있다 (${designViews.join(',')})`,
+    designViews.includes('versions') && designViews.includes('reference')
+  )
 
   // ── 상단 두 줄 ────────────────────────────────────────────
   // L4 도구줄이 컨텍스트 바와 같은 h-11/bg-panel 을 쓰므로 클래스가 아니라 역할 훅으로 센다.
   check('DB: 컨텍스트 바가 없다', (await page.locator('[data-context-bar]').count()) === 0)
   const topText = await body()
   check('DB: 설계·운영 뱃지 라벨이 모듈 줄에 둘 다 보인다', topText.includes('설계') && topText.includes('운영'))
+
+  // ⑴ 뱃지는 다리 쪽 끝 — 설계는 Design **뒤**, 운영은 Remote **앞**. 가운데 Migration 을 사이에 두고
+  //    둘이 마주 본다. 자리는 좌표로만 드러나므로 x 로 잰다.
+  const midX = async (sel) => {
+    const box = await page.locator(sel).first().boundingBox()
+    return box ? box.x + box.width / 2 : null
+  }
+  const [designChip, designTab, opsChip, remoteTab] = await Promise.all([
+    midX('[data-area-chip="design"]'),
+    midX('[data-nav-module="design"]'),
+    midX('[data-area-chip="ops"]'),
+    midX('[data-nav-module="remote"]')
+  ])
+  check('DB: 설계 뱃지가 Design 탭 뒤에 선다 — 다리 쪽', designChip > designTab)
+  check('DB: 운영 뱃지가 Remote 탭 앞에 선다 — 다리 쪽', opsChip < remoteTab)
+  check('DB: 두 뱃지가 Migration 을 사이에 두고 마주 본다', designChip < opsChip)
 
   // ⑵ 착지는 설계부(Design) — 설계 손잡이만 뜨고 운영 손잡이는 안 뜬다.
   check('DB › Design: 설계 손잡이가 뷰 탭 줄에 있다', (await page.locator('[data-area-handle="design"]').count()) === 1)
@@ -61,9 +86,9 @@ export async function run(ctx) {
   check(`DB: 손잡이가 고른 설계를 말한다 (${designFace.trim()})`, !designFace.includes('설계 선택'))
 
   // ── 설계부 어느 화면에서나 같은 자리 ────────────────────────
-  await click('[data-nav-module="versions"]')
+  await click('[data-nav-view="versions"]')
   await page.waitForTimeout(400)
-  check('DB › Versions: 시점 손잡이가 여기도 하나 있다', (await page.locator('[data-version-lens]').count()) === 1)
+  check('DB › Design › Versions: 시점 손잡이가 여기도 하나 있다', (await page.locator('[data-version-lens]').count()) === 1)
 
   // ── 시점 전환 + 읽기 전용 ──────────────────────────────────
   await click('[data-version-lens]')
@@ -116,7 +141,7 @@ export async function run(ctx) {
   // (그전에는 늘 첫 뷰로 되돌아가 "자꾸 connections 에 들어온다"는 제보가 왔다.)
   await click('[data-nav-view="data"]')
   await page.waitForTimeout(300)
-  await click('[data-nav-module="versions"]')
+  await click('[data-nav-module="design"]')
   await page.waitForTimeout(300)
   await click('[data-nav-module="remote"]')
   await page.waitForTimeout(400)
@@ -146,11 +171,15 @@ export async function run(ctx) {
     'DB › Migration: 자기 기억(Plan)으로 돌아온다',
     (await page.locator('[data-nav-view="plan"][data-state="active"]').count()) === 1
   )
-  // ── 공통 모듈은 손잡이가 없다 ──────────────────────────────
-  // Reference 는 어느 부서의 대상도 안 쓴다 — 뷰도 없으므로 뷰 탭 줄 자체가 안 그려져야 한다.
-  await click('[data-nav-module="reference"]')
+  // ── Reference 는 이제 Design 안 뷰다 ───────────────────────
+  // 2026-08-03 이전엔 어느 부서도 아닌 모듈이라 손잡이가 하나도 없었다. Design 안으로 들어오면서
+  // 설계 손잡이가 딸려 뜬다 — 손잡이는 모듈 단위라, 이건 자리를 옮긴 값이지 버그가 아니다.
+  await click('[data-nav-module="design"]')
   await page.waitForTimeout(300)
-  check('DB › Reference: 손잡이가 하나도 없다', (await page.locator('[data-area-handle]').count()) === 0)
+  await click('[data-nav-view="reference"]')
+  await page.waitForTimeout(300)
+  check('DB › Design › Reference: 설계 손잡이를 Design 줄과 똑같이 쓴다', (await page.locator('[data-area-handle="design"]').count()) === 1)
+  check('DB › Design › Reference: 운영 손잡이는 없다', (await page.locator('[data-area-handle="ops"]').count()) === 0)
 
   // 뒤 스위트가 기대하는 자리로 돌려놓는다 — 기억이 남으므로 명시적으로 되돌린다.
   await click('[data-nav-module="remote"]')

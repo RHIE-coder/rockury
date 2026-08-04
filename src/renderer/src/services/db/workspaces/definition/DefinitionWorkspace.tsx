@@ -27,7 +27,7 @@ function TablesSidebar() {
       activeId={activeId}
       onPick={(t) => setActive(t.id)}
       searchPlaceholder="테이블/컬럼 검색…"
-      emptyText="아직 테이블이 없어요"
+      emptyText="테이블 없음"
     />
   )
 }
@@ -178,6 +178,7 @@ export function DefinitionWorkspace() {
   return (
     <WorkspacePanels
       autoSaveId="db.definition"
+      collapsible
       sidebarTitle="SCHEMA"
       sidebarActions={readOnly ? undefined : <AddMenu designId={design.id} />}
       sidebar={<TablesSidebar />}

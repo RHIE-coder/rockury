@@ -37,6 +37,8 @@ import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { SqlEditor } from '@renderer/ui/SqlEditor'
+import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
+import { RowDetailDialog } from './RowDetailDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/ui/dialog'
 import type { TableDef } from '../workspaces/definition/types'
 import type { DialectId } from '../dialects'
@@ -112,8 +114,9 @@ export function QueryView() {
   const rollback = useQueryStore((s) => s.rollback)
   const dismissError = useQueryStore((s) => s.dismissError)
 
-  const [showSchema, setShowSchema] = useState(true)
   const [treeFilter, setTreeFilter] = useState('')
+  /** 상세 모달로 열어 둔 결과 행(0-기준). null 이면 닫혀 있다. */
+  const [detailRow, setDetailRow] = useState<number | null>(null)
   const [preview, setPreview] = useState<TableRef | null>(null)
   const [ctx, setCtx] = useState<{ x: number; y: number; id: string; kind: 'folder' | 'query' } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -224,17 +227,20 @@ export function QueryView() {
   }
 
   return (
-    <div className="flex h-full min-h-0" onClick={() => ctx && setCtx(null)}>
-      {/* 좌: QUERIES 트리 */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-line">
-        <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-          <span>Queries</span>
-          <div className="flex items-center gap-1">
-            <button type="button" title="새 폴더" onClick={() => void lib.addFolder('New Folder')} className="text-muted hover:text-fg"><FolderPlus className="size-3.5" /></button>
-            <button type="button" title="새 쿼리" onClick={() => void newQuery()} className="text-muted hover:text-fg"><FilePlus2 className="size-3.5" /></button>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 border-b border-line px-2 pb-2">
+    <div className="h-full min-h-0" onClick={() => ctx && setCtx(null)}>
+      <WorkspacePanels
+        autoSaveId="db.console.query"
+        collapsible
+        sidebarTitle="Queries"
+        sidebarActions={
+          <>
+            <button type="button" title="새 폴더" onClick={() => void lib.addFolder('New Folder')} className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-strong hover:text-fg"><FolderPlus className="size-3.5" /></button>
+            <button type="button" title="새 쿼리" onClick={() => void newQuery()} className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-strong hover:text-fg"><FilePlus2 className="size-3.5" /></button>
+          </>
+        }
+        sidebar={
+          <div className="flex h-full min-h-0 flex-col">
+        <div className="flex items-center gap-1.5 border-b border-line px-2 py-2">
           <Search className="size-3.5 text-muted" />
           <input value={treeFilter} onChange={(e) => setTreeFilter(e.target.value)} placeholder="Filter queries..." className="w-full bg-transparent text-[12px] outline-none" />
         </div>
@@ -270,12 +276,21 @@ export function QueryView() {
               )}
             </DragOverlay>
           </DndContext>
-          {flat.length === 0 && <div className="px-4 py-2 text-[11.5px] text-muted">저장된 쿼리가 없어요. + 로 새 쿼리를 만드세요.</div>}
+          {flat.length === 0 && <div className="px-4 py-2 text-[11.5px] italic text-muted">저장된 쿼리 없음</div>}
         </div>
-      </aside>
-
+          </div>
+        }
+        rightTitle="Schema"
+        rightPanel={
+          <SchemaPanel
+            tables={tables ?? []}
+            onInsert={(name) => setSql(sql + (sql && !sql.endsWith(' ') ? ' ' : '') + name)}
+            onPreview={(t) => setPreview(t)}
+          />
+        }
+      >
       {/* 중앙: 편집기 */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-w-0 flex-col">
         <div className="flex shrink-0 items-start justify-between gap-2 border-b border-line px-5 py-2.5">
           <div className="min-w-0 flex-1">
             {active ? (
@@ -301,9 +316,6 @@ export function QueryView() {
               </>
             )}
           </div>
-          <Button size="sm" variant={showSchema ? 'soft' : 'outline'} title="스키마 패널" onClick={() => setShowSchema((v) => !v)}>
-            <Table2 /> Schema
-          </Button>
         </div>
 
         <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-1.5 text-[12px]">
@@ -377,7 +389,13 @@ export function QueryView() {
                 </thead>
                 <tbody>
                   {shown.map((row, i) => (
-                    <tr key={i} className="hover:bg-panel/60">
+                    // 칸이 잘려 긴 값은 표에서 못 읽는다 — 누르면 상세 모달이 자르지 않고 펴 보인다.
+                    <tr
+                      key={i}
+                      data-result-row={i}
+                      onClick={() => setDetailRow(i)}
+                      className="cursor-pointer hover:bg-panel/60"
+                    >
                       <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-muted">{i + 1}</td>
                       {result.columns.map((c) => {
                         const { text, muted } = cell(row[c])
@@ -404,7 +422,7 @@ export function QueryView() {
         </div>
       </div>
 
-      {showSchema && <SchemaPanel tables={tables ?? []} onInsert={(name) => setSql(sql + (sql && !sql.endsWith(' ') ? ' ' : '') + name)} onPreview={(t) => setPreview(t)} onClose={() => setShowSchema(false)} />}
+      </WorkspacePanels>
 
       {/* 우클릭 컨텍스트 메뉴 */}
       {ctx && (
@@ -420,6 +438,16 @@ export function QueryView() {
       )}
 
       {preview && <TablePreviewModal connectionId={conn.id} dialect={conn.dbType} table={preview} onClose={() => setPreview(null)} />}
+
+      {detailRow != null && result && (
+        <RowDetailDialog
+          columns={result.columns}
+          rows={shown}
+          index={detailRow}
+          onIndexChange={setDetailRow}
+          onClose={() => setDetailRow(null)}
+        />
+      )}
     </div>
   )
 }
@@ -469,17 +497,13 @@ function QueryTreeRow({ node, active, editing, collapsed, dropTarget, onSelect, 
 }
 
 /** 스키마 사이드 패널 — 테이블/컬럼 트리 + 검색 + 클릭 삽입 + 테이블 미리보기. */
-function SchemaPanel({ tables, onInsert, onPreview, onClose }: { tables: TableDef[]; onInsert: (name: string) => void; onPreview: (table: TableRef) => void; onClose: () => void }) {
+function SchemaPanel({ tables, onInsert, onPreview }: { tables: TableDef[]; onInsert: (name: string) => void; onPreview: (table: TableRef) => void }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const query = q.trim().toLowerCase()
   const filtered = tables.filter((t) => !query || t.name.toLowerCase().includes(query) || t.columns.some((c) => c.name.toLowerCase().includes(query)))
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-l border-line">
-      <div className="flex items-center justify-between border-b border-line px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-        <span>Schema</span>
-        <button type="button" onClick={onClose} className="text-muted hover:text-fg"><X className="size-3.5" /></button>
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-1.5 border-b border-line px-2 py-2">
         <Search className="size-3.5 text-muted" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter..." className="w-full bg-transparent text-[12px] outline-none" />
@@ -511,7 +535,7 @@ function SchemaPanel({ tables, onInsert, onPreview, onClose }: { tables: TableDe
         })}
         {filtered.length === 0 && <div className="px-3 py-2 text-[11.5px] text-muted">일치 없음</div>}
       </div>
-    </aside>
+    </div>
   )
 }
 

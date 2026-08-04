@@ -22,6 +22,7 @@
 - **CASE-remote-015** FK 참조 대상 표기: 단일 `users (id)`, 복합 `orders (org_id, no)`, 대상/컬럼이 비면 `?` 자리 유지. (definition.detail AC-F1)
 - **CASE-remote-016** 목록 그룹핑: 검색을 적용한 뒤 테이블/뷰로 가르고 각 묶음 순서 유지, 검색 전 전체 개수와 검색 후 개수를 함께 준다. 뷰 표식 없는 목록은 전부 테이블. (definition.table-list AC-4) → `db/tableList.test.ts`
 - **CASE-remote-017** 뷰 표식 영속: 설계 저장소 왕복(`replaceTablesForDesign`→`listTables`)에서 `isView` 가 보존되고, 표식 없는 테이블은 false 로 정규화된다. (definition.table-list AC-4) → `main/store/stores.test.ts`
+- **CASE-remote-01D** 고른 표 따라가기 판정: 다른 표가 골라졌으면 따라가고, 이미 그 표를 열고 있거나 고른 것이 없으면 안 움직인다. **저장 안 한 셀 변경이나 커밋 대기 트랜잭션이 있으면 안 따라간다.** 고름은 연결마다 따로 기억하고, 연결이 없으면 아무 데도 안 적는다. (definition.table-list AC-7) → `remote/focus.test.ts`
 
 ## Scenario S2b — Data 표시 품질 (순수 로직)
 - **CASE-remote-018** 컬럼 폭 자동 계산: 짧은 값은 최소 폭, 아주 긴 값도 최대 폭을 넘지 않음, 가장 긴 값 기준(뒤에 짧은 값이 와도 안 줄어듦), 값이 짧아도 긴 컬럼명이면 헤더 기준, 키 배지만큼 가산, 행이 없어도 모든 컬럼에 폭 부여, 표본 상한 밖 행은 무시. (data.grid AC-6) → `console/data/colWidth.test.ts`
@@ -39,11 +40,15 @@
 - **CASE-remote-031** 삭제 가드: 참조 중인 쿼리 삭제 시 거부 + 참조 목록 반환. (collection.items AC-2)
 
 ## Scenario S5 — 앱 구동 흐름 (e2e/suites/07-remote-schema · 08-remote-query-data · 09-remote-collection, CSS/text 로케이터만)
-- **CASE-remote-040** Data 뷰 진입 → 사이드바에 테이블/VIEWS 분리 표시, 헤더에 PK/FK 텍스트 배지 표시.
-- **CASE-remote-041** Constraints 탭 전환 → 종류 필터 칩과 제약 목록 렌더.
+- **CASE-remote-040** Data 뷰 진입 → 머리줄에 `Data · <연결 이름>` 과 테이블 수, 사이드바에 `테이블`/`뷰` 구역 분리 표시, 그리드 헤더에 PK/FK 텍스트 배지 표시. 그리드 아래에 제약 칸은 **없다**(사이드 패널 `제약` 탭이 정본). (data.header AC-1/AC-2 · data.table-list AC-1 · data.constraints-tab AC-4)
+- **CASE-remote-041** 사이드 패널 `제약` 탭 전환 → 종류 필터 칩과 제약 목록 렌더. 탭은 사이드바 안에 있고 이름은 `테이블·뷰`/`제약` 이다. (data.constraints-tab AC-1/AC-2)
 - **CASE-remote-042** Query 뷰 → `{{키워드}}` 입력 시 값 입력칸 노출, 실행.
+- **CASE-remote-042a** Query 의 **좌·우·양쪽 패널 접기/펼치기**: 각각 접으면 폭 0 + 세로 띠가 남고, 양쪽 손잡이 하나로 둘을 한 번에 여닫는다(펼치면 접기 전 폭으로). (db-design.definition.side-panel AC-5/AC-5a)
+- **CASE-remote-042b** **결과 행 상세** — 행을 누르면 모달이 뜨고, 잘리던 긴 값이 다 보이며 JSON 은 들여써서 보인다. `다음` 으로 행을 넘긴다. (result-grid.row-detail AC-1~AC-5)
 - **CASE-remote-043** Collection 트리에서 저장 쿼리 클릭 → 에디터 로드.
+- **CASE-remote-043a** Collection 도 같은 좌·우·양쪽 접기와 인라인 결과의 행 상세를 갖는다(Query 와 **같은 부품**). (side-panel AC-5a · result-grid.row-detail AC-1)
 - **CASE-remote-044** Definition 뷰 진입 → 사이드바에 실 DB 테이블 목록(users/user_roles), 테이블 선택 후 `SQL` 토글 시 `CREATE TABLE` DDL 렌더. (definition.table-list/sql)
+- **CASE-remote-044b** **고른 표가 뷰를 넘어 유지된다** — Definition 에서 `user_roles` 를 고르고 Diagram·Data 로 옮겨도 같은 표가 활성이고, Data 에서 `users` 를 고르면 Definition 이 따라온다. (definition.table-list AC-7)
 - **CASE-remote-045** Definition 편집: `편집` → 테이블 추가·컬럼 추가 → 대기 변경 미리보기 → `적용` → 재역설계에 신규 테이블 반영. (definition.edit AC-1/2/4)
 - **CASE-remote-046** Definition 편집(파괴적): 테이블 삭제 시 파괴적 경고 → `적용`(확인) → 재역설계에서 사라짐(DB 원복). (definition.edit AC-3/4)
 - **CASE-remote-047** Diagram 편집: `편집` → **누를 수 있는** 노드를 hit-test 로 골라(첫 노드는 캔버스 밖·좌측 패널 아래에 놓일 수 있다) 선택 시 **상세 서랍이 Definition 편집 화면을 그대로** 연다 → 캔버스 `테이블` 로 노드 증가+대기 변경 → `버리기` 로 읽기 복귀. (diagram AC-1/2/4, diagram.detail AC-2)
@@ -51,6 +56,7 @@
 - **CASE-remote-049** Definition 상세의 FK 가 `ON DELETE`·`ON UPDATE` 를 동시에 보인다(테스트 DB `user_roles` 는 둘 다 CASCADE). (definition.detail AC-F2)
 - **CASE-remote-04A** Diagram 좌측 목록 패널이 있고, 항목을 누르면 캔버스 뷰포트가 실제로 움직인다(포커싱). (diagram.table-panel AC-1/AC-2)
 - **CASE-remote-04B** Data 의 JSON 셀이 구조 요약으로 보이고, 눌러 열면 뷰어가 형식 정상 여부와 정렬/한 줄 도구를 보인다. (data.json-cell AC-1/AC-2/AC-3)
+- **CASE-remote-04B2** Data 의 **행 번호**를 누르면 행 상세 모달이 열리고(셀 편집과 부딪히지 않는 자리), 숨긴 컬럼까지 자르지 않고 보인다. (result-grid.row-detail AC-1a/AC-1b)
 - **CASE-remote-04C** **배치 유실 회귀** — 노드를 옮기고 캔버스도 옮긴 **직후** 다른 화면(Remote 밖 뷰)으로 나갔다 Diagram 으로 돌아오면 노드 위치와 화면 위치가 그대로다. 디바운스가 끝나기 전에 떠나도 저장된다. (diagram.layout AC-2)
 - **CASE-remote-04D** 그룹 만들기 → 테이블 두 개를 영역에 넣고 **영역을 끌면 두 노드가 같은 거리만큼 함께 움직인다.** 그룹 안 노드 하나만 끌면 그것만 움직인다. (diagram.group AC-1/AC-2)
 - **CASE-remote-04E** 그룹 접기 → 소속 노드가 캔버스에서 사라지고 그룹 상자는 남는다. 펴면 접기 전 자리로 돌아온다. (diagram.group AC-4)

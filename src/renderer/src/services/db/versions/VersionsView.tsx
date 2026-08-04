@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { GitCommitHorizontal, Layers, Lock, Milestone, RotateCcw, Sprout, Trash2 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
+import { Checkbox } from '@renderer/ui/checkbox'
 import { useActiveDesign } from '../designs/store'
 import { dialectInfo } from '../dialects'
 import { useDesignTables } from '../workspaces/definition/store'
 import { useDesignSeedSets } from '../workspaces/seed/store'
 import { CutVersionDialog } from './CutVersionDialog'
+import { comparePair, togglePick } from './compareSelection'
 import { useRestoreStore } from './restoreStore'
 import { latestVer } from './semver'
+import { VersionDiffPanel } from './VersionDiffPanel'
 import { useDesignVersions, useVersionsStore, type VersionDef } from './store'
 
 function fmt(iso: string): string {
@@ -17,8 +20,20 @@ function fmt(iso: string): string {
     : d.toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-/** 버전 한 줄 — 번호·메모·테이블수·시각 + 삭제(잘못 컷된 버전 회수). 잠긴 버전은 삭제 불가. */
-function VersionRow({ v, designId, latest }: { v: VersionDef; designId: string; latest: boolean }) {
+/** 버전 한 줄 — 비교 고르기·번호·메모·테이블수·시각 + 삭제(잘못 컷된 버전 회수). 잠긴 버전은 삭제 불가. */
+function VersionRow({
+  v,
+  designId,
+  latest,
+  picked,
+  onPick
+}: {
+  v: VersionDef
+  designId: string
+  latest: boolean
+  picked: boolean
+  onPick: () => void
+}) {
   const remove = useVersionsStore((s) => s.remove)
   const openRestore = useRestoreStore((s) => s.openRestore)
   const [confirming, setConfirming] = useState(false)
@@ -26,8 +41,16 @@ function VersionRow({ v, designId, latest }: { v: VersionDef; designId: string; 
   return (
     <div
       data-version-number={v.number}
-      className="group flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0"
+      data-picked={picked || undefined}
+      className="group flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 data-[picked]:bg-accent-soft/40"
     >
+      <Checkbox
+        data-version-pick={v.number}
+        checked={picked}
+        onCheckedChange={onPick}
+        // 라벨을 안 붙인다 — 두 개를 고르면 아래에 비교가 열려서 뜻이 그 자리에서 드러난다.
+        title="비교할 버전으로 고르기"
+      />
       <span className="flex items-center gap-1.5 rounded-full bg-accent-2-soft px-2 py-0.5 font-mono text-[12px] font-semibold text-accent-2">
         {v.locked && <Lock className="size-3" />}
         {v.number}
@@ -92,13 +115,19 @@ function VersionRow({ v, designId, latest }: { v: VersionDef; designId: string; 
   )
 }
 
-/** Versions › Timeline — 설계의 버전 컷 목록 + 새 컷. (diff 는 Version Diff 뷰에서) */
-export function TimelineView() {
+/**
+ * Design › Versions — 설계의 버전 컷 목록 + 새 컷 + **고른 두 버전의 비교**.
+ *
+ * 예전엔 `Versions` 가 모듈이었고 그 안이 `Timeline`·`Version Diff` 두 화면이었다. 2026-08-03
+ * 사용자 결정으로 Design 안 뷰 하나로 접혔다 — 비교는 목록에서 두 줄을 고르면 아래에 열린다.
+ */
+export function VersionsView() {
   const design = useActiveDesign()
   const versions = useDesignVersions(design?.id ?? null)
   const tables = useDesignTables()
   const seeds = useDesignSeedSets()
   const [cutOpen, setCutOpen] = useState(false)
+  const [picked, setPicked] = useState<string[]>([])
 
   if (!design) {
     return (
@@ -110,6 +139,7 @@ export function TimelineView() {
 
   const latest = latestVer(versions.map((v) => v.number))
   const info = dialectInfo(design.dialect)
+  const pair = comparePair(versions, picked)
 
   return (
     // 셸의 워크스페이스 칸은 overflow-hidden 이라 스크롤 상자는 각 뷰가 세운다(AppShell).
@@ -146,10 +176,23 @@ export function TimelineView() {
             </div>
           ) : (
             versions.map((v, i) => (
-              <VersionRow key={v.id} v={v} designId={design.id} latest={i === 0} />
+              <VersionRow
+                key={v.id}
+                v={v}
+                designId={design.id}
+                latest={i === 0}
+                picked={picked.includes(v.id)}
+                onPick={() => setPicked((p) => togglePick(p, v.id))}
+              />
             ))
           )}
         </div>
+
+        {/* 하나만 골랐을 때만 나오는 안내 — 늘 띄우면 안 쓰는 사람에게 줄 하나가 계속 남는다. */}
+        {picked.length === 1 && (
+          <p className="mt-3 text-[12px] text-muted">비교할 버전 하나 더</p>
+        )}
+        {pair && <VersionDiffPanel base={pair.base} target={pair.target} />}
 
         <CutVersionDialog
           open={cutOpen}

@@ -5,6 +5,7 @@ import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
+import { SideListEmpty, SideListRow, SideListScroll, SideSectionHeader } from '../../sideList'
 import { autoColumnWidths } from '../../remote/data/colWidth'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { useVersionLens } from '../../versions/store'
@@ -59,56 +60,49 @@ const TYPE_LABEL_MAX = 18
 
 /**
  * 좌측 사이드바 — 시드 세트 목록. 짝짓기 기준이 없는 세트는 경고 표식을 단다.
- * 머리·개수 표기는 Definition·Diagram 사이드바(`TableListPanel`)와 같은 문법으로 맞춘다.
+ * 행·구역 머리는 다른 DB 사이드 패널과 **같은 부품**(`sideList`)을 쓴다 — 담는 것만 다르고
+ * 생김새는 같아야 한다.
  */
 function SeedSetSidebar({ sets, activeKey, onPick }: { sets: SeedSet[]; activeKey: string; onPick: (k: string) => void }) {
   if (sets.length === 0) {
-    return <div className="px-3 py-4 text-[12px] text-muted">아직 시드 세트가 없어요</div>
+    return (
+      <SideListScroll>
+        <SideListEmpty>시드 세트 없음</SideListEmpty>
+      </SideListScroll>
+    )
   }
   const sorted = [...sets].sort((a, b) => a.tableName.localeCompare(b.tableName))
   return (
-    <div className="min-h-0 flex-1 overflow-auto px-1.5 pb-3">
-      <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
-        <Sprout className="size-3" />
-        시드 세트
-        <span className="opacity-70">{sorted.length}</span>
-      </div>
+    <SideListScroll>
+      <SideSectionHeader icon={Sprout} label="시드 세트" count={sorted.length} first />
       {sorted.map((s) => {
         const k = setKey(s)
-        const active = k === activeKey
         return (
-          <button
+          <SideListRow
             key={k}
-            type="button"
-            data-seed-set-row={s.tableName}
-            onClick={() => onPick(k)}
-            className={cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors',
-              active ? 'bg-accent-soft font-semibold text-accent' : 'text-fg hover:bg-panel-strong'
-            )}
-          >
-            {/* 시드는 뷰에 못 심는다(seedSetCandidates 가 뷰를 뺀다) — 아이콘도 테이블 하나로 고정. */}
-            <Table2 className="size-3.5 shrink-0 opacity-70" />
-            <span className="min-w-0 flex-1 truncate font-mono">{s.tableName}</span>
-            {seedSetStatus(s) === 'no-natural-key' && (
-              <span
-                data-seed-needs-key
-                title="짝짓기 기준 컬럼이 필요해요"
-                className="flex shrink-0 items-center gap-0.5 rounded bg-warning-soft px-1 py-0.5 text-[10px] font-semibold text-warning"
-              >
-                <AlertTriangle className="size-2.5" />
-                짝짓기
-              </span>
-            )}
-            <span
-              className={cn('shrink-0 text-[10.5px] tabular-nums', active ? 'text-accent/70' : 'text-muted')}
-            >
-              {s.rows.length}
-            </span>
-          </button>
+            // 시드는 뷰에 못 심는다(seedSetCandidates 가 뷰를 뺀다) — 아이콘도 테이블 하나로 고정.
+            icon={Table2}
+            name={s.tableName}
+            count={s.rows.length}
+            active={k === activeKey}
+            onPick={() => onPick(k)}
+            attrs={{ 'data-seed-set-row': s.tableName }}
+            extra={
+              seedSetStatus(s) === 'no-natural-key' ? (
+                <span
+                  data-seed-needs-key
+                  title="짝짓기 기준 컬럼이 필요해요"
+                  className="flex shrink-0 items-center gap-0.5 rounded bg-warning-soft px-1 py-0.5 text-[10px] font-semibold text-warning"
+                >
+                  <AlertTriangle className="size-2.5" />
+                  짝짓기
+                </span>
+              ) : undefined
+            }
+          />
         )
       })}
-    </div>
+    </SideListScroll>
   )
 }
 
@@ -994,6 +988,7 @@ export function SeedWorkspace() {
   return (
     <WorkspacePanels
       autoSaveId="db.seed"
+      collapsible
       sidebarTitle="SEED SETS"
       sidebarActions={
         readOnly ? undefined : (

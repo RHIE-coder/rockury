@@ -291,6 +291,7 @@ export function StreamView() {
       <div className="min-h-0 flex-1">
         <WorkspacePanels
           autoSaveId="api-runner-stream"
+          collapsible
           sidebarTitle="스트림 요청"
           sidebar={
             <div className="flex flex-col">

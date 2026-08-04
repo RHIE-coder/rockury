@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Boxes } from 'lucide-react'
-import { areasIn, groupBySlot, handlesFor, isAreaSplit } from './moduleSlots'
+import { areasIn, chipSide, groupBySlot, handlesFor, isAreaSplit } from './moduleSlots'
 import type { Module } from './types'
 
 const mod = (id: string, extra: Partial<Module> = {}): Module => ({
@@ -46,6 +46,19 @@ describe('areasIn', () => {
 
   it('구획을 안 적으면 common', () => {
     expect(areasIn([mod('a')])).toEqual(['common'])
+  })
+})
+
+describe('chipSide', () => {
+  // 뱃지가 다리 쪽 끝으로 옮겨 간 규칙(2026-08-03). 눈으로만 보이는 종류라 다른 게이트가 못 잡는다.
+  it('다리가 있으면 왼쪽 묶음은 뒤끝, 오른쪽 묶음은 앞끝 — 둘 다 다리를 향한다', () => {
+    expect(chipSide('start', true)).toBe('trailing')
+    expect(chipSide('end', true)).toBe('leading')
+  })
+
+  it('다리가 없으면 예전 그대로 묶음 앞 — 구획만 쓰는 api·infra 가 여기 걸린다', () => {
+    expect(chipSide('start', false)).toBe('leading')
+    expect(chipSide('end', false)).toBe('leading')
   })
 })
 

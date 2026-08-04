@@ -7,9 +7,11 @@ import type { TableDef } from '../../workspaces/definition/types'
 const FOCUS = { duration: 400, padding: 0.55, maxZoom: 1.1 }
 
 /**
- * Diagram 좌측 사이드 패널 — Remote › Data 사이드바와 같은 구성(테이블/뷰 분리 + 제약 탭 + 그룹 탭).
+ * Diagram 좌측 사이드 패널 — Definition·Data 와 같은 구성(테이블/뷰 분리 + 제약 탭)에 그룹 탭만 더한다.
  * 항목을 누르면 그 노드를 선택하고 캔버스를 그 노드로 옮긴다(포커싱) — 제약을 눌러도 그 제약이
  * 걸린 테이블로 날아간다. `useReactFlow` 를 쓰므로 반드시 `ReactFlowProvider` **안쪽**에 놓아야 한다.
+ *
+ * 바깥 틀(폭 조절·접기·머리줄)은 `WorkspacePanels` 가 맡는다 — 여기서 폭을 정하지 않는다.
  */
 export function DiagramTablePanel({
   tables,
@@ -38,23 +40,16 @@ export function DiagramTablePanel({
   )
 
   return (
-    <aside
-      data-diagram-table-panel
-      className="flex w-60 shrink-0 flex-col border-r border-line bg-canvas"
-    >
+    <div data-diagram-table-panel className="flex h-full min-h-0 flex-col">
       <TableSidePanel
         tables={tables}
         activeId={selectedId}
         onPick={focus}
-        emptyText="테이블이 없어요"
+        searchPlaceholder="테이블/컬럼/스키마 검색…"
+        emptyText="테이블 없음"
         groupTab={groupTab}
         groupCount={groupCount}
-        footer={
-          <p className="shrink-0 border-t border-line px-3 py-2 text-[10.5px] leading-relaxed text-muted">
-            항목을 누르면 해당 테이블로 이동해요.
-          </p>
-        }
       />
-    </aside>
+    </div>
   )
 }

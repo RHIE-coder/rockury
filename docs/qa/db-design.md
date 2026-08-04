@@ -58,22 +58,27 @@
 - **CASE-design-043** 셀에 `{{ADMIN_PASSWORD_HASH}}` 입력 → 변수 표식 + 세트 머리의 변수 목록에 등장. (variables AC-1/AC-2)
 - **CASE-design-044** 저장소(`seedSets.list`)에 선언·행 반영 + **콜드 재시작**(앱 종료→재기동) 후 세트·행·변수 잔존. (persistence AC-1/AC-2)
 - **CASE-design-044b** `설계에 없는 행` 을 `삭제 후보` 로 고르면 그 뜻을 경고로 보인다. (declaration AC-4)
-- **CASE-design-045** 시드를 담아 버전 컷 → 타임라인에 시드 행 수 표시 + Versions › Version Diff 에 시드 섹션(시드 없던 옛 버전과 비교 → 세트/행 추가) 표시. (version-diff AC-1/AC-2/AC-3/AC-5) — 행 값 변경 케이스는 단위테스트 CASE-design-021 이 덮는다.
+- **CASE-design-045** 시드를 담아 버전 컷 → 타임라인에 시드 행 수 표시 + 두 버전을 골라 연 비교 패널(Design › Versions)에 시드 섹션(시드 없던 옛 버전과 비교 → 세트/행 추가) 표시. (version-diff AC-1/AC-2/AC-3/AC-5) — 행 값 변경 케이스는 단위테스트 CASE-design-021 이 덮는다.
 
 ## Scenario S6 — 뷰 선언 (Design › Definition) → `services/db/workspaces/definition/ddl.test.ts` · `versions/diff.test.ts` · `main/store/stores.test.ts`
 - **CASE-design-050** 뷰 DDL: `isView` 인 대상은 `CREATE TABLE` 이 아니라 `CREATE VIEW … AS <본문>` 으로 나온다. `OR REPLACE` 는 MySQL·MariaDB·PostgreSQL 에만 붙고 SQLite 에는 안 붙는다. PostgreSQL 은 설명을 `COMMENT ON VIEW` 로 따로 낸다. (definition.view AC-5)
 - **CASE-design-051** 뷰 DDL 경계: 본문 끝 세미콜론이 겹치지 않고, 본문이 비면 무엇이 비었는지 알리되 DDL 구조는 깨지지 않는다. 뷰 이름도 식별자 인용을 탈출하지 못한다(주입 방어). (definition.view AC-5)
 - **CASE-design-052** 뷰 Diff: 테이블 ↔ 뷰 전환과 본문(`viewSql`) 변경을 각각 차이로 잡고, 안 바뀌면 조용하다. (definition.view AC-6)
 - **CASE-design-053** 뷰 저장 왕복: `viewSql` 이 저장→조회에서 보존되고, 뷰가 아닌 테이블은 빈 문자열로 정규화된다. (definition.view AC-6)
+- **CASE-design-054** **새 표·뷰가 태어날 스키마**: 범위를 골랐으면 그 첫 스키마, 안 골랐고 쓰는 스키마가 하나면 그것, 그래도 못 정하면 기본 스키마. 어느 경우에도 **빈 값을 주지 않는다** — 빈 값이면 범위 걸름(`scopedTables`)에 통째로 탈락해 화면에서 사라진다. (definition.schema AC-5) → `definition/designScope.test.ts`
 
 ## Scenario S7 — 공용 사이드 패널·뷰 선언 앱 흐름 (e2e/suites/03-design-definition)
-- **CASE-design-060** Design › Definition 사이드 패널 `제약` 탭: 테이블별 그룹과 제약 행이 뜨고, 종류 필터(FK)가 다른 종류를 걸러내며, 제약을 누르면 그 테이블로 이동한다. (definition.side-panel AC-2/AC-3)
-- **CASE-design-061** 사이드바 `+` → `뷰 추가` → 뷰 배지가 뜨고 제약 구역이 사라지며 본문 SELECT 편집기가 나타난다. 목록이 테이블/뷰로 갈린다. (definition.view AC-1/AC-3/AC-4, definition.side-panel AC-2)
+- **CASE-design-060** Design › Definition 사이드 패널 `제약` 탭: 테이블별 그룹과 제약 행이 뜨고, 종류 필터(FK)가 다른 종류를 걸러내며, 제약을 누르면 그 테이블로 이동한다. (definition.side-panel AC-3/AC-4)
+- **CASE-design-060b** 사이드 패널 **접기/펼치기**: 접으면 목록이 화면에서 사라지고 세로 띠만 남으며, 띠를 누르면 목록이 돌아온다. (definition.side-panel AC-5)
+- **CASE-design-061** 사이드바 `+` → `뷰 추가` → 뷰 배지가 뜨고 제약 구역이 사라지며 본문 SELECT 편집기가 나타난다. 목록이 테이블/뷰로 갈린다. **새로 만든 뷰에도 스키마가 붙는다**(안 붙으면 범위를 켠 설계에서 눌러도 아무것도 안 뜬다 — 2026-08-04 회귀). (definition.view AC-1/AC-3/AC-4, definition.schema AC-5, definition.side-panel AC-2)
 - **CASE-design-062** 본문 SELECT 를 쓰면 SQL 폼이 `CREATE OR REPLACE VIEW` + 그 본문을 내고 `CREATE TABLE` 은 내지 않는다. 뷰 표식·본문이 로컬 저장소까지 왕복한다. (definition.view AC-5/AC-6)
+- **CASE-design-063** **고른 표가 화면을 넘어 유지된다** — Definition 에서 `products` 를 고르고 Diagram 으로 가도 같은 표가 활성이고, Diagram 에서 `orders` 를 고르면 Definition 이 따라온다. (db-design.diagram.scope AC-4)
 
 ## Scenario S9 — Design › Diagram 그룹·상세보기 앱 흐름 (e2e/suites/03-design-definition · 04-design-seed)
 > 배치·그룹·상세보기의 규칙 정본은 `db-remote.diagram` 이고, 여기서는 **설계 스코프**에서도 같게 도는지를 덮는다.
 - **CASE-design-100** Design › Diagram 에서 그룹을 만들고 테이블을 넣은 뒤 **영역을 끌면 소속 노드가 함께 움직인다.** 설계를 바꿨다 돌아와도 그 그룹·배치가 남는다(설계별 스코프). (db-design.diagram.scope AC-1 · diagram.group AC-2/AC-7)
+- **CASE-design-100a** 화면 위 도구줄의 `그룹 추가` 로도 그룹이 만들어지고, **새 상자가 보이는 캔버스 안에 놓을 만한 크기로** 생긴다. (db-remote.diagram.group-panel AC-2d/AC-6)
+- **CASE-design-100b** **드래그 회귀** — 캔버스에서 표를 끌어 그룹 상자에 얹으면 소속이 된다. **컬럼이 많아 상자보다 긴 표(`orders`)도** 들어간다(한가운데 점이 아니라 겹친 넓이로 판정). (db-remote.diagram.group AC-3a)
 - **CASE-design-101** 노드를 고르면 아래 서랍에 **설계 편집 폼**이 뜨고, 거기서 컬럼을 더하면 Definition 화면에도 그대로 보인다(같은 저장소·같은 폼). (db-design.diagram.scope AC-3 · diagram.detail AC-2)
 - **CASE-design-066** 설계부 그룹 지우기: 확인 창에 `테이블도 함께 지우기` 가 있고, 고르면 **확인 문구를 그대로 입력해야** 버튼이 열린다. 지우면 그룹과 **소속 테이블이 설계에서 사라지고**, Definition 목록에도 없다. (db-remote.diagram.group-panel AC-2b/AC-2c)
 - **CASE-design-102** **커밋된 버전 열람(읽기 전용)에서는 배치·그룹이 저장되지 않는다** — 노드를 끌어도 안 움직이고, 저장본이 그대로이며, 그룹 만들기 버튼이 없다. (db-design.diagram.scope AC-2) → `04-design-seed`(버전 컷 뒤라 커밋 버전이 있다)

@@ -546,6 +546,34 @@ export async function run(ctx) {
   await click('button:text-is("Table")') // Table 폼으로 복귀
   await page.waitForTimeout(150)
 
+  // ⭐ 고른 표는 뷰를 옮겨도 유지된다(2026-08-04 사용자 요청 — "자꾸 초기화되니까 보기가 쉽지 않네").
+  //    Definition·Diagram·Data 가 각자 로컬 state 를 들고 있던 동안은 옮길 때마다 첫 표로 돌아갔다.
+  //    색으로만 드러나는 종류라 다른 게이트가 못 잡는다 → 여기서 못박는다.
+  {
+    const activeRow = async () =>
+      page.locator('[data-table-active="true"]').first().getAttribute('data-table-row').catch(() => null)
+    check('Remote › Definition: 고른 표(user_roles)가 활성으로 표시된다', (await activeRow()) === 'user_roles')
+
+    await click('button:has-text("Diagram")')
+    await page.waitForTimeout(1_500)
+    check(`Remote › Diagram: 고른 표가 유지된다 (${await activeRow()})`, (await activeRow()) === 'user_roles')
+
+    await click('button:has-text("Data")')
+    await page.waitForTimeout(2_500)
+    check(`Remote › Data: 고른 표를 그대로 연다 (${await activeRow()})`, (await activeRow()) === 'user_roles')
+
+    // 반대 방향도 같다 — Data 에서 고르면 Definition 이 따라온다.
+    await page.locator('[data-table-row="users"]').first().click()
+    await page.waitForTimeout(1_500)
+    await click('button:has-text("Definition")')
+    await page.waitForTimeout(1_500)
+    check(`Remote › Definition: Data 에서 고른 users 로 따라온다 (${await activeRow()})`, (await activeRow()) === 'users')
+
+    // 뒤 검사가 user_roles 를 전제하므로 되돌려 놓는다.
+    await page.locator('[data-table-row="user_roles"]').first().click()
+    await page.waitForTimeout(300)
+  }
+
   // Remote › Definition 편집 — 라이브 스키마 편집: 대기 변경 → DDL 미리보기 → tx 게이트 적용 → 재역설계.
   // 공유 테스트 DB 를 오염시키지 않도록 rky_probe 를 만들었다 되지운다(생성/삭제 왕복 = 클린).
   await click('button:text-is("편집")')

@@ -1,8 +1,8 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import type { Connection } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { GitBranch, Plus, Eye, LayoutGrid, Lock } from 'lucide-react'
+import { GitBranch, Plus, Eye, Layers, LayoutGrid, Lock } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useActiveDesign } from '../../designs/store'
@@ -31,14 +31,22 @@ export function DesignDiagramWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const tables = useMemo(() => scoped, [scopedSig])
 
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  /**
+   * 고른 표는 이 화면 것이 아니라 **설계부가 함께 쓰는 값**이다(`useDefinitionStore.activeTableId`) —
+   * Definition 과 Diagram 을 오가도 보던 표가 그대로다(2026-08-04 사용자 요청). 로컬 state 로
+   * 들고 있던 동안은 Diagram 에 들어올 때마다 고름이 풀렸다.
+   *
+   * 여기 들어올 때 상세 서랍이 저절로 열리지는 않는다 — 서랍은 `DiagramSurface` 가 **누른 순간**만 연다.
+   */
+  const selectedId = useDefinitionStore((s) => s.activeTableId) || null
   // 커밋 버전을 볼 때는 배치·그룹을 저장하지 않는다 — 지나간 버전의 화면을 만졌다고
   // 정본이 바뀌면 안 된다(정본 §db-design.diagram.scope AC-2).
   const layout = useDiagramLayout(design ? `design:${design.id}` : null, !readOnly)
 
+  // 빈 캔버스를 눌러 고름을 풀면 Definition 도 함께 푼다 — 한 값을 둘이 보는 이상 한쪽만
+  // 남겨 둘 수 없다(그 경우 Definition 은 예전처럼 목록 첫 표로 돌아간다).
   const handleSelect = useCallback((id: string | null) => {
-    setSelectedId(id)
-    if (id) useDefinitionStore.getState().setActiveTable(id)
+    useDefinitionStore.getState().setActiveTable(id ?? '')
   }, [])
 
   const handleConnectFk = useCallback(
@@ -98,6 +106,11 @@ export function DesignDiagramWorkspace() {
               </Button>
               <Button size="sm" variant="ghost" onClick={() => addView(design.id)}>
                 <Eye /> 뷰 추가
+              </Button>
+              {/* 그룹도 여기서 만든다 — 왼쪽 `그룹` 탭을 열어야만 만들 수 있으면 못 찾는다.
+                  상자는 지금 보고 있는 자리에 생긴다(§diagram.group AC-6). */}
+              <Button size="sm" variant="ghost" data-group-create-toolbar onClick={() => layout.createGroup()}>
+                <Layers /> 그룹 추가
               </Button>
             </>
           )}

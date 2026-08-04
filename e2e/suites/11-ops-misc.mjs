@@ -46,7 +46,10 @@ export async function run(ctx) {
   await page.waitForSelector('text=두 DB 의 스키마가 동일해요', { timeout: 15_000 })
   check('Migration › Compare: 같은 DB 두 연결 → 스키마 동일', (await body()).includes('두 DB 의 스키마가 동일해요'))
 
-  // ⭐ 버전 삭제(잘못 들어간 버전 회수) — Timeline 에서 삭제 → 목록에서 사라짐.
+  // ⭐ 버전 삭제(잘못 들어간 버전 회수) — 타임라인에서 삭제 → 목록에서 사라짐.
+  // Versions 는 Design 안 뷰라(2026-08-03) 설계부로 먼저 건너간다 — Migration 줄에는 없다.
+  await click('[data-nav-module="design"]')
+  await page.waitForTimeout(300)
   await click('button:has-text("Versions")')
   await page.waitForSelector('text=버전 타임라인', { timeout: 8_000 })
   await page.waitForTimeout(300)

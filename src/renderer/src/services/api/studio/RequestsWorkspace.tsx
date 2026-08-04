@@ -959,6 +959,7 @@ export function RequestsWorkspace() {
       <div className="min-h-0 flex-1">
         <WorkspacePanels
           autoSaveId="api-studio-requests"
+          collapsible
           sidebarTitle="요청"
           sidebarActions={
             <span className="flex items-center gap-0.5">

@@ -11,6 +11,7 @@ import { useScope } from './useScope'
 import { TableSidePanel } from '../TableSidePanel'
 import { useActiveConnection } from '../connections/store'
 import { useRemoteStore } from './store'
+import { useRemoteFocus, useRemoteFocusStore } from './focus'
 import { resolveActiveTable } from './definition/select'
 import { TableDetail } from './definition/TableDetail'
 import { SqlView } from './definition/SqlView'
@@ -68,7 +69,10 @@ export function DefinitionView() {
   const setEditActive = useSchemaEditStore((s) => s.setActiveTable)
   const addTableEdit = useSchemaEditStore((s) => s.addTable)
 
-  const [activeId, setActiveId] = useState<string | null>(null)
+  // 고른 표는 이 화면 것이 아니라 **운영부가 함께 쓰는 값**이다 — Diagram·Data 로 옮겨도 그대로다.
+  const activeId = useRemoteFocus(connId)
+  const setFocus = useRemoteFocusStore((s) => s.setFocus)
+  const setActiveId = (id: string | null): void => setFocus(connId, id)
   const [form, setForm] = useState<'table' | 'sql'>('table')
   /** FK 를 눌러 건너온 자리 — "…로 돌아가기"가 이걸 든다. 사이드바로 직접 고르면 지운다. */
   const [returnTo, setReturnTo] = useState<{ id: string; label: string } | null>(null)
@@ -166,6 +170,7 @@ export function DefinitionView() {
           <div className="min-h-0 flex-1">
             <WorkspacePanels
               autoSaveId="db.console.definition"
+              collapsible
               sidebarTitle="SCHEMA"
               sidebarActions={
                 isEditing ? (

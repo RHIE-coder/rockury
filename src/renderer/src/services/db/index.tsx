@@ -9,7 +9,6 @@ import {
   GitCompare,
   History,
   Layers,
-  Milestone,
   Monitor,
   Network,
   PenTool,
@@ -36,8 +35,7 @@ import { SeedWorkspace } from './workspaces/seed/SeedWorkspace'
 import { DesignDialogs } from './designs/DesignDialogs'
 import { DesignScopeSelector } from './designs/DesignScopeSelector'
 import { useDesignsStore } from './designs/store'
-import { TimelineView } from './versions/TimelineView'
-import { VersionDiffView } from './versions/VersionDiffView'
+import { VersionsView } from './versions/VersionsView'
 import { ScopeSelector } from './connections/ScopeSelector'
 import { VersionLens } from './versions/VersionLens'
 import { ConnectionsView } from './connections/ConnectionsView'
@@ -56,13 +54,15 @@ import './rehydration' // 에이전트(MCP) 쓰기 → store:changed → 스코�
 /**
  * DB 서비스 IA (확정본).
  *
- *   설계부(design) : 버전 중심. 도면을 짓고 버전을 컷한다. Env 무관.
- *   운영부(ops)    : active Env 중심. Connection 에 붙어 조회/반영한다.
- *   공통(common)   : Reference.
+ *   설계부(design) : Design. 버전 중심으로 도면을 짓고 버전을 컷한다. Env 무관.
+ *   운영부(ops)    : Remote. active Env 중심. Connection 에 붙어 조회/반영한다.
+ *   건너가는 자리   : Migration. 어느 부서도 아니다.
+ *
+ * 모듈 줄은 이 셋뿐이다(2026-08-03 사용자 요청) — Versions·Reference 는 Design 안 뷰로 내려갔다.
  *
  * 두 부서는 정의된 문으로만 오간다:
- *   설계→운영  Versions 에서 컷한 버전을 Migration 이 Environment 에 반영
- *   운영→설계  Migration/Drift 가 캡처한 변경을 Versions 에 새 버전으로 되먹임
+ *   설계→운영  Design › Versions 에서 컷한 버전을 Migration 이 Environment 에 반영
+ *   운영→설계  Migration/Drift 가 캡처한 변경을 Design › Versions 에 새 버전으로 되먹임
  *
  * depth 는 Service→Module→View 3단이며, Design·시점·Connection·범위는 nav 계층이 아니라
  * **뷰 탭 줄 오른쪽 끝의 구획 손잡이**가 든 ambient 셀렉터다(설계 손잡이 = 설계+시점,
@@ -161,36 +161,27 @@ export const dbService: Service = {
       icon: PenTool,
       area: 'design',
       views: [
-        // 시점 손잡이는 여기 없다 — 설계 손잡이가 들고 있어 Design·Versions 전 뷰에서 늘 같은 자리다.
+        // 시점 손잡이는 여기 없다 — 설계 손잡이가 들고 있어 이 줄 전 뷰에서 늘 같은 자리다.
         // Diagram·Seed 는 그래서 도구줄 자체가 없어졌다(손잡이 하나만 세우던 줄이었다).
         { id: 'definition', label: 'Definition', icon: TableProperties, workspace: DefinitionWorkspace, Toolbar: DefinitionToolbar },
         { id: 'diagram', label: 'Diagram', icon: GitBranch, workspace: DesignDiagramWorkspace },
         { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedWorkspace },
         { id: 'mocking', label: 'Mocking', icon: Shuffle, workspace: view(Shuffle, 'depth 3 · Design › Mocking', 'Mocking', '목업 데이터 생성 규칙을 설정한다') },
         { id: 'documenting', label: 'Documenting', icon: FileText, workspace: view(FileText, 'depth 3 · Design › Documenting', 'Documenting', '스키마 문서를 작성/생성한다') },
-        { id: 'validation', label: 'Validation', icon: ShieldCheck, workspace: view(ShieldCheck, 'depth 3 · Design › Validation', 'Validation', '설계 단계 제약/무결성 규칙을 검증한다') }
+        { id: 'validation', label: 'Validation', icon: ShieldCheck, workspace: view(ShieldCheck, 'depth 3 · Design › Validation', 'Validation', '설계 단계 제약/무결성 규칙을 검증한다') },
+        // Versions·Reference 는 2026-08-03 사용자 요청으로 **모듈에서 여기 뷰로 내려왔다** —
+        // 맨 윗줄에 다섯 칸이 서 있으니 "지금 어느 부서에 있나"가 안 읽혔다. 이제 윗줄은
+        // `Design ——Migration—— Remote` 세 칸이고, 설계부에서 하는 일은 전부 이 줄 안에 있다.
+        //
+        // Versions 는 뷰 둘(Timeline·Version Diff)이었는데 **한 뷰로 접었다**: 비교는 타임라인에서
+        // 두 줄을 고르면 그 아래에 열린다. 따로 뜬 화면이던 동안은 이미 보고 있던 목록을
+        // 셀렉트로 한 번 더 골라야 했다.
+        { id: 'versions', label: 'Versions', icon: History, workspace: VersionsView },
+        // Reference 는 원래 어느 부서도 아닌 `common` 모듈이었다. Design 안으로 들어오면서
+        // 설계 손잡이가 딸려 뜬다 — 문서에 설계를 고르는 자리가 붙는 셈이지만, 문서를 찾는 일은
+        // 설계를 보다 생기지 실 DB 를 만지다 생기지 않는다(2026-08-01 자리 결정과 같은 이유).
+        { id: 'reference', label: 'Reference', icon: BookOpen, workspace: view(BookOpen, 'depth 3 · Design › Reference', 'Reference', '데이터 사전/문서(reference)') }
       ]
-    },
-    {
-      id: 'versions',
-      label: 'Versions',
-      icon: History,
-      area: 'design',
-      views: [
-        { id: 'timeline', label: 'Timeline', icon: Milestone, workspace: TimelineView },
-        { id: 'diff', label: 'Version Diff', icon: GitCompare, workspace: VersionDiffView }
-      ]
-    },
-
-    // ── 공통 ────────────────────────────────────────────────────────────────
-    // 설계 묶음 바로 뒤에 선다(2026-08-01 사용자 요청) — 문서를 찾는 일은 설계를 보다 생기지,
-    // 실 DB 를 만지다 생기지 않는다. 구분선은 그대로라 설계 묶음에 속한 것처럼 읽히진 않는다.
-    {
-      id: 'reference',
-      label: 'Reference',
-      icon: BookOpen,
-      area: 'common',
-      workspace: view(BookOpen, 'depth 2 · DB › Reference', 'Reference', '데이터 사전/문서(reference)')
     },
 
     // ── 건너가는 자리 ────────────────────────────────────────────────────────

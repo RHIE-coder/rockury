@@ -37,6 +37,27 @@ export async function run(ctx) {
     check('Design › Definition: 제약 클릭 → 그 테이블로 이동', (await body()).includes('orders'))
   }
 
+  // ── 사이드 패널 접기/펼치기 (DB 서비스 여섯 화면 공용 — §db-design.definition.side-panel AC-5) ──
+  {
+    // 접힌 패널은 **폭 0** 으로 눌릴 뿐 DOM 에는 남는다(검색어·고른 탭 유지). 안의 행은 잘려 있을
+    // 뿐이라 `isVisible()` 로는 접힘을 못 가린다(실측) → 패널의 실제 폭으로 판정한다.
+    const sidebarW = async () =>
+      Math.round((await page.locator('[data-workspace-sidebar]').first().boundingBox())?.width ?? -1)
+    const openW = await sidebarW()
+    await click('[data-sidebar-collapse]')
+    await page.waitForTimeout(400)
+    check(
+      'Design › Definition: 사이드 패널 접기 → 폭 0 + 펼치기 띠',
+      openW > 0 && (await sidebarW()) === 0 && (await page.locator('[data-sidebar-expand]').count()) === 1
+    )
+    await click('[data-sidebar-expand]')
+    await page.waitForTimeout(400)
+    check(
+      'Design › Definition: 세로 띠 → 펼치면 접기 전 폭으로 돌아온다',
+      (await sidebarW()) === openW && (await page.locator('[data-sidebar-expand]').count()) === 0
+    )
+  }
+
   // ── Design › Definition — 뷰 선언(설계부에서 뷰 만들기 → 목록이 테이블/뷰로 갈린다) ──
   {
     await click('button[aria-label="테이블 추가"]')
@@ -44,6 +65,14 @@ export async function run(ctx) {
     await click('[data-definition-add="view"]')
     await page.waitForSelector('[data-definition-view-badge]', { timeout: 5_000 })
     check('Design › Definition: 뷰 추가 → 뷰 배지', (await page.locator('[data-definition-view-badge]').count()) === 1)
+    // ⭐ 회귀 — 새로 만든 표·뷰에 **스키마가 붙어야** 한다(2026-08-04 제보). 안 붙던 동안은
+    //    범위를 켠 설계에서 목록·다이어그램이 통째로 걸러 내, 눌러도 아무것도 안 뜨고 저장만 됐다.
+    {
+      const noSchema = await page.evaluate(async () =>
+        (await window.rockury.tables.list()).filter((t) => !t.schema).map((t) => t.name)
+      )
+      check(`Design › Definition: 새 뷰에도 스키마가 붙는다 (${noSchema.join(',') || '없음'})`, noSchema.length === 0)
+    }
     check('Design › Definition: 뷰엔 제약 구역이 없다', !(await body()).includes('제약 추가'))
     check('Design › Definition: 뷰 본문 편집기', (await page.locator('[data-view-body]').count()) === 1)
     // 목록이 테이블/뷰 구역으로 갈린다 — 이 화면이 Remote 와 같아지는 지점
@@ -69,6 +98,28 @@ export async function run(ctx) {
       return list.filter((t) => t.designId === 'commerce-core' && t.isView).map((t) => t.viewSql)
     })
     check('Design › Definition: 뷰 선언·본문 저장 왕복', storedView.length === 1 && storedView[0].includes('SELECT id, order_number'))
+  }
+
+  // ⭐ 고른 표는 Definition ↔ Diagram 을 오가도 유지된다(2026-08-04 사용자 요청).
+  //    Diagram 이 고름을 자기 화면 안에만 들고 있던 동안은 들어올 때마다 풀렸다.
+  //    색으로만 드러나는 종류라 다른 게이트가 못 잡는다 → 여기서 못박는다.
+  {
+    const activeRow = async () =>
+      page.locator('[data-table-active="true"]').first().getAttribute('data-table-row').catch(() => null)
+    await page.locator('[data-table-row="products"]').first().click()
+    await page.waitForTimeout(300)
+    check('Design › Definition: 고른 표(products)가 활성으로 표시된다', (await activeRow()) === 'products')
+
+    await click('button:has-text("Diagram")')
+    await page.waitForTimeout(1_200)
+    check(`Design › Diagram: 고른 표가 유지된다 (${await activeRow()})`, (await activeRow()) === 'products')
+
+    // 반대 방향도 같다 — Diagram 에서 고르면 Definition 이 따라온다.
+    await page.locator('[data-table-row="orders"]').first().click()
+    await page.waitForTimeout(300)
+    await click('button:has-text("Definition")')
+    await page.waitForTimeout(800)
+    check(`Design › Definition: Diagram 에서 고른 orders 로 따라온다 (${await activeRow()})`, (await activeRow()) === 'orders')
   }
 
   // Design › Diagram — 가상 ERD 편집기(설계 테이블 렌더 + 편집 + 설계 스코프 위치 영속).
@@ -195,15 +246,56 @@ export async function run(ctx) {
   {
     await page.locator('[data-side-tab="groups"]').first().click()
     await page.waitForTimeout(200)
-    await page.locator('[data-group-create]').first().click()
+    // 상단 도구줄의 `그룹 추가` — 왼쪽 `그룹` 탭을 열지 않고도 만들 수 있어야 한다.
+    // (패널 안의 `+ 그룹` 은 07-remote-schema 가 덮는다.)
+    await page.locator('[data-group-create-toolbar]').first().click()
     await page.keyboard.press('Escape')
-    await page.waitForTimeout(300)
+    await page.waitForTimeout(400)
+    check('Design › Diagram: 도구줄 `그룹 추가` → 캔버스에 영역', (await page.locator('[data-erd-group="그룹 1"]').count()) > 0)
+
+    // ⭐ 회귀 — 새 그룹 상자는 **지금 보고 있는 자리**에 생겨야 한다. 예전엔 테이블 무리 오른쪽
+    //    바깥에 생겨, 표가 많아 배율이 낮으면 화면 구석의 점만 해서 끌어다 놓을 수가 없었다.
+    const inView = await page.evaluate(() => {
+      const pane = document.querySelector('.react-flow')?.getBoundingClientRect()
+      const box = document.querySelector('[data-erd-group]')?.getBoundingClientRect()
+      if (!pane || !box) return null
+      return {
+        inside: box.left > pane.left && box.right < pane.right && box.top > pane.top && box.bottom < pane.bottom,
+        w: Math.round(box.width)
+      }
+    })
+    check(
+      'Design › Diagram: 새 그룹 상자가 보이는 캔버스 안에, 놓을 만한 크기로 생긴다',
+      !!inView && inView.inside && inView.w > 120
+    )
+
+    // ⭐ 회귀 — 캔버스에서 표를 끌어 그룹에 넣는다. 예전엔 표의 **한가운데 점**으로 판정해
+    //    컬럼 많은 긴 표(orders)는 빈 상자(180px)에 아무리 얹어도 안 들어갔다.
+    {
+      const box = await page.locator('[data-erd-group="그룹 1"]').first().boundingBox()
+      const node = page.locator('.react-flow__node').filter({ hasText: 'orders' }).first()
+      const nb = await node.boundingBox()
+      if (box && nb) {
+        await page.mouse.move(nb.x + nb.width / 2, nb.y + 10)
+        await page.mouse.down()
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 20 })
+        await page.mouse.up()
+        await page.waitForTimeout(700)
+      }
+      // 접힌 그룹은 소속 행을 안 그린다 — 펴서 센다.
+      await page.locator('[data-group-row="그룹 1"] button').first().click()
+      await page.waitForTimeout(300)
+      const names = await page
+        .locator('[data-group-row="그룹 1"] [data-group-member]')
+        .evaluateAll((els) => els.map((e) => e.getAttribute('data-group-member')))
+      check('Design › Diagram: 캔버스에서 표를 끌어 그룹에 넣는다(긴 표도)', names.includes('orders'))
+    }
+
     const rows = page.locator('[data-group-member] select')
     if ((await rows.count()) > 0) {
       await rows.first().selectOption('g1')
       await page.waitForTimeout(250)
     }
-    check('Design › Diagram: 그룹 만들기 → 캔버스에 영역', (await page.locator('[data-erd-group="그룹 1"]').count()) > 0)
 
     // 뷰를 떠났다 와도 남는다 + 저장 스코프가 설계 키다.
     await click('button:has-text("Definition")')

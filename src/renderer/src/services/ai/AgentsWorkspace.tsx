@@ -279,7 +279,9 @@ function ConnectPane() {
  */
 export function AgentsWorkspace() {
   return (
-    <WorkspacePanels autoSaveId="ai-agents" defaultSize={40} sidebar={<ConnectPane />}>
+    // 제목은 안 준다 — `ConnectPane` 이 이미 `Agents` 머리를 갖고 있어 두 번 적히면 시끄럽다.
+    // 머리줄에는 접기 손잡이만 선다.
+    <WorkspacePanels autoSaveId="ai-agents" defaultSize={40} collapsible sidebar={<ConnectPane />}>
       <ToolsPane />
     </WorkspacePanels>
   )

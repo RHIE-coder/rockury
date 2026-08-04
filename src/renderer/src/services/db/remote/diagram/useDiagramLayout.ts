@@ -15,7 +15,17 @@ export interface DiagramLayoutApi {
   saveLayout: (patch: { positions?: Positions; viewport?: Viewport | null }) => void
   /** 그룹이 바뀔 때 부른다(지연 저장 — 화면을 떠나면 마저 저장한다). */
   setGroups: (next: DiagramGroup[]) => void
+  /**
+   * 새 그룹을 만들고 id 를 준다. 상자는 **지금 보고 있는 한가운데**에 놓는다
+   * (`setViewCenterProbe` 로 캔버스가 알려 준 자리). 아무도 안 알려 줬으면 기존 내용 오른쪽 빈 자리.
+   */
   createGroup: () => string
+  /**
+   * 캔버스가 "지금 화면 한가운데의 캔버스 좌표"를 알려 주는 통로.
+   * 상단 도구줄의 `그룹` 버튼은 `ReactFlowProvider` **밖**에 있어 뷰포트를 직접 볼 수 없다 —
+   * 어디서 만들든 같은 자리에 생기도록 캔버스가 이 통로에 물어보는 함수를 걸어 둔다.
+   */
+  setViewCenterProbe: (probe: (() => { x: number; y: number } | null) | null) => void
   deleteGroup: (id: string) => void
   patchGroup: (id: string, patch: Partial<DiagramGroup>) => void
   /** `자동 배치` — 배치만 지우고 그룹은 남긴다. */
@@ -42,6 +52,8 @@ export function useDiagramLayout(scopeKey: string | null, persist: boolean): Dia
 
   /** 마지막으로 저장된 전체 위치 — 새 그룹 상자를 놓을 빈 자리를 고르는 데 쓴다. */
   const positionsRef = useRef<Positions>({})
+  /** 캔버스가 걸어 두는 "지금 어디를 보고 있나" 물음. 캔버스가 없으면 비어 있다. */
+  const viewCenterProbe = useRef<(() => { x: number; y: number } | null) | null>(null)
   const groupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingGroups = useRef<DiagramGroup[] | null>(null)
   const scopeRef = useRef(scopeKey)
@@ -112,13 +124,21 @@ export function useDiagramLayout(scopeKey: string | null, persist: boolean): Dia
   const createGroup = useCallback((): string => {
     const id = nextGroupId(groups)
     // 이름은 **id 순번**을 따른다 — 목록 길이로 지으면 하나 지운 뒤 만들 때 이름이 겹친다.
-    const anchor = nextGroupAnchor(positionsRef.current, groups)
+    // 자리는 지금 보고 있는 한가운데 — 안 보이는 곳에 만들면 끌어다 놓을 수가 없다.
+    const anchor = nextGroupAnchor(positionsRef.current, groups, viewCenterProbe.current?.() ?? undefined)
     setGroups([
       ...groups,
       { id, name: `그룹 ${id.replace(/^g/, '')}`, color: '', tableIds: [], collapsed: false, ...anchor }
     ])
     return id
   }, [groups, setGroups])
+
+  const setViewCenterProbe = useCallback(
+    (probe: (() => { x: number; y: number } | null) | null) => {
+      viewCenterProbe.current = probe
+    },
+    []
+  )
 
   const deleteGroup = useCallback(
     (id: string) => {
@@ -161,6 +181,7 @@ export function useDiagramLayout(scopeKey: string | null, persist: boolean): Dia
     saveLayout,
     setGroups,
     createGroup,
+    setViewCenterProbe,
     deleteGroup,
     patchGroup,
     resetLayout,

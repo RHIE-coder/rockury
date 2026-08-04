@@ -2,13 +2,13 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Eye, Layers, Search, Table2 } from 'lucide-react'
 import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
+import { SideListEmpty, SideListRow, SideListScroll, SideSectionHeader } from './sideList'
 import { groupTablesForList } from './tableList'
 import type { TableDef } from './workspaces/definition/types'
 
 /**
- * 테이블 목록 패널 — Definition·Diagram 이 공유하는 **하나뿐인** 목록 표현.
- * Remote › Data 사이드바를 원형 삼아 테이블과 뷰(view)를 섹션으로 가른다.
- * (Data 자체는 편집 가능 여부 자물쇠 등 자기 사정이 있어 아직 자체 목록을 쓴다 — 통합은 후속.)
+ * 테이블 목록 패널 — Design·Remote 의 Definition·Diagram·Data 가 공유하는 **하나뿐인** 목록 표현.
+ * 테이블과 뷰(view)를 구역으로 가르고, 여러 스키마가 섞여 있으면 스키마로 한 겹 더 묶는다.
  */
 export function TableListPanel({
   tables,
@@ -16,8 +16,7 @@ export function TableListPanel({
   onPick,
   searchPlaceholder,
   rowExtra,
-  emptyText = '테이블이 없어요',
-  footer
+  emptyText = '테이블 없음'
 }: {
   tables: TableDef[]
   activeId: string | null
@@ -27,8 +26,6 @@ export function TableListPanel({
   /** 행 오른쪽 끝 추가 표식(예: 편집 불가 자물쇠). */
   rowExtra?: (t: TableDef) => ReactNode
   emptyText?: string
-  /** 목록 아래 고정 영역(예: 사용법 안내). */
-  footer?: ReactNode
 }) {
   const [q, setQ] = useState('')
   const g = useMemo(() => groupTablesForList(tables, q), [tables, q])
@@ -47,57 +44,58 @@ export function TableListPanel({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto px-1.5 pb-3">
+      <SideListScroll>
         {g.shown === 0 ? (
-          <p className="px-2 py-4 text-center text-[11.5px] italic text-muted">
-            {g.total === 0 ? emptyText : '검색 결과가 없어요'}
-          </p>
+          <SideListEmpty>{g.total === 0 ? emptyText : '검색 결과 없음'}</SideListEmpty>
         ) : (
-          <>
-            {g.groups.map((grp, gi) => (
-              <div key={grp.schema || '·'}>
-                {/* 스키마가 섞여 있을 때만 머리를 그린다 — 하나뿐이면 시끄럽다. */}
-                {g.multiSchema && <SchemaHeader schema={grp.schema} count={grp.tables.length + grp.views.length} first={gi === 0} />}
-                {grp.tables.length > 0 && (
-                  <SectionHeader
-                    icon={Table2}
-                    label="테이블"
-                    count={grp.tables.length}
-                    first={gi === 0 && !g.multiSchema}
-                  />
-                )}
-                {grp.tables.map((t) => (
-                  <TableListRow
-                    key={t.id}
-                    table={t}
-                    active={t.id === activeId}
-                    onPick={() => onPick(t)}
-                    extra={rowExtra?.(t)}
-                  />
-                ))}
-                {grp.views.length > 0 && (
-                  <SectionHeader
-                    icon={Eye}
-                    label="뷰"
-                    count={grp.views.length}
-                    first={grp.tables.length === 0 && gi === 0 && !g.multiSchema}
-                  />
-                )}
-                {grp.views.map((t) => (
-                  <TableListRow
-                    key={t.id}
-                    table={t}
-                    active={t.id === activeId}
-                    onPick={() => onPick(t)}
-                    extra={rowExtra?.(t)}
-                  />
-                ))}
-              </div>
-            ))}
-          </>
+          g.groups.map((grp, gi) => (
+            <div key={grp.schema || '·'}>
+              {/* 스키마가 섞여 있을 때만 머리를 그린다 — 하나뿐이면 시끄럽다. */}
+              {g.multiSchema && (
+                <SchemaHeader
+                  schema={grp.schema}
+                  count={grp.tables.length + grp.views.length}
+                  first={gi === 0}
+                />
+              )}
+              {grp.tables.length > 0 && (
+                <SideSectionHeader
+                  icon={Table2}
+                  label="테이블"
+                  count={grp.tables.length}
+                  first={gi === 0 && !g.multiSchema}
+                />
+              )}
+              {grp.tables.map((t) => (
+                <TableListRow
+                  key={t.id}
+                  table={t}
+                  active={t.id === activeId}
+                  onPick={() => onPick(t)}
+                  extra={rowExtra?.(t)}
+                />
+              ))}
+              {grp.views.length > 0 && (
+                <SideSectionHeader
+                  icon={Eye}
+                  label="뷰"
+                  count={grp.views.length}
+                  first={grp.tables.length === 0 && gi === 0 && !g.multiSchema}
+                />
+              )}
+              {grp.views.map((t) => (
+                <TableListRow
+                  key={t.id}
+                  table={t}
+                  active={t.id === activeId}
+                  onPick={() => onPick(t)}
+                  extra={rowExtra?.(t)}
+                />
+              ))}
+            </div>
+          ))
         )}
-      </div>
-      {footer}
+      </SideListScroll>
     </div>
   )
 }
@@ -122,32 +120,6 @@ function SchemaHeader({ schema, count, first }: { schema: string; count: number;
   )
 }
 
-/** 섹션 머리 — 테이블/뷰를 가르는 라벨 + 개수. */
-function SectionHeader({
-  icon: Icon,
-  label,
-  count,
-  first
-}: {
-  icon: typeof Table2
-  label: string
-  count: number
-  first?: boolean
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-1.5 px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-wide text-muted',
-        first ? 'pt-1.5' : 'mt-1.5 border-t border-line pt-2'
-      )}
-    >
-      <Icon className="size-3" />
-      {label}
-      <span className="opacity-70">{count}</span>
-    </div>
-  )
-}
-
 /** 목록 행 — 종류 아이콘 + 이름 + (추가 표식) + 컬럼 수. */
 function TableListRow({
   table,
@@ -161,27 +133,20 @@ function TableListRow({
   extra?: ReactNode
 }) {
   return (
-    <button
-      type="button"
-      onClick={onPick}
-      title={table.name}
-      // e2e 가 구조(ul/li)에 매이지 않고 이름으로 행을 집게 하는 훅 — 지우면 스모크가 깨진다.
-      data-table-row={table.name}
-      className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors',
-        active ? 'bg-accent-soft font-semibold text-accent' : 'text-fg hover:bg-panel-strong'
-      )}
-    >
-      {table.isView ? (
-        <Eye className="size-3.5 shrink-0 opacity-70" />
-      ) : (
-        <Table2 className="size-3.5 shrink-0 opacity-70" />
-      )}
-      <span className="min-w-0 flex-1 truncate font-mono">{table.name}</span>
-      {extra}
-      <span className={cn('shrink-0 text-[10.5px] tabular-nums', active ? 'text-accent/70' : 'text-muted')}>
-        {table.columns.length}
-      </span>
-    </button>
+    <SideListRow
+      icon={table.isView ? Eye : Table2}
+      name={table.name}
+      count={table.columns.length}
+      active={active}
+      onPick={onPick}
+      extra={extra}
+      attrs={{
+        // e2e 가 구조(ul/li)에 매이지 않고 이름으로 행을 집게 하는 훅 — 지우면 스모크가 깨진다.
+        'data-table-row': table.name,
+        // 고른 표는 뷰를 옮겨도 유지돼야 한다(2026-08-04) — 그 "유지"는 색으로만 드러나서,
+        // 검사가 클래스 문자열을 뒤지지 않게 훅으로 내놓는다.
+        'data-table-active': active ? 'true' : undefined
+      }}
+    />
   )
 }

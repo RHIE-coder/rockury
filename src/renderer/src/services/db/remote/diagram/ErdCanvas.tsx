@@ -8,6 +8,7 @@ import {
   Panel,
   useNodesState,
   useReactFlow,
+  useStore,
   getNodesBounds
 } from '@xyflow/react'
 import type { Connection, Edge, Node, NodeMouseHandler, OnNodeDrag, Viewport, XYPosition } from '@xyflow/react'
@@ -34,7 +35,7 @@ import { RelationErdEdge } from './RelationErdEdge'
 import { GroupErdNode, GROUP_DRAG_HANDLE } from './GroupErdNode'
 import {
   collapsedTableIds,
-  groupAtPoint,
+  groupAtRect,
   groupColor,
   groupNodeId,
   groupOfTable,
@@ -53,6 +54,12 @@ const edgeTypes = { relationErd: RelationErdEdge }
 const GROUP_Z = -1
 /** 화면 이동(줌·팬) 저장 지연 — 매 프레임 저장하지 않기 위한 것. 떠날 때는 반드시 마저 저장한다. */
 const MOVE_SAVE_DELAY = 800
+/**
+ * 캔버스 크기가 자리 잡는 데 주는 시간 — 이 안에서 크기가 바뀌면 "전체 맞춤"을 다시 잡는다.
+ * 크기 조절 패널 안에 있어 mount 직후 한두 프레임은 최종 크기가 아니다(실측 1프레임).
+ * 넉넉히 잡되, 이 시간이 지난 뒤의 크기 변화는 사용자가 끈 것이므로 화면을 건드리지 않는다.
+ */
+const SETTLE_MS = 1_500
 
 export interface ErdCanvasProps {
   /** 캔버스에 그릴 테이블(필터 적용 후). */
@@ -382,8 +389,9 @@ export function ErdCanvas({
       frozenRectsRef.current = null
       if (draggable) {
         const size = sizes[node.id] ?? { width: 232, height: 80 }
-        const center = { x: node.position.x + size.width / 2, y: node.position.y + size.height / 2 }
-        const target = groupAtPoint(groupsRef.current, dropRects, center)
+        // 표 전체를 넘긴다 — 한가운데 점으로 보면 컬럼 많은 긴 표가 빈 그룹 상자에 안 들어간다.
+        const rect = { x: node.position.x, y: node.position.y, width: size.width, height: size.height }
+        const target = groupAtRect(groupsRef.current, dropRects, rect)
         const current = groupOfTable(groupsRef.current, node.id)?.id ?? null
         if (target !== current) onGroupsChange(setMembership(groupsRef.current, node.id, target))
       }
@@ -400,6 +408,29 @@ export function ErdCanvas({
       persistNow()
     }, MOVE_SAVE_DELAY)
   }, [persist, persistNow])
+
+  /**
+   * 저장된 시점이 없을 때의 첫 "전체 맞춤"을 캔버스 **크기가 정해진 뒤에** 다시 잡는다.
+   * 이 캔버스는 크기 조절 패널 안에 있어 mount 때 ReactFlow 가 잰 크기가 최종 크기가 아니다 —
+   * `fitView` 는 그때 한 번만 돌아서, 좁게 잰 크기에 맞춘 축소 화면이 그대로 굳었다
+   * (실측: ERD 가 왼쪽 위에 손톱만 하게 몰림).
+   *
+   * 다시 맞추는 건 **자리 잡는 동안(SETTLE_MS)만** 이다. 그 뒤의 크기 변화(사용자가 사이드
+   * 패널을 끌어 넓힘)에는 손대지 않는다 — 확대해 둔 화면을 폭 조절이 되돌리면 안 된다.
+   */
+  const flowW = useStore((s) => s.width)
+  const flowH = useStore((s) => s.height)
+  const userMoved = useRef(false)
+  const bornAt = useRef(performance.now())
+  const onMoveStart = useCallback((e: MouseEvent | TouchEvent | null) => {
+    // 프로그램이 옮긴 것(fitView 등)은 `event` 가 없다 — 사람이 끌거나 굴린 것만 센다.
+    if (e) userMoved.current = true
+  }, [])
+  useEffect(() => {
+    if (storedViewport || userMoved.current || !flowW || !flowH) return
+    if (performance.now() - bornAt.current > SETTLE_MS) return
+    void rf.fitView({ padding: 0.15 })
+  }, [flowW, flowH, storedViewport, rf])
 
   // PNG/SVG 내보내기 — 전체 노드 경계를 담는 뷰포트로 .react-flow__viewport 를 캡처.
   const doExport = useCallback(
@@ -453,6 +484,7 @@ export function ErdCanvas({
       onNodeDragStart={onNodeDragStart}
       onNodeDrag={onNodeDrag}
       onNodeDragStop={onNodeDragStop}
+      onMoveStart={onMoveStart}
       onMoveEnd={onMoveEnd}
       onConnect={onConnectFk}
       nodesDraggable={draggable}

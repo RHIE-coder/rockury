@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { useReactFlow } from '@xyflow/react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useReactFlow, useStore } from '@xyflow/react'
 import type { Connection } from '@xyflow/react'
+import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { qualifiedName, sameTable, type TableRef } from '../../schemaRef'
 import type { TableDef } from '../../workspaces/definition/types'
 import { DiagramTablePanel } from './DiagramTablePanel'
@@ -125,79 +126,107 @@ export function DiagramSurface({
     })
   }, [])
 
+  /**
+   * "지금 화면 한가운데가 캔버스의 어디인가" 를 layout 에 걸어 둔다 — 새 그룹 상자를 **보고 있는
+   * 자리**에 놓기 위한 것. 화면 밖이나 낮은 배율의 구석에 생기면 "캔버스에서 끌어다 놓으세요" 를
+   * 읽고도 놓을 자리를 못 찾는다(2026-08-04 사용자 보고: "드래그앤드롭 동작 안 하는데?").
+   * 상단 도구줄의 `그룹` 버튼은 `ReactFlowProvider` 밖이라 뷰포트를 직접 못 본다 — 그래서 통로로 준다.
+   */
+  const flowW = useStore((s) => s.width)
+  const flowH = useStore((s) => s.height)
+  const setViewCenterProbe = layout.setViewCenterProbe
+  useEffect(() => {
+    setViewCenterProbe(() => {
+      const vp = rf.getViewport()
+      if (!flowW || !flowH || !vp.zoom) return null
+      return { x: (-vp.x + flowW / 2) / vp.zoom, y: (-vp.y + flowH / 2) / vp.zoom }
+    })
+    return () => setViewCenterProbe(null)
+  }, [rf, flowW, flowH, setViewCenterProbe])
+
   return (
-    <div className="flex min-h-0 flex-1">
-      <DiagramTablePanel
-        tables={shown}
-        selectedId={selectedId}
-        onSelect={pick}
-        groupCount={layout.groups.length}
-        groupTab={
-          <DiagramGroupPanel
-            tables={tables}
-            groups={layout.groups}
-            onGroupsChange={layout.setGroups}
-            onPatchGroup={layout.patchGroup}
-            onCreateGroup={layout.createGroup}
-            onDeleteGroup={layout.deleteGroup}
-            onlyGroups={onlyGroups}
-            onToggleOnly={toggleOnly}
-            activeTableId={selectedId}
-            onPickTable={(t) => focus(t.id)}
-            editable={draggable}
-            onDeleteTables={onDeleteTables}
-          />
-        }
-      />
-      {/* min-h-0 이 없으면 서랍의 최소 높이가 이 열의 높이를 밀어올려 화면 위 머리글까지 밖으로
-          밀려난다(높이 42% + 최소 220px). flex 자식의 기본 min-height 는 auto 라 반드시 0 으로 낮춘다. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="relative min-h-0 flex-1">
-          <ErdCanvas
+    <div className="min-h-0 flex-1">
+      <WorkspacePanels
+        // 두 Diagram 화면(설계·운영)이 사이드바 폭·접힘을 함께 쓴다 — 같은 일을 하는 자리라
+        // 한쪽에서 좁혀 놓고 다른 쪽에서 다시 좁히게 하지 않는다.
+        autoSaveId="db.diagram"
+        collapsible
+        sidebarTitle="SCHEMA"
+        sidebar={
+          <DiagramTablePanel
             tables={shown}
-            allTableIds={allTableIds}
-            scope={scope}
-            exportName={exportName}
-            draggable={draggable}
-            editable={editable}
-            persist={persist}
-            onSaveLayout={layout.saveLayout}
-            onConnectFk={onConnectFk}
             selectedId={selectedId}
             onSelect={pick}
-            storedPositions={layout.storedPositions}
-            storedViewport={layout.storedViewport}
-            groups={layout.groups}
-            onGroupsChange={layout.setGroups}
-            toolbarExtra={
-              <>
-                {isolated && (
-                  <ToggleChip
-                    active={hideIsolated}
-                    onClick={() => setHideIsolated((v) => !v)}
-                    title="관계 없는 테이블 숨김"
-                  >
-                    관계만
-                  </ToggleChip>
-                )}
-                {toolbarExtra}
-              </>
+            groupCount={layout.groups.length}
+            groupTab={
+              <DiagramGroupPanel
+                tables={tables}
+                groups={layout.groups}
+                onGroupsChange={layout.setGroups}
+                onPatchGroup={layout.patchGroup}
+                onCreateGroup={layout.createGroup}
+                onDeleteGroup={layout.deleteGroup}
+                onlyGroups={onlyGroups}
+                onToggleOnly={toggleOnly}
+                activeTableId={selectedId}
+                onPickTable={(t) => focus(t.id)}
+                editable={draggable}
+                onDeleteTables={onDeleteTables}
+              />
             }
           />
+        }
+      >
+        {/* min-h-0 이 없으면 서랍의 최소 높이가 이 열의 높이를 밀어올려 화면 위 머리글까지 밖으로
+            밀려난다(높이 42% + 최소 220px). flex 자식의 기본 min-height 는 auto 라 반드시 0 으로 낮춘다. */}
+        <div className="flex h-full min-h-0 min-w-0 flex-col">
+          <div className="relative min-h-0 flex-1">
+            <ErdCanvas
+              tables={shown}
+              allTableIds={allTableIds}
+              scope={scope}
+              exportName={exportName}
+              draggable={draggable}
+              editable={editable}
+              persist={persist}
+              onSaveLayout={layout.saveLayout}
+              onConnectFk={onConnectFk}
+              selectedId={selectedId}
+              onSelect={pick}
+              storedPositions={layout.storedPositions}
+              storedViewport={layout.storedViewport}
+              groups={layout.groups}
+              onGroupsChange={layout.setGroups}
+              toolbarExtra={
+                <>
+                  {isolated && (
+                    <ToggleChip
+                      active={hideIsolated}
+                      onClick={() => setHideIsolated((v) => !v)}
+                      title="관계 없는 테이블 숨김"
+                    >
+                      관계만
+                    </ToggleChip>
+                  )}
+                  {toolbarExtra}
+                </>
+              }
+            />
+          </div>
+          <DiagramDrawer
+            // 스키마가 섞여 있을 수 있다 — 서랍 머리도 한정 이름으로 말한다.
+            title={selected ? qualifiedName(selected) : null}
+            subtitle={detailSubtitle}
+            // 고른 것이 없으면 서랍은 언제나 닫힌 상태다 — 빈 서랍이 화면을 먹지 않게.
+            open={drawerOpen && !!selected}
+            onOpenChange={(v) => setDrawerOpen(v && !!selected)}
+            form={form}
+            onFormChange={setForm}
+            table={selected ? detail(selected, jump) : null}
+            sql={selected ? sqlDetail(selected) : null}
+          />
         </div>
-        <DiagramDrawer
-          // 스키마가 섞여 있을 수 있다 — 서랍 머리도 한정 이름으로 말한다.
-          title={selected ? qualifiedName(selected) : null}
-          subtitle={detailSubtitle}
-          // 고른 것이 없으면 서랍은 언제나 닫힌 상태다 — 빈 서랍이 화면을 먹지 않게.
-          open={drawerOpen && !!selected}
-          onOpenChange={(v) => setDrawerOpen(v && !!selected)}
-          form={form}
-          onFormChange={setForm}
-          table={selected ? detail(selected, jump) : null}
-          sql={selected ? sqlDetail(selected) : null}
-        />
-      </div>
+      </WorkspacePanels>
     </div>
   )
 }

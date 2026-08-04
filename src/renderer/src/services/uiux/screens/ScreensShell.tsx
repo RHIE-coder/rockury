@@ -53,6 +53,7 @@ export function ScreensShell({ children, aside }: { children: ReactNode; aside?:
       <div className="min-h-0 flex-1">
         <WorkspacePanels
           sidebar={<HierarchyTree />}
+          collapsible
           sidebarTitle="위계"
           autoSaveId="uiux-screens"
           sidebarActions={

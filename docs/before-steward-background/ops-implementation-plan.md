@@ -33,7 +33,7 @@ DB 서비스의 **설계부(design)** 는 로컬 SQLite 저장소 위에 실제 
 - **벤더 네이티브 설계**: dialect는 Design의 고정 속성. `services/db/dialects.ts`, 타입 카탈로그+자동완성 `services/db/typeCatalog.ts`.
 - **Design 스토어**: `services/db/designs/store.ts` (IPC 하이드레이션), 생성/관리 다이얼로그.
 - **Definition**(Design): `services/db/workspaces/definition/` — 표/SQL 편집, 컬럼/제약, 다중컬럼 CHECK 파생칩+CHK마커, 테이블 write-through 영속.
-- **Versions**: `services/db/versions/` — `store.ts`, `semver.ts`, `diff.ts`(스냅샷 diff 엔진), `TimelineView`(컷), `VersionDiffView`(diff①), `CutVersionDialog`, `VersionSync`.
+- **Versions**: `services/db/versions/` — `store.ts`, `semver.ts`, `diff.ts`(스냅샷 diff 엔진), `TimelineView`(컷), `VersionDiffView`(diff①), `CutVersionDialog`, `VersionSync`. (2026-08-03 결정으로 Versions 모듈은 **Design 안 뷰 하나**가 됐다: `TimelineView`+`VersionDiffView` → `VersionsView`(타임라인에서 두 줄을 고르면 열리는 `VersionDiffPanel`).)
 - **버전 렌즈**: Design 도구줄의 시점 손잡이(Definition·Diagram·Seed). Draft=편집 / 커밋버전=읽기전용. 상태는 `versions/store.ts` 의 `lens`, `useDesignTables`/`useDesignReadOnly`가 그것을 읽는다. (2026-07-29 컨텍스트 바 셀렉터에서 내려옴 — IA 결정 C.)
 - **컨텍스트 바**: `shell/ContextBar.tsx` — Design / Version(설계) / Env(운영) ambient 셀렉터. 옵션은 `nav/contextOptions.ts` 런타임 레지스트리.
 - nav 선택은 localStorage 영속(`useNav` persist), 설계·버전·테이블은 SQLite 영속.

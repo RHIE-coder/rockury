@@ -8,7 +8,7 @@ import {
   GROUP_PAD,
   GROUP_PALETTE,
   collapsedTableIds,
-  groupAtPoint,
+  groupAtRect,
   groupColor,
   groupNodeId,
   groupOfTable,
@@ -76,6 +76,23 @@ describe('nextGroupAnchor (새 그룹 자리)', () => {
     const a = nextGroupAnchor(pos, [])
     const b = nextGroupAnchor(pos, [g({ id: 'g1' })])
     expect(b.y).toBeGreaterThan(a.y)
+  })
+
+  // 회귀: 테이블이 수십 개면 "오른쪽 바깥" 자리는 낮은 배율에서 화면 구석의 점이 된다 —
+  // 놓을 자리가 안 보여 드래그가 고장 난 것처럼 보였다(2026-08-04 사용자 보고).
+  it('보고 있는 자리를 주면 그 한가운데에 상자를 놓는다 — 멀리 있는 테이블과 무관하게', () => {
+    const pos = { 't:users': { x: 0, y: 0 }, 't:far': { x: 90_000, y: 0 } }
+    const at = nextGroupAnchor(pos, [], { x: 1_000, y: 500 })
+    // 상자(280×180)의 한가운데가 보고 있는 점에 오도록.
+    expect(at).toEqual({ x: 1_000 - GROUP_MIN_W / 2, y: 500 - GROUP_MIN_H / 2 })
+    expect(at.x).toBeLessThan(90_000)
+  })
+
+  it('보고 있는 자리에 놓을 때도 연달아 만들면 서로 어긋난다', () => {
+    const at1 = nextGroupAnchor({}, [], { x: 0, y: 0 })
+    const at2 = nextGroupAnchor({}, [g({ id: 'g1' })], { x: 0, y: 0 })
+    expect(at2.x).toBeGreaterThan(at1.x)
+    expect(at2.y).toBeGreaterThan(at1.y)
   })
 })
 
@@ -202,7 +219,7 @@ describe('groupRect (영역 계산)', () => {
   })
 })
 
-describe('groupAtPoint (놓은 자리 판정)', () => {
+describe('groupAtRect (놓은 표가 어느 그룹에 얹혔나)', () => {
   const groups = [
     g({ id: 'big', tableIds: ['t:users', 't:orders'] }),
     g({ id: 'small', tableIds: ['t:items'] })
@@ -213,17 +230,40 @@ describe('groupAtPoint (놓은 자리 판정)', () => {
     't:items': { x: 300, y: 300 }
   }
   const rects = groupRects(groups, pos, SIZES)
+  /** 표 하나를 (x,y) 에 놓았을 때의 사각형. */
+  const at = (x: number, y: number, h = 100): { x: number; y: number; width: number; height: number } => ({
+    x, y, width: 200, height: h
+  })
 
-  it('영역 안이면 그 그룹', () => {
-    expect(groupAtPoint(groups, rects, { x: 50, y: 50 })).toBe('big')
+  it('영역 안에 얹히면 그 그룹', () => {
+    expect(groupAtRect(groups, rects, at(0, 0))).toBe('big')
   })
 
   it('겹치면 더 좁은(안쪽) 그룹이 이긴다', () => {
-    expect(groupAtPoint(groups, rects, { x: 350, y: 350 })).toBe('small')
+    expect(groupAtRect(groups, rects, at(300, 300))).toBe('small')
   })
 
-  it('어느 영역에도 없으면 null', () => {
-    expect(groupAtPoint(groups, rects, { x: -5000, y: -5000 })).toBeNull()
+  it('어느 영역에도 안 닿으면 null', () => {
+    expect(groupAtRect(groups, rects, at(-5000, -5000))).toBeNull()
+  })
+
+  it('모서리만 스친 것은 소속으로 보지 않는다 — 지나가다 놓은 것까지 빨아들이면 안 된다', () => {
+    const r = rects.small
+    // 오른쪽 아래 모서리에 몇 px 만 걸치게.
+    expect(groupAtRect(groups, rects, { x: r.x + r.width - 8, y: r.y + r.height - 8, width: 200, height: 100 }))
+      .not.toBe('small')
+  })
+
+  // 회귀: 컬럼 많은 표(높이 350)를 빈 그룹 상자(180)에 넣지 못하던 문제.
+  // 표의 한가운데 점으로 판정하던 시절엔 머리를 상자에 맞춰 놓아도 한가운데가 상자 밖이었다.
+  it('빈 그룹 상자보다 긴 표도 얹으면 들어간다 (한가운데가 상자 밖이어도)', () => {
+    const empty = [g({ id: 'e1', x: 1000, y: 1000 })]
+    const emptyRects = groupRects(empty, {}, SIZES)
+    expect(emptyRects.e1).toEqual({ x: 1000, y: 1000, width: GROUP_MIN_W, height: GROUP_MIN_H })
+    // 표 머리를 상자 안에 맞춰 놓는다 — 표가 상자보다 훨씬 길어 한가운데는 상자 아래로 빠진다.
+    const tall = { x: 1020, y: 1020, width: 232, height: 350 }
+    expect(tall.y + tall.height / 2).toBeGreaterThan(1000 + GROUP_MIN_H)
+    expect(groupAtRect(empty, emptyRects, tall)).toBe('e1')
   })
 })
 

@@ -304,7 +304,7 @@ export async function run(ctx) {
   await click('button:has-text("Definition")')
   await page.waitForTimeout(200)
 
-  // Versions › Timeline — 시드 버전
+  // Design › Versions — 시드 버전 (2026-08-03 부터 Design 안 뷰다)
   await click('button:has-text("Versions")')
   await page.waitForSelector('text=버전 타임라인', { timeout: 5_000 })
   await page.waitForTimeout(300)
@@ -320,15 +320,20 @@ export async function run(ctx) {
   check('버전 컷 후 v0.3.15 등장', (await body()).includes('v0.3.15'))
   check('버전 컷: 시드 행 수 표시(스냅샷에 시드 동봉)', (await page.locator('[data-version-seed-rows]').count()) >= 1)
 
-  // ⭐ Version Diff 에 시드 섹션 — 시드 없던 옛 버전(v0.3.14)↔시드 담긴 새 버전(v0.3.15).
+  // ⭐ 버전 비교에 시드 섹션 — 시드 없던 옛 버전(v0.3.14)↔시드 담긴 새 버전(v0.3.15).
   //    CASE-design-045: 옛 스냅샷 폴백이 깨지지 않고 시드 델타가 보인다.
-  await click('button:has-text("Version Diff")')
-  await page.waitForSelector('text=버전 비교', { timeout: 8_000 })
+  //    2026-08-03 — 따로 뜨던 Version Diff 화면이 사라지고, 타임라인에서 두 줄을 고르면 아래에 열린다.
+  await click('[data-version-pick="v0.3.14"]')
+  await click('[data-version-pick="v0.3.15"]')
+  await page.waitForSelector('[data-version-diff]', { timeout: 8_000 })
   await page.waitForTimeout(400)
-  check('Version Diff: 시드 섹션 렌더', (await page.locator('[data-seed-diff]').count()) === 1)
-  check('Version Diff: 시드 세트(orders) 델타 표시', (await page.locator('[data-seed-diff-set="orders"]').count()) === 1)
-  await click('button:has-text("Timeline")')
+  check('버전 비교: 시드 섹션 렌더', (await page.locator('[data-seed-diff]').count()) === 1)
+  check('버전 비교: 시드 세트(orders) 델타 표시', (await page.locator('[data-seed-diff-set="orders"]').count()) === 1)
+  // 고름을 풀어 놓는다 — 뒤 검사가 타임라인만 보고 판단한다.
+  await click('[data-version-pick="v0.3.14"]')
+  await click('[data-version-pick="v0.3.15"]')
   await page.waitForTimeout(300)
+  check('버전 비교: 고름을 풀면 비교가 닫힌다', (await page.locator('[data-version-diff]').count()) === 0)
 
   // ⭐ CASE-design-065 — 커밋 버전을 **열람**하는 동안에는 배치·그룹을 저장하지 않는다.
   //    지나간 버전의 화면을 만졌다고 정본이 바뀌면 안 된다(정본 db-design.diagram.scope AC-2).
@@ -375,7 +380,7 @@ export async function run(ctx) {
         (await page.locator('[data-group-create]').count()) === 0
     )
 
-    // 렌즈를 Draft 로, 화면을 Versions › Timeline 으로 되돌린다 —
+    // 렌즈를 Draft 로, 화면을 Design › Versions 로 되돌린다 —
     // 다음 스위트(05-mcp-write)는 타임라인이 열린 채로 시작한다고 본다(상태 의존 순서).
     await click('[data-version-lens]')
     await click('[data-version-lens-option="draft"]')
@@ -389,7 +394,6 @@ export async function run(ctx) {
     check('Design › Diagram: Draft 로 돌아오면 읽기 전용 배지가 사라진다',
       !(await body()).includes('읽기 전용(커밋 버전)'))
     await click('button:has-text("Versions")')
-    await click('button:has-text("Timeline")')
     await page.waitForTimeout(400)
   }
 }

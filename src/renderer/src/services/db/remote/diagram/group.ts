@@ -45,6 +45,12 @@ export const GROUP_PAD = 28
 /** 이름표 높이 — 위쪽 여백에 더 얹어 이름이 테이블을 덮지 않게 한다. */
 export const GROUP_HEADER_H = 26
 /** 빈 그룹 최소 크기 — 끌어다 놓을 자리가 없으면 그룹을 만들 수가 없다. */
+/**
+ * 표를 그룹에 넣었다고 볼 겹침 비율(작은 쪽 넓이 기준). 스치듯 지나가며 놓은 것까지 소속으로
+ * 잡으면 옆 그룹에 자꾸 빨려 들어가고, 너무 높이 잡으면 긴 표가 작은 상자에 안 들어간다.
+ */
+export const DROP_OVERLAP = 0.45
+
 export const GROUP_MIN_W = 280
 export const GROUP_MIN_H = 180
 /** 접힌 그룹 상자 크기(이름표 한 장 크기). */
@@ -74,11 +80,29 @@ export function nextGroupId(groups: DiagramGroup[]): string {
 }
 
 /**
- * 새 그룹 상자를 놓을 자리 — **기존 내용의 오른쪽 빈 자리**에, 이미 있는 그룹 수만큼 아래로 어긋나게.
- * 화면 중앙에 놓으면 지금 보이는 테이블 위를 덮어 무엇이 생겼는지 안 보이고,
- * 고정 좌표에 놓으면 그룹을 여러 개 만들 때 서로 겹친다.
+ * 새 그룹 상자를 놓을 자리.
+ *
+ * **보고 있는 자리에 놓는다**(`viewCenter` 를 주면 그 한가운데). 예전엔 늘 기존 내용의 오른쪽
+ * 바깥에 놓았는데, 테이블이 수십 개라 배율이 낮으면 그 상자가 화면 구석의 점만 해서 "캔버스에서
+ * 끌어다 놓으세요" 를 읽고도 놓을 자리를 못 찾았다 — 드래그가 고장 난 것으로 보였다
+ * (2026-08-04 사용자 보고: "드래그앤드롭 동작 안 하는데?").
+ * 상자는 테이블 **뒤에** 반투명으로 깔리므로 보이는 테이블과 겹쳐도 가리지 않는다.
+ *
+ * 이미 있는 그룹 수만큼 어긋나게 둔다 — 연달아 만들 때 정확히 포개지지 않도록.
+ * `viewCenter` 가 없으면(화면을 모르는 호출) 예전처럼 오른쪽 빈 자리로 간다.
  */
-export function nextGroupAnchor(positions: Positions, groups: DiagramGroup[]): { x: number; y: number } {
+export function nextGroupAnchor(
+  positions: Positions,
+  groups: DiagramGroup[],
+  viewCenter?: { x: number; y: number }
+): { x: number; y: number } {
+  const stagger = groups.length * 32
+  if (viewCenter) {
+    return {
+      x: Math.round(viewCenter.x - GROUP_MIN_W / 2 + stagger),
+      y: Math.round(viewCenter.y - GROUP_MIN_H / 2 + stagger)
+    }
+  }
   const pts = Object.values(positions)
   if (pts.length === 0) return { x: 40, y: 40 + groups.length * 40 }
   const maxX = pts.reduce((m, p) => Math.max(m, p.x), -Infinity)
@@ -178,28 +202,39 @@ export function groupRects(
 }
 
 /**
- * 놓은 점이 어느 그룹 안인지. 영역이 겹치면 **더 좁은(안쪽) 그룹**을 고른다 —
+ * 놓은 **표가 어느 그룹에 얹혔는지**. 영역이 겹치면 **더 좁은(안쪽) 그룹**을 고른다 —
  * 큰 그룹이 작은 그룹을 품고 있을 때 큰 쪽이 이기면 안쪽 그룹에 넣을 방법이 없어진다.
+ *
+ * 판정 기준이 예전엔 표의 **한가운데 점**이었는데, 그러면 **컬럼 많은 표를 빈 그룹에 못 넣는다**:
+ * 빈 상자는 180px 인데 컬럼 10개짜리 표는 350px 라, 머리를 상자에 맞춰 놓아도 한가운데는 늘
+ * 상자 아래로 빠졌다(2026-08-04 사용자 보고: "드래그앤드롭 동작 안 하는데?"). 사람은 표의
+ * **머리를 잡아** 끌기 때문에 한가운데가 어디 있는지 보면서 놓지 않는다 — 그래서 겹친 넓이로 본다.
  *
  * ⚠ 넘기는 `rects` 는 **드래그를 시작한 순간의 사각형**이어야 한다. 끄는 중의 실시간 사각형을
  * 쓰면, 상자가 끌려가는 노드를 따라 부풀거나(안 빠짐) 그 노드를 빼고 줄어들어(조금만 움직여도
  * 빠짐) 어느 쪽이든 사용자가 본 상자와 판정이 어긋난다. ErdCanvas 가 시작 시점 값을 얼려 넘긴다.
  */
-export function groupAtPoint(
+export function groupAtRect(
   groups: DiagramGroup[],
   rects: Record<string, Rect>,
-  point: { x: number; y: number }
+  node: Rect
 ): string | null {
+  const nodeArea = node.width * node.height
   let best: string | null = null
   let bestArea = Infinity
   for (const g of groups) {
     const r = rects[g.id]
     if (!r) continue
-    if (point.x < r.x || point.x > r.x + r.width || point.y < r.y || point.y > r.y + r.height) continue
-    const area = r.width * r.height
-    if (area < bestArea) {
+    const ox = Math.min(node.x + node.width, r.x + r.width) - Math.max(node.x, r.x)
+    const oy = Math.min(node.y + node.height, r.y + r.height) - Math.max(node.y, r.y)
+    if (ox <= 0 || oy <= 0) continue
+    const groupArea = r.width * r.height
+    // 둘 중 **작은 쪽**을 기준으로 본다 — 긴 표를 작은 상자에 놓을 때는 상자가 덮이고,
+    // 작은 표를 큰 상자에 놓을 때는 표가 덮인다. 어느 쪽이든 "얹었다"로 읽혀야 한다.
+    if ((ox * oy) / Math.min(nodeArea, groupArea) < DROP_OVERLAP) continue
+    if (groupArea < bestArea) {
       best = g.id
-      bestArea = area
+      bestArea = groupArea
     }
   }
   return best

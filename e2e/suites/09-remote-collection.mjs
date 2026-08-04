@@ -32,6 +32,34 @@ export async function run(ctx) {
   await page.waitForSelector('button[title="결과 접기"]', { timeout: 8_000 })
   check('Remote › Collection: 각 쿼리 결과 인라인 펼침', (await page.locator('button[title="결과 접기"]').count()) > 0)
 
+  // ⭐ 인라인 결과의 행 상세 — Query 와 같은 부품 (§result-grid.row-detail AC-1)
+  if ((await page.locator('[data-result-row]').count()) > 0) {
+    await page.locator('[data-result-row]').first().click()
+    await page.waitForSelector('[data-row-detail]', { timeout: 8_000 })
+    check('Remote › Collection: 인라인 결과 행 클릭 → 상세 모달', (await page.locator('[data-row-detail]').innerText()).includes('1행'))
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+  }
+
+  // ⭐ 좌·우·양쪽 패널 접기 (§db-design.definition.side-panel AC-5a)
+  {
+    const W = async (sel) => Math.round((await page.locator(sel).first().boundingBox())?.width ?? -1)
+    const L0 = await W('[data-workspace-sidebar]')
+    const R0 = await W('[data-workspace-right]')
+    await page.locator('[data-panels-both]').first().click()
+    await page.waitForTimeout(400)
+    check(
+      'Remote › Collection: 양쪽 패널 한 번에 접기',
+      L0 > 0 && R0 > 0 && (await W('[data-workspace-sidebar]')) === 0 && (await W('[data-workspace-right]')) === 0
+    )
+    await page.locator('[data-panels-both]').first().click()
+    await page.waitForTimeout(400)
+    check(
+      'Remote › Collection: 양쪽 패널 한 번에 펼치기',
+      (await W('[data-workspace-sidebar]')) === L0 && (await W('[data-workspace-right]')) === R0
+    )
+  }
+
   // 쓰기 아이템 추가 → Run All → 커밋 게이트(쓰기 원자성) → 롤백
   await page.locator('input[placeholder="즉석 이름"]').fill('WRITE_ITEM')
   await page.locator('input[placeholder^="즉석 SELECT"]').fill('UPDATE users SET is_active = is_active')
@@ -84,8 +112,9 @@ export async function run(ctx) {
 
   // 폴더 "아이콘" 클릭으로 펼치기/접기 (사용자 회귀: 아이콘 클릭이 안 먹던 문제 — 이름만 토글됐음)
   const iconClick = async (name) => { const b = await rowHandle(name); await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await page.waitForTimeout(300) }
-  const colHasRow = async (name) => (await page.locator('aside').first().locator(`button:has-text("${name}")`).count()) > 0
-  const colRowNames = async () => await page.evaluate(() => [...document.querySelector('aside').querySelectorAll('div.group\\/row')].map((d) => d.querySelector('button')?.textContent.trim()))
+  // 좌측 트리는 이제 공용 껍데기(WorkspacePanels)의 왼쪽 패널이다 — `aside` 가 아니라 그 훅으로 집는다.
+  const colHasRow = async (name) => (await page.locator('[data-workspace-sidebar]').first().locator(`button:has-text("${name}")`).count()) > 0
+  const colRowNames = async () => await page.evaluate(() => [...document.querySelector('[data-workspace-sidebar]').querySelectorAll('div.group\\/row')].map((d) => d.querySelector('button')?.textContent.trim()))
   await remountColl()
   check('Remote › Collection: 폴더 펼침 상태서 자식 보임', await colHasRow('TREE_CHILD'))
   await iconClick('TREE_FOLDER')
@@ -115,7 +144,7 @@ export async function run(ctx) {
   await remountColl('AXDROP')
   await page.locator('div.group\\/row:has-text("AXDROP")').first().locator('button[title="이름 변경"]').click()
   await page.waitForTimeout(200)
-  await page.locator('aside').first().locator('input:not([placeholder])').first().fill('AXRENAMED')
+  await page.locator('[data-workspace-sidebar]').first().locator('input:not([placeholder])').first().fill('AXRENAMED')
   await page.keyboard.press('Enter'); await page.waitForTimeout(500)
   check('Remote › Collection: 연필 버튼으로 컬렉션 이름 변경 저장', await page.evaluate(async (cid) => (await window.rockury.collections.list(cid)).some((c) => c.name === 'AXRENAMED'), treeIds.cid))
 
@@ -142,7 +171,7 @@ export async function run(ctx) {
   check('Remote › Collection: 컨텍스트 이동▶서브메뉴로 폴더 이동', (await folderOf(mv.moveId)) === mv.destId)
 
   // 컬렉션 설명(description) 편집 저장 (Query 와 동일한 상세 편집)
-  await page.locator('aside').first().locator('button:has-text("CTXMOVE")').first().click()
+  await page.locator('[data-workspace-sidebar]').first().locator('button:has-text("CTXMOVE")').first().click()
   await page.waitForTimeout(300)
   await page.locator('input[placeholder="설명 추가..."]').first().fill('설명123')
   await page.keyboard.press('Tab'); await page.waitForTimeout(500)
@@ -173,7 +202,7 @@ export async function run(ctx) {
   })
   await click('button:has-text("Collection")')
   await page.waitForSelector('text=GRP_COLL', { timeout: 8_000 })
-  await page.locator('aside').first().locator('button:has-text("GRP_COLL")').first().click()
+  await page.locator('[data-workspace-sidebar]').first().locator('button:has-text("GRP_COLL")').first().click()
   await page.waitForTimeout(300)
   await click('button:has-text("Run All")')
   await page.waitForSelector('text=커밋 불필요', { timeout: 15_000 })

@@ -35,6 +35,65 @@ export async function run(ctx) {
   // 스키마 사이드 패널(기본 열림) — 테이블/컬럼 트리 (T12)
   check('Remote › Query: 스키마 패널(user_roles)', (await body()).includes('user_roles'))
 
+  // ⭐ 좌·우·양쪽 패널 접기/펼치기 (§db-design.definition.side-panel AC-5/AC-5a)
+  {
+    const W = async (sel) => Math.round((await page.locator(sel).first().boundingBox())?.width ?? -1)
+    const L0 = await W('[data-workspace-sidebar]')
+    const R0 = await W('[data-workspace-right]')
+    await page.locator('[data-sidebar-collapse]').first().click()
+    await page.waitForTimeout(350)
+    check(
+      'Remote › Query: 왼쪽 패널 접기 → 폭 0 + 세로 띠',
+      L0 > 0 && (await W('[data-workspace-sidebar]')) === 0 && (await page.locator('[data-sidebar-expand]').count()) === 1
+    )
+    await page.locator('[data-sidebar-expand]').first().click()
+    await page.waitForTimeout(350)
+
+    await page.locator('[data-right-collapse]').first().click()
+    await page.waitForTimeout(350)
+    check(
+      'Remote › Query: 오른쪽 패널 접기 → 폭 0 + 세로 띠',
+      R0 > 0 && (await W('[data-workspace-right]')) === 0 && (await page.locator('[data-right-expand]').count()) === 1
+    )
+    await page.locator('[data-right-expand]').first().click()
+    await page.waitForTimeout(350)
+
+    // 양쪽 손잡이는 어느 상태에서도 닿아야 한다 — 접으면 띠에, 펴면 머리줄에 선다.
+    await page.locator('[data-panels-both]').first().click()
+    await page.waitForTimeout(400)
+    check(
+      'Remote › Query: 양쪽 한 번에 접기',
+      (await W('[data-workspace-sidebar]')) === 0 && (await W('[data-workspace-right]')) === 0
+    )
+    await page.locator('[data-panels-both]').first().click()
+    await page.waitForTimeout(400)
+    check(
+      'Remote › Query: 양쪽 한 번에 펼치기(접기 전 폭으로)',
+      (await W('[data-workspace-sidebar]')) === L0 && (await W('[data-workspace-right]')) === R0
+    )
+  }
+
+  // ⭐ 결과 행 상세 모달 — 표에서 잘리는 긴 값·JSON 을 자르지 않고 펴 본다 (§result-grid.row-detail)
+  {
+    await typeSql('SELECT id, preferences FROM user_profiles LIMIT 3')
+    await page.waitForTimeout(300)
+    await click('button:has-text("Run")')
+    await page.waitForSelector('[data-result-row]', { timeout: 15_000 })
+    await page.locator('[data-result-row="0"]').first().click()
+    await page.waitForSelector('[data-row-detail]', { timeout: 8_000 })
+    const detail = await page.locator('[data-row-detail]').innerText()
+    check('Remote › Query: 행 클릭 → 상세 모달', detail.includes('1행'))
+    check(
+      'Remote › Query: 상세의 JSON 은 들여써서 보인다',
+      (await page.locator('[data-row-detail] pre').count()) > 0
+    )
+    await page.locator('[data-row-detail-next]').first().click()
+    await page.waitForTimeout(300)
+    check('Remote › Query: 상세에서 다음 행으로 넘어간다', (await page.locator('[data-row-detail]').innerText()).includes('2행'))
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+  }
+
   // 파라미터화 쿼리 — {{키워드}} 입력 시 파라미터 바 노출 (T11)
   await typeSql('SELECT * FROM users WHERE id = {{uid}}')
   await page.waitForTimeout(300)
@@ -55,8 +114,10 @@ export async function run(ctx) {
 
   // Remote › Data — 조회 + 편집(수정→트랜잭션 게이트→롤백)(Phase 2b)
   await click('button:has-text("Data")')
-  await page.waitForSelector('aside button:has-text("users")', { timeout: 15_000 })
-  await click('aside button:has-text("users")')
+  // 사이드 패널은 Definition·Diagram 과 같은 공용 부품이다 — 행은 이름 훅으로 집는다
+  // (예전엔 이 화면만 자체 `aside` 목록이었다).
+  await page.waitForSelector('[data-table-row="users"]', { timeout: 15_000 })
+  await click('[data-table-row="users"]')
   await page.waitForSelector('th:has-text("email")', { timeout: 15_000 })
   check('Remote › Data: users 행 조회', (await body()).includes('email'))
 
@@ -86,14 +147,26 @@ export async function run(ctx) {
   // 키 배지(PK/FK/UK 텍스트) + 타입 라벨(char/varchar) (T1)
   check('Remote › Data: 키 배지(PK)+타입 라벨', (await body()).includes('PK'))
   // Constraints 탭 — 전역 제약 목록(읽기 전용) (T10)
-  await click('button:has-text("Constraints")')
+  await click('[data-side-tab="constraints"]')
   await page.waitForTimeout(500)
   check('Remote › Data: Constraints 탭 제약 목록(PRIMARY)', (await body()).includes('PRIMARY'))
-  await click('button:has-text("Tables")')
+  await click('[data-side-tab="tables"]')
   await page.waitForTimeout(200)
 
+  // ⭐ Data 의 행 상세 — 행 번호가 손잡이다(셀은 눌러 편집하는 자리라 행 전체는 못 쓴다).
+  {
+    await page.locator('[data-result-row="0"]').first().click()
+    await page.waitForSelector('[data-row-detail]', { timeout: 8_000 })
+    const detail = await page.locator('[data-row-detail]').innerText()
+    check('Remote › Data: 행 번호 클릭 → 행 상세 모달', detail.includes('1행'))
+    // 상세는 "이 행 전부" — 숨김 설정과 무관하게 표의 컬럼이 모두 뜬다.
+    check('Remote › Data: 상세에 컬럼이 모두 뜬다(email)', detail.includes('email'))
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+  }
+
   // JSON 값 — 셀은 구조 요약 칩(`{} n`)으로 보이고, 눌러 열면 정렬된 뷰어가 형식 정상 여부까지 알려 준다.
-  await click('aside button:has-text("user_profiles")')
+  await click('[data-table-row="user_profiles"]')
   await page.waitForSelector('tbody tr', { timeout: 15_000 })
   await page.waitForTimeout(300)
   {
@@ -109,7 +182,7 @@ export async function run(ctx) {
   }
 
   // FK 참조 선택 모달 — FK 셀의 FK 버튼 클릭 → 모달(검색·페이지·Set NULL/Cancel/Apply) (사용자 보고 회귀 방지)
-  await click('aside button:has-text("user_roles")')
+  await click('[data-table-row="user_roles"]')
   await page.waitForSelector('tbody tr', { timeout: 15_000 })
   await page.waitForTimeout(300)
   await click('button[title$="참조 선택"]')

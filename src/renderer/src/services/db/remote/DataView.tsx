@@ -22,15 +22,19 @@ import {
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
+import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { SqlEditor } from '@renderer/ui/SqlEditor'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@renderer/ui/dialog'
 import type { Constraint, TableDef } from '../workspaces/definition/types'
 import { downloadText } from '../download'
+import { dialectInfo } from '../dialects'
 import { useActiveConnection } from '../connections/store'
 import { sameTable } from '../schemaRef'
 import { useRemoteStore } from './store'
-import { columnKeyKinds, splitTablesAndViews } from './introspection'
+import { TableSidePanel } from '../TableSidePanel'
+import { RowDetailDialog } from './RowDetailDialog'
+import { columnKeyKinds } from './introspection'
 import { canEdit, pkColumns, quoteTable, type Filter, type SqlDialect } from './data/sqlBuilder'
 import { columnKind } from './data/cellKind'
 import { autoColumnWidths, COL_WIDTH_DEFAULTS } from './data/colWidth'
@@ -39,11 +43,10 @@ import { badgeLabels, typeLabel } from './data/columnMeta'
 import { genUuid } from './data/genValue'
 import { normalizeDateTime, nowDateTime } from './data/timeValue'
 import { formatDateCell, timezoneOptions, TZ_MODES, type TzMode } from './data/timezone'
-import { flattenConstraints, type KindFilter } from './constraintsView'
-import { ConstraintListPanel, KindBadge } from '../ConstraintListPanel'
 import { useOutsideClose } from '@renderer/lib/useOutsideClose'
 import { toCsv, toJson, toSqlInsert } from './data/exportRows'
 import { PAGE_SIZES, rowKey, useDataStore } from './data/store'
+import { shouldFollowFocus, useRemoteFocus, useRemoteFocusStore } from './focus'
 
 function display(v: unknown): string {
   if (v === null || v === undefined) return ''
@@ -88,7 +91,7 @@ function fkMap(t: TableDef): Record<string, FkTarget> {
 
 /**
  * Remote › Data — 실 DB 행 조회/편집(§ops 향상, 레거시 이관).
- * 테이블/뷰 분리 목록, Constraint 탭(읽기 전용), 키 배지(PK/FK/UK/IDX 텍스트)+타입 라벨,
+ * 목록·제약 탭은 Definition·Diagram 과 같은 공용 사이드 패널이 맡는다. 키 배지(PK/FK/UK/IDX 텍스트)+타입 라벨,
  * 타입별 셀 도우미(시간값 NOW/OK/ESC · UUID 생성 · NULL · JSON 모달 · FK 룩업), 타임존 3-way,
  * 셀/행 복사, 컬럼 표시/숨김, 미저장 변경 가드. 편집 커밋은 트랜잭션+파라미터 바인드. PK 없으면 읽기전용.
  */
@@ -101,7 +104,6 @@ export function DataView() {
   const d = useDataStore()
   const dialect = conn?.dbType
 
-  const [tab, setTab] = useState<'tables' | 'constraints'>('tables')
   const [showFilters, setShowFilters] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [showCols, setShowCols] = useState(false)
@@ -110,7 +112,8 @@ export function DataView() {
   const [tz, setTz] = useState<string>(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
   const [showTz, setShowTz] = useState(false)
   const [copiedCsv, setCopiedCsv] = useState(false)
-  const [cfilter, setCfilter] = useState<KindFilter>('ALL')
+  /** 상세 모달로 열어 둔 행(0-기준). null 이면 닫혀 있다. */
+  const [detailRow, setDetailRow] = useState<number | null>(null)
   const [jsonEdit, setJsonEdit] = useState<{ key: string; col: string; text: string } | null>(null)
   // 읽기 전용 JSON 열람(편집 불가 테이블) — 편집 모달과 같은 뷰어를 쓰되 적용 버튼이 없다.
   const [jsonView, setJsonView] = useState<{ col: string; text: string } | null>(null)
@@ -153,11 +156,41 @@ export function DataView() {
     if (s.tx) void s.rollback()
   }, [connId])
 
-  // 테이블이 바뀌면 컬럼 숨김·폭 상태 초기화.
+  // 테이블이 바뀌면 컬럼 숨김·폭 상태 초기화. 열려 있던 행 상세도 닫는다 —
+  // 그대로 두면 다른 표의 몇 번째 행을 가리키게 된다.
   useEffect(() => {
     setHidden(new Set())
     setColW({})
+    setDetailRow(null)
   }, [d.table?.schema, d.table?.name])
+
+  /**
+   * 고른 표 따라가기 — Definition·Diagram 에서 고른 표를 이 화면도 그대로 연다
+   * (2026-08-04 사용자 요청). 목록이 아직 안 왔으면 `tables` 가 바뀔 때 다시 온다.
+   *
+   * 파생값(all·selected·pendingCount)이 아니라 스토어를 직접 읽는다 — 그것들은 `if (!conn)`
+   * 이른 반환 뒤에 계산돼서, 여기서 쓰면 훅 순서가 렌더마다 달라진다.
+   */
+  const focusId = useRemoteFocus(connId)
+  const setFocus = useRemoteFocusStore((s) => s.setFocus)
+  useEffect(() => {
+    if (!connId || !dialect || !focusId) return
+    const list = useRemoteStore.getState().byEnv[connId] ?? []
+    const target = list.find((t) => t.id === focusId)
+    if (!target) return
+    const s = useDataStore.getState()
+    const current = s.table ? list.find((t) => sameTable(t, s.table!)) : undefined
+    if (
+      !shouldFollowFocus({
+        focusId,
+        currentId: current?.id ?? null,
+        pendingCount: s.pendingCount(),
+        hasOpenTx: !!s.tx
+      })
+    )
+      return
+    void s.selectTable(connId, dialect, target)
+  }, [connId, dialect, focusId, tables])
 
   const NUM_COL_W = 56
   const ACT_COL_W = 32
@@ -167,8 +200,6 @@ export function DataView() {
   }
 
   const all = tables ?? []
-  const { tables: baseTables, views } = splitTablesAndViews(all)
-  const constraints = flattenConstraints(all)
 
   // 스키마까지 맞춰 되찾는다 — 이름만으로 찾으면 동명 표 중 목록의 첫 번째가 잡힌다.
   const active = d.table
@@ -212,13 +243,9 @@ export function DataView() {
   const pickTable = (t: TableDef): void => {
     if (!dialect || !connId) return
     if ((pendingCount > 0 || d.tx) && !window.confirm('저장하지 않은 변경/커밋 대기 중인 트랜잭션이 있습니다. 롤백하고 이동할까요?')) return
+    // 여기서 고른 것도 운영부 공용 값이다 — Definition·Diagram 으로 옮겨도 같은 표를 본다.
+    setFocus(connId, t.id)
     void d.selectTable(connId, dialect, t)
-  }
-
-  const copyRow = (row: Record<string, unknown>): void => {
-    const obj: Record<string, unknown> = {}
-    for (const c of selected!.columns) obj[c.name] = row[c.name] ?? null
-    copy(JSON.stringify(obj, null, 2))
   }
 
   /**
@@ -242,67 +269,55 @@ export function DataView() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* 탭 바 — Tables / Constraints */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-line px-3 py-1.5">
-        <button
-          type="button"
-          onClick={() => setTab('tables')}
-          className={cn('rounded px-2.5 py-1 text-[12px] font-medium outline-none', tab === 'tables' ? 'bg-accent-soft text-accent' : 'text-muted hover:text-fg')}
+      {/* 화면 머리줄 — Definition·Diagram 과 같은 문법(이름 · 연결 / 무엇을 보고 있나).
+          예전엔 이 자리를 탭바가 차지했는데 탭이 사이드바로 들어가면서 비었다. */}
+      <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
+        <div className="flex flex-col">
+          <h2 className="text-[14px] font-bold text-fg">
+            Data <span className="font-normal text-muted">· {conn.name}</span>
+          </h2>
+          {/* 보고 있는 표 이름·행 수는 아래 도구줄과 쪽 넘김이 이미 말한다 — 여기서 되풀이하지 않는다. */}
+          <p className="text-[12px] text-muted">
+            {introLoading ? '실 DB 역설계 중…' : `${all.length}개 테이블`}
+          </p>
+        </div>
+        <span
+          title="연결 방언"
+          className="flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-medium text-fg"
         >
-          Tables <span className="opacity-70">{all.length}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('constraints')}
-          className={cn('rounded px-2.5 py-1 text-[12px] font-medium outline-none', tab === 'constraints' ? 'bg-accent-soft text-accent' : 'text-muted hover:text-fg')}
-        >
-          Constraints <span className="opacity-70">{constraints.length}</span>
-        </button>
+          <span className="size-2 rounded-full" style={{ background: dialectInfo(conn.dbType).dot }} />
+          {dialectInfo(conn.dbType).label}
+        </span>
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        {/* 좌: Tables 탭 = 테이블/뷰 목록, Constraints 탭 = 제약 목록 */}
-        {tab === 'tables' ? (
-          <aside className="flex w-56 shrink-0 flex-col border-r border-line">
-            <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-              <span>테이블</span>
-              {introLoading && <Loader2 className="size-3 animate-spin" />}
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto">
-              {baseTables.map((t) => (
-                <TableRow key={t.id} t={t} active={!!active && sameTable(t, active)} onPick={() => pickTable(t)} />
-              ))}
-              {views.length > 0 && (
-                <div className="mt-1 flex items-center gap-1.5 border-t border-line px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
-                  <Eye className="size-3" /> Views <span className="opacity-70">{views.length}</span>
-                </div>
-              )}
-              {views.map((t) => (
-                <TableRow key={t.id} t={t} active={!!active && sameTable(t, active)} onPick={() => pickTable(t)} isView />
-              ))}
-              {all.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">테이블 없음</div>}
-            </div>
-          </aside>
-        ) : (
-          <aside className="flex w-72 shrink-0 flex-col border-r border-line">
-            {/* 목록 표현은 Definition·Diagram 과 같은 공용 패널을 쓴다(구현 하나). */}
-            <ConstraintListPanel
+      <div className="min-h-0 flex-1">
+        <WorkspacePanels
+          autoSaveId="db.console.data"
+          collapsible
+          sidebarTitle="SCHEMA"
+          sidebarActions={introLoading ? <Loader2 className="size-3.5 animate-spin text-muted" /> : undefined}
+          sidebar={
+            <TableSidePanel
               tables={all}
-              activeTableName={d.table?.name ?? null}
-              onPickTable={pickTable}
-              filter={cfilter}
-              onFilterChange={setCfilter}
+              activeId={selected?.id ?? null}
+              onPick={pickTable}
+              searchPlaceholder="테이블/컬럼/스키마 검색…"
+              emptyText="테이블 없음"
+              // 이 화면에서만 붙는 표식 — PK 가 없어 행을 고칠 수 없는 표(뷰는 아이콘이 이미 말한다).
+              rowExtra={(t) =>
+                !t.isView && !canEdit(t) ? (
+                  <Lock className="size-3 shrink-0 text-muted" aria-label="읽기 전용 (PK 없음)" />
+                ) : undefined
+              }
             />
-          </aside>
-        )}
-
-        {/* 우: 그리드 */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          {!selected ? (
-            <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
-              {tab === 'constraints' ? '왼쪽에서 제약을 선택하면 해당 테이블을 봅니다' : '왼쪽에서 테이블을 선택하세요'}
-            </div>
-          ) : (
+          }
+        >
+          <div className="flex h-full min-w-0 flex-col">
+            {!selected ? (
+              <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
+                선택된 테이블 없음
+              </div>
+            ) : (
             <>
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
                 <div className="flex items-center gap-2">
@@ -477,7 +492,17 @@ export function DataView() {
                       return (
                         <tr key={ri} className={cn('group hover:bg-panel/50', deleted && 'opacity-40 line-through')}>
                           <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-muted">
-                            <button type="button" title="행을 JSON 으로 복사" onClick={() => copyRow(row)} className="outline-none hover:text-accent">{ri + 1}</button>
+                            {/* 셀은 눌러 편집하는 자리라 행 전체 클릭은 편집과 부딪힌다 — 편집 대상이
+                                아닌 행 번호가 상세를 여는 손잡이다(복사는 모달 안에 있다). */}
+                            <button
+                              type="button"
+                              data-result-row={ri}
+                              title="행 상세 보기"
+                              onClick={() => setDetailRow(ri)}
+                              className="outline-none hover:text-accent hover:underline"
+                            >
+                              {ri + 1}
+                            </button>
                           </td>
                           {editable && (
                             <td className="border-b border-line/50 px-1 py-0.5 text-center">
@@ -559,11 +584,8 @@ export function DataView() {
                 {d.rows.length === 0 && !d.loading && <div className="py-8 text-center text-[13px] text-muted">행이 없습니다</div>}
               </div>
 
-              {/* Constraints 탭 — 현재 테이블 제약 패널(읽기 전용) */}
-              {tab === 'constraints' && (
-                <TableConstraintsPanel table={selected} />
-              )}
-
+              {/* 현재 테이블의 제약은 사이드 패널 `제약` 탭이 이미 보인다 — 그리드 아래에 같은 것을
+                  또 두지 않는다(서비스 문구 규칙: 같은 정보는 한 화면에 한 번). */}
               <div className="flex shrink-0 items-center justify-between border-t border-line px-4 py-2 text-[12px] text-muted">
                 <div className="flex items-center gap-2">
                   <span>{d.rows.length}행 · 페이지 {d.page + 1}</span>
@@ -578,10 +600,22 @@ export function DataView() {
                   <Button size="sm" variant="ghost" disabled={d.rows.length < d.pageSize || d.loading} onClick={() => dialect && void d.setPage(connId!, dialect, selected, d.page + 1)}><ChevronRight /></Button>
                 </div>
               </div>
-            </>
-          )}
-        </div>
+              </>
+            )}
+          </div>
+        </WorkspacePanels>
       </div>
+
+      {detailRow != null && selected && (
+        // 숨긴 컬럼도 보인다 — 상세는 "이 행 전부"를 읽는 자리다(컬럼 숨김은 표를 좁히려는 설정).
+        <RowDetailDialog
+          columns={selected.columns.map((c) => c.name)}
+          rows={d.rows}
+          index={detailRow}
+          onIndexChange={setDetailRow}
+          onClose={() => setDetailRow(null)}
+        />
+      )}
 
       {jsonEdit && (
         <JsonValueDialog
@@ -613,63 +647,6 @@ export function DataView() {
           }}
           onClose={() => setFkEdit(null)}
         />
-      )}
-    </div>
-  )
-}
-
-/** 좌측 목록 행 — 테이블/뷰. 컬럼 수 + 뷰 V 배지 + 편집불가 lock. */
-function TableRow({ t, active, onPick, isView }: { t: TableDef; active: boolean; onPick: () => void; isView?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onPick}
-      className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-[12px] outline-none hover:bg-panel', active ? 'bg-accent-soft/50 text-accent' : 'text-fg')}
-    >
-      {isView ? <Eye className="size-3.5 shrink-0 opacity-60" /> : <Table2 className="size-3.5 shrink-0 opacity-60" />}
-      <span className="min-w-0 flex-1 truncate">{t.name}</span>
-      {isView && <span className="rounded bg-accent-soft px-1 text-[9px] font-bold text-accent">V</span>}
-      {!isView && !canEdit(t) && <Lock className="size-3 shrink-0 opacity-40" />}
-      <span className="shrink-0 text-[10.5px] text-muted">{t.columns.length}</span>
-    </button>
-  )
-}
-
-/** 현재 테이블 제약 패널(읽기 전용) — Type/Name/Columns/Reference. */
-function TableConstraintsPanel({ table }: { table: TableDef }) {
-  const [open, setOpen] = useState(true)
-  const list = flattenConstraints([table])
-  return (
-    <div className="shrink-0 border-t border-line bg-panel/40">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-1.5 px-4 py-1.5 text-left text-[12px] font-semibold text-fg outline-none">
-        {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />} Constraints <span className="text-muted">{list.length}</span>
-      </button>
-      {open && (
-        <div className="max-h-40 overflow-auto px-2 pb-2">
-          <table className="w-full border-collapse text-[11.5px]">
-            <thead className="text-left text-muted">
-              <tr>
-                <th className="px-2 py-1 font-medium">Type</th>
-                <th className="px-2 py-1 font-medium">Name</th>
-                <th className="px-2 py-1 font-medium">Columns</th>
-                <th className="px-2 py-1 font-medium">Reference</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((c) => (
-                <tr key={c.id} className="border-t border-line/50">
-                  <td className="px-2 py-1"><KindBadge kind={c.kind} /></td>
-                  <td className="px-2 py-1 font-mono">{c.name}</td>
-                  <td className="px-2 py-1 font-mono text-muted">{c.columns.join(', ')}</td>
-                  <td className="px-2 py-1 font-mono text-accent">{c.refDetail ?? '—'}</td>
-                </tr>
-              ))}
-              {list.length === 0 && (
-                <tr><td colSpan={4} className="px-2 py-2 text-center text-muted">제약 없음</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
       )}
     </div>
   )

@@ -188,7 +188,7 @@ AsyncAPI(= 이벤트 기반 시스템용 명세 표준) 형식 지원뿐이다.
 
 ## 7. 열린 질문 / 뒤로 미룬 것
 
-- **Overview · Reference 모듈** — 지금 IA 에 없다. DB 서비스는 뒀다. 필요해지면 추가.
+- **Overview · Reference 모듈** — 지금 IA 에 없다. DB 서비스는 Reference 를 뒀다(2026-08-03 부터 모듈이 아니라 Design 안 뷰). 필요해지면 추가.
 - **웹훅 외부 터널** — 1차는 로컬 전용. 진짜 외부 콜백을 받으려면 터널이 필요하다.
 - (전송은 2026-07-29 로 **네 가지가 다 섰다** — WebSocket · SSE · gRPC · GraphQL 구독.
   gRPC 는 `@grpc/grpc-js`·`@grpc/proto-loader` 를 사용자 합의 후 `main` 에서 더했고,

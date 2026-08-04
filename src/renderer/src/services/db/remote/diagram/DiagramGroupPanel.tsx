@@ -101,16 +101,7 @@ export function DiagramGroupPanel({
 
       <div className="min-h-0 flex-1 overflow-auto px-1.5 pb-3">
         {groups.length === 0 && (
-          <p className="px-2 py-4 text-center text-[11.5px] italic leading-relaxed text-muted">
-            아직 그룹이 없어요.
-            {editable && (
-              <>
-                <br />
-                위 <span className="not-italic font-semibold">+ 그룹</span> 으로 만들고, 캔버스에서
-                테이블을 그 영역 안으로 끌어다 놓으세요.
-              </>
-            )}
-          </p>
+          <p className="px-2 py-4 text-center text-[11.5px] italic text-muted">그룹 없음</p>
         )}
 
         {groups.map((g, i) => {
@@ -229,9 +220,7 @@ export function DiagramGroupPanel({
                     </div>
                   )}
                   {members.length === 0 ? (
-                    <p className="px-1 py-1.5 text-[11px] italic text-muted">
-                      비어 있어요 — 캔버스에서 테이블을 이 영역으로 끌어다 놓으세요.
-                    </p>
+                    <p className="px-1 py-1.5 text-[11px] italic text-muted">비어 있음</p>
                   ) : (
                     members.map((t) => (
                       <MemberRow
@@ -273,10 +262,6 @@ export function DiagramGroupPanel({
           </div>
         )}
       </div>
-
-      <p className="shrink-0 border-t border-line px-3 py-2 text-[10.5px] leading-relaxed text-muted">
-        그룹 이름표를 끌면 안의 테이블이 같이 움직여요.
-      </p>
 
       <GroupDeleteDialog
         group={groups.find((g) => g.id === deleting) ?? null}

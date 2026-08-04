@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Network, Loader2, Pencil, RefreshCw, LayoutGrid } from 'lucide-react'
+import { Network, Layers, Loader2, Pencil, RefreshCw, LayoutGrid } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useActiveConnection } from '../connections/store'
 import { useRemoteStore } from './store'
+import { useRemoteFocus, useRemoteFocusStore } from './focus'
 import { useScope } from './useScope'
 import { buildErd } from './diagram/graph'
 import { isolatedTableIds } from './diagram/filter'
@@ -38,7 +39,10 @@ export function DiagramView() {
   const begin = useSchemaEditStore((s) => s.begin)
 
   const layout = useDiagramLayout(connId, true)
-  const [selected, setSelected] = useState<string | null>(null)
+  // 고른 표는 운영부가 함께 쓰는 값이다(`focus`) — Definition·Data 로 옮겨도 그대로다.
+  // 여기 들어올 때 서랍이 저절로 열리지는 않는다: 서랍은 `DiagramSurface` 가 **누른 순간**만 연다.
+  const selected = useRemoteFocus(connId)
+  const setFocus = useRemoteFocusStore((s) => s.setFocus)
 
   useEffect(() => {
     if (connId) void load(connId, connId)
@@ -97,6 +101,17 @@ export function DiagramView() {
               <Button size="sm" variant="ghost" disabled={loading || !tables} onClick={() => void layout.resetLayout()}>
                 <LayoutGrid /> 자동 배치
               </Button>
+              {/* 설계부 Diagram 과 같은 자리에 둔다 — 그룹은 운영부에서도 만들 수 있다(배치·묶음은
+                  실 DB 를 안 건드리므로 읽기 모드에서도 된다). */}
+              <Button
+                size="sm"
+                variant="ghost"
+                data-group-create-toolbar
+                disabled={loading || !tables}
+                onClick={() => layout.createGroup()}
+              >
+                <Layers /> 그룹 추가
+              </Button>
               <Button size="sm" variant="outline" disabled={loading} onClick={() => void load(conn.id, conn.id, true)}>
                 {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
               </Button>
@@ -128,7 +143,7 @@ export function DiagramView() {
             persist
             layout={layout}
             selectedId={selected}
-            onSelect={setSelected}
+            onSelect={(id) => setFocus(connId, id)}
             isolated={isolated}
             detailSubtitle="실 DB 역설계 · 읽기"
             scope={{ availableSchemas, schemaLabel, onAddSchema: addSchema }}

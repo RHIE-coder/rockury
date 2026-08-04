@@ -1,12 +1,13 @@
 import { create } from 'zustand'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
-import { scopedTables } from '../../scope'
+import { designSchemas, scopedTables } from '../../scope'
 import { autoIncrementToken } from '../../typeCatalog'
 import { isReadOnlyLens, useVersionLens, useVersionsStore } from '../../versions/store'
 import {
   changedDesignIds,
   draftTablesFromSnapshot,
   mergeDesignTables,
+  newTableSchema,
   reconcileActiveTable,
   toTableDef,
   toTableRecord
@@ -80,6 +81,13 @@ function patchActive(
 /** 컬럼 keys 성격 제약(pk/uk/idx/fk)이 비면 제거. check 는 컬럼 무관이라 유지. */
 function pruneEmpty(cons: Constraint[]): Constraint[] {
   return cons.filter((k) => k.kind === 'check' || k.columns.length > 0)
+}
+
+/** 새 표·뷰가 태어날 스키마 — 판정은 `newTableSchema`(순수), 여기선 그 입력만 모은다. */
+function schemaForNew(tables: TableDef[], designId: string): string {
+  const design = useDesignsStore.getState().designs.find((d) => d.id === designId)
+  const mine = tables.filter((t) => t.designId === designId)
+  return newTableSchema(design?.schemas ?? [], designSchemas(mine))
 }
 
 export const useDefinitionStore = create<DefinitionState>()((set) => ({
@@ -336,6 +344,8 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
       const table: TableDef = {
         id,
         designId,
+        // 스키마를 안 채우면 범위를 켠 설계에서 **화면에 안 뜬다**(`newTableSchema` 주석).
+        schema: schemaForNew(s.tables, designId),
         name: `new_table_${seq}`,
         comment: '',
         columns: [
@@ -354,6 +364,7 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
       const view: TableDef = {
         id,
         designId,
+        schema: schemaForNew(s.tables, designId),
         name: `new_view_${seq++}`,
         comment: '',
         columns: [],

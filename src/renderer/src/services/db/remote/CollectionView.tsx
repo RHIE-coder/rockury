@@ -18,6 +18,8 @@ import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/ui/dialog'
+import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
+import { RowDetailDialog } from './RowDetailDialog'
 import { useActiveConnection } from '../connections/store'
 import { type QueryResult } from './query/store'
 import { flattenTree, getProjection, moveTargets, removeChildrenOf, type FlatNode } from './collection/tree'
@@ -197,17 +199,20 @@ export function CollectionView() {
   }
 
   return (
-    <div className="flex h-full min-h-0" onClick={() => colCtx && setColCtx(null)}>
-      {/* 좌: 컬렉션 트리 */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-line">
-        <div className="flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-          <span>Collections</span>
-          <div className="flex items-center gap-1">
-            <button type="button" title="새 폴더" onClick={() => void st.addCollectionFolder('New Folder')} className="text-muted hover:text-fg"><FolderPlus className="size-3.5" /></button>
-            <button type="button" title="새 컬렉션" onClick={() => void st.addCollection('Untitled Collection')} className="text-muted hover:text-fg"><FilePlus2 className="size-3.5" /></button>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 border-b border-line px-2 pb-2">
+    <div className="h-full min-h-0" onClick={() => colCtx && setColCtx(null)}>
+      <WorkspacePanels
+        autoSaveId="db.console.collection"
+        collapsible
+        sidebarTitle="Collections"
+        sidebarActions={
+          <>
+            <button type="button" title="새 폴더" onClick={() => void st.addCollectionFolder('New Folder')} className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-strong hover:text-fg"><FolderPlus className="size-3.5" /></button>
+            <button type="button" title="새 컬렉션" onClick={() => void st.addCollection('Untitled Collection')} className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-strong hover:text-fg"><FilePlus2 className="size-3.5" /></button>
+          </>
+        }
+        sidebar={
+          <div className="flex h-full min-h-0 flex-col">
+        <div className="flex items-center gap-1.5 border-b border-line px-2 py-2">
           <Search className="size-3.5 text-muted" />
           <input value={colFilter} onChange={(e) => setColFilter(e.target.value)} placeholder="Filter collections..." className="w-full bg-transparent text-[12px] outline-none" />
         </div>
@@ -242,12 +247,47 @@ export function CollectionView() {
               )}
             </DragOverlay>
           </DndContext>
-          {colFlat.length === 0 && <div className="px-4 py-2 text-[11.5px] text-muted">컬렉션이 없어요. + 로 만드세요.</div>}
+          {colFlat.length === 0 && <div className="px-4 py-2 text-[11.5px] italic text-muted">컬렉션 없음</div>}
         </div>
-      </aside>
-
+          </div>
+        }
+        rightTitle="Queries"
+        rightPanel={
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex items-center gap-1.5 border-b border-line px-2 py-2">
+              <Search className="size-3.5 text-muted" />
+              <input value={qFilter} onChange={(e) => setQFilter(e.target.value)} placeholder="Filter..." className="w-full bg-transparent text-[12px] outline-none" />
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto py-1">
+              {qFlat.map((n) => {
+                const isFolder = n.kind === 'folder'
+                const isCollapsed = qCollapsed.has(n.id)
+                return (
+                  <div
+                    key={n.id}
+                    draggable={!isFolder}
+                    onDragStart={!isFolder ? (e) => { e.dataTransfer.setData('text/query-id', n.id); e.dataTransfer.effectAllowed = 'copy' } : undefined}
+                    style={{ paddingLeft: n.depth * INDENT + 8 }}
+                    className={cn('group/q flex items-center gap-1.5 py-1 pr-2 text-[12px]', !isFolder && 'cursor-grab')}
+                    title={isFolder ? undefined : '드래그해서 컬렉션에 추가 · 또는 + 클릭'}
+                  >
+                    {isFolder
+                      ? <button type="button" onClick={() => toggle(setQCollapsed, n.id)} className="text-amber-500">{isCollapsed ? <Folder className="size-3.5" /> : <FolderOpen className="size-3.5" />}</button>
+                      : <FileCode2 className="size-3.5 shrink-0 opacity-60" />}
+                    <span onClick={isFolder ? () => toggle(setQCollapsed, n.id) : undefined} className={cn('min-w-0 flex-1 truncate font-mono', isFolder ? 'cursor-pointer font-semibold text-fg' : 'text-muted')} title={n.kind === 'query' ? n.sql : n.name}>{n.name}</span>
+                    {!isFolder && activeCollection && (
+                      <button type="button" title="이 컬렉션에 참조로 추가" onClick={() => void st.addReference(n.id)} className="text-muted opacity-0 hover:text-accent group-hover/q:opacity-100"><Plus className="size-3.5" /></button>
+                    )}
+                  </div>
+                )
+              })}
+              {qFlat.length === 0 && <div className="px-3 py-2 text-[11.5px] italic text-muted">저장된 쿼리 없음</div>}
+            </div>
+          </div>
+        }
+      >
       {/* 중앙: 활성 컬렉션 아이템 */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-w-0 flex-col">
         {!activeCollection ? (
           <div className="flex flex-1 items-center justify-center text-[13px] text-muted">컬렉션을 선택하거나 새로 만드세요</div>
         ) : (
@@ -348,39 +388,7 @@ export function CollectionView() {
         )}
       </div>
 
-      {/* 우: QUERIES(저장쿼리 트리) — 클릭해 컬렉션에 참조 추가 */}
-      <aside className="flex w-60 shrink-0 flex-col border-l border-line">
-        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Queries</div>
-        <div className="flex items-center gap-1.5 border-b border-line px-2 pb-2">
-          <Search className="size-3.5 text-muted" />
-          <input value={qFilter} onChange={(e) => setQFilter(e.target.value)} placeholder="Filter..." className="w-full bg-transparent text-[12px] outline-none" />
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto py-1">
-          {qFlat.map((n) => {
-            const isFolder = n.kind === 'folder'
-            const isCollapsed = qCollapsed.has(n.id)
-            return (
-              <div
-                key={n.id}
-                draggable={!isFolder}
-                onDragStart={!isFolder ? (e) => { e.dataTransfer.setData('text/query-id', n.id); e.dataTransfer.effectAllowed = 'copy' } : undefined}
-                style={{ paddingLeft: n.depth * INDENT + 8 }}
-                className={cn('group/q flex items-center gap-1.5 py-1 pr-2 text-[12px]', !isFolder && 'cursor-grab')}
-                title={isFolder ? undefined : '드래그해서 컬렉션에 추가 · 또는 + 클릭'}
-              >
-                {isFolder
-                  ? <button type="button" onClick={() => toggle(setQCollapsed, n.id)} className="text-amber-500">{isCollapsed ? <Folder className="size-3.5" /> : <FolderOpen className="size-3.5" />}</button>
-                  : <FileCode2 className="size-3.5 shrink-0 opacity-60" />}
-                <span onClick={isFolder ? () => toggle(setQCollapsed, n.id) : undefined} className={cn('min-w-0 flex-1 truncate font-mono', isFolder ? 'cursor-pointer font-semibold text-fg' : 'text-muted')} title={n.kind === 'query' ? n.sql : n.name}>{n.name}</span>
-                {!isFolder && activeCollection && (
-                  <button type="button" title="이 컬렉션에 참조로 추가" onClick={() => void st.addReference(n.id)} className="text-muted opacity-0 hover:text-accent group-hover/q:opacity-100"><Plus className="size-3.5" /></button>
-                )}
-              </div>
-            )
-          })}
-          {qFlat.length === 0 && <div className="px-3 py-2 text-[11.5px] text-muted">저장된 쿼리가 없어요. Query 탭에서 만드세요.</div>}
-        </div>
-      </aside>
+      </WorkspacePanels>
 
       {/* 아이템 편집 모달 */}
       <Dialog open={!!editItem} onOpenChange={(o) => !o && setEditItem(null)}>
@@ -421,6 +429,8 @@ export function CollectionView() {
  */
 const INLINE_MAX_ROWS = 100
 function InlineResult({ result }: { result: QueryResult }) {
+  /** 상세 모달로 열어 둔 행(0-기준). 결과 표마다 따로 든다 — 여러 결과가 한 화면에 펼쳐진다. */
+  const [detailRow, setDetailRow] = useState<number | null>(null)
   if (result.columns.length === 0) {
     return (
       <div className="border-t border-line px-3 py-2 text-[11.5px] text-muted" onPointerDown={(e) => e.stopPropagation()}>
@@ -442,7 +452,8 @@ function InlineResult({ result }: { result: QueryResult }) {
           </thead>
           <tbody>
             {shown.map((row, i) => (
-              <tr key={i} className="hover:bg-panel/60">
+              // 칸이 잘려 긴 값은 표에서 못 읽는다 — 누르면 상세 모달이 자르지 않고 펴 보인다.
+              <tr key={i} data-result-row={i} onClick={() => setDetailRow(i)} className="cursor-pointer hover:bg-panel/60">
                 {result.columns.map((c) => {
                   const v = row[c]
                   const isNull = v === null || v === undefined
@@ -457,6 +468,16 @@ function InlineResult({ result }: { result: QueryResult }) {
       <div className="px-3 py-1.5 text-[11px] text-muted">
         {result.rowCount}행{result.rows.length > INLINE_MAX_ROWS && ` · 상위 ${INLINE_MAX_ROWS}행만 표시`}{typeof result.executionTimeMs === 'number' && ` · ${result.executionTimeMs}ms`}
       </div>
+
+      {detailRow != null && (
+        <RowDetailDialog
+          columns={result.columns}
+          rows={shown}
+          index={detailRow}
+          onIndexChange={setDetailRow}
+          onClose={() => setDetailRow(null)}
+        />
+      )}
     </div>
   )
 }

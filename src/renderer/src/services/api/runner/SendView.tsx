@@ -94,6 +94,7 @@ export function SendView() {
       <div className="min-h-0 flex-1">
         <WorkspacePanels
           autoSaveId="api-runner-send"
+          collapsible
           sidebarTitle="요청"
           sidebar={
             <div className="flex flex-col">

@@ -127,6 +127,27 @@ export function mergeDesignTables(current: TableDef[], designId: string, incomin
 }
 
 /**
+ * **새로 만드는 표·뷰가 태어날 스키마**(순수).
+ *
+ * 만드는 쪽에 이 기본값이 없던 동안 새 표·뷰는 스키마 없이 태어났고, 화면 목록·다이어그램은
+ * 스키마 범위로 거르면서 `스키마가 있고 && 고른 범위에 든다` 를 요구했다 — 그래서 범위를 켠
+ * 설계에서는 `테이블 추가`·`뷰 추가` 를 눌러도 **저장만 되고 아무것도 안 떴다**. 앱을 다시 열면
+ * 불러오는 쪽(`toTableDef`)이 빈 스키마를 기본값으로 채워 그제서야 나타났다
+ * (2026-08-04 사용자 제보 · 실측 재현).
+ *
+ * 정하는 순서:
+ *  1. **고른 범위의 첫 스키마** — 지금 보고 있는 자리에 생겨야 누른 사람 눈에 보인다.
+ *  2. 범위를 안 골랐고 **설계가 실제로 쓰는 스키마가 하나뿐**이면 그것 — 단일 스키마 설계에
+ *     엉뚱한 묶음을 새로 만들지 않는다.
+ *  3. 그래도 못 정하면 기본 스키마(`toTableDef` 의 폴백과 같은 값이라 만들기·불러오기가 안 어긋난다).
+ */
+export function newTableSchema(scope: readonly string[], used: readonly string[]): string {
+  if (scope.length > 0) return scope[0]
+  if (used.length === 1) return used[0]
+  return DEFAULT_SCHEMA
+}
+
+/**
  * 리하이드레이션 후 활성 테이블 재조정 판정(순수).
  * 편집 중이던 활성 테이블이 에이전트 쓰기로 사라지면 activeTableId 가 죽은 id 로 남아
  * 이후 편집 액션이 조용히 no-op 이 된다 — 사라졌으면 갱신된 그 설계의 첫 테이블로 되돌린다.

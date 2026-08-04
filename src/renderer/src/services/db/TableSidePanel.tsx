@@ -18,7 +18,6 @@ export function TableSidePanel({
   searchPlaceholder,
   rowExtra,
   emptyText,
-  footer,
   groupTab,
   groupCount
 }: {
@@ -28,7 +27,6 @@ export function TableSidePanel({
   searchPlaceholder?: string
   rowExtra?: (t: TableDef) => ReactNode
   emptyText?: string
-  footer?: ReactNode
   /** 주면 `그룹` 탭이 생긴다(Diagram 전용 — 정본 §db-remote.diagram.group-panel). */
   groupTab?: ReactNode
   groupCount?: number
@@ -68,7 +66,6 @@ export function TableSidePanel({
             searchPlaceholder={searchPlaceholder}
             rowExtra={rowExtra}
             emptyText={emptyText}
-            footer={footer}
           />
         ) : active === 'groups' ? (
           groupTab
