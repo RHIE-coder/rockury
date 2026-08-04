@@ -202,7 +202,10 @@ function Row({
 }: {
   label: string
   selected: boolean
-  /** 프로젝트 이름이 아니라 **상태**(`없음`)임을 드러낸다 — 같은 모양이면 그런 이름의 프로젝트로 읽힌다. */
+  /**
+   * 프로젝트 이름이 아니라 **상태**(`없음`)임을 드러낸다 — 같은 모양이면 그런 이름의
+   * 프로젝트로 읽힌다. 색으로만 가른다(한글 기울임 금지 — `ProjectSelector` 의 같은 자리 참고).
+   */
   state?: boolean
   onSelect: () => void
 }) {
@@ -216,7 +219,7 @@ function Row({
       ) : (
         <span className="w-3.5 shrink-0" />
       )}
-      <span className={cx('truncate', state && 'italic text-muted')}>{label}</span>
+      <span className={cx('truncate', state && 'text-muted')}>{label}</span>
     </DropdownMenu.Item>
   )
 }

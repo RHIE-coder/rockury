@@ -144,7 +144,12 @@ function Option({
   id: string
   label: string
   hint?: string
-  /** 프로젝트 이름이 아니라 **상태**(`전체`·`프로젝트 없음`)임을 드러낸다 — 같은 모양이면 그런 이름의 프로젝트로 읽힌다. */
+  /**
+   * 프로젝트 이름이 아니라 **상태**(`전체`·`프로젝트 없음`)임을 드러낸다 — 같은 모양이면
+   * 그런 이름의 프로젝트로 읽힌다. 색으로만 가른다: **한글에 기울임을 쓰지 않는다.**
+   * 한글 폰트에는 이탤릭 자형이 없어 브라우저가 강제로 기울이고, 그 튀어나온 부분을
+   * 같은 요소의 `truncate` 가 잘라 버린다(2026-08-04 실측 — "전체"의 오른쪽이 잘렸다).
+   */
   state?: boolean
   currentId: string
   onSelect: (id: string) => void
@@ -161,7 +166,7 @@ function Option({
         ) : (
           <span className="w-3.5 shrink-0" />
         )}
-        <span className={cx('truncate', state && 'italic text-muted')}>{label}</span>
+        <span className={cx('truncate', state && 'text-muted')}>{label}</span>
       </span>
       {hint && <span className="shrink-0 font-mono text-[11px] text-muted">{hint}</span>}
     </DropdownMenu.Item>
