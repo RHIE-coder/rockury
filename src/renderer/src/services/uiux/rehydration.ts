@@ -1,5 +1,5 @@
 import { useSpecStore } from './store'
-import { useNav } from '@renderer/nav/useNav'
+import { useProjectStore } from '@renderer/shell/projectStore'
 
 /**
  * 에이전트(MCP) 쓰기 리하이드레이션 — 메인이 보내는 `uiux:changed` 를 받아 **그 스코프만**
@@ -16,7 +16,12 @@ import { useNav } from '@renderer/nav/useNav'
 window.rockury.uiux.onChanged((e) => {
   void (async () => {
     const store = useSpecStore.getState()
-    const active = (): string | null => useNav.getState().contextValues['project'] ?? null
+    // 지금 보고 있는 프로젝트 — 셸의 범위가 정본이고, 지목이 없으면 첫 프로젝트로 떨어진다(store.ts 와 같은 규칙).
+    const active = (): string | null => {
+      const scope = useProjectStore.getState().scope
+      if (scope.kind === 'one') return scope.projectId
+      return useSpecStore.getState().projects[0]?.id ?? null
+    }
 
     // 프로젝트 자체가 새로 생겼을 수 있어 목록부터 — 안 하면 셀렉터가 계속 "고를 프로젝트 없음"이다.
     if (e.domain === 'nodes') {

@@ -1,6 +1,7 @@
 import { Minus, Square, X } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 import { sourceLabel } from '@shared/sourceLabel'
+import { ProjectSelector } from './ProjectSelector'
 
 const dragRegion: CSSProperties = { WebkitAppRegion: 'drag' }
 const noDrag: CSSProperties = { WebkitAppRegion: 'no-drag' }
@@ -61,15 +62,21 @@ export function Titlebar() {
       style={dragRegion}
       className="flex h-9 shrink-0 items-center justify-between border-b border-line bg-canvas px-3 text-fg"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <span aria-hidden className="text-[15px] leading-none text-accent">
           ◆
         </span>
         <span className="text-[13px] font-semibold tracking-tight">Rockury</span>
-        <span className="ml-1 text-[11px] font-medium text-muted">
+        <span className="ml-1 hidden text-[11px] font-medium text-muted min-[1100px]:inline">
           Build on Rock, Speed like Mercury
         </span>
         <SourceBadge />
+
+        <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-line" />
+        {/* 창 드래그 영역 안이라 조작 요소는 no-drag 로 빼 준다(안 그러면 클릭이 창 끌기로 먹힌다). */}
+        <span style={noDrag} className="min-w-0">
+          <ProjectSelector />
+        </span>
       </div>
 
       <div style={noDrag} className="flex items-center gap-1">

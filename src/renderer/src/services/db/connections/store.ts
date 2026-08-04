@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { useContextOptions } from '@renderer/nav/contextOptions'
 import { useNav } from '@renderer/nav/useNav'
+import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
+import { useProjectStore } from '@renderer/shell/projectStore'
 import { dialectInfo, type DialectId } from '../dialects'
 import { partitionAutoCheck } from './autoCheck'
 
@@ -30,6 +32,11 @@ export interface ConnectionDef {
   schemas: string[]
   autoCheckDisabled: boolean
   groupId: string | null
+  /**
+   * 속한 프로젝트. null 이면 **공용** — 로컬 테스트 DB 처럼 프로젝트를 가리지 않고 쓰는 접속이라
+   * 어느 프로젝트를 보고 있어도 목록에 남는다(설계류와 갈리는 유일한 지점).
+   */
+  projectId: string | null
   sortOrder: number
   createdAt: string
   updatedAt: string
@@ -110,7 +117,10 @@ export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
   },
 
   create: async (form) => {
-    const row = (await window.rockury.connections.create(form)) as ConnectionDef
+    // 지금 보고 있는 프로젝트가 그대로 소속이 된다. 전체·프로젝트 없음이면 공용으로 만들어진다.
+    const scope = useProjectStore.getState().scope
+    const projectId = scope.kind === 'one' ? scope.projectId : null
+    const row = (await window.rockury.connections.create({ ...form, projectId })) as ConnectionDef
     set((s) => ({ connections: [...s.connections, row] }))
     return row
   },
@@ -232,11 +242,14 @@ export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
 // 앱 시작 시 하이드레이션.
 void useConnectionsStore.getState().init()
 
-/** connections → 컨텍스트 바 'conn' 셀렉터 옵션 동기화. */
-function pushConnOptions(connections: ConnectionDef[]): void {
+/**
+ * connections → 'conn' 셀렉터 옵션 동기화. **프로젝트 범위로 먼저 거른다** —
+ * 접속은 쓰는 도구라 무소속은 공용으로 남는다(shared). 남의 프로젝트 것만 숨는다.
+ */
+function pushConnOptions(connections: ConnectionDef[], scope: ProjectScope): void {
   useContextOptions.getState().setOptions(
     'conn',
-    connections.map((c) => {
+    filterByScope(connections, scope, 'shared').map((c) => {
       const info = dialectInfo(c.dbType)
       return {
         id: c.id,
@@ -248,10 +261,26 @@ function pushConnOptions(connections: ConnectionDef[]): void {
     })
   )
 }
-pushConnOptions(useConnectionsStore.getState().connections)
+function syncConnOptions(): void {
+  pushConnOptions(useConnectionsStore.getState().connections, useProjectStore.getState().scope)
+}
+
+syncConnOptions()
 useConnectionsStore.subscribe((s, prev) => {
-  if (s.connections !== prev.connections) pushConnOptions(s.connections)
+  if (s.connections !== prev.connections) syncConnOptions()
 })
+useProjectStore.subscribe((s, prev) => {
+  if (s.scope !== prev.scope) syncConnOptions()
+  // 소속 정리 창이 저장소를 직접 고쳤다 — 우리가 든 사본은 아직 옛 소속이라 다시 읽는다.
+  if (s.itemsRevision !== prev.itemsRevision) void useConnectionsStore.getState().init()
+})
+
+/** 지금 프로젝트 범위에 드는 접속만 — 무소속(공용)은 늘 포함된다. 목록 화면이 쓴다. */
+export function useScopedConnections(): ConnectionDef[] {
+  const connections = useConnectionsStore((s) => s.connections)
+  const scope = useProjectStore((s) => s.scope)
+  return filterByScope(connections, scope, 'shared')
+}
 
 /** 컨텍스트 바에서 선택된 활성 Connection. 미선택이면 null. */
 export function useActiveConnection(): ConnectionDef | null {

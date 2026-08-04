@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { useContextOptions } from '@renderer/nav/contextOptions'
-import { useNav } from '@renderer/nav/useNav'
+import { oneProject } from '@renderer/shell/projectScope'
+import { useProjectStore } from '@renderer/shell/projectStore'
 import { parseContent, serializeContent } from './content'
 import type { SurfaceContent } from './types'
 
@@ -106,9 +106,17 @@ export interface SpecState {
 
 const EMPTY_TREE: SpecTree = { applications: [], services: [], surfaces: [] }
 
-/** 활성 프로젝트 id — 컨텍스트 바가 정본이라 스토어가 따로 들지 않는다(두 곳에 두면 어긋난다). */
+/**
+ * 활성 프로젝트 id — **셸의 프로젝트 범위가 정본**이라 스토어가 따로 들지 않는다(두 곳에 두면 어긋난다).
+ *
+ * 범위는 셋인데(전체·프로젝트 하나·프로젝트 없음) 화면 설계 트리는 **뿌리 하나**를 요구한다.
+ * 지목이 없는 두 경우에는 첫 프로젝트로 떨어진다 — UI/UX 를 열자마자 빈 화면을 보이느니
+ * 무언가를 보이고, 셸에서 프로젝트를 고르면 그때부터 그것을 따른다.
+ */
 function activeProjectId(): string | null {
-  return useNav.getState().contextValues['project'] ?? null
+  const scope = useProjectStore.getState().scope
+  if (scope.kind === 'one') return scope.projectId
+  return useSpecStore.getState().projects[0]?.id ?? null
 }
 
 export const useSpecStore = create<SpecState>()((set, get) => ({
@@ -178,8 +186,10 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
       if (level === 'project') {
         const projects = await window.rockury.uiux.listProjects()
         set({ projects })
-        // 첫 프로젝트를 만들면 바로 그것을 보게 한다 — 만들자마자 빈 화면이면 무엇을 한 건지 알 수 없다.
-        useNav.getState().setContextValue('project', id)
+        // 만들면 바로 그것을 보게 한다 — 만들자마자 빈 화면이면 무엇을 한 건지 알 수 없다.
+        // 셸 셀렉터가 범위의 정본이라 그쪽 목록도 함께 새로 읽는다.
+        useProjectStore.setState({ scope: oneProject(id) })
+        void useProjectStore.getState().load()
       } else {
         await get().loadTree(activeProjectId())
       }
@@ -193,8 +203,10 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
   updateNode: async (level, id, patch) => {
     try {
       await window.rockury.uiux.updateNode(level, id, patch)
-      if (level === 'project') set({ projects: await window.rockury.uiux.listProjects() })
-      else await get().loadTree(activeProjectId())
+      if (level === 'project') {
+        set({ projects: await window.rockury.uiux.listProjects() })
+        void useProjectStore.getState().load() // 셀렉터에 뜬 이름도 함께 바뀌어야 한다
+      } else await get().loadTree(activeProjectId())
       return true
     } catch (e) {
       set({ error: message(e) })
@@ -208,9 +220,8 @@ export const useSpecStore = create<SpecState>()((set, get) => ({
       if (level === 'project') {
         const projects = await window.rockury.uiux.listProjects()
         set({ projects })
-        if (activeProjectId() === id) {
-          useNav.getState().setContextValue('project', projects[0]?.id ?? '')
-        }
+        // 보고 있던 프로젝트를 지웠으면 범위를 되돌린다 — load() 의 stale 검사가 전체로 떨군다.
+        void useProjectStore.getState().load()
       } else {
         if (get().selectedSurfaceId === id) get().selectSurface(null)
         await get().loadTree(activeProjectId())
@@ -356,37 +367,21 @@ export function useTree(): SpecTree {
   return useSpecStore((s) => s.tree) ?? EMPTY_TREE
 }
 
-/** 컨텍스트 바에서 고른 프로젝트. 미선택이면 null. */
+/** 지금 보고 있는 프로젝트. 하나도 없으면 null. */
 export function useActiveProject(): SpecProjectRow | null {
-  const projectId = useNav((s) => s.contextValues['project'])
+  const scope = useProjectStore((s) => s.scope)
   const projects = useSpecStore((s) => s.projects)
-  return projects.find((p) => p.id === projectId) ?? null
+  if (scope.kind === 'one') return projects.find((p) => p.id === scope.projectId) ?? null
+  return projects[0] ?? null
 }
 
-// ── 컨텍스트 바 연동 ────────────────────────────────────────────────
+// ── 셸 프로젝트 범위 연동 ──────────────────────────────────────────
 
-/** projects → 컨텍스트 바 'project' 셀렉터 옵션 동기화. */
-function pushProjectOptions(projects: SpecProjectRow[]): void {
-  useContextOptions.getState().setOptions(
-    'project',
-    projects.map((p) => ({
-      id: p.id,
-      label: p.name,
-      hint: p.key,
-      subtitle: p.description || undefined
-    }))
-  )
-}
-
-pushProjectOptions(useSpecStore.getState().projects)
-useSpecStore.subscribe((s, prev) => {
-  if (s.projects !== prev.projects) pushProjectOptions(s.projects)
-})
-
-// 프로젝트를 바꾸면 그 위계를 다시 읽는다.
-useNav.subscribe((s, prev) => {
-  if (s.contextValues['project'] !== prev.contextValues['project']) {
-    void useSpecStore.getState().loadTree(s.contextValues['project'] ?? null)
+// 셸에서 범위를 바꾸면 그 위계를 다시 읽는다. 목록이 늦게 도착해도(첫 프로젝트 폴백이
+// null → 실제 값으로 바뀔 때) 같은 자리에서 받아 준다.
+useProjectStore.subscribe((s, prev) => {
+  if (s.scope !== prev.scope || s.projects !== prev.projects) {
+    void useSpecStore.getState().loadTree(activeProjectId())
   }
 })
 

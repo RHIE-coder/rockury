@@ -6,7 +6,13 @@ import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { dialectInfo } from '../dialects'
 import { useConnectionBindings, useEnvManageStore } from '../environments/store'
-import { useConnectionsStore, type ConnGroupDef, type ConnStatus, type ConnectionDef } from './store'
+import {
+  useConnectionsStore,
+  useScopedConnections,
+  type ConnGroupDef,
+  type ConnStatus,
+  type ConnectionDef
+} from './store'
 import { applyMove, bucketByGroup, insertionIndex, reorderList, verticalInsertionIndex, type Rect } from './dnd'
 
 function StatusPill({ status }: { status?: ConnStatus }) {
@@ -149,7 +155,8 @@ const GRID_CLS = 'grid auto-rows-min gap-3 [grid-template-columns:repeat(auto-fi
  * 카드 드래그 = 그룹 넣기/빼기/순서 변경 — 고스트가 마우스를 따라오고, 놓일 자리는 점선 플레이스홀더로 미리 보인다.
  */
 export function ConnectionsView() {
-  const connections = useConnectionsStore((s) => s.connections)
+  // 지금 프로젝트 범위의 접속만 — 무소속(공용)은 늘 남는다.
+  const connections = useScopedConnections()
   const groups = useConnectionsStore((s) => s.groups)
   const loaded = useConnectionsStore((s) => s.loaded)
   const openCreate = useConnectionsStore((s) => s.openCreate)

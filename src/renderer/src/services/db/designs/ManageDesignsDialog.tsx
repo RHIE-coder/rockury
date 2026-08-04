@@ -12,7 +12,7 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { dialectInfo } from '../dialects'
 import { useDefinitionStore } from '../workspaces/definition/store'
-import { useDesignsStore, type DesignDef } from './store'
+import { useDesignsStore, useScopedDesigns, type DesignDef } from './store'
 
 /** 한 설계 행 — 이름·설명 인라인 편집(blur 커밋) + 삭제(2단 확인). 벤더는 읽기 전용. */
 function DesignRow({ design }: { design: DesignDef }) {
@@ -98,7 +98,8 @@ export function ManageDesignsDialog() {
   const open = useDesignsStore((s) => s.manageOpen)
   const closeManage = useDesignsStore((s) => s.closeManage)
   const openCreate = useDesignsStore((s) => s.openCreate)
-  const designs = useDesignsStore((s) => s.designs)
+  // 지금 프로젝트 범위의 설계만 — 셀렉터에 안 뜨는 것이 여기 보이면 목록이 두 벌로 보인다.
+  const designs = useScopedDesigns()
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && closeManage()}>

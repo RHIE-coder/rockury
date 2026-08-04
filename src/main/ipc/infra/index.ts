@@ -307,12 +307,14 @@ export function registerInfraIpc(): void {
 
   // --- 설계본 ---
   ipcMain.handle('infra:listDesigns', () => envelope(() => listDesigns()))
-  ipcMain.handle('infra:createDesign', (_e, input: { name: string; description?: string }) =>
-    envelope(() => createDesign(input))
+  ipcMain.handle(
+    'infra:createDesign',
+    (_e, input: { name: string; description?: string; projectId?: string | null }) =>
+      envelope(() => createDesign(input))
   )
   ipcMain.handle(
     'infra:updateDesign',
-    (_e, id: string, patch: { name?: string; description?: string }) =>
+    (_e, id: string, patch: { name?: string; description?: string; projectId?: string | null }) =>
       envelope(() => updateDesign(id, patch))
   )
   ipcMain.handle('infra:deleteDesign', (_e, id: string) => envelope(() => deleteDesign(id)))

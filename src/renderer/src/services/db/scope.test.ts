@@ -26,6 +26,7 @@ const conn = (over: Partial<ConnectionDef> = {}): ConnectionDef => ({
   schemas: [],
   autoCheckDisabled: false,
   groupId: null,
+  projectId: null,
   sortOrder: 0,
   createdAt: '',
   updatedAt: '',

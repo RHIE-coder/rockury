@@ -73,6 +73,7 @@ const conn = (over: Partial<ConnectionDef> = {}): ConnectionDef => ({
   schemas: [],
   autoCheckDisabled: false,
   groupId: null,
+  projectId: null,
   sortOrder: 0,
   createdAt: '',
   updatedAt: '',
@@ -182,7 +183,8 @@ describe('설계 편집본(Draft) 반영', () => {
     name: 'pokemon-tcg',
     description: '',
     dialect: 'postgresql' as const,
-    schemas: [] as string[]
+    schemas: [] as string[],
+    projectId: null
   }
 
   it('기본으로 켜져 있다 — 꺼져 있으면 같은 함정을 다시 밟는다', async () => {

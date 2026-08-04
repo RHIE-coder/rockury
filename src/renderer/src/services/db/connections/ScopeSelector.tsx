@@ -6,7 +6,7 @@ import { useNav } from '@renderer/nav/useNav'
 import { reconcileScope, scopeModel, scopeSummary, shownScope, toggleSchema } from '../scope'
 import { useRemoteStore } from '../remote/store'
 import { ScopeMenu } from './ScopeMenu'
-import { useActiveConnection, useConnectionsStore } from './store'
+import { useActiveConnection, useConnectionsStore, useScopedConnections } from './store'
 
 /**
  * **범위 손잡이** — 이 연결에서 볼 스키마를 고른다(§db-remote.scope).
@@ -24,7 +24,7 @@ import { useActiveConnection, useConnectionsStore } from './store'
  */
 export function ScopeSelector() {
   const conn = useActiveConnection()
-  const connections = useConnectionsStore((s) => s.connections)
+  const connections = useScopedConnections()
   const setSchemas = useConnectionsStore((s) => s.setSchemas)
   const setContextValue = useNav((s) => s.setContextValue)
   const reload = useRemoteStore((s) => s.load)

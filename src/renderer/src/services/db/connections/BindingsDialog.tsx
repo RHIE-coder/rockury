@@ -17,7 +17,7 @@ import {
   SelectValue
 } from '@renderer/ui/select'
 import { dialectInfo } from '../dialects'
-import { useDesignsStore } from '../designs/store'
+import { useDesignsStore, useScopedDesigns } from '../designs/store'
 import { useDesignVersions } from '../versions/store'
 import { useConnectionsStore } from './store'
 import { useEnvManageStore, type ConnectionBinding } from '../environments/store'
@@ -123,7 +123,8 @@ function BindingRow({ connectionId, binding }: { connectionId: string; binding: 
 
 /** 설계 연결 추가 — 아직 안 묶인 설계 선택 + (선택) 타깃 버전. */
 function AddBinding({ connectionId, boundDesignIds }: { connectionId: string; boundDesignIds: Set<string> }) {
-  const designs = useDesignsStore((s) => s.designs)
+  // 접속에 맬 설계도 지금 범위 안에서 고른다.
+  const designs = useScopedDesigns()
   const bind = useEnvManageStore((s) => s.bind)
   const busy = useEnvManageStore((s) => s.busy)
   const [designId, setDesignId] = useState<string>('')

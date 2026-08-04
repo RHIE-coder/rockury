@@ -118,6 +118,10 @@ export const apiMigration: ServiceMigration = {
    * 앱을 켜자마자 기록 조회가 터진다. 지나간 기록은 전부 단발 실행이므로 기본값이 맞다.
    */
   alter: (d) => {
+    // api_specs.project_id — 공용 projects 의 소속. **비워 둘 수 있다(무소속)**.
+    // 명세에만 붙인다: 요청·환경·버전·실행기록은 전부 명세에 딸려 있어 부모를 타고 정해진다.
+    addColumnIfMissing(d, 'api_specs', 'project_id', 'TEXT')
+
     addColumnIfMissing(d, 'api_runs', 'shape', "TEXT NOT NULL DEFAULT 'unary'")
     addColumnIfMissing(d, 'api_runs', 'messages_json', 'TEXT')
     // 목록 조회가 메시지 본문을 안 읽으려면 건수만 따로 있어야 한다(본문 5,000건을 매번

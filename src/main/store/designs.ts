@@ -9,12 +9,16 @@ export interface DesignRecord {
   /** 범위(scope) — 이 설계에서 지금 보고 있는 스키마 목록. **빈 배열이면 전부 본다.** */
   schemas: string[]
   created_at: string
+  /** 속한 프로젝트. null 이면 무소속 — 설계류라 프로젝트를 고르면 목록에서 숨는다. */
+  project_id: string | null
 }
 
 export interface CreateDesignInput {
   name: string
   description?: string
   dialect: string
+  /** 만들 때 보고 있던 프로젝트. 안 주면 무소속. */
+  projectId?: string | null
 }
 
 function slugify(name: string): string {
@@ -35,6 +39,7 @@ interface DesignRow {
   dialect: string
   schemas: string | null
   created_at: string
+  project_id: string | null
 }
 
 /** 범위 JSON 파싱 — 깨진 값이면 빈 배열(= 전부 보기). 범위 하나 때문에 설계가 안 열리면 안 된다. */
@@ -54,10 +59,12 @@ const toRecord = (r: DesignRow): DesignRecord => ({
   description: r.description,
   dialect: r.dialect,
   schemas: parseSchemas(r.schemas),
-  created_at: r.created_at
+  created_at: r.created_at,
+  project_id: r.project_id ?? null
 })
 
-const SELECT = 'SELECT id, name, description, dialect, schemas, created_at FROM designs'
+const SELECT =
+  'SELECT id, name, description, dialect, schemas, created_at, project_id FROM designs'
 
 export function listDesigns(): DesignRecord[] {
   return (getDb().prepare(`${SELECT} ORDER BY created_at ASC`).all() as unknown as DesignRow[]).map(toRecord)
@@ -69,7 +76,7 @@ export function listDesigns(): DesignRecord[] {
  */
 export function updateDesign(
   id: string,
-  patch: { name?: string; description?: string; schemas?: string[] }
+  patch: { name?: string; description?: string; schemas?: string[]; projectId?: string | null }
 ): DesignRecord {
   const d = getDb()
   const sets: string[] = []
@@ -77,6 +84,8 @@ export function updateDesign(
   if (patch.name !== undefined) (sets.push('name = ?'), args.push(patch.name.trim()))
   if (patch.description !== undefined) (sets.push('description = ?'), args.push(patch.description.trim()))
   if (patch.schemas !== undefined) (sets.push('schemas = ?'), args.push(JSON.stringify(patch.schemas)))
+  // 소속 옮기기 — null 이 "무소속으로 되돌리기" 라서 undefined 와 갈라야 한다.
+  if (patch.projectId !== undefined) (sets.push('project_id = ?'), args.push(patch.projectId))
   if (sets.length > 0) d.prepare(`UPDATE designs SET ${sets.join(', ')} WHERE id = ?`).run(...args, id)
   return toRecord(d.prepare(`${SELECT} WHERE id = ?`).get(id) as unknown as DesignRow)
 }
@@ -111,10 +120,18 @@ export function createDesign(input: CreateDesignInput): DesignRecord {
     description: (input.description ?? '').trim(),
     dialect: input.dialect,
     schemas: [], // 새 설계는 범위를 안 고른 상태 = 전부 보기
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    project_id: input.projectId ?? null
   }
   d.prepare(
-    'INSERT INTO designs (id, name, description, dialect, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(record.id, record.name, record.description, record.dialect, record.created_at)
+    'INSERT INTO designs (id, name, description, dialect, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(
+    record.id,
+    record.name,
+    record.description,
+    record.dialect,
+    record.created_at,
+    record.project_id
+  )
   return record
 }

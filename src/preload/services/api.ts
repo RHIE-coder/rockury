@@ -74,8 +74,10 @@ export const apiApi = {
     get: (id: string): Promise<SpecDef | null> => ipcRenderer.invoke('api:getSpec', id),
     create: (input: CreateSpecInput): Promise<SpecSummary> =>
       ipcRenderer.invoke('api:createSpec', input),
-    update: (id: string, patch: { name: string; description: string }): Promise<SpecSummary> =>
-      ipcRenderer.invoke('api:updateSpec', id, patch),
+    update: (
+      id: string,
+      patch: { name: string; description: string; projectId?: string | null }
+    ): Promise<SpecSummary> => ipcRenderer.invoke('api:updateSpec', id, patch),
     /** 요청 전량 교체. 여기 없는 기존 요청은 삭제된다. */
     setRequests: (specId: string, requests: RequestDef[]): Promise<void> =>
       ipcRenderer.invoke('api:setSpec', specId, requests),

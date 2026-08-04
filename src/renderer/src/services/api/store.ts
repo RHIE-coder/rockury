@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { useContextOptions } from '@renderer/nav/contextOptions'
 import { useNav } from '@renderer/nav/useNav'
+import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
+import { useProjectStore } from '@renderer/shell/projectStore'
 import { interfaceMeta, type InterfaceKind, type RequestDef, type SpecDef } from '@shared/api/types'
 import type { SpecSummary } from '../../../../preload/services/api'
 import { ipcErrorText } from './errorText'
@@ -60,7 +62,10 @@ export const useApiStore = create<ApiState>()((set, get) => ({
   closeTransfer: () => set({ transferOpen: false }),
 
   addSpec: async ({ name, kind, description = '' }) => {
-    const row = await window.rockury.apiSpecs.create({ name, kind, description })
+    // 지금 보고 있는 프로젝트가 그대로 소속이 된다. 전체·프로젝트 없음이면 무소속.
+    const scope = useProjectStore.getState().scope
+    const projectId = scope.kind === 'one' ? scope.projectId : null
+    const row = await window.rockury.apiSpecs.create({ name, kind, description, projectId })
     set((s) => ({ specs: [...s.specs, row] }))
     return row.id
   },
@@ -102,11 +107,14 @@ export const useApiStore = create<ApiState>()((set, get) => ({
 
 void useApiStore.getState().init()
 
-/** specs → 컨텍스트 바 'spec' 셀렉터 옵션 동기화. */
-function pushSpecOptions(specs: SpecSummary[]): void {
+/**
+ * specs → 'spec' 셀렉터 옵션 동기화. **프로젝트 범위로 먼저 거른다** —
+ * 명세는 그 프로젝트의 산출물이라 남의 것도, 정체 모를 무소속도 섞이면 안 된다(strict).
+ */
+function pushSpecOptions(specs: SpecSummary[], scope: ProjectScope): void {
   useContextOptions.getState().setOptions(
     'spec',
-    specs.map((s) => ({
+    filterByScope(specs, scope, 'strict').map((s) => ({
       id: s.id,
       label: s.name,
       hint: interfaceMeta(s.kind).label,
@@ -114,10 +122,26 @@ function pushSpecOptions(specs: SpecSummary[]): void {
     }))
   )
 }
-pushSpecOptions(useApiStore.getState().specs)
+function syncSpecOptions(): void {
+  pushSpecOptions(useApiStore.getState().specs, useProjectStore.getState().scope)
+}
+
+syncSpecOptions()
 useApiStore.subscribe((s, prev) => {
-  if (s.specs !== prev.specs) pushSpecOptions(s.specs)
+  if (s.specs !== prev.specs) syncSpecOptions()
 })
+useProjectStore.subscribe((s, prev) => {
+  if (s.scope !== prev.scope) syncSpecOptions()
+  // 소속 정리 창이 저장소를 직접 고쳤다 — 우리가 든 사본은 아직 옛 소속이라 다시 읽는다.
+  if (s.itemsRevision !== prev.itemsRevision) void useApiStore.getState().init()
+})
+
+/** 지금 프로젝트 범위에 드는 명세만. 목록 화면이 쓴다. */
+export function useScopedSpecs(): SpecSummary[] {
+  const specs = useApiStore((s) => s.specs)
+  const scope = useProjectStore((s) => s.scope)
+  return filterByScope(specs, scope, 'strict')
+}
 
 /** 컨텍스트 바 선택이 바뀌면 그 명세를 통째로 읽어 온다. */
 useNav.subscribe((s, prev) => {

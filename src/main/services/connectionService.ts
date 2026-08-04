@@ -38,6 +38,8 @@ export interface ConnectionFormData {
   /** 범위 — 이 연결에서 보고 있는 스키마 목록. 빈 배열이면 기본 스키마 하나(§db-remote.scope). */
   schemas?: string[]
   autoCheckDisabled?: boolean
+  /** 속한 프로젝트. null·미지정이면 공용(어느 프로젝트에서나 보이는 접속). */
+  projectId?: string | null
 }
 
 export interface TestConnectionResult {
@@ -64,7 +66,8 @@ export const connectionService = {
       sslEnabled: form.sslEnabled,
       sslConfig: form.sslConfig,
       schemas: form.schemas,
-      autoCheckDisabled: form.autoCheckDisabled
+      autoCheckDisabled: form.autoCheckDisabled,
+      projectId: form.projectId
     })
   },
 
@@ -81,7 +84,8 @@ export const connectionService = {
       sslEnabled: form.sslEnabled,
       sslConfig: form.sslConfig,
       schemas: form.schemas,
-      autoCheckDisabled: form.autoCheckDisabled
+      autoCheckDisabled: form.autoCheckDisabled,
+      projectId: form.projectId
     })
   },
 

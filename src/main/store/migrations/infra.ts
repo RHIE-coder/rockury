@@ -1,4 +1,5 @@
-import type { ServiceMigration } from './types'
+import type { DatabaseSync } from 'node:sqlite'
+import { addColumnIfMissing, type ServiceMigration } from './types'
 
 /**
  * Infra 서비스의 로컬 저장소 스키마.
@@ -160,5 +161,14 @@ export const infraMigration: ServiceMigration = {
       updated_at       TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_infra_mw_kind ON infra_mw_connections(kind);
-  `
+  `,
+
+  alter(d: DatabaseSync): void {
+    // 공용 projects 의 소속. **비워 둘 수 있다(무소속)**.
+    // 설계본 하나 + 밖에 붙는 접속 둘에만 붙인다. 노드·연결선·실물 스냅샷은 설계본이나 공급자를
+    // 타고 프로젝트가 정해지고, 카탈로그(노드 종류 정의)는 프로젝트와 무관한 전역 지식이라 대상이 아니다.
+    addColumnIfMissing(d, 'infra_designs', 'project_id', 'TEXT')
+    addColumnIfMissing(d, 'infra_providers', 'project_id', 'TEXT')
+    addColumnIfMissing(d, 'infra_mw_connections', 'project_id', 'TEXT')
+  }
 }

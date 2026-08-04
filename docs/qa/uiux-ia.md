@@ -11,7 +11,7 @@
 - **CASE-uiux-001** 모듈 구성: 6개이고 순서가 `features · screens · flows · rules · style · versions` 다. 첫 칸이 `features` 여야 한다(기본 진입). (shell.modules AC-1/AC-2)
 - **CASE-uiux-002** 뷰 구성: `screens` 는 `canvas · spec · review`, `style` 은 `tokens · components`, `versions` 는 `timeline · diff` 를 갖는다. `features` · `flows` · `rules` 는 뷰 없이 자기 workspace 를 갖는다 — 뷰도 workspace 도 없는 모듈이 있으면 그 칸은 빈 화면이 된다. (shell.modules AC-3)
 - **CASE-uiux-003** id 유일성: 모듈 id 가 서로 겹치지 않고, 한 모듈 안의 뷰 id 도 서로 겹치지 않는다. (shell.modules AC-6)
-- **CASE-uiux-004** 컨텍스트 셀렉터: `project · version · viewport` 세 개이고, `version` 기본값은 `draft`, `viewport` 기본값은 `pc` 이며 옵션은 `pc · tablet · mobile` 셋이다. `project` 는 기본값 없이 안내 문구를 갖는다. (shell.context AC-1/AC-3/AC-4/AC-5)
+- **CASE-uiux-004** 컨텍스트 셀렉터: `version · viewport` 두 개이고, `version` 기본값은 `draft`, `viewport` 기본값은 `pc` 이며 옵션은 `pc · tablet · mobile` 셋이다. **`project` 셀렉터는 이 서비스에 없다** — 다섯 서비스를 함께 좁히는 범위라 셸이 든다(2026-08-04). (shell.context AC-1/AC-3/AC-4/AC-5)
 - **CASE-uiux-005** 구획을 나누지 않는다: 어떤 셀렉터도 `activeInAreas` 를 갖지 않고(= 모든 모듈에서 활성), 어떤 모듈도 `area` 를 갖지 않는다. DB 서비스의 설계부/운영부 분리를 따라가지 않는다는 결정이 코드에 남아야 한다. (shell.context AC-2)
 
 ## Scenario S2 — 앱 구동 순회 (실 앱) → `npm run surface-verify`

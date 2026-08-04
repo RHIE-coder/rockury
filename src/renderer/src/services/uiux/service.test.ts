@@ -43,14 +43,13 @@ describe('uiuxService — 컨텍스트 셀렉터', () => {
   const ctx = uiuxService.context ?? []
   const sel = (id: string) => ctx.find((c) => c.id === id)
 
-  it('CASE-uiux-004 셀렉터는 project · version · viewport 셋이다', () => {
-    expect(ctx.map((c) => c.id)).toEqual(['project', 'version', 'viewport'])
+  it('CASE-uiux-004 셀렉터는 version · viewport 둘이다', () => {
+    expect(ctx.map((c) => c.id)).toEqual(['version', 'viewport'])
   })
 
-  it('CASE-uiux-004 project 는 런타임 데이터라 기본값 없이 안내 문구로 시작한다', () => {
-    expect(sel('project')?.defaultOptionId).toBeUndefined()
-    expect(sel('project')?.placeholder).toBeTruthy()
-    expect(sel('project')?.options).toEqual([])
+  it('Project 셀렉터는 이 서비스에 없다 — 다섯 서비스를 함께 좁히는 범위라 셸이 든다', () => {
+    // 서비스에도 두면 같은 이름의 셀렉터가 둘이 되고, 어느 쪽이 진짜인지 알 수 없다.
+    expect(sel('project')).toBeUndefined()
   })
 
   it('CASE-uiux-004 version 기본값은 draft 다', () => {

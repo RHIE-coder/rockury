@@ -10,7 +10,7 @@ import {
 } from '@renderer/ui/select'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { dialectInfo } from '../dialects'
-import { useActiveConnection, useConnectionsStore } from '../connections/store'
+import { useActiveConnection, useScopedConnections } from '../connections/store'
 import { normalizeSchema } from '../remote/introspection'
 import { diffSnapshots, type SchemaDiff } from '../versions/diff'
 import { SchemaDiffPanel } from '../versions/SchemaDiffPanel'
@@ -22,7 +22,7 @@ import { SchemaDiffPanel } from '../versions/SchemaDiffPanel'
  */
 export function CompareView(): ReactElement {
   const base = useActiveConnection()
-  const connections = useConnectionsStore((s) => s.connections)
+  const connections = useScopedConnections()
   const [otherId, setOtherId] = useState<string>('')
   const [diff, setDiff] = useState<SchemaDiff | null>(null)
   const [comparedWith, setComparedWith] = useState<string>('') // 결과가 어느 상대의 것인지(선택 변경 시 무효화 표시)

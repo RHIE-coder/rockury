@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { MIGRATIONS, applyMigrations, declaredTables, type ServiceMigration } from './index'
+import {
+  MIGRATIONS,
+  SHARED_OWNER,
+  applyMigrations,
+  declaredTables,
+  type ServiceMigration
+} from './index'
 
 /**
  * TestPlan: parallel-dev · Scenario S3 (CASE-pdev-020 ~ 022)
@@ -75,8 +81,11 @@ describe('서비스별 마이그레이션 분할', () => {
 
   it('서비스가 더한 테이블은 전부 자기 서비스 접두어를 쓴다 (네임스페이스 규칙)', () => {
     // 접두어가 없으면 두 서비스가 같은 이름을 고를 확률이 생기고, 그 충돌은 앱이 안 켜지는 것으로 나타난다.
+    // 공용 소유(shell)는 제외한다 — 접두어의 목적은 서비스끼리의 충돌 회피인데 공용은 하나뿐이라
+    // 충돌 상대가 없고, `shell_projects` 로 적으면 모든 서비스가 참조하는 이름이 셸 전용으로 읽힌다.
     const before = new Set(TABLES_BEFORE_SPLIT)
     for (const m of MIGRATIONS) {
+      if (m.service === SHARED_OWNER) continue
       for (const t of m.tables) {
         if (before.has(t)) continue // 분할 전부터 있던 이름은 레거시 예외
         expect(t.startsWith(`${m.service}_`), `'${t}' 는 '${m.service}_' 로 시작해야 한다`).toBe(true)
@@ -140,7 +149,83 @@ describe('서비스별 마이그레이션 분할', () => {
     d.close()
   })
 
-  it('다섯 서비스가 모두 자기 마이그레이션 자리를 갖는다 (병렬 개발 소유권)', () => {
-    expect(MIGRATIONS.map((m) => m.service).sort()).toEqual(['ai', 'api', 'db', 'infra', 'uiux'])
+  it('다섯 서비스 + 공용 자리가 모두 자기 마이그레이션을 갖는다 (병렬 개발 소유권)', () => {
+    expect(MIGRATIONS.map((m) => m.service).sort()).toEqual([
+      'ai',
+      'api',
+      'db',
+      'infra',
+      'shell',
+      'uiux'
+    ])
+  })
+})
+
+/**
+ * 공용 소유(shell) — 어느 서비스에도 속하지 않는 테이블의 자리.
+ * 프로젝트는 다섯 서비스가 **함께** 쓰는 범위라 어느 한 서비스가 소유할 수 없다.
+ * (`ai/coverage/shell.ts` 가 이미 같은 뜻으로 'shell' 을 쓰고 있어 토큰을 맞춘다.)
+ */
+describe('공용 소유 자리', () => {
+  it('projects 테이블이 생긴다', () => {
+    const d = new DatabaseSync(tempDbFile())
+    applyMigrations(d)
+    expect(tableNames(d)).toContain('projects')
+    d.close()
+  })
+
+  it('같은 key 를 가진 프로젝트를 둘 만들 수 없다', () => {
+    // key 는 UI/UX 안정 주소의 첫 조각(`coupang.buyer.auth.login`)이다 — 겹치면 주소가 두 곳을 가리킨다.
+    const d = new DatabaseSync(tempDbFile())
+    applyMigrations(d)
+    const insert = d.prepare(
+      'INSERT INTO projects (id, key, name, description, created_at) VALUES (?,?,?,?,?)'
+    )
+    insert.run('p1', 'coupang', '쿠팡', '', '2026-08-04T00:00:00.000Z')
+    expect(() => insert.run('p2', 'coupang', '쿠팡 둘', '', '2026-08-04T00:00:00.000Z')).toThrow()
+    d.close()
+  })
+
+  /**
+   * 소속 칸을 갖는 테이블 전수 — 각 서비스에서 **목록 맨 위에 이름으로 뜨는 것**만이다.
+   * 그 안에 든 것(테이블·요청·환경·노드)은 부모를 타고 프로젝트가 정해지므로 칸을 두지 않는다.
+   * 안쪽까지 칸을 두면 "명세는 쿠팡인데 그 안 요청은 배민" 인 있을 수 없는 상태가 생긴다.
+   */
+  const SCOPED_TABLES = [
+    'designs', // DB 설계
+    'connections', // DB 접속
+    'api_specs', // API 명세
+    'infra_designs', // 인프라 설계본
+    'infra_providers', // 클라우드 공급자 연결
+    'infra_mw_connections' // 미들웨어 접속
+  ]
+
+  it.each(SCOPED_TABLES)('%s 에 소속 칸(project_id)이 있다', (table) => {
+    const d = new DatabaseSync(tempDbFile())
+    applyMigrations(d)
+    const cols = (
+      d.prepare(`SELECT name FROM pragma_table_info(?)`).all(table) as unknown as { name: string }[]
+    ).map((r) => r.name)
+    expect(cols).toContain('project_id')
+    d.close()
+  })
+
+  it.each(SCOPED_TABLES)('%s 의 소속은 비워 둘 수 있다 (무소속 허용)', (table) => {
+    // 프로젝트를 안 정한 것도 만들 수 있어야 한다 — NOT NULL 이면 프로젝트를 먼저 만들라는
+    // 관문이 생기고, 이미 쌓인 로컬 데이터가 갈 곳을 잃는다.
+    const d = new DatabaseSync(tempDbFile())
+    applyMigrations(d)
+    const notNull = d
+      .prepare(`SELECT "notnull" AS nn FROM pragma_table_info(?) WHERE name='project_id'`)
+      .get(table) as unknown as { nn: number }
+    expect(notNull.nn).toBe(0)
+    d.close()
+  })
+
+  it('공용도 서비스도 아닌 이름을 선언하면 여전히 실패한다', () => {
+    // 공용 자리를 연다고 아무 이름이나 통과하면 오타가 조용히 새 소유자를 만든다.
+    const d = new DatabaseSync(tempDbFile())
+    expect(() => applyMigrations(d, [{ service: 'core', tables: [], schema: '' }])).toThrow(/core/)
+    d.close()
   })
 })

@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { filterByScope } from '@renderer/shell/projectScope'
+import { useProjectStore } from '@renderer/shell/projectStore'
 import { BUILTIN_CATALOGS } from './catalog/builtin'
 import { parseCatalog, serializeCatalog } from './catalog/schema'
 import { cloneAsMine, newUserCatalog, upsertNodeType } from './catalog/userCatalog'
@@ -64,7 +66,7 @@ interface InfraState {
   loaded: boolean
   catalogs: StoredCatalog[]
   providers: ProviderPublic[]
-  designs: { id: string; name: string; description: string }[]
+  designs: { id: string; name: string; description: string; projectId: string | null }[]
   activeDesignId: string | null
   nodes: DesignNode[]
   edges: DesignEdge[]
@@ -180,7 +182,9 @@ export const useInfraStore = create<InfraState>()((set, get) => ({
     await Promise.all([get().reloadCatalogs(), get().reloadProviders()])
     const designs = await window.rockury.infra.listDesigns()
     set({ designs, loaded: true })
-    if (designs.length > 0) await get().selectDesign(designs[0].id)
+    // 범위 밖 설계본을 자동으로 열면, 셀렉터엔 '쿠팡' 인데 화면엔 남의 지도가 뜬다.
+    const inScope = filterByScope(designs, useProjectStore.getState().scope, 'strict')
+    if (inScope.length > 0) await get().selectDesign(inScope[0].id)
   },
 
   reloadCatalogs: async () => {
@@ -280,7 +284,10 @@ export const useInfraStore = create<InfraState>()((set, get) => ({
   },
 
   createDesign: async (name) => {
-    const d = await window.rockury.infra.createDesign({ name })
+    // 지금 보고 있는 프로젝트가 그대로 소속이 된다. 전체·프로젝트 없음이면 무소속.
+    const scope = useProjectStore.getState().scope
+    const projectId = scope.kind === 'one' ? scope.projectId : null
+    const d = await window.rockury.infra.createDesign({ name, projectId })
     set({ designs: [...get().designs, d] })
     await get().selectDesign(d.id)
     return d.id
@@ -632,3 +639,19 @@ export function growParents(nodes: DesignNode[]): DesignNode[] {
   }
   return nodes.map((n) => sized.get(n.id) as DesignNode)
 }
+
+// 프로젝트를 바꾸면 보고 있던 설계본이 범위 밖일 수 있다 — 그 자리에서 범위 안 첫 것으로 옮긴다.
+// (범위 밖 지도를 그대로 두면 셀렉터와 화면이 서로 다른 프로젝트를 가리킨다.)
+useProjectStore.subscribe((s, prev) => {
+  // 소속 정리 창이 저장소를 직접 고쳤다 — 설계본 목록을 다시 읽어야 소속이 최신이 된다.
+  if (s.itemsRevision !== prev.itemsRevision) {
+    void window.rockury.infra.listDesigns().then((designs) => useInfraStore.setState({ designs }))
+  }
+  if (s.scope === prev.scope) return
+  const store = useInfraStore.getState()
+  if (!store.loaded) return
+  const inScope = filterByScope(store.designs, s.scope, 'strict')
+  if (inScope.some((d) => d.id === store.activeDesignId)) return
+  if (inScope.length > 0) void store.selectDesign(inScope[0].id)
+  else useInfraStore.setState({ activeDesignId: null, nodes: [], edges: [] })
+})

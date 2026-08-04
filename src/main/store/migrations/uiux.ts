@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { addColumnIfMissing, type ServiceMigration } from './types'
+import type { ServiceMigration } from './types'
+import { promoteProjectsToShared } from './promoteProjects'
 
 /**
  * UI/UX 서비스의 로컬 저장소 스키마 — 명세 정본 `docs/spec/uiux-ia.md` §7.
@@ -9,6 +10,10 @@ import { addColumnIfMissing, type ServiceMigration } from './types'
  * 지옥이 되고, 편집 단위도 버전 스냅샷 단위도 화면 하나라 `content` JSON 한 칸에 담는다
  * (DB 서비스가 테이블의 컬럼·제약을 JSON 칸에 두는 것과 같은 판단).
  *
+ * **맨 위층 Project 는 이 서비스 것이 아니다** — 다섯 서비스가 함께 쓰는 범위가 되면서 공용
+ * `projects`(store/migrations/shell.ts)로 올라갔다. 여기 남는 것은 UI/UX 전용 부가값인
+ * 디자인 토큰뿐이다.
+ *
  * `key` 는 안정 주소의 조각이다 — 이어 붙이면 `coupang.buyer.auth.login`. 흐름의 도착점·
  * 규칙의 대상·핀 코멘트가 전부 이 주소에 걸리므로 **같은 부모 아래 유일해야 한다(INV-1)**.
  * 그 유일성은 주석이 아니라 UNIQUE 인덱스가 강제한다.
@@ -16,7 +21,7 @@ import { addColumnIfMissing, type ServiceMigration } from './types'
 export const uiuxMigration: ServiceMigration = {
   service: 'uiux',
   tables: [
-    'uiux_projects',
+    'uiux_project_tokens',
     'uiux_applications',
     'uiux_services',
     'uiux_surfaces',
@@ -25,21 +30,19 @@ export const uiuxMigration: ServiceMigration = {
   ],
 
   alter(d: DatabaseSync): void {
-    // 디자인 토큰 — 기본 한 벌 위에 프로젝트가 덮어쓰는 값만 담는다(전부가 아니라 차이만).
-    // 함께 읽고 함께 쓰이므로 칸 하나에 JSON 으로 둔다(화면 내용과 같은 판단).
-    addColumnIfMissing(d, 'uiux_projects', 'tokens', "TEXT NOT NULL DEFAULT '{}'")
+    // schema 뒤에 돈다 — 옮겨 담을 uiux_project_tokens 가 이미 만들어진 뒤여야 한다.
+    promoteProjectsToShared(d)
   },
 
   schema: `
-    CREATE TABLE IF NOT EXISTS uiux_projects (
-      id          TEXT PRIMARY KEY,
-      key         TEXT NOT NULL,
-      name        TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      tokens      TEXT NOT NULL DEFAULT '{}',
-      created_at  TEXT NOT NULL
+    -- 디자인 토큰 — 기본 한 벌 위에 프로젝트가 덮어쓰는 값만 담는다(전부가 아니라 차이만).
+    -- 함께 읽고 함께 쓰이므로 칸 하나에 JSON 으로 둔다(화면 내용과 같은 판단).
+    -- 공용 projects 가 아니라 여기 사는 이유: 토큰은 UI/UX 전용이라, 공용 테이블에 두면
+    -- 서비스마다 전용 칸이 하나씩 붙어 공용이 잡동사니가 된다.
+    CREATE TABLE IF NOT EXISTS uiux_project_tokens (
+      project_id TEXT PRIMARY KEY,
+      tokens     TEXT NOT NULL DEFAULT '{}'
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_uiux_projects_key ON uiux_projects(key);
 
     CREATE TABLE IF NOT EXISTS uiux_applications (
       id          TEXT PRIMARY KEY,

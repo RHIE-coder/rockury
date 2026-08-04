@@ -14,7 +14,7 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { dialectInfo } from '../dialects'
 import { ScopeMenu } from '../connections/ScopeMenu'
-import { useConnectionsStore } from '../connections/store'
+import { useScopedConnections } from '../connections/store'
 import { reconcileScope, scopeModel, scopeSummary, shownScope, toggleSchema } from '../scope'
 import { useDefinitionStore } from '../workspaces/definition/store'
 import { isEmptyDiff } from '../versions/diff'
@@ -26,7 +26,7 @@ import { useImportStore } from './importStore'
  */
 export function ImportDialog() {
   const st = useImportStore()
-  const connections = useConnectionsStore((s) => s.connections)
+  const connections = useScopedConnections()
   // 지금 설계에 든 테이블 수 — 덮어쓰기 전에 무엇이 바뀌는지 숫자로 보인다.
   // **훅은 조기 return 위에서 전부 부른다** — 아래로 내리면 창이 닫힌 렌더와 열린 렌더의
   // 훅 개수가 달라져 화면이 통째로 죽는다(실측).

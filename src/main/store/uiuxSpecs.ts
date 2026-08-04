@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from './db'
+import {
+  createProject,
+  listProjects as sharedListProjects,
+  releaseScopedRefs
+} from './projects'
 
 /**
  * UI/UX 설계 저장소 — 명세 정본 `docs/spec/uiux-ia.md` §7.
@@ -71,7 +76,8 @@ export interface NodeInput {
 
 /** 층별 테이블·부모 칸 — level 하나로 갈리는 지점을 여기 한 곳에 모은다. */
 const TABLE: Record<SpecLevel, { name: string; parent: string | null }> = {
-  project: { name: 'uiux_projects', parent: null },
+  // 맨 위층만 공용 테이블이다 — 프로젝트는 다섯 서비스가 함께 쓰는 범위라 UI/UX 소유가 아니다.
+  project: { name: 'projects', parent: null },
   application: { name: 'uiux_applications', parent: 'project_id' },
   service: { name: 'uiux_services', parent: 'application_id' },
   surface: { name: 'uiux_surfaces', parent: 'service_id' }
@@ -86,10 +92,12 @@ const CHILD: Partial<Record<SpecLevel, SpecLevel>> = {
 
 const KEY_PATTERN = /^[a-z0-9][a-z0-9_-]*$/
 
+/**
+ * 프로젝트 목록은 공용 저장소가 정본이다 — 여기서 또 조회하면 정렬·칸이 두 벌이 되고,
+ * 한쪽만 고쳐지는 순간 UI/UX 화면과 셸 셀렉터가 서로 다른 목록을 보인다.
+ */
 export function listProjects(): SpecProjectRow[] {
-  return getDb()
-    .prepare('SELECT id, key, name, description, created_at FROM uiux_projects ORDER BY created_at ASC')
-    .all() as unknown as SpecProjectRow[]
+  return sharedListProjects()
 }
 
 /**
@@ -145,10 +153,9 @@ export function createNode(level: SpecLevel, parentId: string | null, input: Nod
   const description = (input.description ?? '').trim()
 
   if (level === 'project') {
-    d.prepare(
-      'INSERT INTO uiux_projects (id, key, name, description, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(id, input.key, name, description, new Date().toISOString())
-    return { id }
+    // 프로젝트는 공용이라 만드는 자리도 한 곳이다 — 여기서 또 INSERT 하면 키 규칙이 두 벌이 되고,
+    // 한쪽만 고쳐지는 순간 같은 이름의 프로젝트가 두 경로로 생긴다.
+    return { id: createProject({ key: input.key, name, description }).id }
   }
 
   const position = nextPosition(level, parentId as string)
@@ -215,6 +222,18 @@ function deleteSubtree(level: SpecLevel, ids: string[]): void {
   if (level === 'surface') {
     d.prepare(`DELETE FROM uiux_notes WHERE surface_id IN (${ids.map(() => '?').join(',')})`).run(...ids)
   }
+  // 프로젝트에 딸린 UI/UX 전용 값(디자인 토큰)도 같은 이유로 함께 지운다 — 포함 트리(project →
+  // application) 밖에 있어서 연쇄 삭제가 저절로 닿지 않는다.
+  //
+  // 다른 서비스의 설계·접속은 **지우지 않고 소속만 푼다**(releaseScopedRefs). 여기서 지우는 것은
+  // 프로젝트가 뿌리인 UI/UX 위계뿐이다 — DB 설계는 프로젝트보다 무거운 산출물이라 이름표를
+  // 떼는 일에 딸려 사라지면 안 된다.
+  if (level === 'project') {
+    d.prepare(
+      `DELETE FROM uiux_project_tokens WHERE project_id IN (${ids.map(() => '?').join(',')})`
+    ).run(...ids)
+    for (const id of ids) releaseScopedRefs(d, id)
+  }
   const child = CHILD[level]
   if (child) {
     const ct = TABLE[child]
@@ -245,7 +264,7 @@ export function findByAddress(address: string): AddressHit | null {
   if (parts.length === 0 || parts.length > 4) return null
   const d = getDb()
 
-  const project = d.prepare('SELECT id FROM uiux_projects WHERE key = ?').get(parts[0]) as unknown as
+  const project = d.prepare('SELECT id FROM projects WHERE key = ?').get(parts[0]) as unknown as
     | { id: string }
     | undefined
   if (!project) return null
@@ -363,9 +382,9 @@ export function deleteVersion(id: string): void {
  * 한다 — 기본값이 바뀌면 안 건드린 토큰은 자동으로 따라와야 하고, 전부를 복사해 두면 그게 막힌다.
  */
 export function getProjectTokens(projectId: string): Record<string, string> {
-  const row = getDb().prepare('SELECT tokens FROM uiux_projects WHERE id = ?').get(projectId) as unknown as
-    | { tokens: string }
-    | undefined
+  const row = getDb()
+    .prepare('SELECT tokens FROM uiux_project_tokens WHERE project_id = ?')
+    .get(projectId) as unknown as { tokens: string } | undefined
   if (!row) return {}
   try {
     const parsed = JSON.parse(row.tokens || '{}')
@@ -380,7 +399,14 @@ export function getProjectTokens(projectId: string): Record<string, string> {
 }
 
 export function setProjectTokens(projectId: string, tokens: Record<string, string>): void {
-  getDb().prepare('UPDATE uiux_projects SET tokens = ? WHERE id = ?').run(JSON.stringify(tokens), projectId)
+  // 토큰 행은 프로젝트를 만들 때가 아니라 **처음 덮어쓸 때** 생긴다(아무것도 안 고친 프로젝트는
+  // 행이 없는 게 맞다) — 그래서 UPDATE 가 아니라 UPSERT 다.
+  getDb()
+    .prepare(
+      `INSERT INTO uiux_project_tokens (project_id, tokens) VALUES (?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET tokens = excluded.tokens`
+    )
+    .run(projectId, JSON.stringify(tokens))
 }
 
 // ── 의견(핀) ────────────────────────────────────────────────────────

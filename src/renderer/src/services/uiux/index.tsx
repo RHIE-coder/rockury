@@ -2,7 +2,6 @@ import {
   Blocks,
   Braces,
   Component,
-  FolderKanban,
   Frame,
   GitCompare,
   History,
@@ -13,7 +12,6 @@ import {
   Paintbrush,
   Palette,
   PenTool,
-  Plus,
   ShieldCheck,
   Workflow
 } from 'lucide-react'
@@ -76,13 +74,6 @@ const NodeDialog = withSuspense(() =>
   import('./screens/NodeDialog').then((m) => ({ default: m.NodeDialog }))
 )
 
-/** 컨텍스트 바 액션에서 스토어를 부른다 — 위와 같은 이유로 여기서도 정적 import 를 피한다. */
-const openProjectDialog = (): void => {
-  void import('./store').then((m) =>
-    m.useSpecStore.getState().openDialog({ level: 'project', parentId: null })
-  )
-}
-
 /**
  * UI/UX 서비스 IA. 명세 정본은 `docs/spec/uiux-ia.md`.
  *
@@ -102,23 +93,9 @@ export const uiuxService: Service = {
   icon: Palette,
   // 서비스 전역 오버레이 — 위계 노드 만들기·고치기 모달(컨텍스트 바 액션·트리·빈 상태 CTA 로 열린다).
   Overlay: NodeDialog,
+  // Project 셀렉터는 여기 없다 — 프로젝트는 다섯 서비스를 함께 좁히는 범위라 셸(타이틀바)이 든다.
+  // 이 서비스에도 두면 같은 이름의 셀렉터가 둘이 되고, 어느 쪽이 진짜인지 알 수 없다.
   context: [
-    {
-      // 프로젝트(쿠팡·배민…)는 런타임 데이터 — `services/uiux/store` 가 옵션을 주입한다.
-      id: 'project',
-      label: 'Project',
-      icon: FolderKanban,
-      placeholder: '프로젝트 선택',
-      options: [],
-      actions: [
-        {
-          id: 'create-project',
-          label: '새 프로젝트…',
-          icon: Plus,
-          onSelect: openProjectDialog
-        }
-      ]
-    },
     {
       // 설계 스냅샷 렌즈. DB 서비스의 Version 과 같은 뜻 — Draft(편집 중) / 커밋 버전(읽기 전용).
       id: 'version',

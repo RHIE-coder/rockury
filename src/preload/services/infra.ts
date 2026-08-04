@@ -77,10 +77,15 @@ export const infraApi = {
 
     // 설계본
     listDesigns: (): Promise<DesignRow[]> => unwrap(ipcRenderer.invoke('infra:listDesigns')),
-    createDesign: (input: { name: string; description?: string }): Promise<DesignRow> =>
-      unwrap(ipcRenderer.invoke('infra:createDesign', input)),
-    updateDesign: (id: string, patch: { name?: string; description?: string }): Promise<void> =>
-      unwrap(ipcRenderer.invoke('infra:updateDesign', id, patch)),
+    createDesign: (input: {
+      name: string
+      description?: string
+      projectId?: string | null
+    }): Promise<DesignRow> => unwrap(ipcRenderer.invoke('infra:createDesign', input)),
+    updateDesign: (
+      id: string,
+      patch: { name?: string; description?: string; projectId?: string | null }
+    ): Promise<void> => unwrap(ipcRenderer.invoke('infra:updateDesign', id, patch)),
     deleteDesign: (id: string): Promise<void> =>
       unwrap(ipcRenderer.invoke('infra:deleteDesign', id)),
     getGraph: (designId: string): Promise<{ nodes: NodeRow[]; edges: EdgeRow[] }> =>

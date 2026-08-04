@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { useContextOptions } from '@renderer/nav/contextOptions'
 import { useNav } from '@renderer/nav/useNav'
+import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
+import { useProjectStore } from '@renderer/shell/projectStore'
 import { dialectInfo, type DialectId } from '../dialects'
 
 /**
@@ -20,6 +22,8 @@ export interface DesignDef {
    * 연결은 안 고르면 "기본 스키마 하나"지만(읽는 비용이 든다), 설계는 이미 손에 있어 다 보인다.
    */
   schemas: string[]
+  /** 속한 프로젝트. null 이면 무소속 — 프로젝트를 고르면 목록에서 숨는다(설계류 규칙). */
+  projectId: string | null
 }
 
 interface DesignsState {
@@ -52,12 +56,14 @@ const toDef = (r: {
   description: string
   dialect: string
   schemas?: string[]
+  project_id?: string | null
 }): DesignDef => ({
   id: r.id,
   name: r.name,
   description: r.description,
   dialect: r.dialect as DialectId,
-  schemas: r.schemas ?? []
+  schemas: r.schemas ?? [],
+  projectId: r.project_id ?? null
 })
 
 export const useDesignsStore = create<DesignsState>()((set, get) => ({
@@ -74,7 +80,11 @@ export const useDesignsStore = create<DesignsState>()((set, get) => ({
     set({ designs: rows.map(toDef), loaded: true })
   },
   addDesign: async ({ name, description = '', dialect }) => {
-    const row = await window.rockury.designs.create({ name, description, dialect })
+    // 지금 보고 있는 프로젝트가 그대로 소속이 된다 — 폴더 안에서 파일을 만드는 것과 같다.
+    // 전체·프로젝트 없음을 보고 있으면 무소속으로 만들어진다.
+    const scope = useProjectStore.getState().scope
+    const projectId = scope.kind === 'one' ? scope.projectId : null
+    const row = await window.rockury.designs.create({ name, description, dialect, projectId })
     set((s) => ({ designs: [...s.designs, toDef(row)] }))
     return row.id
   },
@@ -101,11 +111,14 @@ export const useDesignsStore = create<DesignsState>()((set, get) => ({
 // 앱 시작 시 저장소에서 설계를 하이드레이션(하위 구독이 옵션 동기화를 받아준다).
 void useDesignsStore.getState().init()
 
-/** designs → 컨텍스트 바 'design' 셀렉터 옵션 동기화. */
-function pushDesignOptions(designs: DesignDef[]): void {
+/**
+ * designs → 'design' 셀렉터 옵션 동기화. **프로젝트 범위로 먼저 거른다** —
+ * 설계는 그 프로젝트의 산출물이라 남의 것도, 정체 모를 무소속도 섞이면 안 된다(strict).
+ */
+function pushDesignOptions(designs: DesignDef[], scope: ProjectScope): void {
   useContextOptions.getState().setOptions(
     'design',
-    designs.map((d) => {
+    filterByScope(designs, scope, 'strict').map((d) => {
       const info = dialectInfo(d.dialect)
       return {
         id: d.id,
@@ -117,9 +130,19 @@ function pushDesignOptions(designs: DesignDef[]): void {
     })
   )
 }
-pushDesignOptions(useDesignsStore.getState().designs)
+function syncDesignOptions(): void {
+  pushDesignOptions(useDesignsStore.getState().designs, useProjectStore.getState().scope)
+}
+
+syncDesignOptions()
 useDesignsStore.subscribe((s, prev) => {
-  if (s.designs !== prev.designs) pushDesignOptions(s.designs)
+  if (s.designs !== prev.designs) syncDesignOptions()
+})
+// 프로젝트를 바꾸면 셀렉터 목록도 그 자리에서 따라온다.
+useProjectStore.subscribe((s, prev) => {
+  if (s.scope !== prev.scope) syncDesignOptions()
+  // 소속 정리 창이 저장소를 직접 고쳤다 — 우리가 든 사본은 아직 옛 소속이라 다시 읽는다.
+  if (s.itemsRevision !== prev.itemsRevision) void useDesignsStore.getState().init()
 })
 
 /** 컨텍스트 바에서 선택된 활성 Design. 미선택이면 null. */
@@ -127,4 +150,11 @@ export function useActiveDesign(): DesignDef | null {
   const designId = useNav((s) => s.contextValues['design'])
   const designs = useDesignsStore((s) => s.designs)
   return designs.find((d) => d.id === designId) ?? null
+}
+
+/** 지금 프로젝트 범위에 드는 설계만. 목록 화면(설계 관리 등)이 쓴다. */
+export function useScopedDesigns(): DesignDef[] {
+  const designs = useDesignsStore((s) => s.designs)
+  const scope = useProjectStore((s) => s.scope)
+  return filterByScope(designs, scope, 'strict')
 }

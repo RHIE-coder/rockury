@@ -266,6 +266,12 @@ export const dbMigration: ServiceMigration = {
     // 구 스키마 호환 보정 — `CREATE TABLE IF NOT EXISTS` 는 기존 테이블에 컬럼을 더하지 못한다.
     // 이미 쓰고 있던 로컬 DB 파일을 깨지 않고 컬럼만 얹기 위한 경로다.
 
+    // designs·connections.project_id — 공용 projects 의 소속. **비워 둘 수 있다(무소속)**.
+    // 설계와 접속에만 붙인다: 그 안에 든 테이블·쿼리·환경은 부모를 타고 프로젝트가 정해지므로
+    // 칸을 또 두면 "설계는 쿠팡인데 그 안 테이블은 배민" 인 있을 수 없는 상태가 생긴다.
+    addColumnIfMissing(d, 'designs', 'project_id', 'TEXT')
+    addColumnIfMissing(d, 'connections', 'project_id', 'TEXT')
+
     // collection_items.saved_query_id — 컬렉션 아이템이 저장쿼리를 "참조"할 수 있도록.
     addColumnIfMissing(d, 'collection_items', 'saved_query_id', 'TEXT')
 

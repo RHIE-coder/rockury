@@ -28,6 +28,11 @@ export interface ConnectionRecord {
   schemas: string[]
   autoCheckDisabled: boolean
   groupId: string | null
+  /**
+   * 속한 프로젝트. null 이면 **공용** — 접속은 쓰는 도구라, 무소속은 어느 프로젝트에서나 보인다
+   * (설계류와 갈리는 유일한 지점).
+   */
+  projectId: string | null
   sortOrder: number
   createdAt: string
   updatedAt: string
@@ -54,6 +59,8 @@ export interface CreateConnectionInput {
   sslConfig?: Record<string, unknown>
   schemas?: string[]
   autoCheckDisabled?: boolean
+  /** 만들 때 보고 있던 프로젝트. 안 주면 공용. */
+  projectId?: string | null
 }
 
 export type UpdateConnectionInput = Partial<{
@@ -68,6 +75,8 @@ export type UpdateConnectionInput = Partial<{
   sslConfig: Record<string, unknown>
   schemas: string[]
   autoCheckDisabled: boolean
+  /** null 이면 공용으로 되돌린다. */
+  projectId: string | null
 }>
 
 interface ConnRow {
@@ -84,6 +93,7 @@ interface ConnRow {
   schemas: string | null
   auto_check_disabled: number
   group_id: string | null
+  project_id: string | null
   sort_order: number
   created_at: string
   updated_at: string
@@ -125,6 +135,7 @@ function toRecord(r: ConnRow): ConnectionRecord {
     schemas: parseSchemas(r.schemas),
     autoCheckDisabled: r.auto_check_disabled === 1,
     groupId: r.group_id ?? null,
+    projectId: r.project_id ?? null,
     sortOrder: r.sort_order,
     createdAt: r.created_at,
     updatedAt: r.updated_at
@@ -163,8 +174,9 @@ export function createConnection(input: CreateConnectionInput): ConnectionRecord
   d.prepare(
     `INSERT INTO connections
        (id, name, db_type, host, port, database_name, db_user, encrypted_password,
-        ssl_enabled, ssl_config, schemas, auto_check_disabled, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ssl_enabled, ssl_config, schemas, auto_check_disabled, project_id, sort_order,
+        created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.name,
@@ -178,6 +190,7 @@ export function createConnection(input: CreateConnectionInput): ConnectionRecord
     input.sslConfig ? JSON.stringify(input.sslConfig) : null,
     JSON.stringify(input.schemas ?? []),
     input.autoCheckDisabled ? 1 : 0,
+    input.projectId ?? null,
     max + 1,
     now,
     now
@@ -204,6 +217,8 @@ export function updateConnection(id: string, patch: UpdateConnectionInput): Conn
   if (patch.sslConfig !== undefined) set('ssl_config', JSON.stringify(patch.sslConfig))
   if (patch.schemas !== undefined) set('schemas', JSON.stringify(patch.schemas))
   if (patch.autoCheckDisabled !== undefined) set('auto_check_disabled', patch.autoCheckDisabled ? 1 : 0)
+  // 소속 옮기기 — null 이 "공용으로 되돌리기" 라서 undefined 와 갈라야 한다.
+  if (patch.projectId !== undefined) set('project_id', patch.projectId)
 
   if (sets.length > 0) {
     set('updated_at', new Date().toISOString())

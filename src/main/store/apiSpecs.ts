@@ -19,12 +19,16 @@ export interface SpecSummary {
   requestCount: number
   latestVersion: string | null
   createdAt: string
+  /** 속한 프로젝트. null 이면 무소속 — 설계류라 프로젝트를 고르면 목록에서 숨는다. */
+  projectId: string | null
 }
 
 export interface CreateSpecInput {
   name: string
   kind: string
   description?: string
+  /** 만들 때 보고 있던 프로젝트. 안 주면 무소속. */
+  projectId?: string | null
 }
 
 function slugify(name: string): string {
@@ -50,8 +54,17 @@ export function requireKind(value: unknown): InterfaceKind {
 export function listSpecs(): SpecSummary[] {
   const d = getDb()
   const rows = d
-    .prepare('SELECT id, name, description, kind, created_at FROM api_specs ORDER BY created_at ASC')
-    .all() as unknown as { id: string; name: string; description: string; kind: string; created_at: string }[]
+    .prepare(
+      'SELECT id, name, description, kind, created_at, project_id FROM api_specs ORDER BY created_at ASC'
+    )
+    .all() as unknown as {
+    id: string
+    name: string
+    description: string
+    kind: string
+    created_at: string
+    project_id: string | null
+  }[]
 
   return rows.map((r) => {
     const { c } = d.prepare('SELECT COUNT(*) AS c FROM api_requests WHERE spec_id = ?').get(r.id) as unknown as {
@@ -67,7 +80,8 @@ export function listSpecs(): SpecSummary[] {
       kind: r.kind as InterfaceKind,
       requestCount: c,
       latestVersion: v?.number ?? null,
-      createdAt: r.created_at
+      createdAt: r.created_at,
+      projectId: r.project_id ?? null
     }
   })
 }
@@ -93,23 +107,35 @@ export function createSpec(input: CreateSpecInput): SpecSummary {
   for (let n = 2; taken.has(id); n++) id = `${base}-${n}`
 
   const createdAt = new Date().toISOString()
-  d.prepare('INSERT INTO api_specs (id, name, description, kind, created_at) VALUES (?, ?, ?, ?, ?)').run(
+  const projectId = input.projectId ?? null
+  d.prepare(
+    'INSERT INTO api_specs (id, name, description, kind, created_at, project_id) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(id, name, (input.description ?? '').trim(), kind, createdAt, projectId)
+  return {
     id,
     name,
-    (input.description ?? '').trim(),
+    description: (input.description ?? '').trim(),
     kind,
-    createdAt
-  )
-  return { id, name, description: (input.description ?? '').trim(), kind, requestCount: 0, latestVersion: null, createdAt }
+    requestCount: 0,
+    latestVersion: null,
+    createdAt,
+    projectId
+  }
 }
 
 /** 이름·설명만 고친다 — 인터페이스 종류는 고정 속성이라 입력 표면에 없다(spec §2). */
-export function updateSpec(id: string, patch: { name: string; description: string }): SpecSummary {
+export function updateSpec(
+  id: string,
+  patch: { name: string; description: string; projectId?: string | null }
+): SpecSummary {
   const d = getDb()
   requireSpec(id)
   const name = patch.name.trim()
   if (!name) throw new Error('명세 이름이 비어 있습니다.')
   d.prepare('UPDATE api_specs SET name = ?, description = ? WHERE id = ?').run(name, patch.description.trim(), id)
+  // 소속 옮기기 — null 이 "무소속으로 되돌리기" 라서 undefined 와 갈라야 한다.
+  if (patch.projectId !== undefined)
+    d.prepare('UPDATE api_specs SET project_id = ? WHERE id = ?').run(patch.projectId, id)
   return listSpecs().find((s) => s.id === id)!
 }
 

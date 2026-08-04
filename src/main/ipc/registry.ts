@@ -1,5 +1,6 @@
 import { registerWindowIpc } from './window'
 import { registerDevFeedbackIpc } from './devFeedback'
+import { registerProjectsIpc } from './projects'
 import { registerUiuxIpc } from './uiux'
 import { registerApiIpc } from './api'
 import { registerDbIpc } from './db'
@@ -22,11 +23,12 @@ export const SERVICE_IPC: { service: string; register: () => void }[] = [
 
 /**
  * 앱이 쓰는 IPC 채널 전부를 등록한다.
- * 창 제어(`window:*`)와 개발용 화면 피드백(`shell:*`)은 어느 서비스에도 안 속하는
- * 셸·도구 기능이라 서비스 순회 밖에서 먼저 건다.
+ * 창 제어(`window:*`)·개발용 화면 피드백·프로젝트(`shell:*`)는 어느 서비스에도 안 속하는
+ * 셸·공용 기능이라 서비스 순회 밖에서 먼저 건다.
  */
 export function registerAllIpc(): void {
   registerWindowIpc()
   registerDevFeedbackIpc()
+  registerProjectsIpc()
   for (const s of SERVICE_IPC) s.register()
 }

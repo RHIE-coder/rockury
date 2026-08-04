@@ -34,11 +34,15 @@ export interface DesignRecord {
   description: string
   dialect: string
   created_at: string
+  /** 속한 프로젝트. null 이면 무소속. */
+  project_id: string | null
 }
 export interface CreateDesignInput {
   name: string
   description?: string
   dialect: string
+  /** 만들 때 보고 있던 프로젝트. 안 주면 무소속. */
+  projectId?: string | null
 }
 
 /** 테이블 정의 레코드 (main/store/tables 와 동일 형태). */
@@ -107,7 +111,7 @@ export const dbApi = {
       ipcRenderer.invoke('designs:create', input),
     update: (
       id: string,
-      patch: { name?: string; description?: string; schemas?: string[] }
+      patch: { name?: string; description?: string; schemas?: string[]; projectId?: string | null }
     ): Promise<DesignRecord> => ipcRenderer.invoke('designs:update', id, patch),
     delete: (id: string): Promise<void> => ipcRenderer.invoke('designs:delete', id)
   },

@@ -1,21 +1,26 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { SERVICE_IDS, type ServiceMigration } from './types'
+import { MIGRATION_OWNERS, type ServiceMigration } from './types'
+import { shellMigration } from './shell'
 import { uiuxMigration } from './uiux'
 import { apiMigration } from './api'
 import { dbMigration } from './db'
 import { infraMigration } from './infra'
 import { aiMigration } from './ai'
 
-export type { ServiceMigration, ServiceId } from './types'
-export { SERVICE_IDS, addColumnIfMissing } from './types'
+export type { ServiceMigration, ServiceId, MigrationOwner } from './types'
+export { SERVICE_IDS, SHARED_OWNER, MIGRATION_OWNERS, addColumnIfMissing } from './types'
 
 /**
- * 서비스별 마이그레이션 등록부 — 순서는 `nav/registry.ts` 의 서비스 순서를 따른다.
+ * 마이그레이션 등록부 — 공용이 먼저, 그 뒤로 `nav/registry.ts` 의 서비스 순서를 따른다.
+ *
+ * **공용(shell)이 맨 앞인 이유**: 서비스들이 `projects` 를 가리키는 소속 칸을 갖고, uiux 는
+ * 자기 프로젝트 행을 그리로 옮긴다. 대상 테이블이 없는 상태로 그 일이 돌면 안 된다.
  *
  * 새 서비스를 만들 때만 이 배열을 건드린다. **테이블을 더할 때는 자기 서비스 파일만** 고친다
  * (병렬 개발에서 공용 파일 편집을 0으로 만드는 것이 이 분할의 목적이다).
  */
 export const MIGRATIONS: ServiceMigration[] = [
+  shellMigration,
   uiuxMigration,
   apiMigration,
   dbMigration,
@@ -43,9 +48,10 @@ function assertConsistent(list: ServiceMigration[]): void {
 
   const owner = new Map<string, string>()
   for (const m of list) {
-    if (!(SERVICE_IDS as readonly string[]).includes(m.service)) {
+    if (!(MIGRATION_OWNERS as readonly string[]).includes(m.service)) {
       throw new Error(
-        `알 수 없는 서비스 id '${m.service}' — 허용: ${SERVICE_IDS.join(', ')} (nav/registry.ts 의 Service.id 와 같아야 합니다).`
+        `알 수 없는 소유자 '${m.service}' — 허용: ${MIGRATION_OWNERS.join(', ')} ` +
+          `(서비스는 nav/registry.ts 의 Service.id 와 같아야 하고, 어느 서비스에도 안 속하면 'shell').`
       )
     }
     for (const t of m.tables) {

@@ -197,27 +197,61 @@ export interface DesignRow {
   id: string
   name: string
   description: string
+  /** 속한 프로젝트. null 이면 무소속 — 설계류라 프로젝트를 고르면 목록에서 숨는다. */
+  projectId: string | null
+}
+
+interface DesignDbRow {
+  id: string
+  name: string
+  description: string
+  project_id: string | null
 }
 
 export function listDesigns(): DesignRow[] {
-  return getDb()
-    .prepare(`SELECT id, name, description FROM infra_designs ORDER BY created_at`)
-    .all() as unknown as DesignRow[]
+  return (
+    getDb()
+      .prepare(`SELECT id, name, description, project_id FROM infra_designs ORDER BY created_at`)
+      .all() as unknown as DesignDbRow[]
+  ).map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    projectId: r.project_id ?? null
+  }))
 }
 
-export function createDesign(input: { name: string; description?: string }): DesignRow {
+export function createDesign(input: {
+  name: string
+  description?: string
+  /** 만들 때 보고 있던 프로젝트. 안 주면 무소속. */
+  projectId?: string | null
+}): DesignRow {
   const id = randomUUID()
   const stamp = now()
+  const projectId = input.projectId ?? null
   getDb()
     .prepare(
-      `INSERT INTO infra_designs (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO infra_designs (id, name, description, created_at, updated_at, project_id)
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(id, input.name, input.description ?? '', stamp, stamp)
-  return { id, name: input.name, description: input.description ?? '' }
+    .run(id, input.name, input.description ?? '', stamp, stamp, projectId)
+  return { id, name: input.name, description: input.description ?? '', projectId }
 }
 
-export function updateDesign(id: string, patch: { name?: string; description?: string }): void {
+export function updateDesign(
+  id: string,
+  patch: { name?: string; description?: string; projectId?: string | null }
+): void {
   const db = getDb()
+  // 소속 옮기기 — null 이 "무소속으로 되돌리기" 라서 undefined 와 갈라야 한다.
+  if (patch.projectId !== undefined) {
+    db.prepare(`UPDATE infra_designs SET project_id = ?, updated_at = ? WHERE id = ?`).run(
+      patch.projectId,
+      now(),
+      id
+    )
+  }
   if (patch.name !== undefined) {
     db.prepare(`UPDATE infra_designs SET name = ?, updated_at = ? WHERE id = ?`).run(patch.name, now(), id)
   }
