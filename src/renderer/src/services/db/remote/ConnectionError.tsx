@@ -12,16 +12,17 @@ import { describeConnectionError } from './connectionProblem'
  * 알 수 없었다(2026-08-04 사용자 실측 — "앱 문제인 줄 알았다").
  *
  * 세 가지를 한 자리에 둔다: 무엇이 잘못됐나 · 무엇을 확인하나 · 다시 해 보기.
+ *
+ * **어느 접속인지는 여기서 말하지 않는다** — 뷰 탭 줄의 셀렉터와 화면 헤더가 이미 그 이름을
+ * 보이고 있어서, 여기서 또 적으면 같은 화면에 세 번 적는 셈이다.
  */
 export function ConnectionError({
-  connectionName,
   error,
   onRetry,
   retrying = false,
   /** 화면 한가운데를 채울지(본문이 통째로 빌 때) 줄 배너로 얹을지. */
   variant = 'block'
 }: {
-  connectionName: string
   error: string
   onRetry?: () => void
   retrying?: boolean
@@ -44,7 +45,7 @@ export function ConnectionError({
       >
         <PlugZap className="size-4 shrink-0" />
         <span className="min-w-0 flex-1">
-          <b className="font-semibold">{connectionName}</b>에 연결할 수 없습니다 — {reason}.
+          <b className="font-semibold">서버에 연결할 수 없습니다</b> — {reason}.
           {hint && <span className="ml-1 opacity-80">{hint}</span>}
         </span>
         {retry}
@@ -59,9 +60,7 @@ export function ConnectionError({
     >
       <div className="max-w-md rounded-lg border border-destructive/30 bg-destructive/5 p-5 text-center">
         <PlugZap className="mx-auto mb-3 size-7 text-destructive" />
-        <p className="text-[14px] font-semibold text-fg">
-          <b>{connectionName}</b>에 연결할 수 없습니다
-        </p>
+        <p className="text-[14px] font-semibold text-fg">서버에 연결할 수 없습니다</p>
         <p className="mt-1 text-[13px] text-destructive">{reason}</p>
         {hint && <p className="mt-2 text-[12px] text-muted">{hint}</p>}
 

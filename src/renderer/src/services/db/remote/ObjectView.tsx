@@ -165,7 +165,6 @@ export function ObjectView() {
 
       {error ? (
         <ConnectionError
-          connectionName={conn.name}
           error={error}
           retrying={loading}
           onRetry={() => void load(conn.id, conn.id, true)}

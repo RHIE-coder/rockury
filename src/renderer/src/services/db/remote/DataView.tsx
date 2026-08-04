@@ -314,7 +314,6 @@ export function DataView() {
       {/* 연결이 안 되면 표 목록이 빈 것과 구분되지 않는다 — "테이블 없음" 은 연결 실패의 답이 아니다. */}
       {introError ? (
         <ConnectionError
-          connectionName={conn.name}
           error={introError}
           retrying={introLoading}
           onRetry={() => connId && void loadIntro(connId, connId, true)}

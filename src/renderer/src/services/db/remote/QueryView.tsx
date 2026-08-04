@@ -374,7 +374,6 @@ export function QueryView() {
         {introError && (
           <ConnectionError
             variant="inline"
-            connectionName={conn.name}
             error={introError}
             retrying={introLoading}
             onRetry={() => void loadIntro(conn.id, conn.id, true)}
