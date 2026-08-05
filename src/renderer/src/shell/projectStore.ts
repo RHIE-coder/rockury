@@ -6,6 +6,7 @@ import {
   scopeToOptionId,
   type ProjectScope
 } from './projectScope'
+import { windowStorage } from './windowSession'
 
 export type Project = Awaited<ReturnType<typeof window.rockury.projects.list>>[number]
 
@@ -78,7 +79,9 @@ export const useProjectStore = create<ProjectState>()(
     }),
     {
       name: 'rockury.project',
-      storage: createJSONStorage(() => localStorage),
+      // 떼어낸 창은 지금 범위를 물려받되 **되돌려 쓰진 않는다** — 그 창에서 범위를 바꾼 것이
+      // 첫 창의 저장값을 덮으면, 앱을 껐다 켤 때 어느 창을 마지막으로 만졌느냐로 결과가 갈린다.
+      storage: createJSONStorage(windowStorage),
       // 목록은 저장하지 않는다(저장소가 정본이라 켤 때 다시 읽는다). 고른 범위만 남긴다.
       partialize: (s) => ({ scope: s.scope }),
       // 저장본은 이 기능이 없던 시절 것일 수 있다 — 옵션 id 로 접었다 펴서 모양을 보정한다.

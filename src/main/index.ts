@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { alreadyRunningNotice } from './instanceNotice'
@@ -7,50 +7,11 @@ import { alreadyRunningNotice } from './instanceNotice'
 declare const __SOURCE_ROOT__: string
 import { registerAllIpc } from './ipc/registry'
 import { setDbPath } from './store/db'
-import { defaultWindowBounds } from './windowSize'
+import { createAppWindow, restoreWindows, saveLayout } from './windows'
+import { installAppMenu } from './menu'
 import { startAiServer, stopAiServer } from './ai/http'
 import { setStoreChangeNotifier } from './ai/tools'
 import { createKeychainTokenStore } from './ai/tokenStore'
-
-function createWindow(): void {
-  // 커서가 있는 화면에 띄운다 — 사용자가 지금 보고 있는 모니터. 위치를 직접 정해야
-  // 창이 좁은 모니터에 걸려 폭이 잘리지 않는다(defaultWindowBounds 주석 참고).
-  const target = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const { x, y, width, height } = defaultWindowBounds(target.workArea)
-  const mainWindow = new BrowserWindow({
-    x,
-    y,
-    width,
-    height,
-    minWidth: 960,
-    minHeight: 600,
-    show: false,
-    frame: false,
-    backgroundColor: '#ffffff',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  })
-
-  mainWindow.on('ready-to-show', () => mainWindow.show())
-
-  // 외부 링크는 기본 브라우저로
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  // electron-vite: dev 서버 URL 또는 빌드된 HTML 로드
-  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
-  if (rendererUrl) {
-    mainWindow.loadURL(rendererUrl)
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-}
 
 // 미패키징 실행에서도 userData 경로가 'Electron' 이 아닌 앱 이름으로 잡히도록 명시.
 app.setName('Rockury')
@@ -105,12 +66,19 @@ app.whenReady().then(() => {
   setStoreChangeNotifier((e) => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send('store:changed', e)
   })
-  createWindow()
+  // 탭·창 단축키(⌘T·⌘N·⌘W·⌘1~9)는 앱 메뉴가 든다 — 화면에서 키를 받으면 macOS 기본 메뉴의
+  // ⌘W(창 닫기)가 먼저 먹어 탭 대신 창이 닫힌다.
+  installAppMenu()
+  // 지난번에 떠 있던 창들을 되살린다(첫 실행이면 창 하나).
+  restoreWindows()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createAppWindow({ primary: true })
   })
 })
+
+// 끄기 직전의 창 배치를 남긴다 — 창이 아직 살아 있는 이 시점이라야 무엇이 떠 있었는지 셀 수 있다.
+app.on('before-quit', saveLayout)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

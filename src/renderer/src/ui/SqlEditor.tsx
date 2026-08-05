@@ -109,6 +109,9 @@ export function SqlEditor(props: SqlEditorProps) {
           '&': { fontSize: '13px', backgroundColor: 'transparent', height: '100%' },
           '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
           '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--color-muted)' },
+          // 자리표시 글자. CodeMirror 기본값(#888)은 흰 바탕에서 대비 3.54:1 로 AA(4.5:1)에 못 미쳐
+          // 화면 관문이 막는다. 바깥 CSS 로는 못 덮는다 — 이 테마 규칙이 더 좁아서 늘 이긴다.
+          '.cm-placeholder': { color: 'var(--color-muted)' },
           '&.cm-focused': { outline: 'none' },
           '.cm-activeLine': { backgroundColor: 'color-mix(in srgb, var(--color-panel) 60%, transparent)' },
           '.cm-activeLineGutter': { backgroundColor: 'transparent' }

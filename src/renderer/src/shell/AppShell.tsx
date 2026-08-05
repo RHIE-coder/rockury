@@ -1,4 +1,5 @@
 import { Titlebar } from './Titlebar'
+import { TabBar } from './TabBar'
 import { ActivityRail } from './ActivityRail'
 import { ContextBar } from './ContextBar'
 import { ModuleTabs } from './ModuleTabs'
@@ -11,8 +12,12 @@ import { DevFeedback } from '../devtools/feedback'
  * Rockury 공통 레이아웃 셸.
  *
  * 활성 경로를 걸으며 존재하는 계층만 렌더한다:
- *   L1 레일(항상) → L2 모듈탭(항상) → L3 뷰탭(뷰나 구획 손잡이가 있을 때 — 판단은 ViewTabs 자신이) →
+ *   L0 탭 줄(항상 — 지금 열어 둔 자리들) → L1 레일(항상) → L2 모듈탭(항상) →
+ *   L3 뷰탭(뷰나 구획 손잡이가 있을 때 — 판단은 ViewTabs 자신이) →
  *   L4 툴바(leaf 에 Toolbar 있을 때) → 워크스페이스
+ *
+ * 탭 줄만 **레일보다 위, 폭 전체**에 선다. 탭은 서비스를 가로질러 섞이므로(DB 탭 옆에 API 탭)
+ * 서비스 레일 안에 가둘 수 없다 — 브라우저에서 탭 줄이 창 맨 위에 있는 것과 같은 이유다.
  */
 export function AppShell() {
   const { service, leaf } = useActive()
@@ -24,6 +29,7 @@ export function AppShell() {
   return (
     <div className="flex h-screen flex-col bg-canvas text-fg">
       <Titlebar />
+      <TabBar />
 
       <div className="flex min-h-0 flex-1">
         <ActivityRail />

@@ -1,12 +1,13 @@
 import { Settings } from 'lucide-react'
 import { registry } from '../nav/registry'
-import { useNav } from '../nav/useNav'
+import { useActiveTab, useNav } from '../nav/useNav'
 import { cx } from '../lib/cx'
 import { AGENT_ACTIVITY_TTL_MS, isActive, useAgentActivity } from './agentActivity'
 
 /** L1 — 서비스 전환용 좌측 세로 레일. */
 export function ActivityRail() {
-  const serviceId = useNav((s) => s.serviceId)
+  // 지금 서비스는 **활성 탭**이 든다 — 탭을 옮기면 레일의 켜진 칸도 함께 옮겨간다.
+  const serviceId = useActiveTab().serviceId
   const selectService = useNav((s) => s.selectService)
   const activity = useAgentActivity((s) => s.at)
 

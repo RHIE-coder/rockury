@@ -12,6 +12,13 @@ export const shellCoverage: ServiceCoverage = {
     'window:minimize': 'UI 창 제어 — 원격 노출 실익 없음',
     'window:toggle-maximize': 'UI 창 제어 — 원격 노출 실익 없음',
     'window:close': 'UI 창 제어 — 원격 노출 실익 없음',
+    'window:open':
+      'UI 창 제어 — 사람이 보려고 여는 창이다. 에이전트가 부를 수 있으면 사용자 화면에 ' +
+      '창이 제멋대로 뜬다(끄는 길은 사람 손밖에 없다).',
+    'window:closeUnlessLast': 'UI 창 제어 — 원격 노출 실익 없음',
+    'window:session':
+      'UI 창 상태 보고 — 화면이 자기 탭 목록을 메인에 되보고하는 통로다. 저장소가 아니라 ' +
+      '창 배치 기억이라 에이전트가 읽거나 쓸 것이 없다.',
     // ── 개발용 화면 피드백: 에이전트가 부를 것이 아니라 사람이 앱에서 남기는 입력 ──
     'shell:saveDevFeedback':
       '개발 전용 도구 — 사람이 화면에 표시를 그려 남기는 입력이라 원격 호출 대상이 아니다. ' +

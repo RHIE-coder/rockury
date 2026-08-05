@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CASCADE_STEP,
+  cascadeBounds,
   defaultWindowBounds,
   defaultWindowSize,
   WINDOW_ASPECT,
+  usableBounds,
   WINDOW_MAX,
   WINDOW_MIN
 } from './windowSize'
@@ -82,5 +85,87 @@ describe('defaultWindowBounds — 첫 창 위치', () => {
     expect(b.x).toBeGreaterThanOrEqual(work.x)
     expect(b.x + b.width).toBeLessThanOrEqual(work.x + work.width)
     expect(b.width).toBeGreaterThan(b.height)
+  })
+})
+
+describe('cascadeBounds — 둘째 창부터의 위치', () => {
+  const work = { x: 0, y: 40, width: 1800, height: 1129 }
+  const base = defaultWindowBounds(work)
+
+  it('첫 창은 계산된 자리 그대로다', () => {
+    expect(cascadeBounds(base, work, 0)).toEqual(base)
+  })
+
+  it('다음 창마다 오른아래로 한 걸음씩 민다', () => {
+    expect(cascadeBounds(base, work, 1)).toEqual({
+      ...base,
+      x: base.x + CASCADE_STEP,
+      y: base.y + CASCADE_STEP
+    })
+    expect(cascadeBounds(base, work, 2).x).toBe(base.x + CASCADE_STEP * 2)
+  })
+
+  it('밀어도 창은 늘 작업영역 안에 있다 — 화면 밖에 열려 안 보이는 사고 방지', () => {
+    for (let i = 0; i < 40; i++) {
+      const b = cascadeBounds(base, work, i)
+      expect(b.x).toBeGreaterThanOrEqual(work.x)
+      expect(b.y).toBeGreaterThanOrEqual(work.y)
+      expect(b.x + b.width).toBeLessThanOrEqual(work.x + work.width)
+      expect(b.y + b.height).toBeLessThanOrEqual(work.y + work.height)
+    }
+  })
+
+  it('끝까지 밀면 처음 자리로 되감는다', () => {
+    const room = Math.min(
+      work.x + work.width - base.width - base.x,
+      work.y + work.height - base.height - base.y
+    )
+    const steps = Math.floor(room / CASCADE_STEP)
+    expect(cascadeBounds(base, work, steps + 1)).toEqual(base)
+  })
+
+  it('밀 자리가 아예 없는 화면(창이 작업영역을 꽉 채움)에서는 안 민다', () => {
+    const tight = { x: 0, y: 0, width: base.width, height: base.height }
+    expect(cascadeBounds({ ...base, x: 0, y: 0 }, tight, 3)).toEqual({ ...base, x: 0, y: 0 })
+  })
+
+  it('크기는 안 건드린다 — 미는 것은 위치뿐', () => {
+    const b = cascadeBounds(base, work, 5)
+    expect(b.width).toBe(base.width)
+    expect(b.height).toBe(base.height)
+  })
+})
+
+describe('usableBounds — 저장해 둔 창 자리를 지금 화면에 비춰 보기', () => {
+  const main = { x: 0, y: 40, width: 1800, height: 1129 }
+  const second = { x: 1800, y: 0, width: 1920, height: 1080 }
+
+  it('그 화면이 그대로 있으면 저장된 자리를 살린다', () => {
+    const saved = { x: 100, y: 100, width: 1200, height: 800 }
+    expect(usableBounds(saved, [main])).toEqual(saved)
+  })
+
+  it('둘째 모니터가 사라졌으면 버린다 — 허공에 열면 보이지도 닫히지도 않는다', () => {
+    const saved = { x: 2000, y: 100, width: 1200, height: 800 }
+    expect(usableBounds(saved, [second])).toEqual(saved)
+    expect(usableBounds(saved, [main])).toBeNull()
+  })
+
+  it('화면에 살짝만 걸치면 버린다 — 제목 줄을 잡을 만큼은 보여야 한다', () => {
+    // 오른쪽 끝에서 30px 만 걸친 창: 옮길 손잡이가 안 나온다.
+    expect(usableBounds({ x: 1770, y: 100, width: 1200, height: 800 }, [main])).toBeNull()
+  })
+
+  it('세로로만 걸쳐도 버린다 — 제목 줄이 화면 위로 넘어간 경우', () => {
+    expect(usableBounds({ x: 200, y: -790, width: 1200, height: 800 }, [main])).toBeNull()
+  })
+
+  it('크기가 없는 자리는 버린다 (깨진 저장본)', () => {
+    expect(usableBounds({ x: 0, y: 0, width: 0, height: 800 }, [main])).toBeNull()
+    expect(usableBounds({ x: 0, y: 0, width: -5, height: -5 }, [main])).toBeNull()
+  })
+
+  it('화면이 하나도 없으면 버린다', () => {
+    expect(usableBounds({ x: 0, y: 0, width: 1200, height: 800 }, [])).toBeNull()
   })
 })

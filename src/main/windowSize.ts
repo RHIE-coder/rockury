@@ -63,3 +63,43 @@ export function defaultWindowBounds(work: Rect, min: Size = WINDOW_MIN, max: Siz
     y: Math.round(work.y + (work.height - height) / 2)
   }
 }
+
+/**
+ * 저장해 둔 창 자리를 지금 화면들에 비춰 본다 — 쓸 수 있으면 그대로, 아니면 **null**.
+ *
+ * 창 배치를 되살릴 때 필요하다. 어제 두 번째 모니터에서 껐는데 오늘 그 모니터가 없으면,
+ * 저장된 좌표는 아무 화면에도 없는 허공이다 — 창이 뜨긴 하는데 안 보인다(닫을 수도 없다).
+ * 눈에 보이는 넓이가 충분히 겹치는 화면이 하나라도 있어야 살린다.
+ */
+export function usableBounds(saved: Rect, workAreas: readonly Rect[]): Rect | null {
+  if (!(saved.width > 0 && saved.height > 0)) return null
+  // 제목 줄이 잡히는 만큼(가로 절반·세로 40px)은 화면 안에 들어와야 옮기거나 닫을 수 있다.
+  const needW = Math.min(saved.width / 2, 240)
+  const needH = 40
+  for (const wa of workAreas) {
+    const w = Math.min(saved.x + saved.width, wa.x + wa.width) - Math.max(saved.x, wa.x)
+    const h = Math.min(saved.y + saved.height, wa.y + wa.height) - Math.max(saved.y, wa.y)
+    if (w >= needW && h >= needH) return saved
+  }
+  return null
+}
+
+/** 두 번째 창부터 앞 창에서 밀어 놓는 거리(px). 제목 줄 높이(36)보다 작아야 앞 창이 가려지지 않는다. */
+export const CASCADE_STEP = 28
+
+/**
+ * 둘째 창부터의 위치 — 앞 창 위에 정확히 겹치지 않게 오른아래로 민다.
+ *
+ * 정확히 겹쳐 열면 새 창이 떴는지가 화면상 안 보여서 "안 열렸나" 하고 두 번 누르게 된다.
+ * 밀다가 작업영역을 벗어나면 **처음 자리로 되감는다** — 안 되감으면 창 몇 개를 연 뒤부터
+ * 모니터 밖에 열려 아예 안 보인다(창 제어가 화면 안에 있어야 닫을 수도 있다).
+ */
+export function cascadeBounds(base: Rect, work: Rect, index: number, step = CASCADE_STEP): Rect {
+  const room = Math.max(
+    0,
+    Math.min(work.x + work.width - base.width - base.x, work.y + work.height - base.height - base.y)
+  )
+  const steps = Math.floor(room / step)
+  const offset = steps <= 0 ? 0 : (Math.max(0, index) % (steps + 1)) * step
+  return { ...base, x: base.x + offset, y: base.y + offset }
+}
