@@ -59,6 +59,19 @@ export function deleteVersion(id: string): void {
   getDb().prepare('DELETE FROM versions WHERE id = ?').run(id)
 }
 
+/**
+ * 버전 **메모** 수정 — 컷하고 나서야 무엇을 담았는지 적고 싶어진다(2026-08-05 사용자 요청).
+ *
+ * 여기서 고칠 수 있는 것은 메모뿐이다. **불변인 것은 스냅샷과 번호**다 —
+ * 스냅샷은 "그때 설계가 이랬다"는 증거라 고치면 증거가 아니게 되고, 번호(`v0.1.1`)는 id
+ * (`<설계>@<번호>`)의 일부이자 단조 증가의 근거라 바꾸면 이미 그 번호를 가리키는 것들
+ * (버전 렌즈·Diff 선택·마이그레이션 로그)이 통째로 떠 버린다. 메모는 사람이 읽는 이름표라
+ * 그런 매달림이 없다.
+ */
+export function updateVersionNote(id: string, note: string): void {
+  getDb().prepare('UPDATE versions SET note = ? WHERE id = ?').run(note.trim(), id)
+}
+
 export function createVersion(input: CreateVersionInput): VersionRecord {
   const d = getDb()
   const record: VersionRecord = {

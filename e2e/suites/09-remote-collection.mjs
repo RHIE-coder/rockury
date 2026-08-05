@@ -84,15 +84,15 @@ export async function run(ctx) {
   //    유지, 오른쪽(dx>0)이면 그 폴더로 중첩. (사용자 회귀: 루트로 못 가고 폴더로만 잡히던 버그)
   const treeIds = await page.evaluate(async () => {
     const cid = (await window.rockury.connections.list())[0].id
-    const fa = await window.rockury.collections.createFolder({ connectionId: cid, parentId: null, name: 'TREE_FOLDER' })
-    await window.rockury.collections.create({ connectionId: cid, name: 'TREE_CHILD', folderId: fa.id })
-    const move = await window.rockury.collections.create({ connectionId: cid, name: 'TREE_MOVE', folderId: null })
+    const fa = await window.rockury.collections.createFolder({ scope: { connectionId: cid }, parentId: null, name: 'TREE_FOLDER' })
+    await window.rockury.collections.create({ scope: { connectionId: cid }, name: 'TREE_CHILD', folderId: fa.id })
+    const move = await window.rockury.collections.create({ scope: { connectionId: cid }, name: 'TREE_MOVE', folderId: null })
     return { cid, faId: fa.id, moveId: move.id }
   })
   const remountColl = async (waitText = 'TREE_MOVE') => { await click('button:has-text("Query")'); await click('button:has-text("Collection")'); await page.waitForSelector(`text=${waitText}`, { timeout: 8_000 }) }
   const rowHandle = async (name) => await page.locator(`div.group\\/row:has-text("${name}")`).first().locator('span').first().boundingBox()
   const rowBox = async (name) => await page.locator(`div.group\\/row:has-text("${name}")`).first().boundingBox()
-  const folderOf = async (id) => ((await page.evaluate(async (cid) => await window.rockury.collections.list(cid), treeIds.cid)).find((c) => c.id === id) || {}).folderId
+  const folderOf = async (id) => ((await page.evaluate(async (cid) => await window.rockury.collections.list({ connectionId: cid }), treeIds.cid)).find((c) => c.id === id) || {}).folderId
   // dnd-kit PointerSensor 드래그: 핸들 잡고 → 세로로 목표 행까지(가로 오프셋 dx 고정) → 놓기
   const dragTree = async (fromName, toName, dx) => {
     const from = await rowHandle(fromName), to = await rowBox(toName)
@@ -127,9 +127,9 @@ export async function run(ctx) {
   // "접힌 AXFOLDER 바로 다음 행"을 런타임에 찾아 그 위로 드롭한다 — 그 행의 prev 는 정의상 AXFOLDER 라
   // 오른쪽 드래그(dx+22)면 AXFOLDER 로 중첩된다(배치와 무관하게 안정).
   const ax = await page.evaluate(async (cid) => {
-    const F = await window.rockury.collections.createFolder({ connectionId: cid, parentId: null, name: 'AXFOLDER' })
-    await window.rockury.collections.create({ connectionId: cid, name: 'AXCHILD', folderId: F.id })
-    const drop = await window.rockury.collections.create({ connectionId: cid, name: 'AXDROP', folderId: null })
+    const F = await window.rockury.collections.createFolder({ scope: { connectionId: cid }, parentId: null, name: 'AXFOLDER' })
+    await window.rockury.collections.create({ scope: { connectionId: cid }, name: 'AXCHILD', folderId: F.id })
+    const drop = await window.rockury.collections.create({ scope: { connectionId: cid }, name: 'AXDROP', folderId: null })
     return { fId: F.id, dropId: drop.id }
   }, treeIds.cid)
   await remountColl('AXDROP')
@@ -146,12 +146,12 @@ export async function run(ctx) {
   await page.waitForTimeout(200)
   await page.locator('[data-workspace-sidebar]').first().locator('input:not([placeholder])').first().fill('AXRENAMED')
   await page.keyboard.press('Enter'); await page.waitForTimeout(500)
-  check('Remote › Collection: 연필 버튼으로 컬렉션 이름 변경 저장', await page.evaluate(async (cid) => (await window.rockury.collections.list(cid)).some((c) => c.name === 'AXRENAMED'), treeIds.cid))
+  check('Remote › Collection: 연필 버튼으로 컬렉션 이름 변경 저장', await page.evaluate(async (cid) => (await window.rockury.collections.list({ connectionId: cid })).some((c) => c.name === 'AXRENAMED'), treeIds.cid))
 
   // 우클릭 컨텍스트 메뉴 + 이동 ▶ 서브메뉴 (Query/Collection 구조 편집 통합)
   const mv = await page.evaluate(async (cid) => {
-    const F = await window.rockury.collections.createFolder({ connectionId: cid, parentId: null, name: 'CTXDEST' })
-    const c = await window.rockury.collections.create({ connectionId: cid, name: 'CTXMOVE', folderId: null })
+    const F = await window.rockury.collections.createFolder({ scope: { connectionId: cid }, parentId: null, name: 'CTXDEST' })
+    const c = await window.rockury.collections.create({ scope: { connectionId: cid }, name: 'CTXMOVE', folderId: null })
     return { destId: F.id, moveId: c.id }
   }, treeIds.cid)
   await remountColl('CTXMOVE')
@@ -175,7 +175,7 @@ export async function run(ctx) {
   await page.waitForTimeout(300)
   await page.locator('input[placeholder="설명 추가..."]').first().fill('설명123')
   await page.keyboard.press('Tab'); await page.waitForTimeout(500)
-  check('Remote › Collection: 설명(description) 편집 저장', await page.evaluate(async (cid) => (await window.rockury.collections.list(cid)).some((c) => c.description === '설명123'), treeIds.cid))
+  check('Remote › Collection: 설명(description) 편집 저장', await page.evaluate(async (cid) => (await window.rockury.collections.list({ connectionId: cid })).some((c) => c.description === '설명123'), treeIds.cid))
 
   // Remote › History — 독립 뷰(다중 소스): Query 실행 이력이 기록됨
   await click('button:has-text("History")')
@@ -196,7 +196,7 @@ export async function run(ctx) {
   // ⭐ 컬렉션 로그 그룹(아코디언) — 조회 2건 컬렉션을 Run All → History 에서 컬렉션 이름·문 수 그룹, 펼치면 #순번.
   await page.evaluate(async () => {
     const cid = (await window.rockury.connections.list())[0].id
-    const c = await window.rockury.collections.create({ connectionId: cid, name: 'GRP_COLL', folderId: null })
+    const c = await window.rockury.collections.create({ scope: { connectionId: cid }, name: 'GRP_COLL', folderId: null })
     await window.rockury.collections.addItem({ collectionId: c.id, name: 'g1', sql: 'SELECT 1 AS a' })
     await window.rockury.collections.addItem({ collectionId: c.id, name: 'g2', sql: 'SELECT 2 AS b' })
   })

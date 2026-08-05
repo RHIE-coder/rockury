@@ -29,18 +29,40 @@ export function handlesFor(module: Module): ModuleArea[] {
   return area === 'common' ? [] : [area]
 }
 
+/** 손잡이 줄의 모양(`Module.handleLayout`). 안 적은 모듈은 전부 예전 모양(`'end'`)이다. */
+export type HandleLayout = 'end' | 'sides'
+
 /**
- * 구획 뱃지가 그 구획 묶음의 **어느 끝**에 붙는가 — 다리(건너가는 모듈로 이어지는 선) 쪽 끝이다
- * (2026-08-03 사용자 요청 — "설계 뱃지가 Migration 버튼 선이랑 연결되는 느낌이 되게").
- * 선을 눈으로 따라가면 그 끝에 부서 이름이 서 있어, 다리가 어디서 어디로 건너는지가 한눈에 읽힌다.
- *
- * **다리가 있을 때만** 자리를 옮긴다. api·infra 는 구획을 쓰지만 건너가는 모듈이 없어 선도 없다 —
- * 거기서도 옮기면 뱃지가 묶음 뒤로 밀려, 가리킬 선도 없이 "이 탭들의 이름표"라는 뜻만 흐려진다.
+ * 이 모듈의 손잡이 줄 모양. **기본이 예전 모양**이라, 안 적은 모듈은 한 글자도 안 바뀐다 —
+ * 손잡이 컴포넌트는 다섯 서비스가 함께 쓰므로 기본값이 새 모양이면 아무도 요청하지 않은 화면이
+ * 통째로 따라 바뀐다(2026-08-04 에 그렇게 번뜨렸다).
  */
-export function chipSide(slot: ModuleSlot, crossing: boolean): 'leading' | 'trailing' {
-  if (!crossing) return 'leading'
-  // 다리는 줄 가운데(center)에 있다 — 왼쪽 묶음은 뒤끝이, 오른쪽 묶음은 앞끝이 다리를 향한다.
-  return slot === 'end' ? 'leading' : 'trailing'
+export function handleLayoutFor(module: Module): HandleLayout {
+  return module.handleLayout ?? 'end'
+}
+
+/** 이웃한 같은 구획끼리 묶은 덩어리. 모듈 줄이 이 덩어리마다 **카드 한 장**을 세운다. */
+export interface AreaRun {
+  area: ModuleArea
+  modules: Module[]
+}
+
+/**
+ * 모듈을 **이웃한 같은 구획끼리** 묶는다(등록 순서 유지).
+ *
+ * `areasIn` 과 다르다: 저쪽은 "어느 구획들이 나왔나"(중복 제거)이고, 이쪽은 "줄 위에서 어디부터
+ * 어디까지가 한 부서인가"(자리)다. 카드는 자리를 알아야 그린다 — 설계·운영·설계 순으로 섞여
+ * 놓이면 카드도 셋이어야지, 둘로 묶으면 순서가 뒤집힌다.
+ */
+export function areaRuns(modules: readonly Module[]): AreaRun[] {
+  const runs: AreaRun[] = []
+  for (const m of modules) {
+    const area = m.area ?? 'common'
+    const last = runs[runs.length - 1]
+    if (last && last.area === area) last.modules.push(m)
+    else runs.push({ area, modules: [m] })
+  }
+  return runs
 }
 
 /** 한 자리에 나온 구획들(처음 나온 순서). 구획 뱃지는 구획 하나에 하나라 이 목록이 곧 뱃지 목록이다. */

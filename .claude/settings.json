@@ -1,5 +1,19 @@
 {
   "enabledPlugins": {
     "steward@steward": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "EndConversation",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.harness/steward/project/hooks/no-end-conversation.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

@@ -1,12 +1,14 @@
 import { ipcRenderer } from 'electron'
 import { unwrap } from '../envelope'
 import type { ConnectionGroupRecord, ConnectionRecord, DbType } from '../../main/store/connections'
+import type { SampleResult, SampleStatus } from '../../shared/db/samplePlan'
 import type { ConnectionFormData, TestConnectionResult } from '../../main/services/connectionService'
 import type { EnvironmentRecord } from '../../main/store/environments'
 import type { IntrospectedSchema } from '../../main/services/introspection/types'
 import type { QueryResult, TxBeginResult, ExplainResult } from '../../main/services/queryService'
 import type { AppendHistoryInput, QueryHistoryRecord } from '../../main/store/queryHistory'
 import type { FolderRecord, SavedQueryRecord } from '../../main/store/savedQueries'
+import type { LibraryScope } from '../../main/store/libraryScope'
 import type { CollectionRecord, CollectionItemRecord, CollectionFolderRecord } from '../../main/store/collections'
 import type { DiagramLayoutRecord, SaveLayoutInput } from '../../main/store/diagramLayouts'
 import type {
@@ -24,6 +26,7 @@ export type {
   ConnectionFormData,
   TestConnectionResult,
   EnvironmentRecord,
+  LibraryScope,
   DbType
 }
 
@@ -150,7 +153,10 @@ export const dbApi = {
       ipcRenderer.invoke('versions:list', designId),
     create: (input: CreateVersionInput): Promise<VersionRecord> =>
       ipcRenderer.invoke('versions:create', input),
-    delete: (id: string): Promise<void> => ipcRenderer.invoke('versions:delete', id)
+    delete: (id: string): Promise<void> => ipcRenderer.invoke('versions:delete', id),
+    // 메모만 고칠 수 있다 — 스냅샷과 번호는 불변이다(`store/versions.updateVersionNote` 주석).
+    updateNote: (id: string, note: string): Promise<void> =>
+      ipcRenderer.invoke('versions:updateNote', id, note)
   },
   // 운영부 — 원시 접속(1급). 설계 무관, Remote 구동.
   connections: {
@@ -169,7 +175,11 @@ export const dbApi = {
     testById: (id: string): Promise<TestConnectionResult> =>
       unwrap(ipcRenderer.invoke('connections:testById', id)),
     revealPassword: (id: string): Promise<string> =>
-      unwrap(ipcRenderer.invoke('connections:revealPassword', id))
+      unwrap(ipcRenderer.invoke('connections:revealPassword', id)),
+    // 샘플 DB — 준비물 없이 써 보는 SQLite 하나(만들기는 없는 쪽만, 다시 만들기는 파일만).
+    sampleStatus: (): Promise<SampleStatus> => unwrap(ipcRenderer.invoke('connections:sampleStatus')),
+    createSample: (): Promise<SampleResult> => unwrap(ipcRenderer.invoke('connections:createSample')),
+    resetSample: (): Promise<SampleResult> => unwrap(ipcRenderer.invoke('connections:resetSample'))
   },
   // 운영부 — 접속 카드 그룹(분류). 삭제 시 소속 연결은 미분류로.
   connectionGroups: {
@@ -233,13 +243,14 @@ export const dbApi = {
     historyClear: (connectionId: string): Promise<void> =>
       unwrap(ipcRenderer.invoke('query:historyClear', connectionId))
   },
-  // 운영부 — 저장 쿼리 라이브러리(폴더 트리).
+  // 저장 쿼리 라이브러리(폴더 트리). 소속은 **설계 아니면 연결** — 설계 화면은 `designId`,
+  // 운영 화면은 `connectionId` 를 준다(연결로 주면 물린 설계 것까지 함께 온다).
   savedQueries: {
-    tree: (connectionId: string): Promise<{ folders: FolderRecord[]; queries: SavedQueryRecord[] }> =>
-      unwrap(ipcRenderer.invoke('sq:tree', connectionId)),
-    createFolder: (input: { connectionId: string; parentId: string | null; name: string }): Promise<FolderRecord> =>
+    tree: (scope: LibraryScope): Promise<{ folders: FolderRecord[]; queries: SavedQueryRecord[] }> =>
+      unwrap(ipcRenderer.invoke('sq:tree', scope)),
+    createFolder: (input: { scope: LibraryScope; parentId: string | null; name: string }): Promise<FolderRecord> =>
       unwrap(ipcRenderer.invoke('sq:createFolder', input)),
-    createQuery: (input: { connectionId: string; folderId: string | null; name: string; sql: string }): Promise<SavedQueryRecord> =>
+    createQuery: (input: { scope: LibraryScope; folderId: string | null; name: string; sql: string }): Promise<SavedQueryRecord> =>
       unwrap(ipcRenderer.invoke('sq:createQuery', input)),
     renameFolder: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('sq:renameFolder', id, name)),
     updateQuery: (id: string, patch: { name?: string; description?: string; sql?: string }): Promise<void> =>
@@ -249,13 +260,13 @@ export const dbApi = {
     reorderTree: (items: { id: string; kind: 'folder' | 'query'; parentId: string | null; sortOrder: number }[]): Promise<void> =>
       unwrap(ipcRenderer.invoke('sq:reorderTree', items))
   },
-  // 운영부 — 컬렉션(순서 있는 쿼리 묶음 · Run-All).
+  // 컬렉션(순서 있는 쿼리 묶음 · Run-All). 소속은 저장쿼리와 같다.
   collections: {
-    list: (connectionId: string): Promise<CollectionRecord[]> => unwrap(ipcRenderer.invoke('col:list', connectionId)),
-    folders: (connectionId: string): Promise<CollectionFolderRecord[]> => unwrap(ipcRenderer.invoke('col:folders', connectionId)),
+    list: (scope: LibraryScope): Promise<CollectionRecord[]> => unwrap(ipcRenderer.invoke('col:list', scope)),
+    folders: (scope: LibraryScope): Promise<CollectionFolderRecord[]> => unwrap(ipcRenderer.invoke('col:folders', scope)),
     items: (collectionId: string): Promise<CollectionItemRecord[]> => unwrap(ipcRenderer.invoke('col:items', collectionId)),
-    create: (input: { connectionId: string; name: string; folderId?: string | null }): Promise<CollectionRecord> => unwrap(ipcRenderer.invoke('col:create', input)),
-    createFolder: (input: { connectionId: string; parentId: string | null; name: string }): Promise<CollectionFolderRecord> => unwrap(ipcRenderer.invoke('col:createFolder', input)),
+    create: (input: { scope: LibraryScope; name: string; folderId?: string | null }): Promise<CollectionRecord> => unwrap(ipcRenderer.invoke('col:create', input)),
+    createFolder: (input: { scope: LibraryScope; parentId: string | null; name: string }): Promise<CollectionFolderRecord> => unwrap(ipcRenderer.invoke('col:createFolder', input)),
     rename: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('col:rename', id, name)),
     update: (id: string, patch: { name?: string; description?: string }): Promise<void> => unwrap(ipcRenderer.invoke('col:update', id, patch)),
     renameFolder: (id: string, name: string): Promise<void> => unwrap(ipcRenderer.invoke('col:renameFolder', id, name)),

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { chipSide, groupBySlot, handlesFor } from '@renderer/nav/moduleSlots'
+import { areaRuns, groupBySlot, handlesFor } from '@renderer/nav/moduleSlots'
 import type { Service } from '@renderer/nav/types'
 
 /**
@@ -51,6 +51,9 @@ describe('dbService — 모듈 줄', () => {
       'definition',
       'diagram',
       'seed',
+      // 라이브러리 — 소속이 연결에서 설계로 옮겨져 생긴 자리(2026-08-04).
+      'query',
+      'collection',
       'mocking',
       'documenting',
       'validation',
@@ -80,15 +83,16 @@ describe('dbService — 모듈 줄', () => {
   })
 })
 
-describe('dbService — 구획 뱃지 자리', () => {
-  // 2026-08-03 사용자 요청 — 뱃지가 Migration 으로 이어지는 선 끝에 서야 한다.
-  it('건너가는 모듈이 있으니 다리가 그려진다', () => {
+describe('dbService — 모듈 줄의 세 카드', () => {
+  // 2026-08-04 사용자 요청 — 왼쪽은 설계 카드, 오른쪽은 운영 카드, 가운데는 건너가는 문.
+  it('가운데는 Migration 하나뿐 — 문이 줄 한가운데에 선다', () => {
     expect(groupBySlot(dbService.modules).center.map((m) => m.id)).toEqual(['migration'])
   })
 
-  it('설계 뱃지는 Design 뒤, 운영 뱃지는 Remote 앞 — 둘 다 다리를 향한다', () => {
-    expect(chipSide('start', true)).toBe('trailing')
-    expect(chipSide('end', true)).toBe('leading')
+  it('왼쪽 자리는 설계 카드 한 장, 오른쪽 자리는 운영 카드 한 장', () => {
+    const zones = groupBySlot(dbService.modules)
+    expect(areaRuns(zones.start).map((r) => r.area)).toEqual(['design'])
+    expect(areaRuns(zones.end).map((r) => r.area)).toEqual(['ops'])
   })
 })
 

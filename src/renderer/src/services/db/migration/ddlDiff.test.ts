@@ -196,4 +196,112 @@ describe('generateMigration — 스키마 한정', () => {
     const plan = generateMigration(snap([before, scoped('auth', 'x')]), snap([after, scoped('auth', 'x')]), 'postgresql')
     expect(plan.statements.some((s) => s.sql === 'ALTER TABLE "public"."members" SET SCHEMA "auth";')).toBe(true)
   })
+
+  it('테이블 설명도 한정 이름으로 — 동명 테이블에 잘못 붙으면 안 된다', () => {
+    const before = scoped('auth', 'members')
+    const after = { ...before, comment: '가입 회원' }
+    const plan = generateMigration(snap([before, scoped('public', 'members')]), snap([after, scoped('public', 'members')]), 'postgresql')
+    expect(plan.statements.some((s) => s.sql === `COMMENT ON TABLE "auth"."members" IS '가입 회원';`)).toBe(true)
+  })
+})
+
+// 설명(comment)만 고쳐도 반영 계획이 비면 안 된다 — 비면 화면의 `적용` 버튼이 안 켜진다.
+describe('generateMigration — 설명(comment)', () => {
+  const withComment = (t: TableDef, colName: string, comment: string): TableDef => ({
+    ...t,
+    columns: t.columns.map((c) => (c.name === colName ? { ...c, comment } : c))
+  })
+
+  it('PG 컬럼 설명만 바꿔도 COMMENT ON COLUMN 이 나온다', () => {
+    const target = withComment(usersBase, 'email', '로그인 이메일')
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'postgresql')
+    expect(plan.statements.map((s) => s.sql)).toEqual([
+      `COMMENT ON COLUMN "users"."email" IS '로그인 이메일';`
+    ])
+    expect(plan.destructiveCount).toBe(0)
+  })
+
+  it('PG 컬럼 설명을 지우면 빈 문자열이 아니라 NULL', () => {
+    const base = withComment(usersBase, 'email', '옛 설명')
+    const plan = generateMigration(snap([base]), snap([usersBase]), 'postgresql')
+    expect(plan.statements[0].sql).toBe('COMMENT ON COLUMN "users"."email" IS NULL;')
+  })
+
+  it('PG 컬럼 이름과 설명을 함께 바꾸면 설명은 새 이름에 붙는다', () => {
+    const target = {
+      ...usersBase,
+      columns: usersBase.columns.map((c) => (c.name === 'email' ? { ...c, name: 'login_id', comment: '로그인 아이디' } : c))
+    }
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'postgresql')
+    const sqls = plan.statements.map((s) => s.sql)
+    expect(sqls).toContain('ALTER TABLE "users" RENAME COLUMN "email" TO "login_id";')
+    expect(sqls).toContain(`COMMENT ON COLUMN "users"."login_id" IS '로그인 아이디';`)
+    expect(sqls.indexOf('ALTER TABLE "users" RENAME COLUMN "email" TO "login_id";')).toBeLessThan(
+      sqls.indexOf(`COMMENT ON COLUMN "users"."login_id" IS '로그인 아이디';`)
+    )
+  })
+
+  it('PG 새 컬럼의 설명도 따라간다 — ADD COLUMN 절엔 못 싣는다', () => {
+    const target = tbl('users', [...usersBase.columns, col('age', 'int', { nullable: true, comment: '나이' })], usersBase.constraints)
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'postgresql')
+    const sqls = plan.statements.map((s) => s.sql)
+    expect(sqls).toContain('ALTER TABLE "users" ADD COLUMN "age" int NULL;')
+    expect(sqls).toContain(`COMMENT ON COLUMN "users"."age" IS '나이';`)
+  })
+
+  it('MySQL 컬럼 설명은 MODIFY COLUMN 에 딸려 간다', () => {
+    const target = withComment(usersBase, 'email', '로그인 이메일')
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'mysql')
+    expect(plan.statements.map((s) => s.sql)).toEqual([
+      "ALTER TABLE `users` MODIFY COLUMN `email` varchar(255) NOT NULL COMMENT '로그인 이메일';"
+    ])
+  })
+
+  it('PG 테이블 설명 변경 → COMMENT ON TABLE', () => {
+    const target = { ...usersBase, comment: '사용자' }
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'postgresql')
+    expect(plan.statements.map((s) => s.sql)).toEqual([`COMMENT ON TABLE "users" IS '사용자';`])
+  })
+
+  it("설명 속 따옴표는 이스케이프한다", () => {
+    const target = withComment(usersBase, 'email', "it's here")
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'postgresql')
+    expect(plan.statements[0].sql).toBe(`COMMENT ON COLUMN "users"."email" IS 'it''s here';`)
+  })
+
+  // sqlite 는 설명을 저장할 자리가 없다 — 문을 못 내는 대신 이유를 남겨야
+  // 화면이 "변경 없음"으로만 보이지 않는다.
+  it('sqlite 컬럼 설명 변경 → 문 대신 미지원 사유', () => {
+    const target = withComment(usersBase, 'email', '로그인 이메일')
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'sqlite')
+    expect(plan.statements).toEqual([])
+    expect(plan.unsupported).toEqual(['sqlite: users.email 컬럼 설명은 sqlite 가 저장하지 않는다'])
+  })
+
+  it('sqlite 테이블 설명 변경 → 문 대신 미지원 사유', () => {
+    const target = { ...usersBase, comment: '사용자' }
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'sqlite')
+    expect(plan.statements).toEqual([])
+    expect(plan.unsupported).toEqual(['sqlite: users 테이블 설명은 sqlite 가 저장하지 않는다'])
+  })
+
+  it('sqlite 새 컬럼의 설명도 버려진다고 알린다', () => {
+    const target = tbl('users', [...usersBase.columns, col('age', 'int', { nullable: true, comment: '나이' })], usersBase.constraints)
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'sqlite')
+    expect(plan.statements.some((s) => s.sql.includes('ADD COLUMN'))).toBe(true)
+    expect(plan.unsupported).toEqual(['sqlite: users.age 컬럼 설명은 sqlite 가 저장하지 않는다'])
+  })
+
+  it('sqlite 새 테이블의 설명도 버려진다고 알린다', () => {
+    const target = { ...tbl('notes', [col('id', 'INTEGER')]), comment: '메모' }
+    const plan = generateMigration(snap([]), snap([target]), 'sqlite')
+    expect(plan.statements[0].kind).toBe('create')
+    expect(plan.unsupported).toEqual(['sqlite: notes 의 설명은 sqlite 가 저장하지 않는다'])
+  })
+
+  it('설명을 안 건드린 sqlite 변경은 사유를 안 남긴다', () => {
+    const target = tbl('users', [...usersBase.columns, col('age', 'int', { nullable: true })], usersBase.constraints)
+    const plan = generateMigration(snap([usersBase]), snap([target]), 'sqlite')
+    expect(plan.unsupported).toEqual([])
+  })
 })

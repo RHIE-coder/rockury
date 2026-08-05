@@ -591,6 +591,25 @@ export async function run(ctx) {
   await page.waitForTimeout(500)
   check('Remote › Definition 편집: 생성 적용 → 재역설계에 rky_probe 반영', (await body()).includes('rky_probe'))
 
+  // 설명(comment)만 고친 편집 — 회귀: PG 는 컬럼 설명이 DDL 로 안 접혀 대기 변경이 0건이었고,
+  // 그래서 `적용` 이 죽은 채 아무 단서도 안 남았다. 실 DB 왕복으로 설명이 남는지까지 본다.
+  await click('button:text-is("편집")')
+  await page.waitForTimeout(200)
+  await page.locator('[data-table-row="rky_probe"]').first().click()
+  await page.waitForTimeout(200)
+  // placeholder 가 "설명"인 칸은 컬럼 설명뿐이다(테이블 쪽은 "테이블 설명").
+  await page.locator('input[placeholder="설명"]').last().fill('탐침 메모')
+  await page.waitForTimeout(300)
+  const applyBtn = page.locator('button:text-is("적용")').first()
+  check('Remote › Definition 편집: 설명만 고쳐도 적용이 켜진다', await applyBtn.isEnabled())
+  await applyBtn.click()
+  await page.waitForSelector('button:text-is("편집")', { timeout: 15_000 })
+  await page.waitForTimeout(500)
+  // 적용하면 활성 테이블이 풀린다 — 설명은 상세 칸에만 그려지니 다시 골라야 읽을 수 있다.
+  await page.locator('[data-table-row="rky_probe"]').first().click()
+  await page.waitForTimeout(500)
+  check('Remote › Definition 편집: 설명 적용 → 재역설계에 남는다', (await body()).includes('탐침 메모'))
+
   // 파괴적 편집(테이블 삭제) — 경고 후 적용, DB 를 원상 복구(rky_probe 제거).
   await click('button:text-is("편집")')
   await page.waitForTimeout(200)

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { SampleResult, SampleStatus } from '@shared/db/samplePlan'
 import { useContextOptions } from '@renderer/nav/contextOptions'
 import { useNav } from '@renderer/nav/useNav'
 import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
@@ -98,6 +99,14 @@ interface ConnectionsState {
   removeGroup: (id: string) => Promise<void>
   reorderGroups: (orderedIds: string[]) => Promise<void>
   move: (connId: string, groupId: string | null, orderedIds: string[]) => Promise<void>
+
+  /** 샘플 DB — 파일 유무와 그것을 가리키는 접속. 아직 안 읽었으면 null. */
+  sample: SampleStatus | null
+  loadSample: () => Promise<void>
+  /** 없는 쪽만 만든다. 만든 결과를 돌려줘 화면이 사실대로 알린다. */
+  makeSample: () => Promise<SampleResult>
+  /** 파일만 새로. 접속 레코드(이름·그룹·순서)는 그대로 둔다. */
+  remakeSample: () => Promise<SampleResult>
 }
 
 export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
@@ -236,11 +245,34 @@ export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
     } catch {
       await get().init()
     }
+  },
+
+  sample: null,
+
+  loadSample: async () => {
+    set({ sample: await window.rockury.connections.sampleStatus() })
+  },
+
+  makeSample: async () => {
+    const r = await window.rockury.connections.createSample()
+    // 접속이 새로 생겼을 수 있으니 목록을 저장소 기준으로 다시 맞춘다.
+    await get().init()
+    set({ sample: r.status })
+    return r
+  },
+
+  remakeSample: async () => {
+    const r = await window.rockury.connections.resetSample()
+    set({ sample: r.status })
+    // 파일이 통째로 바뀌었다 — 옛 확인 결과가 남아 새 파일을 확인한 것처럼 읽히면 안 된다.
+    if (r.status.connectionId) get().setStatus(r.status.connectionId, { state: 'idle' })
+    return r
   }
 }))
 
 // 앱 시작 시 하이드레이션.
 void useConnectionsStore.getState().init()
+void useConnectionsStore.getState().loadSample()
 
 /**
  * connections → 'conn' 셀렉터 옵션 동기화. **프로젝트 범위로 먼저 거른다** —

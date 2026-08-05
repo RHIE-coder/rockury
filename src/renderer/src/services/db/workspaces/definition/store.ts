@@ -8,6 +8,7 @@ import {
   draftTablesFromSnapshot,
   mergeDesignTables,
   newTableSchema,
+  nextNewName,
   reconcileActiveTable,
   toTableDef,
   toTableRecord
@@ -346,7 +347,7 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
         designId,
         // 스키마를 안 채우면 범위를 켠 설계에서 **화면에 안 뜬다**(`newTableSchema` 주석).
         schema: schemaForNew(s.tables, designId),
-        name: `new_table_${seq}`,
+        name: nextNewName(s.tables, designId, 'new_table'),
         comment: '',
         columns: [
           { id: colId, name: 'id', type: idType, nullable: false, defaultValue: autoIncrementToken(dialect), comment: '' }
@@ -365,7 +366,7 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
         id,
         designId,
         schema: schemaForNew(s.tables, designId),
-        name: `new_view_${seq++}`,
+        name: nextNewName(s.tables, designId, 'new_view'),
         comment: '',
         columns: [],
         constraints: [],

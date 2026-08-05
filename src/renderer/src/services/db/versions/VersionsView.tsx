@@ -35,8 +35,11 @@ function VersionRow({
   onPick: () => void
 }) {
   const remove = useVersionsStore((s) => s.remove)
+  const updateNote = useVersionsStore((s) => s.updateNote)
   const openRestore = useRestoreStore((s) => s.openRestore)
   const [confirming, setConfirming] = useState(false)
+  // 메모는 눌러야 입력칸이 된다 — 늘 입력칸이면 목록이 폼처럼 보여 읽을 때 시끄럽다.
+  const [editingNote, setEditingNote] = useState(false)
 
   return (
     <div
@@ -60,9 +63,42 @@ function VersionRow({
           최신
         </span>
       )}
-      <span className="min-w-0 flex-1 truncate text-[13px] text-fg">
-        {v.note || <span className="text-muted/60">메모 없음</span>}
-      </span>
+      {/*
+        메모는 컷한 **뒤에** 적고 싶어지는 것이라 여기서 바로 고친다(2026-08-05 사용자 요청 —
+        "블록체인도 아니고"). 스냅샷·번호는 그대로 불변이다: 스냅샷은 그때의 증거고, 번호는
+        id 의 일부라 바꾸면 그 번호를 가리키던 것들이 통째로 뜬다.
+      */}
+      {editingNote ? (
+        <input
+          autoFocus
+          data-version-note-input={v.number}
+          defaultValue={v.note}
+          placeholder="이 버전에 담긴 것"
+          onBlur={(e) => {
+            setEditingNote(false)
+            if (e.target.value.trim() !== v.note) void updateNote(designId, v.id, e.target.value)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+            // Esc 는 되돌린다 — 실수로 지웠을 때 빠져나갈 길이 있어야 한다.
+            if (e.key === 'Escape') {
+              e.currentTarget.value = v.note
+              e.currentTarget.blur()
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-accent/50 bg-canvas px-1.5 py-0.5 text-[13px] text-fg outline-none"
+        />
+      ) : (
+        <button
+          type="button"
+          data-version-note={v.number}
+          onClick={() => setEditingNote(true)}
+          title="눌러서 메모 고치기"
+          className="min-w-0 flex-1 truncate rounded px-1.5 py-0.5 text-left text-[13px] text-fg hover:bg-panel-strong"
+        >
+          {v.note || <span className="text-muted/60">메모 없음</span>}
+        </button>
+      )}
       <span className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted">
         <Layers className="size-3.5" />
         {v.snapshot.tables.length}
@@ -155,8 +191,14 @@ export function VersionsView() {
                 {design.name}
               </span>
             </div>
+            {/*
+              "컷된 버전은 편집 불가"는 이제 틀린 말이다 — 메모는 고칠 수 있다(2026-08-05).
+              그리고 **두 개를 고르면 비교가 열린다**는 사실을 여기서 말한다: 그전엔 하나를
+              골랐을 때만 안내가 떠서, 아무것도 안 고른 사람 눈엔 비교 기능이 없는 것으로 보였다
+              (사용자 제보 — "버전별로 차이 보여주는 화면 있던걸로 기억하는데").
+            */}
             <p className="mt-0.5 text-[12px] text-muted">
-              설계의 불변 스냅샷 · 단조 증가 · 컷된 버전은 편집 불가
+              불변 스냅샷 · 메모만 수정 · 두 버전을 고르면 비교
             </p>
           </div>
           <Button size="sm" className="ml-auto" onClick={() => setCutOpen(true)}>

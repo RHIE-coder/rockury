@@ -1,8 +1,11 @@
-import { beforeAll, describe, expect, it } from 'vitest'
-import { mkdtempSync } from 'node:fs'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { chmodSync, existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { setDbPath } from './db'
+import { createSample, resetSample } from './sampleDb'
+import { findSampleConnection, SAMPLE_DIR } from '../../shared/db/samplePlan'
 import {
   createFolder,
   createSavedQuery,
@@ -28,7 +31,7 @@ import { listSeedSets, replaceSeedSetsForDesign, type SeedSetRecord } from './se
 import { createDesign, deleteDesign } from './designs'
 import { clearLayout, getLayout, saveLayout } from './diagramLayouts'
 import { appendLog, latestSnapshot, listLogs, saveSnapshot } from './migration'
-import { createVersion, deleteVersion, listVersions } from './versions'
+import { createVersion, deleteVersion, listVersions, updateVersionNote } from './versions'
 import {
   createConnection,
   createConnectionGroup,
@@ -63,23 +66,25 @@ beforeAll(() => {
 })
 
 const CONN = 'conn_test'
+/** 라이브러리 소속 — 이 연결에 물린 설계가 없으니 '이 연결만의 것'으로 잡힌다. */
+const SCOPE = { connectionId: CONN }
 
 describe('savedQueries (폴더 트리)', () => {
   it('생성·트리·cascade 삭제·재배치', () => {
-    const root = createFolder({ connectionId: CONN, parentId: null, name: 'root' })
-    const child = createFolder({ connectionId: CONN, parentId: root.id, name: 'child' })
-    const q = createSavedQuery({ connectionId: CONN, folderId: root.id, name: 'q1', sql: 'SELECT 1' })
-    let tree = listTree(CONN)
+    const root = createFolder({ scope: SCOPE, parentId: null, name: 'root' })
+    const child = createFolder({ scope: SCOPE, parentId: root.id, name: 'child' })
+    const q = createSavedQuery({ scope: SCOPE, folderId: root.id, name: 'q1', sql: 'SELECT 1' })
+    let tree = listTree(SCOPE)
     expect(tree.folders.map((f) => f.name).sort()).toEqual(['child', 'root'])
     expect(tree.queries.map((x) => x.name)).toEqual(['q1'])
 
     // 재배치: q1 을 child 로 이동
     reorderTree([{ id: q.id, kind: 'query', parentId: child.id, sortOrder: 0 }])
-    expect(listTree(CONN).queries[0].folderId).toBe(child.id)
+    expect(listTree(SCOPE).queries[0].folderId).toBe(child.id)
 
     // root 삭제 → child + q1 까지 cascade
     deleteFolder(root.id)
-    tree = listTree(CONN)
+    tree = listTree(SCOPE)
     expect(tree.folders).toEqual([])
     expect(tree.queries).toEqual([])
   })
@@ -87,7 +92,7 @@ describe('savedQueries (폴더 트리)', () => {
 
 describe('collections', () => {
   it('생성·아이템 순서·재정렬·cascade 삭제', () => {
-    const col = createCollection({ connectionId: CONN, name: 'batch' })
+    const col = createCollection({ scope: SCOPE, name: 'batch' })
     const a = addItem({ collectionId: col.id, name: 'a', sql: 'SELECT 1' })
     const b = addItem({ collectionId: col.id, name: 'b', sql: 'SELECT 2' })
     expect(listItems(col.id).map((i) => i.name)).toEqual(['a', 'b'])
@@ -96,15 +101,15 @@ describe('collections', () => {
     expect(listItems(col.id).map((i) => i.name)).toEqual(['b', 'a'])
 
     deleteCollection(col.id)
-    expect(listCollections(CONN).find((c) => c.id === col.id)).toBeUndefined()
+    expect(listCollections(SCOPE).find((c) => c.id === col.id)).toBeUndefined()
     expect(listItems(col.id)).toEqual([])
   })
 })
 
 describe('collections — 저장쿼리 참조(hybrid) + 삭제 가드', () => {
   it('참조 아이템은 원본 이름/SQL 을 실효값으로, 원본 수정 시 반영', () => {
-    const q = createSavedQuery({ connectionId: CONN, folderId: null, name: 'ref-q', sql: 'SELECT 42' })
-    const col = createCollection({ connectionId: CONN, name: 'refs' })
+    const q = createSavedQuery({ scope: SCOPE, folderId: null, name: 'ref-q', sql: 'SELECT 42' })
+    const col = createCollection({ scope: SCOPE, name: 'refs' })
     const item = addReference({ collectionId: col.id, savedQueryId: q.id })
     const items = listItems(col.id)
     expect(items[0].savedQueryId).toBe(q.id)
@@ -123,11 +128,66 @@ describe('collections — 저장쿼리 참조(hybrid) + 삭제 가드', () => {
   })
 
   it('즉석(ad-hoc) 아이템은 savedQueryId=null 이고 자체 SQL 을 쓴다', () => {
-    const col = createCollection({ connectionId: CONN, name: 'adhoc' })
+    const col = createCollection({ scope: SCOPE, name: 'adhoc' })
     addItem({ collectionId: col.id, name: 'x', sql: 'SELECT 1' })
     const it = listItems(col.id)[0]
     expect(it.savedQueryId).toBeNull()
     expect(it.sql).toBe('SELECT 1')
+  })
+})
+
+describe('라이브러리 소속 — 설계 소속과 연결 소속', () => {
+  // 2026-08-04 사용자 요청. 고치려던 두 가지가 그대로 회귀 대상이다:
+  //  ⑴ 같은 설계를 쓰는 DEV·STG·PROD 가 같은 한 벌을 본다.
+  //  ⑵ 연결을 지워도 라이브러리가 안 날아간다.
+  const conn = (name: string): string =>
+    createConnection({ name, dbType: 'mysql', host: 'h', port: 1, database: 'd', user: 'u', encryptedPassword: '', sslEnabled: false, autoCheckDisabled: true }).id
+
+  it('설계에 물린 연결들이 한 벌을 함께 본다 — 형제 연결에서 만든 것이 보인다', () => {
+    const design = createDesign({ name: 'shared-design', description: '', dialect: 'mysql' })
+    const dev = conn('dev')
+    const stg = conn('stg')
+    ensureBinding(dev, design.id, 'v0.0.1')
+    ensureBinding(stg, design.id, 'v0.0.1')
+
+    // DEV 에서 만든다 → 설계 소속으로 붙는다(연결 소속이 아니다).
+    const q = createSavedQuery({ scope: { connectionId: dev }, folderId: null, name: 'shared-q', sql: 'SELECT 1' })
+    expect(q.designId).toBe(design.id)
+    expect(q.connectionId).toBe('')
+
+    // STG 에서 봐도 같은 것이 보인다 — 예전엔 연결마다 따로라 안 보였다.
+    expect(listTree({ connectionId: stg }).queries.map((x) => x.name)).toContain('shared-q')
+    // 설계 화면(연결 없이)에서도 보인다.
+    expect(listTree({ designId: design.id }).queries.map((x) => x.name)).toContain('shared-q')
+  })
+
+  it('설계를 안 물린 연결은 자기 것만 본다 — 남의 라이브러리가 새지 않는다', () => {
+    const lone = conn('lone')
+    const other = conn('other')
+    const q = createSavedQuery({ scope: { connectionId: lone }, folderId: null, name: 'lone-q', sql: 'SELECT 1' })
+    expect(q.connectionId).toBe(lone)
+    expect(q.designId).toBe('')
+    expect(listTree({ connectionId: other }).queries.map((x) => x.name)).not.toContain('lone-q')
+  })
+
+  it('연결을 지워도 설계로 넘어가 살아남는다 — 모아 둔 것이 날아가지 않는다', () => {
+    const design = createDesign({ name: 'rescue-design', description: '', dialect: 'mysql' })
+    const c = conn('to-delete')
+    // 결속을 세우기 **전에** 만든 것이라 연결 소속이다.
+    createSavedQuery({ scope: { connectionId: c }, folderId: null, name: 'rescued-q', sql: 'SELECT 1' })
+    createCollection({ scope: { connectionId: c }, name: 'rescued-col' })
+    ensureBinding(c, design.id, 'v0.0.1')
+
+    deleteConnection(c)
+    expect(listTree({ designId: design.id }).queries.map((x) => x.name)).toContain('rescued-q')
+    expect(listCollections({ designId: design.id }).map((x) => x.name)).toContain('rescued-col')
+  })
+
+  it('넘길 설계가 없으면 지운다 — 아무 화면에서도 못 여는 행을 남기지 않는다', () => {
+    const c = conn('orphan-maker')
+    createSavedQuery({ scope: { connectionId: c }, folderId: null, name: 'orphan-q', sql: 'SELECT 1' })
+    deleteConnection(c)
+    expect(listTree({ connectionId: c }).queries).toEqual([])
   })
 })
 
@@ -466,6 +526,32 @@ describe('versions (컷 · 조회 · 삭제)', () => {
     // 없는 id 삭제해도 안전(멱등).
     expect(() => deleteVersion(bad.id)).not.toThrow()
   })
+
+  // 2026-08-05 사용자 요청 — 컷하고 나서야 무엇을 담았는지 적고 싶어진다("블록체인도 아니고").
+  // 고칠 수 있는 것은 **메모뿐**이라는 것이 이 검사의 요지다.
+  it('메모는 고칠 수 있다 — 스냅샷·번호는 그대로', () => {
+    const d = 'design_ver_note'
+    const v = createVersion({ designId: d, number: 'v1.0.0', note: '', snapshot: { tables: [{ id: 't:a' }] } })
+    expect(listVersions(d)[0].note).toBe('')
+
+    updateVersionNote(v.id, '  포켓몬 스키마 최초 반영  ')
+    const after = listVersions(d)[0]
+    expect(after.note).toBe('포켓몬 스키마 최초 반영') // 앞뒤 공백은 다듬는다
+    expect(after.number).toBe('v1.0.0') // 번호 불변 — id 의 일부다
+    expect(after.snapshot).toEqual({ tables: [{ id: 't:a' }] }) // 스냅샷 불변 — 그때의 증거다
+    expect(after.createdAt).toBe(v.createdAt) // 컷 시각도 안 움직인다
+  })
+
+  it('메모를 비우면 빈 값이 된다 — 지우는 길도 있어야 한다', () => {
+    const d = 'design_ver_clear'
+    const v = createVersion({ designId: d, number: 'v1.0.0', note: '지울 메모', snapshot: { tables: [] } })
+    updateVersionNote(v.id, '')
+    expect(listVersions(d)[0].note).toBe('')
+  })
+
+  it('없는 id 를 고쳐도 안전(멱등) — 지운 버전을 고치려 해도 안 터진다', () => {
+    expect(() => updateVersionNote('design_ver_none@v9.9.9', '뭐든')).not.toThrow()
+  })
 })
 
 describe('diagramLayouts (Remote 실 ERD 레이아웃 영속)', () => {
@@ -541,5 +627,114 @@ describe('diagramLayouts (Remote 실 ERD 레이아웃 영속)', () => {
     saveLayout({ connectionId: CONN2, groups: [] })
     clearLayout(CONN2)
     expect(getLayout(CONN2)).toBeNull()
+  })
+})
+
+describe('샘플 DB — 파일과 접속을 따로 판정 (db-connections.sample)', () => {
+  // 앱 저장소(setDbPath)와 별개로, 샘플 파일이 놓일 userData 를 임시 폴더로 흉내낸다.
+  let baseDir: string
+
+  beforeEach(() => {
+    baseDir = mkdtempSync(join(tmpdir(), 'rockury-sample-'))
+    for (const c of listConnections().filter((c) => c.dbType === 'sqlite')) deleteConnection(c.id)
+  })
+
+  const rowCount = (path: string, table: string): number => {
+    const db = new DatabaseSync(path, { readOnly: true })
+    try {
+      const { n } = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }
+      return n
+    } finally {
+      db.close()
+    }
+  }
+
+  it('CASE-conn-045 빈 자리에 만들기 → 파일 + 표 23개 + 초기 행', () => {
+    const r = createSample(baseDir)
+    expect(r.made).toBe('both')
+    expect(existsSync(r.status.path)).toBe(true)
+    expect(rowCount(r.status.path, "sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")).toBe(23)
+    expect(rowCount(r.status.path, 'users')).toBeGreaterThan(0)
+    expect(r.status.connectionId).not.toBeNull()
+  })
+
+  it('CASE-conn-046 파일이 있고 접속만 없으면 → 파일을 덮지 않고 접속만', () => {
+    const { status } = createSample(baseDir)
+    const db = new DatabaseSync(status.path)
+    db.exec("INSERT INTO roles (id, name) VALUES ('r-mine', '내가 넣은 역할')")
+    db.close()
+    const before = rowCount(status.path, 'roles')
+
+    deleteConnection(findSampleConnection(listConnections(), status.path)!)
+    const again = createSample(baseDir)
+
+    expect(again.made).toBe('connection')
+    expect(rowCount(status.path, 'roles')).toBe(before) // 내 행이 살아 있다
+  })
+
+  it('CASE-conn-046 둘 다 있으면 아무것도 만들지 않는다', () => {
+    createSample(baseDir)
+    const n = listConnections().length
+    const again = createSample(baseDir)
+    expect(again.made).toBe('none')
+    expect(listConnections().length).toBe(n) // 카드가 안 늘어난다
+  })
+
+  it('CASE-conn-047 다시 만들기 → 내 행은 사라지고 접속 레코드는 그대로', () => {
+    const { status } = createSample(baseDir)
+    const connId = status.connectionId!
+    const group = createConnectionGroup('샘플 묶음')
+    moveConnection(connId, group.id, [connId])
+    updateConnection(connId, { name: '내 샘플' })
+
+    const db = new DatabaseSync(status.path)
+    db.exec("INSERT INTO roles (id, name) VALUES ('r-mine', '내가 넣은 역할')")
+    db.close()
+    const dirty = rowCount(status.path, 'roles')
+
+    const after = resetSample(baseDir)
+
+    expect(rowCount(after.status.path, 'roles')).toBe(dirty - 1) // 초기 상태로
+    const conn = getConnection(connId)!
+    expect(conn.name).toBe('내 샘플') // 이름·그룹·id 보존
+    expect(conn.groupId).toBe(group.id)
+    expect(after.status.connectionId).toBe(connId)
+  })
+
+  it('CASE-conn-041 이름을 바꿔도 같은 샘플로 본다 — 두 개째가 안 생긴다', () => {
+    const { status } = createSample(baseDir)
+    updateConnection(status.connectionId!, { name: '내 샘플' })
+    expect(createSample(baseDir).made).toBe('none')
+    expect(listConnections().filter((c) => c.database === status.path).length).toBe(1)
+  })
+
+  it('CASE-conn-048 파일을 못 쓰면 접속이 안 생긴다 — 반쪽 등록 금지', () => {
+    const readOnlyBase = mkdtempSync(join(tmpdir(), 'rockury-sample-ro-'))
+    chmodSync(readOnlyBase, 0o500) // 쓰기 권한 제거
+    try {
+      const n = listConnections().length
+      expect(() => createSample(readOnlyBase)).toThrow()
+      expect(listConnections().length).toBe(n)
+    } finally {
+      chmodSync(readOnlyBase, 0o700)
+    }
+  })
+
+  it('CASE-conn-049 다시 만들기가 실패해도 기존 파일이 살아 있다', () => {
+    const { status } = createSample(baseDir)
+    const db = new DatabaseSync(status.path)
+    db.exec("INSERT INTO roles (id, name) VALUES ('r-mine', '내가 넣은 역할')")
+    db.close()
+    const before = rowCount(status.path, 'roles')
+
+    // 폴더를 읽기 전용으로 만들면 새 파일을 옆에 못 만든다 → 손대기 전에 멈춘다.
+    chmodSync(join(baseDir, SAMPLE_DIR), 0o500)
+    try {
+      expect(() => resetSample(baseDir)).toThrow()
+      expect(existsSync(status.path)).toBe(true)
+      expect(rowCount(status.path, 'roles')).toBe(before)
+    } finally {
+      chmodSync(join(baseDir, SAMPLE_DIR), 0o700)
+    }
   })
 })

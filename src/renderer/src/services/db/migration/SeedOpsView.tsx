@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
-import { AlertTriangle, ArrowLeftRight, CheckCircle2, DownloadCloud, Loader2, Play, Sprout } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, CheckCircle2, DownloadCloud, Layers, Loader2, Play, Server, Sprout } from 'lucide-react'
 import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { Checkbox } from '@renderer/ui/checkbox'
@@ -365,8 +365,19 @@ export function SeedOpsView(): ReactElement {
       <div className="flex items-center gap-2">
         <Sprout className="size-4 text-muted" />
         <span className="text-[16px] font-bold tracking-tight text-fg">시드 반영</span>
-        <span className="font-mono text-[12px] text-muted">
-          {design.name} → {connection.name}
+        {/*
+          짝 표기는 Migration 의 다른 화면(`views.tsx` 의 `Pair`)과 같은 문법이다 —
+          설계가 왼쪽, 실제(연결)가 오른쪽이고 그림도 위 손잡이가 쓰는 것을 그대로 쓴다.
+          화살표를 `→` 에서 `↔` 로 바꾼 건 이 줄이 **물린 짝**을 말하기 때문이다: 방향은
+          오른쪽 탭이 정하는데(`apply` 는 설계→운영, `import` 는 그 반대), 여기 `→` 를 못박아
+          두면 되먹임 탭에서 머리글과 화면이 서로 반대를 말했다.
+        */}
+        <span className="flex min-w-0 items-center gap-1.5 font-mono text-[12px] text-muted">
+          <Layers className="size-3.5 shrink-0" />
+          <span className="truncate">{design.name}</span>
+          <span aria-hidden>↔</span>
+          <Server className="size-3.5 shrink-0" />
+          <span className="truncate">{connection.name}</span>
         </span>
         <span className="ml-auto flex gap-1">
           {(

@@ -26,7 +26,12 @@ const api = vi.hoisted(() => {
       schemas: vi.fn(async () => ['public', 'auth', 'billing']),
       catalogs: vi.fn(async () => ['app', 'analytics'])
     },
-    connections: { list: vi.fn(async () => []), update: vi.fn(async () => ({})) },
+    connections: {
+      list: vi.fn(async () => []),
+      update: vi.fn(async () => ({})),
+      // 접속 스토어가 로드될 때 함께 부른다(샘플 DB 상태) — 목록이 아니라 객체를 돌려줘야 한다.
+      sampleStatus: vi.fn(async () => ({ path: '', fileExists: false, connectionId: null }))
+    },
     versions: { list: vi.fn(async () => []), create: vi.fn(async (v) => ({ id: 'v1', ...v })) },
     environments: {
       ensure: vi.fn(async () => ({ id: 'env1' })),

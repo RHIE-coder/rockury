@@ -38,7 +38,11 @@ if (existsSync(SQLITE_PATH)) {
     mkdirSync(DATA_DIR, { recursive: true });
 
     const db = new DatabaseSync(SQLITE_PATH);
-    const initSql = readFileSync(resolve(SCRIPT_DIR, 'init/sqlite/init.sql'), 'utf-8');
+    // 앱의 "샘플 DB" 와 같은 SQL 을 쓴다 — 두 벌을 두면 한쪽만 고쳐져 어긋난다.
+    const initSql = readFileSync(
+      resolve(SCRIPT_DIR, '../../src/main/resources/sample-sqlite.sql'),
+      'utf-8'
+    );
     db.exec(initSql);
     db.close();
     ok(`SQLite DB created at: ${styleText('dim', SQLITE_PATH)}`);

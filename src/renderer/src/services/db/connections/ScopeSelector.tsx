@@ -91,13 +91,14 @@ export function ScopeSelector() {
           data-scope-selector
           title={`${model.schemaLabel} 범위 — 여기서 고른 것을 Definition·Diagram·Data·Query 가 함께 봅니다`}
           className={cx(
-            'flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[13px] transition-colors',
+            // 좁아지면 자기가 줄어든다 — 손잡이 밖으로 글자가 나가지 않게(2026-08-05).
+            'flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[13px] transition-colors',
             'hover:bg-panel-strong data-[state=open]:bg-panel-strong',
             shown.length > 0 ? 'text-fg' : 'text-muted'
           )}
         >
           <Layers size={13} className="shrink-0 text-muted" />
-          <span className="font-mono text-[12px] font-semibold">{scopeSummary(shown)}</span>
+          <span className="truncate font-mono text-[12px] font-semibold">{scopeSummary(shown)}</span>
           <ChevronDown size={12} className="shrink-0 text-muted" />
         </button>
       </DropdownMenu.Trigger>

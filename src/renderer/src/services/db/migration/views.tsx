@@ -5,11 +5,13 @@ import {
   Camera,
   CheckCircle2,
   DownloadCloud,
+  Layers,
   Loader2,
   Play,
   Radar,
   RefreshCw,
   ScrollText,
+  Server,
   XCircle
 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
@@ -99,13 +101,45 @@ function ErrorBar(): ReactElement | null {
   )
 }
 
+/**
+ * 짝 표기 — **설계가 왼쪽, 실제(연결)가 오른쪽**이다.
+ *
+ * 이 방향은 앱이 이미 쓰던 것이다: 모듈 줄이 `Design ── Migration ── Remote` 이고, 오른쪽 위
+ * 손잡이도 설계 묶음이 먼저다(`db/index.tsx` 의 `handles: ['design','ops']`). 여기만 연결을
+ * 왼쪽에 적고 있어서 같은 화면의 위아래가 서로 반대를 가리켰다(2026-08-04 사용자 지적).
+ *
+ * 아이콘을 붙이는 건 순서만으로는 안 읽히기 때문이다 — 설계와 연결에 같은 이름을 쓰는 일이
+ * 흔해서(`piccard ↔ piccard`) 자리를 알아도 어느 쪽이 무엇인지 모른다. 그림은 위 손잡이가
+ * 쓰는 것과 **같은 것**을 쓴다(설계=Layers, 연결=Server) — 눈이 손잡이에서 여기로 이어진다.
+ *
+ * 화살표가 `↔` 인 이유: 이 줄은 무엇과 무엇이 물려 있나(Environment)를 말할 뿐 흐름이 아니다.
+ * 방향이 있는 건 Plan·Run(설계→실제)과 Seed 의 탭이고, 그건 각 화면이 따로 말한다.
+ */
+function Pair({ design, connection }: { design?: string; connection: string }): ReactElement {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 font-normal text-muted">
+      {design !== undefined && (
+        <>
+          <Layers className="size-3.5 shrink-0" />
+          <span className="truncate">{design}</span>
+          <span aria-hidden>↔</span>
+        </>
+      )}
+      <Server className="size-3.5 shrink-0" />
+      <span className="truncate">{connection}</span>
+    </span>
+  )
+}
+
 function Header({ title, ctx, children }: { title: string; ctx: Ctx; children?: ReactNode }): ReactElement {
   const binding = useMigrationStore((s) => s.binding)
   return (
     <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
-      <div className="flex flex-col">
-        <h2 className="text-[14px] font-bold text-fg">
-          {title} <span className="font-normal text-muted">· {ctx.connection.name} ↔ {ctx.design.name}</span>
+      <div className="flex min-w-0 flex-col">
+        <h2 className="flex min-w-0 items-center gap-1.5 text-[14px] font-bold text-fg">
+          {title}
+          <span className="font-normal text-muted">·</span>
+          <Pair design={ctx.design.name} connection={ctx.connection.name} />
         </h2>
         <p className="text-[12px] text-muted">타깃 {binding?.targetVersion || '—'} · 적용 {binding?.appliedVersion || '—'}</p>
       </div>
@@ -118,7 +152,6 @@ function Header({ title, ctx, children }: { title: string; ctx: Ctx; children?: 
 export function DriftView(): ReactElement {
   const design = useActiveDesign()
   const connection = useActiveConnection()
-  const openImport = useImportStore((s) => s.openImport)
   const st = useMigrationStore()
   const cid = connection?.id
   const did = design?.id
@@ -130,39 +163,19 @@ export function DriftView(): ReactElement {
   if (!connection)
     return <Guard title="연결을 선택하세요" sub="Connection 셀렉터에서 대상 실 DB 를 고르세요." />
 
-  // 연결은 있으나 물린 설계가 없음 → 운영 DB 를 새 설계로 가져오는 부트스트랩 진입.
-  if (!design) {
+  // 연결은 있으나 물린 설계가 없음 → 되먹임의 문(가져오기 뷰)이 부트스트랩을 맡는다.
+  if (!design)
     return (
-      <div className="flex h-full flex-col">
-        <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
-          <div className="flex flex-col">
-            <h2 className="text-[14px] font-bold text-fg">Drift <span className="font-normal text-muted">· {connection.name}</span></h2>
-            <p className="text-[12px] text-muted">이 연결에 물린 설계가 없습니다</p>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto p-5">
-          <div className="flex max-w-xl flex-col items-start gap-3 rounded-lg border border-line bg-panel/50 p-4">
-            <div className="flex items-center gap-2 text-[13px] font-semibold text-fg"><DownloadCloud className="size-4" /> 아직 설계가 없습니다</div>
-            <p className="text-[12px] leading-relaxed text-muted">
-              드리프트는 설계 버전이 있어야 대조할 수 있습니다. 실 DB 를 역설계해 <b>새 설계로 가져오면</b> 첫 버전이 만들어지고,
-              이 연결↔설계 결속(Environment)이 세워집니다. 이후부터 드리프트·마이그레이션을 쓸 수 있어요.
-            </p>
-            <Button size="sm" onClick={() => openImport(connection, null)}>
-              <DownloadCloud /> 운영 DB 를 새 설계로 가져오기
-            </Button>
-          </div>
-        </div>
-      </div>
+      <Guard
+        title="이 연결에 물린 설계가 없습니다"
+        sub="가져오기 탭에서 실 DB 를 설계로 들이면 결속이 세워집니다."
+      />
     )
-  }
 
   const ctx: Ctx = { design, connection }
   return (
     <div className="flex h-full flex-col">
       <Header title="Drift" ctx={ctx}>
-        <Button size="sm" onClick={() => openImport(connection, design)}>
-          <DownloadCloud /> 설계로 가져오기
-        </Button>
         <Button size="sm" variant="outline" disabled={st.loading} onClick={() => void st.loadDrift(ctx.connection.id, ctx.design.id)}>
           {st.loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 다시 검사
         </Button>
@@ -192,6 +205,59 @@ export function DriftView(): ReactElement {
           </div>
         ) : (
           <div className="flex items-center gap-2 text-[13px] text-success"><CheckCircle2 className="size-4" /> 드리프트 없음 — 실제가 기준선과 일치합니다</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────── 가져오기 [실제 → 설계] ───────────────────────
+/**
+ * 되먹임의 문 — 실 DB 를 역설계해 설계의 새 버전으로 들인다.
+ *
+ * 예전엔 Drift 머리글의 버튼 하나였다(2026-08-04 사용자 요청으로 뷰가 됐다). 이 모듈의 두 방향
+ * 중 한쪽이 버튼에 숨어 있어서, 뷰 탭 줄만 보면 **반영(설계→실제)만 하는 도구**로 읽혔다.
+ * 설계가 아직 없는 연결의 부트스트랩(새 설계로 컷)도 여기가 맡는다 — 그것도 되먹임이다.
+ */
+export function ImportView(): ReactElement {
+  const design = useActiveDesign()
+  const connection = useActiveConnection()
+  const openImport = useImportStore((s) => s.openImport)
+  const binding = useMigrationStore((s) => s.binding)
+  const driftDiff = useMigrationStore((s) => s.driftDiff)
+
+  if (!connection)
+    return <Guard title="연결을 선택하세요" sub="설계로 들일 실 DB 를 고르세요." />
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
+        <div className="flex min-w-0 flex-col">
+          <h2 className="flex min-w-0 items-center gap-1.5 text-[14px] font-bold text-fg">
+            가져오기
+            <span className="font-normal text-muted">·</span>
+            <Pair design={design?.name} connection={connection.name} />
+          </h2>
+          {design && (
+            <p className="text-[12px] text-muted">타깃 {binding?.targetVersion || '—'} · 적용 {binding?.appliedVersion || '—'}</p>
+          )}
+        </div>
+        <Button size="sm" onClick={() => openImport(connection, design ?? null)}>
+          <DownloadCloud /> {design ? '설계로 가져오기' : '새 설계로 가져오기'}
+        </Button>
+      </div>
+      <ErrorBar />
+      <div className="min-h-0 flex-1 overflow-auto p-5">
+        {!design ? (
+          <div className="text-[13px] text-muted">물린 설계 없음 — 가져오면 첫 버전과 결속이 함께 세워집니다</div>
+        ) : driftDiff && !isEmptyDiff(driftDiff) ? (
+          // Drift 를 이미 돌렸으면 그 결과가 곧 "들일 것"이다 — 여기서 또 읽지 않는다(같은 검사다).
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 text-[13px] font-semibold text-accent-2"><AlertTriangle className="size-4" /> 들일 변경 (기준선 대비)</div>
+            <DiffSummary diff={driftDiff} />
+          </div>
+        ) : (
+          <div className="text-[13px] text-muted">들일 변경 없음 — Drift 에서 검사한 결과가 여기 모입니다</div>
         )}
       </div>
     </div>

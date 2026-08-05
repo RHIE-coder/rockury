@@ -38,6 +38,10 @@ export const dbCoverage: ServiceCoverage = {
     // ── 설계부 삭제: 확정 제외 — 파괴적 조작은 사람이 앱에서만(spec tools.write AC-7, 테스트 핀) ──
     'designs:delete': '파괴적 쓰기 — 파괴적 조작은 사람이 앱에서만, 노출 금지',
     'versions:delete': '파괴적 쓰기 — 파괴적 조작은 사람이 앱에서만, 노출 금지',
+    // 메모는 파괴적이지 않지만(스냅샷·번호는 못 건드린다) 지금 노출할 이유가 없다 —
+    // 버전에 이름을 붙이는 일은 컷한 사람이 왜 컷했는지를 적는 자리라 사람 몫이다.
+    // 에이전트가 버전을 다루는 도구는 `create_version` 하나로 충분하다(2026-08-05).
+    'versions:updateNote': '버전 메모는 컷한 사람이 적는 것 — 지금 노출 이유 없음',
 
     // ── 연결/실 DB 실행: 자격증명·파괴 가능 조작 — 별도 게이트 설계 전에는 노출 금지 ──
     'connections:list': '연결 메타에 호스트·계정 포함 — 민감정보 마스킹 설계 후 검토',
@@ -54,6 +58,9 @@ export const dbCoverage: ServiceCoverage = {
     'connections:test': '실 DB 접속 시도 — 연결 도구 설계 시 함께 검토',
     'connections:testById': '실 DB 접속 시도 — 연결 도구 설계 시 함께 검토',
     'connections:revealPassword': '저장 비밀번호 평문 반환 — 로컬 편집 화면 전용, 원격 노출 절대 금지',
+    'connections:sampleStatus': '샘플 DB 파일 유무 — 사람이 버튼을 누를지 정하는 화면 상태',
+    'connections:createSample': '사용자 디스크에 파일 생성 — 사람이 앱에서 누를 때만',
+    'connections:resetSample': '사용자 디스크의 파일 삭제·재생성(파괴적) — 사람이 앱에서 누를 때만',
     'introspection:run': '실 DB 접속 실행 — 연결 도구 설계 시 함께 검토(읽기지만 접속 부하 유발)',
     'introspection:schemas': '실 DB 접속 실행 — 범위 선택기가 고를 목록을 채우는 조회(사람 조작 전용)',
     'introspection:catalogs': '실 DB 접속 실행 — 범위 선택기의 database 층 목록(사람 조작 전용)',

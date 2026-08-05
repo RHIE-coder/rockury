@@ -148,6 +148,35 @@ export function newTableSchema(scope: readonly string[], used: readonly string[]
 }
 
 /**
+ * **새로 만드는 표·뷰가 태어날 이름**(순수) — `new_table_1` · `new_view_1` …
+ *
+ * 사람이 보는 번호는 **내부 id 번호와 따로 센다.** 예전엔 둘이 같은 카운터(`seq`)를 나눠 써서,
+ * 한 번 만들 때 id 가 한 칸·이름이 한 칸씩 먹었다. 그래서 뷰를 서른한 번 만들면 이름이
+ * `new_view_2, 4, 6 … 62` 로 나왔다 — 쓰는 사람 눈에는 홀수가 통째로 사라진 것으로 보인다
+ * (2026-08-05 사용자 제보 · 실 DB 에서 31개 확인). 표는 더 심해서 컬럼·제약 id 까지 같은
+ * 카운터를 먹는 바람에 이름이 세 칸씩 뛰었다.
+ *
+ * 이 설계 안에서 **같은 접두를 쓰는 이름의 최대 번호 + 1**을 쓴다. 그래서
+ *  · 번호가 1부터 빈틈없이 이어지고,
+ *  · 다 지우면 다시 1부터 시작하며,
+ *  · 사람이 손으로 바꾼 이름(`orders` 등)은 세지 않아 방해하지 않는다.
+ */
+export function nextNewName(
+  tables: readonly TableDef[],
+  designId: string,
+  prefix: 'new_table' | 'new_view'
+): string {
+  const re = new RegExp(`^${prefix}_(\\d+)$`)
+  let max = 0
+  for (const t of tables) {
+    if (t.designId !== designId) continue
+    const m = re.exec(t.name)
+    if (m) max = Math.max(max, Number(m[1]))
+  }
+  return `${prefix}_${max + 1}`
+}
+
+/**
  * 리하이드레이션 후 활성 테이블 재조정 판정(순수).
  * 편집 중이던 활성 테이블이 에이전트 쓰기로 사라지면 activeTableId 가 죽은 id 로 남아
  * 이후 편집 액션이 조용히 no-op 이 된다 — 사라졌으면 갱신된 그 설계의 첫 테이블로 되돌린다.

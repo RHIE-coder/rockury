@@ -5,6 +5,7 @@ import { cn } from '@renderer/lib/utils'
 import type { DialectId } from '../../dialects'
 import { isMyDialect } from '../../workspaces/definition/ddl'
 import { HighlightedSqlLine } from '../../workspaces/definition/HighlightedSql'
+import { previewState } from './previewState'
 import { planOf, useSchemaEditStore } from './store'
 
 /**
@@ -23,6 +24,9 @@ export function PreviewBar({ dialect }: { dialect: DialectId }) {
 
   const plan = useMemo(() => planOf(baseline, draft, dialect), [baseline, draft, dialect])
   const n = plan.statements.length
+  /** 이 방언이 자동으로 못 내는 변경 — 고쳤는데 문이 0건인 이유가 여기 있다. */
+  const blocked = plan.unsupported.length
+  const view = previewState(n, blocked)
   const destructive = plan.destructiveCount
   const autoCommit = isMyDialect(dialect) && n > 0
 
@@ -48,7 +52,7 @@ export function PreviewBar({ dialect }: { dialect: DialectId }) {
         </div>
       )}
 
-      {expanded && n > 0 && (
+      {expanded && view.hasDetail && (
         <div className="max-h-52 overflow-auto border-b border-line bg-canvas px-4 py-2.5 font-mono text-[12px] leading-[1.7]">
           {plan.statements.map((st, i) =>
             st.sql.split('\n').map((line, j) => (
@@ -57,8 +61,8 @@ export function PreviewBar({ dialect }: { dialect: DialectId }) {
               </div>
             ))
           )}
-          {plan.unsupported.length > 0 && (
-            <div className="mt-2 border-t border-line pt-2 text-[11px] text-accent-2">
+          {blocked > 0 && (
+            <div className={cn('text-[11px] text-accent-2', n > 0 && 'mt-2 border-t border-line pt-2')}>
               {plan.unsupported.map((u, i) => (
                 <div key={i}>⚠ {u}</div>
               ))}
@@ -69,11 +73,11 @@ export function PreviewBar({ dialect }: { dialect: DialectId }) {
 
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="flex items-center gap-2 text-[12px]">
-          {n === 0 ? (
+          {view.idle ? (
             <span className="text-muted">변경 없음</span>
           ) : (
             <>
-              <span className="font-semibold text-fg">대기 변경 {n}건</span>
+              {n > 0 && <span className="font-semibold text-fg">대기 변경 {n}건</span>}
               {destructive > 0 && (
                 <span className="flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
                   <AlertTriangle className="size-3" />파괴적 {destructive}
@@ -84,20 +88,27 @@ export function PreviewBar({ dialect }: { dialect: DialectId }) {
                   자동 커밋
                 </span>
               )}
+              {/* 대기 변경 0건인데 고친 게 있는 경우 — 이 배지가 없으면 "변경 없음"으로 읽혀
+                  왜 적용이 안 켜지는지 화면에 단서가 하나도 남지 않는다. */}
+              {blocked > 0 && (
+                <span className="flex items-center gap-1 rounded bg-accent-2-soft px-1.5 py-0.5 text-[11px] text-accent-2">
+                  <AlertTriangle className="size-3" />적용 못 함 {blocked}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setExpanded((v) => !v)}
                 className="flex items-center gap-0.5 text-[11.5px] text-accent hover:underline"
               >
                 {expanded ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
-                SQL {expanded ? '접기' : '보기'}
+                {view.detailLabel} {expanded ? '접기' : '보기'}
               </button>
             </>
           )}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <Button variant="ghost" size="sm" disabled={applying} onClick={discard}>
-            {n === 0 ? '편집 종료' : '버리기'}
+            {view.discardLabel}
           </Button>
           <Button size="sm" disabled={applying || n === 0} onClick={() => void onApply()}>
             {applying ? <Loader2 className="animate-spin" /> : null}

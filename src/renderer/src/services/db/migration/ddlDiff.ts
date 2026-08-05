@@ -29,6 +29,20 @@ export interface MigrationPlan {
 const q = quoteId
 const esc = (s: string): string => s.replace(/'/g, "''")
 
+/**
+ * PostgreSQL 코멘트 문. 설명을 지웠으면 `''` 가 아니라 NULL 로 내린다 —
+ * `IS ''` 는 "빈 설명이 달려 있음"이라 psql `\d+` 등에 빈 줄로 남는다.
+ * @param target `TABLE "s"."t"` / `COLUMN "s"."t"."c"` 처럼 **이미 인용된** 대상 절.
+ */
+const commentOn = (target: string, comment: string): string =>
+  `COMMENT ON ${target} IS ${comment ? `'${esc(comment)}'` : 'NULL'};`
+
+/**
+ * sqlite 는 설명을 담을 자리 자체가 없다(주석은 DDL 텍스트에만 남고 스키마에 저장되지 않는다).
+ * 문을 못 내는 대신 **왜 못 내는지**를 남긴다 — 안 남기면 draft 에 적은 설명이 조용히 사라진다.
+ */
+const NO_SQLITE_COMMENT = (what: string): string => `sqlite: ${what}은 sqlite 가 저장하지 않는다`
+
 /** ADD/MODIFY COLUMN 용 컬럼 절 — `name` TYPE [NULL|NOT NULL] [DEFAULT x] [COMMENT '...'(mysql)]. */
 function columnClause(d: DialectId, c: Column): string {
   const parts = [q(d, c.name), mapType(d, c.type), c.nullable ? 'NULL' : 'NOT NULL']
@@ -179,6 +193,15 @@ function modifyColumn(
         destructive: false,
         table: label
       })
+    // PG 는 컬럼 절에 COMMENT 를 못 넣는다 — 설명은 늘 별도 문이다(MySQL 은 MODIFY COLUMN 에 딸려 간다).
+    // 이름을 함께 바꿨어도 RENAME 이 먼저 나가므로 새 이름(col)으로 붙인다.
+    if ((before.comment ?? '') !== (after.comment ?? ''))
+      out.push({
+        sql: commentOn(`COLUMN ${sqlName}.${col}`, after.comment),
+        kind: 'alter',
+        destructive: false,
+        table: label
+      })
     return
   }
   // sqlite — RENAME 만 지원, 정의 변경은 테이블 재생성 필요
@@ -186,6 +209,8 @@ function modifyColumn(
     out.push({ sql: `ALTER TABLE ${sqlName} RENAME COLUMN ${q(d, before.name)} TO ${q(d, after.name)};`, kind: 'alter', destructive: false, table: label })
   if (before.type !== after.type || before.nullable !== after.nullable || (before.defaultValue ?? null) !== (after.defaultValue ?? null))
     unsupported.push(`sqlite: ${label}.${after.name} 정의 변경은 테이블 재생성 필요`)
+  if ((before.comment ?? '') !== (after.comment ?? ''))
+    unsupported.push(NO_SQLITE_COMMENT(`${label}.${after.name} 컬럼 설명`))
 }
 
 export function generateMigration(
@@ -217,6 +242,8 @@ export function generateMigration(
     if (!bt) {
       // 새 테이블 → CREATE (generateDdl 재사용, 다중문 블록)
       out.push({ sql: generateDdl(tt, d, { qualify }), kind: 'create', destructive: false, table: label(tt) })
+      if (d === 'sqlite' && (tt.comment || tt.columns.some((c) => c.comment)))
+        unsupported.push(NO_SQLITE_COMMENT(`${label(tt)} 의 설명`))
       continue
     }
 
@@ -238,9 +265,14 @@ export function generateMigration(
     const targetCons = new Map(tt.constraints.map((k) => [k.id, k]))
 
     // 1) 컬럼 추가
-    for (const [cid, tc] of targetCols)
-      if (!baseCols.has(cid))
-        out.push({ sql: `ALTER TABLE ${sqlName(tt)} ADD COLUMN ${columnClause(d, tc)};`, kind: 'alter', destructive: false, table: label(tt) })
+    for (const [cid, tc] of targetCols) {
+      if (baseCols.has(cid)) continue
+      out.push({ sql: `ALTER TABLE ${sqlName(tt)} ADD COLUMN ${columnClause(d, tc)};`, kind: 'alter', destructive: false, table: label(tt) })
+      // PG 는 ADD COLUMN 절에 설명을 못 싣는다 — 안 붙이면 새 컬럼 설명이 조용히 버려진다.
+      if (d === 'postgresql' && tc.comment)
+        out.push({ sql: commentOn(`COLUMN ${sqlName(tt)}.${q(d, tc.name)}`, tc.comment), kind: 'alter', destructive: false, table: label(tt) })
+      if (d === 'sqlite' && tc.comment) unsupported.push(NO_SQLITE_COMMENT(`${label(tt)}.${tc.name} 컬럼 설명`))
+    }
     // 2) 컬럼 변경
     for (const [cid, tc] of targetCols) {
       const bc = baseCols.get(cid)
@@ -265,7 +297,10 @@ export function generateMigration(
       if (isMyDialect(d))
         out.push({ sql: `ALTER TABLE ${sqlName(tt)} COMMENT = '${esc(tt.comment)}';`, kind: 'alter', destructive: false, table: label(tt) })
       else if (d === 'postgresql')
-        out.push({ sql: `COMMENT ON TABLE ${q(d, tt.name)} IS '${esc(tt.comment)}';`, kind: 'alter', destructive: false, table: label(tt) })
+        // 한정 이름(sqlName)을 써야 한다 — 이름만 쓰면 범위에 스키마가 둘 이상 켜졌을 때
+        // search_path 가 고른 **다른 스키마의 동명 테이블**에 설명이 붙는다.
+        out.push({ sql: commentOn(`TABLE ${sqlName(tt)}`, tt.comment), kind: 'alter', destructive: false, table: label(tt) })
+      else unsupported.push(NO_SQLITE_COMMENT(`${label(tt)} 테이블 설명`))
     }
   }
 

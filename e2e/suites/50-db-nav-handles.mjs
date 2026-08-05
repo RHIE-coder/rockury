@@ -12,6 +12,14 @@
 //   ⑷ 시점 손잡이는 설계부 전 화면에서 **하나만** 있어야 한다(두 곳이 말하면 숫자가 어긋난다)
 //   ⑸ 좁은 창에서는 손잡이의 상태말이 접혀야 한다(안 접히면 뷰 탭이 밀려 나간다)
 //   ⑹ 다른 서비스(api·uiux)는 예전 컨텍스트 바를 그대로 써야 한다
+//   ⑺ 손잡이의 **모양**은 화면마다 다르다 — Migration 만 두 단 카드(좌우로 갈림)이고
+//      Design·Remote 는 예전 한 줄(오른쪽 끝)이다(`Module.handleLayout` · 2026-08-04)
+//   ⑻ 뷰 묶음 이름표 단은 **쓰는 화면에만** 선다 — 안 쓰는 화면의 탭 줄 높이는 그대로다
+//   ⑼ Design › Query·Collection 은 Remote 와 **같은 화면**이다 — 접속이 필요한 동작만 잠긴다
+//
+// ⑺⑻⑼ 는 모두 2026-08-05 회귀다. 셋 다 원인이 하나다: **한 화면에 요청된 것을 공용 부품에
+// 못박아 다른 화면까지 바뀌었다.** 유무만 보는 검사는 이런 번짐을 못 잡아서(세 화면 다 "있었다")
+// 좌표·구성으로 잰다.
 
 export const meta = {
   name: '50-db-nav-handles',
@@ -50,21 +58,25 @@ export async function run(ctx) {
   const topText = await body()
   check('DB: 설계·운영 뱃지 라벨이 모듈 줄에 둘 다 보인다', topText.includes('설계') && topText.includes('운영'))
 
-  // ⑴ 뱃지는 다리 쪽 끝 — 설계는 Design **뒤**, 운영은 Remote **앞**. 가운데 Migration 을 사이에 두고
-  //    둘이 마주 본다. 자리는 좌표로만 드러나므로 x 로 잰다.
+  // ⑴ 부서마다 카드 한 장이고(2026-08-04 사용자 요청) 이름표는 자기 카드 앞에 선다.
+  //    설계 카드 — Migration — 운영 카드 순서는 좌표로만 드러나므로 x 로 잰다.
   const midX = async (sel) => {
     const box = await page.locator(sel).first().boundingBox()
     return box ? box.x + box.width / 2 : null
   }
-  const [designChip, designTab, opsChip, remoteTab] = await Promise.all([
+  check('DB: 설계 카드가 있다', (await page.locator('[data-area-card="design"]').count()) === 1)
+  check('DB: 운영 카드가 있다', (await page.locator('[data-area-card="ops"]').count()) === 1)
+  const [designChip, designTab, opsChip, remoteTab, gate] = await Promise.all([
     midX('[data-area-chip="design"]'),
     midX('[data-nav-module="design"]'),
     midX('[data-area-chip="ops"]'),
-    midX('[data-nav-module="remote"]')
+    midX('[data-nav-module="remote"]'),
+    midX('[data-nav-module="migration"]')
   ])
-  check('DB: 설계 뱃지가 Design 탭 뒤에 선다 — 다리 쪽', designChip > designTab)
-  check('DB: 운영 뱃지가 Remote 탭 앞에 선다 — 다리 쪽', opsChip < remoteTab)
-  check('DB: 두 뱃지가 Migration 을 사이에 두고 마주 본다', designChip < opsChip)
+  // 이름표는 카드의 **Migration 쪽 끝**에 붙는다 — 왼쪽 카드는 뒤, 오른쪽 카드는 앞(2026-08-05).
+  check('DB: 설계 이름표가 Design 탭 뒤에 선다', designChip > designTab)
+  check('DB: 운영 이름표가 Remote 탭 앞에 선다', opsChip < remoteTab)
+  check('DB: 건너가는 문이 두 카드 사이에 선다', designTab < gate && gate < opsChip)
 
   // ⑵ 착지는 설계부(Design) — 설계 손잡이만 뜨고 운영 손잡이는 안 뜬다.
   check('DB › Design: 설계 손잡이가 뷰 탭 줄에 있다', (await page.locator('[data-area-handle="design"]').count()) === 1)
@@ -171,6 +183,79 @@ export async function run(ctx) {
     'DB › Migration: 자기 기억(Plan)으로 돌아온다',
     (await page.locator('[data-nav-view="plan"][data-state="active"]').count()) === 1
   )
+  // ── ⑺ 손잡이 **모양**은 화면마다 다르다 ─────────────────────
+  // 회귀(2026-08-04): 손잡이는 컴포넌트 하나라, Migration 한 화면에 요청된 두 단 카드를
+  // 컴포넌트에 못박았더니 Design·Remote 까지 같이 바뀌었다. 위의 유무 검사들은 그 번짐을
+  // 하나도 못 잡았다 — 손잡이는 세 화면 모두 "있었기" 때문이다. 모양은 좌표로만 드러나므로
+  // 접힘(높이)과 자리(x)로 잰다. 앞에서 설계를 이미 골라 두어 아랫단이 실제로 그려진다.
+  const handleBox = async (area) => page.locator(`[data-area-handle="${area}"]`).first().boundingBox()
+  const firstTabX = async () => (await page.locator('[data-nav-view]').first().boundingBox()).x
+
+  // 2026-08-05 — 손잡이가 **모듈 줄 양끝**으로 올라갔다(`handleLayout: 'sides'`). 자리가 바뀐 것이
+  // 좌표로만 드러나므로 y(어느 줄인가)와 x(줄의 어느 쪽인가)로 잰다. 모양은 이제 어디서나 한 줄이다.
+  const migDesign = await handleBox('design')
+  const migOps = await handleBox('ops')
+  const moduleRow = await page.locator('[data-nav-module="migration"]').first().boundingBox()
+  const viewRow = await page.locator('[data-nav-view="drift"]').first().boundingBox()
+  check(
+    `DB › Migration: 손잡이가 모듈 줄에 있다 (손잡이 y=${Math.round(migDesign.y)} · 모듈 y=${Math.round(moduleRow.y)} · 뷰 y=${Math.round(viewRow.y)})`,
+    migDesign.y < viewRow.y && migOps.y < viewRow.y
+  )
+  check(`DB › Migration: 설계 손잡이가 줄 맨 왼쪽 (${Math.round(migDesign.x)} < ${Math.round(moduleRow.x)})`, migDesign.x < moduleRow.x)
+  check(`DB › Migration: 운영 손잡이가 줄 맨 오른쪽 (${Math.round(migOps.x)} > ${Math.round(moduleRow.x)})`, migOps.x > moduleRow.x)
+  check(`DB › Migration: 손잡이는 한 줄이다 (h=${Math.round(migDesign.height)})`, migDesign.height < 44)
+  check('DB › Migration: 뷰 탭 줄에는 손잡이가 없다', migDesign.y < viewRow.y && migOps.y < viewRow.y)
+
+  await click('[data-nav-module="remote"]')
+  await page.waitForTimeout(400)
+  const remOps = await handleBox('ops')
+  const remTab = await page.locator('[data-nav-view]').first().boundingBox()
+  check(`DB › Remote: 손잡이도 모듈 줄에 있다 (${Math.round(remOps.y)} < 뷰 탭 ${Math.round(remTab.y)})`, remOps.y < remTab.y)
+  check(`DB › Remote: 줄 오른쪽 끝 (${Math.round(remOps.x)} > 뷰 탭 ${Math.round(remTab.x)})`, remOps.x > remTab.x)
+
+  await click('[data-nav-module="design"]')
+  await page.waitForTimeout(400)
+  const dsDesign = await handleBox('design')
+  const dsTab = await page.locator('[data-nav-view]').first().boundingBox()
+  check(`DB › Design: 손잡이도 모듈 줄에 있다 (${Math.round(dsDesign.y)} < 뷰 탭 ${Math.round(dsTab.y)})`, dsDesign.y < dsTab.y)
+  // 설계는 왼쪽, 운영은 오른쪽 — 모듈 줄의 `Design ── Migration ── Remote` 와 같은 좌우 문법이다.
+  check(`DB › Design: 줄 왼쪽 끝 (${Math.round(dsDesign.x)} < 운영 ${Math.round(remOps.x)})`, dsDesign.x < remOps.x)
+  check(`DB: 손잡이는 어디서나 한 줄 (h=${Math.round(dsDesign.height)})`, dsDesign.height < 44)
+
+  // 이름표는 **Migration 쪽 끝**에 붙어 둘이 마주 본다(2026-08-05 사용자 요청).
+  const cx2 = async (sel) => {
+    const b = await page.locator(sel).first().boundingBox()
+    return b ? b.x + b.width / 2 : null
+  }
+  const [designChip2, designTab2, opsChip2, remoteTab2] = await Promise.all([
+    cx2('[data-area-chip="design"]'),
+    cx2('[data-nav-module="design"]'),
+    cx2('[data-area-chip="ops"]'),
+    cx2('[data-nav-module="remote"]')
+  ])
+  check('DB: 설계 이름표가 Design 탭 **뒤**에 선다 — 가운데를 본다', designChip2 > designTab2)
+  check('DB: 운영 이름표가 Remote 탭 **앞**에 선다 — 가운데를 본다', opsChip2 < remoteTab2)
+
+  // ── ⑼ Design › Query·Collection 은 Remote 와 **같은 화면**이다 ──
+  // 회귀(2026-08-05): 라이브러리 소속을 설계로 옮기면서 설계부용으로 **줄인 화면을 따로 만들었다.**
+  // 그래서 오른쪽 패널도 필터도 결과 영역도 없었다 — 시킨 것은 옮기는 일이었다. 지금은 한
+  // 컴포넌트가 둘을 다 그리고, 갈리는 것은 접속이 필요한 동작(Run·EXPLAIN)뿐이다.
+  await click('[data-nav-module="design"]')
+  await page.waitForTimeout(300)
+  await click('[data-nav-view="query"]')
+  await page.waitForTimeout(600)
+  check('DB › Design › Query: 왼쪽 트리 필터가 있다', (await page.locator('input[placeholder="Filter queries..."]').count()) === 1)
+  check('DB › Design › Query: 오른쪽 Schema 패널이 있다', (await page.locator('input[placeholder="Filter..."]').count()) === 1)
+  check('DB › Design › Query: 결과 영역이 있다', (await body()).includes('SQL 을 실행하면 결과가 여기 표시됩니다'))
+  // 접속이 없으니 못 돌린다 — **여기만** 잠긴다.
+  check('DB › Design › Query: Run 이 잠겨 있다', !(await page.locator('button:has-text("Run")').first().isEnabled()))
+  check('DB › Design › Query: 왜 못 돌리는지 말한다', (await body()).includes('실행은 Remote 에서'))
+
+  await click('[data-nav-view="collection"]')
+  await page.waitForTimeout(600)
+  check('DB › Design › Collection: 왼쪽 컬렉션 필터가 있다', (await page.locator('input[placeholder="Filter collections..."]').count()) === 1)
+  check('DB › Design › Collection: 오른쪽 QUERIES 패널이 있다', (await page.locator('input[placeholder="Filter..."]').count()) === 1)
+
   // ── Reference 는 이제 Design 안 뷰다 ───────────────────────
   // 2026-08-03 이전엔 어느 부서도 아닌 모듈이라 손잡이가 하나도 없었다. Design 안으로 들어오면서
   // 설계 손잡이가 딸려 뜬다 — 손잡이는 모듈 단위라, 이건 자리를 옮긴 값이지 버그가 아니다.

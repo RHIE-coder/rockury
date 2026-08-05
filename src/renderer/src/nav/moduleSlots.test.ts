@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { Boxes } from 'lucide-react'
-import { areasIn, chipSide, groupBySlot, handlesFor, isAreaSplit } from './moduleSlots'
+import {
+  areaRuns,
+  areasIn,
+  groupBySlot,
+  handleLayoutFor,
+  handlesFor,
+  isAreaSplit
+} from './moduleSlots'
 import type { Module } from './types'
 
 const mod = (id: string, extra: Partial<Module> = {}): Module => ({
@@ -32,6 +39,24 @@ describe('groupBySlot', () => {
   })
 })
 
+describe('handleLayoutFor', () => {
+  // 회귀: 2026-08-04. Migration 화면 하나에 요청된 두 단 카드 손잡이를 컴포넌트에 못박아,
+  // 손잡이를 쓰는 **모든** 화면(Design·Remote)이 같이 바뀌었다. 안 적은 모듈이 예전 모양을
+  // 지키는지를 여기서 잡는다 — 화면을 열어 보기 전에는 아무도 모르는 종류의 번짐이다.
+  it('안 적으면 예전 모양(end)', () => {
+    expect(handleLayoutFor(mod('design', { area: 'design' }))).toBe('end')
+    expect(handleLayoutFor(mod('remote', { area: 'ops', slot: 'end' }))).toBe('end')
+    // 손잡이를 둘 쥔다고 저절로 접히지 않는다 — 모양은 적은 모듈만 바뀐다.
+    expect(handleLayoutFor(mod('migration', { handles: ['design', 'ops'] }))).toBe('end')
+  })
+
+  it('적은 모듈만 부서 자리(sides)', () => {
+    expect(
+      handleLayoutFor(mod('migration', { handles: ['design', 'ops'], handleLayout: 'sides' }))
+    ).toBe('sides')
+  })
+})
+
 describe('areasIn', () => {
   it('처음 나온 순서로, 중복 없이', () => {
     expect(
@@ -49,16 +74,40 @@ describe('areasIn', () => {
   })
 })
 
-describe('chipSide', () => {
-  // 뱃지가 다리 쪽 끝으로 옮겨 간 규칙(2026-08-03). 눈으로만 보이는 종류라 다른 게이트가 못 잡는다.
-  it('다리가 있으면 왼쪽 묶음은 뒤끝, 오른쪽 묶음은 앞끝 — 둘 다 다리를 향한다', () => {
-    expect(chipSide('start', true)).toBe('trailing')
-    expect(chipSide('end', true)).toBe('leading')
+describe('areaRuns', () => {
+  // 모듈 줄이 구획마다 카드 한 장을 세우는 규칙(2026-08-04). 자리를 잘못 묶으면 부서 색이
+  // 엉뚱한 탭을 덮는데, 타입검사·빌드는 그걸 못 잡는다.
+  it('이웃한 같은 구획끼리 묶는다', () => {
+    expect(
+      areaRuns([
+        mod('a', { area: 'design' }),
+        mod('b', { area: 'design' }),
+        mod('c', { area: 'ops' })
+      ]).map((r) => [r.area, r.modules.map((m) => m.id)])
+    ).toEqual([
+      ['design', ['a', 'b']],
+      ['ops', ['c']]
+    ])
   })
 
-  it('다리가 없으면 예전 그대로 묶음 앞 — 구획만 쓰는 api·infra 가 여기 걸린다', () => {
-    expect(chipSide('start', false)).toBe('leading')
-    expect(chipSide('end', false)).toBe('leading')
+  it('떨어져 있는 같은 구획은 합치지 않는다 — 합치면 줄 위의 순서가 뒤집힌다', () => {
+    expect(
+      areaRuns([
+        mod('a', { area: 'design' }),
+        mod('b', { area: 'ops' }),
+        mod('c', { area: 'design' })
+      ]).map((r) => r.area)
+    ).toEqual(['design', 'ops', 'design'])
+  })
+
+  it('구획을 안 적으면 common 한 덩어리 — 구획을 안 쓰는 서비스가 여기 걸린다', () => {
+    const runs = areaRuns([mod('a'), mod('b')])
+    expect(runs).toHaveLength(1)
+    expect(runs[0].area).toBe('common')
+  })
+
+  it('모듈이 없으면 덩어리도 없다', () => {
+    expect(areaRuns([])).toEqual([])
   })
 })
 

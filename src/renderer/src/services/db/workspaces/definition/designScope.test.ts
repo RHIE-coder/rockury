@@ -4,6 +4,7 @@ import {
   draftTablesFromSnapshot,
   mergeDesignTables,
   newTableSchema,
+  nextNewName,
   reconcileActiveTable,
   toTableRecord
 } from './designScope'
@@ -175,5 +176,46 @@ describe('newTableSchema', () => {
       // 실제 걸름 규칙에 그대로 먹여 본다 — "빈 값이 아니다"보다 이쪽이 증상에 가깝다.
       expect(scopedTables([{ schema }], scope)).toHaveLength(1)
     }
+  })
+})
+
+describe('nextNewName', () => {
+  const t = (id: string, name: string, designId = 'd1'): TableDef =>
+    ({ id, designId, schema: 'public', name, comment: '', columns: [], constraints: [] }) as TableDef
+
+  // 회귀: 2026-08-05. 이름 번호가 내부 id 카운터를 나눠 써서 한 번 만들 때마다 둘씩 뛰었다 —
+  // 실 DB 에 `new_view_2, 4, 6 … 62` 로 31개가 쌓여 있었다(홀수가 사라진 것처럼 보인다).
+  it('처음 만들면 1번', () => {
+    expect(nextNewName([], 'd1', 'new_view')).toBe('new_view_1')
+    expect(nextNewName([], 'd1', 'new_table')).toBe('new_table_1')
+  })
+
+  it('번호가 1씩 이어진다 — 건너뛰지 않는다', () => {
+    const tables = [t('tbl-1', 'new_view_1'), t('tbl-3', 'new_view_2')]
+    expect(nextNewName(tables, 'd1', 'new_view')).toBe('new_view_3')
+  })
+
+  it('표와 뷰는 따로 센다', () => {
+    const tables = [t('tbl-1', 'new_view_1'), t('tbl-2', 'new_view_2')]
+    expect(nextNewName(tables, 'd1', 'new_table')).toBe('new_table_1')
+  })
+
+  it('사람이 바꾼 이름은 안 센다', () => {
+    const tables = [t('tbl-1', 'orders'), t('tbl-2', 'users'), t('tbl-3', 'new_view_1')]
+    expect(nextNewName(tables, 'd1', 'new_view')).toBe('new_view_2')
+  })
+
+  it('다른 설계 것은 안 센다 — 설계마다 1번부터', () => {
+    const tables = [t('tbl-1', 'new_view_7', 'other')]
+    expect(nextNewName(tables, 'd1', 'new_view')).toBe('new_view_1')
+  })
+
+  it('중간이 비어도 최대 번호 다음을 쓴다 — 살아 있는 이름과 안 부딪힌다', () => {
+    const tables = [t('tbl-1', 'new_view_1'), t('tbl-9', 'new_view_5')]
+    expect(nextNewName(tables, 'd1', 'new_view')).toBe('new_view_6')
+  })
+
+  it('다 지우면 다시 1번', () => {
+    expect(nextNewName([t('tbl-1', 'orders')], 'd1', 'new_view')).toBe('new_view_1')
   })
 })

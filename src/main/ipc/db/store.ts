@@ -14,7 +14,7 @@ import {
   resolveEnvVariables,
   setEnvVariable
 } from '../../store/envVariables'
-import { createVersion, deleteVersion, listVersions, type CreateVersionInput } from '../../store/versions'
+import { createVersion, deleteVersion, listVersions, updateVersionNote, type CreateVersionInput } from '../../store/versions'
 
 /**
  * 로컬 메타 저장소 IPC — 렌더러가 preload(window.rockury.*)를 통해 호출한다.
@@ -56,4 +56,5 @@ export function registerStoreIpc(): void {
   ipcMain.handle('versions:list', (_event, designId: string) => listVersions(designId))
   ipcMain.handle('versions:create', (_event, input: CreateVersionInput) => createVersion(input))
   ipcMain.handle('versions:delete', (_event, id: string) => deleteVersion(id))
+  ipcMain.handle('versions:updateNote', (_event, id: string, note: string) => updateVersionNote(id, note))
 }

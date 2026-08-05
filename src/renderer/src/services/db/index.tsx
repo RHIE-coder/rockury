@@ -3,6 +3,7 @@ import {
   BookOpen,
   Boxes,
   Database,
+  DownloadCloud,
   FileDiff,
   FileText,
   GitBranch,
@@ -32,6 +33,10 @@ import { DefinitionWorkspace } from './workspaces/definition/DefinitionWorkspace
 import { DefinitionToolbar } from './workspaces/definition/DefinitionToolbar'
 import { DesignDiagramWorkspace } from './workspaces/diagram/DesignDiagramWorkspace'
 import { SeedWorkspace } from './workspaces/seed/SeedWorkspace'
+// 설계부의 Query·Collection 은 운영부와 **같은 컴포넌트**다 — 접속이 필요한 동작만 잠긴다.
+// 한때 설계부용으로 줄인 화면을 따로 뒀는데, 옮기라고 한 것을 새로 만든 것이라 되돌렸다(2026-08-05).
+import { DesignQueryView } from './remote/QueryView'
+import { DesignCollectionView } from './remote/CollectionView'
 import { DesignDialogs } from './designs/DesignDialogs'
 import { DesignScopeSelector } from './designs/DesignScopeSelector'
 import { useDesignsStore } from './designs/store'
@@ -46,7 +51,7 @@ import { QueryView } from './remote/QueryView'
 import { DataView } from './remote/DataView'
 import { CollectionView } from './remote/CollectionView'
 import { HistoryView } from './remote/HistoryView'
-import { DriftView, PlanView, RunView, LogsView } from './migration/views'
+import { DriftView, ImportView, PlanView, RunView, LogsView } from './migration/views'
 import { CompareView } from './migration/CompareView'
 import { SeedOpsView } from './migration/SeedOpsView'
 import './rehydration' // 에이전트(MCP) 쓰기 → store:changed → 스코프 재조회 구독(부수효과 모듈)
@@ -65,8 +70,8 @@ import './rehydration' // 에이전트(MCP) 쓰기 → store:changed → 스코�
  *   운영→설계  Migration/Drift 가 캡처한 변경을 Design › Versions 에 새 버전으로 되먹임
  *
  * depth 는 Service→Module→View 3단이며, Design·시점·Connection·범위는 nav 계층이 아니라
- * **뷰 탭 줄 오른쪽 끝의 구획 손잡이**가 든 ambient 셀렉터다(설계 손잡이 = 설계+시점,
- * 운영 손잡이 = 연결+범위). 그 구획을 쓰는 모듈을 보는 동안에만 뜬다.
+ * **구획 손잡이**가 든 ambient 셀렉터다(설계 손잡이 = 설계+시점, 운영 손잡이 = 연결+범위).
+ * 그 구획을 쓰는 모듈을 보는 동안에만 뜬다. 자리는 모듈 줄 양끝이다 — 왼쪽이 설계, 오른쪽이 운영.
  */
 const view = (icon: LucideIcon, depth: string, title: string, subtitle: string) => () =>
   <PlaceholderView icon={icon} depth={depth} title={title} subtitle={subtitle} />
@@ -80,8 +85,11 @@ export const dbService: Service = {
   // 상단 컨텍스트 바는 **없다**(2026-07-30 사용자 결정). 넷 다 `area` 를 달아 구획 손잡이로
   // 갔다 — 설계 손잡이가 설계와 그 시점을, 운영 손잡이가 연결과 범위를 든다. 줄이 하나 줄고,
   // 대상이 자기 구획 안에 들어가 있으면 소속을 글자로 설명할 필요가 없다.
-  // 손잡이 자리는 2026-08-02 에 모듈 줄에서 **뷰 탭 줄 오른쪽 끝**으로 내려갔다(사용자 요청):
-  // 맨 위에 못박혀 있으니 설계 화면에 연결이, 운영 화면에 설계가 늘 같이 떠 있었다.
+  // 손잡이 자리 이력: 모듈 줄 → 뷰 탭 줄 오른쪽 끝(2026-08-02) → **모듈 줄 양끝**(2026-08-05).
+  // 2026-08-02 에 내렸던 이유는 "맨 위에 못박혀 있어 설계 화면에 연결이, 운영 화면에 설계가 늘
+  // 같이 떠 있다"였는데, 그건 자리가 아니라 **늘 뜨는 것**이 문제였다. 지금은 어느 자리에 있든
+  // 그것을 쓰는 화면에서만 뜬다(`handlesFor`). 그래서 양옆이 비어 있는 모듈 줄로 다시 올렸고,
+  // 뷰 탭 줄은 탭에만 쓴다.
   context: [
     {
       // 설계는 런타임 데이터 — designs/store 가 contextOptions 레지스트리로 옵션을 주입한다.
@@ -160,12 +168,20 @@ export const dbService: Service = {
       label: 'Design',
       icon: PenTool,
       area: 'design',
+      // 손잡이는 모듈 줄 **왼쪽 위**에 선다(2026-08-05 사용자 요청). 설계부 화면이라 설계 손잡이
+      // 하나만 뜨고, 자리는 그 부서가 서 있는 쪽(`ModuleTabs.handleAt`)을 그대로 따른다.
+      handleLayout: 'sides',
       views: [
         // 시점 손잡이는 여기 없다 — 설계 손잡이가 들고 있어 이 줄 전 뷰에서 늘 같은 자리다.
         // Diagram·Seed 는 그래서 도구줄 자체가 없어졌다(손잡이 하나만 세우던 줄이었다).
         { id: 'definition', label: 'Definition', icon: TableProperties, workspace: DefinitionWorkspace, Toolbar: DefinitionToolbar },
         { id: 'diagram', label: 'Diagram', icon: GitBranch, workspace: DesignDiagramWorkspace },
         { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedWorkspace },
+        // 라이브러리(저장쿼리·컬렉션) — **준비 전용**. 소속이 연결에서 설계로 옮겨져서 생긴
+        // 자리다(2026-08-04 사용자 요청 · `@shared/db/libraryOwner`): 여기서 짜 두면 그 설계에
+        // 물린 연결들(DEV·STG·PROD)이 Remote 에서 **같은 한 벌**을 본다. 실행은 여기 없다.
+        { id: 'query', label: 'Query', icon: Terminal, workspace: DesignQueryView },
+        { id: 'collection', label: 'Collection', icon: Layers, workspace: DesignCollectionView },
         { id: 'mocking', label: 'Mocking', icon: Shuffle, workspace: view(Shuffle, 'depth 3 · Design › Mocking', 'Mocking', '목업 데이터 생성 규칙을 설정한다') },
         { id: 'documenting', label: 'Documenting', icon: FileText, workspace: view(FileText, 'depth 3 · Design › Documenting', 'Documenting', '스키마 문서를 작성/생성한다') },
         { id: 'validation', label: 'Validation', icon: ShieldCheck, workspace: view(ShieldCheck, 'depth 3 · Design › Validation', 'Validation', '설계 단계 제약/무결성 규칙을 검증한다') },
@@ -200,15 +216,30 @@ export const dbService: Service = {
       // 손잡이만 구획을 안 따른다 — 설계와 실 DB 를 **견주는** 모듈이라 둘 다 골라야 일이 된다.
       // `common` 기본값을 그냥 두면 정작 필요한 손잡이가 둘 다 사라진다.
       handles: ['design', 'ops'],
+      // 손잡이 둘이 **함께** 뜨는 유일한 화면이라, 한 줄로 늘어놓으면 탭이 설 자리가 없다.
+      // 그래서 여기서만 좌우로 갈라 두 단 카드로 접는다(2026-08-04 사용자 요청).
+      // 다른 화면은 이 값을 안 적어 예전 모양 그대로다 — 손잡이는 다섯 서비스가 함께 쓴다.
+      handleLayout: 'sides',
+      // 뷰 줄은 **하는 일로 묶는다**(2026-08-04 사용자 요청). 일곱 뷰가 섞여 서 있어서, 줄만
+      // 봐서는 어느 것이 반영이고 어느 것이 되먹임인지 안 읽혔다. 순서가 곧 흐름이다:
+      // 진단(무엇이 다른가) → 반영(설계 → 실제) → 되먹임(실제 → 설계) → 기록.
+      //
+      // **Compare 는 진단이다**(2026-08-05). 예전엔 Logs 와 한 묶음으로 줄 끝에 있었는데, 그 둘은
+      // 한 갈래가 아니다 — Compare 는 *견주기*, Logs 는 *기록*이라 무슨 이름을 붙여도 한쪽이
+      // 안 맞았다("감사"를 후보로 봤다가 접었다: 감사는 규정 준수를 따지는 일이다).
+      // Drift 는 설계↔실제, Compare 는 실제↔실제 — 둘 다 "무엇과 무엇이 다른가"라 같은 묶음이다.
       views: [
-        { id: 'drift', label: 'Drift', icon: Radar, workspace: DriftView },
-        { id: 'plan', label: 'Plan', icon: FileDiff, workspace: PlanView },
-        // 시드 반영·되먹임 — 스키마(Plan/Run)와 갈라 둔다: 대상이 데이터고 게이트도 따로다.
-        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView },
-        { id: 'run', label: 'Run', icon: Play, workspace: RunView },
+        { id: 'drift', label: 'Drift', icon: Radar, workspace: DriftView, group: '진단' },
         // 실DB↔실DB 비교(DEV·STG·PROD) — 설계 무관, 연결 2개만 필요.
-        { id: 'compare', label: 'Compare', icon: GitCompare, workspace: CompareView },
-        { id: 'logs', label: 'Logs', icon: ScrollText, workspace: LogsView }
+        { id: 'compare', label: 'Compare', icon: GitCompare, workspace: CompareView, group: '진단' },
+        { id: 'plan', label: 'Plan', icon: FileDiff, workspace: PlanView, group: '설계 → 실제', groupTone: 'design' },
+        { id: 'run', label: 'Run', icon: Play, workspace: RunView, group: '설계 → 실제', groupTone: 'design' },
+        // 시드 반영·되먹임 — 스키마(Plan/Run)와 갈라 둔다: 대상이 데이터고 게이트도 따로다.
+        // 안에서 방향을 다시 고르지만(apply/import) 여기 서는 자리는 반영 쪽이다.
+        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView, group: '설계 → 실제', groupTone: 'design' },
+        // 되먹임의 문 — 예전엔 Drift 머리글의 버튼이었다(같은 요청으로 뷰가 됐다).
+        { id: 'import', label: '가져오기', icon: DownloadCloud, workspace: ImportView, group: '실제 → 설계', groupTone: 'ops' },
+        { id: 'logs', label: 'Logs', icon: ScrollText, workspace: LogsView, group: '기록' }
       ]
     },
 
@@ -219,6 +250,8 @@ export const dbService: Service = {
       icon: Monitor,
       area: 'ops',
       slot: 'end',
+      // 운영 손잡이는 모듈 줄 **오른쪽 위**(2026-08-05 사용자 요청) — Design 과 좌우로 짝을 이룬다.
+      handleLayout: 'sides',
       views: [
         // Connections 는 형제 모듈이 아니라 **Remote 의 첫 뷰**다(2026-07-30 사용자 결정).
         // 연결을 고르는 일이 곧 Remote 가 무엇을 보여줄지 정하는 일이라, 나머지 뷰와 같은 줄

@@ -70,6 +70,11 @@ interface VersionsState {
   }) => Promise<void>
   /** 버전 삭제(잘못 컷된 버전 회수). 저장소에서 지우고 로컬 목록에서도 제거. */
   remove: (designId: string, id: string) => Promise<void>
+  /**
+   * 버전 **메모** 수정. 컷한 뒤에야 무엇을 담았는지 적고 싶어진다(2026-08-05 사용자 요청).
+   * 고칠 수 있는 것은 메모뿐이다 — 스냅샷과 번호는 불변이다(`main/store/versions` 주석).
+   */
+  updateNote: (designId: string, id: string, note: string) => Promise<void>
 }
 
 export const useVersionsStore = create<VersionsState>()((set, get) => ({
@@ -101,6 +106,15 @@ export const useVersionsStore = create<VersionsState>()((set, get) => ({
     await window.rockury.versions.delete(id)
     set((s) => ({
       byDesign: { ...s.byDesign, [designId]: (s.byDesign[designId] ?? []).filter((v) => v.id !== id) }
+    }))
+  },
+  updateNote: async (designId, id, note) => {
+    await window.rockury.versions.updateNote(id, note)
+    set((s) => ({
+      byDesign: {
+        ...s.byDesign,
+        [designId]: (s.byDesign[designId] ?? []).map((v) => (v.id === id ? { ...v, note: note.trim() } : v))
+      }
     }))
   }
 }))

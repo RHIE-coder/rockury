@@ -228,10 +228,29 @@ export function updateConnection(id: string, patch: UpdateConnectionInput): Conn
   return getConnection(id)!
 }
 
+const LIBRARY_TABLES = ['query_folders', 'saved_queries', 'collection_folders', 'collections']
+
 export function deleteConnection(id: string): void {
   const d = getDb()
   d.exec('BEGIN')
   try {
+    // 이 연결만의 라이브러리(저장쿼리·컬렉션)는 **물린 설계로 넘긴다** — 설계가 딱 하나일 때만.
+    // 예전엔 아무 처리도 안 해서 행이 남되 가리킬 연결이 없어 영영 못 찾았다(2026-08-04 사용자
+    // 지적: "connection 객체를 잃어버리면 모아 두었던 데이터가 날아간다"). 설계로 넘기면
+    // 형제 연결에서 그대로 이어 쓴다.
+    const bound = d
+      .prepare('SELECT DISTINCT design_id FROM environments WHERE connection_id = ?')
+      .all(id) as unknown as { design_id: string }[]
+    for (const t of LIBRARY_TABLES) {
+      if (bound.length === 1) {
+        d.prepare(`UPDATE ${t} SET design_id = ?, connection_id = '' WHERE design_id = '' AND connection_id = ?`)
+          .run(bound[0].design_id, id)
+      } else {
+        // 넘길 설계가 없거나(연결만 쓰던 사람) 여럿이라 못 고를 때 — 남겨 봐야 아무 화면에서도
+        // 못 여는 행이라 지운다. 설계 소속으로 이미 옮겨 간 것은 `design_id` 가 차 있어 안 걸린다.
+        d.prepare(`DELETE FROM ${t} WHERE design_id = '' AND connection_id = ?`).run(id)
+      }
+    }
     // 연결에 매인 바인딩(Environment)도 함께 정리.
     d.prepare('DELETE FROM environments WHERE connection_id = ?').run(id)
     d.prepare('DELETE FROM connections WHERE id = ?').run(id)

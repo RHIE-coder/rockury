@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, FolderOpen, FolderPlus, GripVertical, Link2, Loader2, PauseCircle, Pencil, Plug, Plus, RefreshCw, Server, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, Database, FolderOpen, FolderPlus, GripVertical, Link2, Loader2, PauseCircle, Pencil, Plug, Plus, RefreshCw, Server, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
@@ -14,6 +14,7 @@ import {
   type ConnectionDef
 } from './store'
 import { applyMove, bucketByGroup, insertionIndex, reorderList, verticalInsertionIndex, type Rect } from './dnd'
+import { sampleButtonLabel } from '@shared/db/samplePlan'
 
 function StatusPill({ status }: { status?: ConnStatus }) {
   const s = status?.state ?? 'idle'
@@ -165,8 +166,15 @@ export function ConnectionsView() {
   const createGroup = useConnectionsStore((s) => s.createGroup)
   const renameGroup = useConnectionsStore((s) => s.renameGroup)
   const removeGroup = useConnectionsStore((s) => s.removeGroup)
+  const sample = useConnectionsStore((s) => s.sample)
+  const makeSample = useConnectionsStore((s) => s.makeSample)
+  const remakeSample = useConnectionsStore((s) => s.remakeSample)
   const activeId = useNav((s) => s.contextValues['conn'])
+  const setActiveConn = useNav((s) => s.setContextValue)
 
+  const [confirmRemake, setConfirmRemake] = useState(false)
+  /** 화면에 안 드러나는 결과만 적는다 — 카드가 생기는 것으로 이미 보이면 아무 말도 안 붙인다. */
+  const [sampleNote, setSampleNote] = useState<string | null>(null)
   const [drag, setDrag] = useState<DragCard | null>(null)
   // 드롭 시점의 최신 드래그 상태 — updater 안 부수효과 금지(StrictMode 이중 호출) 규약이라 ref 로 미러링.
   const dragRef = useRef<DragCard | null>(null)
@@ -187,6 +195,34 @@ export function ConnectionsView() {
   const checking = Object.values(statusMap).some((s) => s.state === 'testing')
   const buckets = bucketByGroup(connections, groups.map((g) => g.id))
   const ungrouped = buckets.get(null) ?? []
+
+  const onSample = async () => {
+    setSampleNote(null)
+    if (sample?.connectionId) {
+      setConfirmRemake(true) // 파괴적이다 — 바로 하지 않고 무엇이 지워지는지 먼저 보인다
+      return
+    }
+    try {
+      const r = await makeSample()
+      if (r.status.connectionId) setActiveConn('conn', r.status.connectionId)
+      // 카드가 생기고 골라지는 것으로 이미 보인다 — 파일을 덮지 않았다는 사실만 따로 알린다.
+      if (r.made === 'connection') setSampleNote('기존 샘플 파일을 그대로 씁니다')
+      if (r.made === 'file') setSampleNote('샘플 파일 다시 만듦')
+    } catch (e) {
+      setSampleNote(e instanceof Error ? e.message : '샘플 DB 만들기 실패')
+    }
+  }
+
+  const onRemake = async () => {
+    setConfirmRemake(false)
+    try {
+      await remakeSample()
+      // 카드는 그 자리 그대로라 아무 변화가 안 보인다 — 이건 말해 줘야 한다.
+      setSampleNote('샘플 파일 다시 만듦')
+    } catch (e) {
+      setSampleNote(e instanceof Error ? e.message : '샘플 DB 다시 만들기 실패')
+    }
+  }
 
   const registerContainer = (key: string | null) => (el: HTMLDivElement | null) => {
     if (el) containersRef.current.set(key, el)
@@ -490,6 +526,9 @@ export function ConnectionsView() {
           <p className="text-[12px] text-muted">DB 접속 · 카드를 누르면 활성 연결, 끌면 그룹·순서를 바꿉니다 (그룹은 왼쪽 손잡이로 위아래 이동)</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => void onSample()} title="준비물 없이 바로 써 보는 SQLite 샘플 (도커 불필요)">
+            <Database className="size-3.5" /> {sampleButtonLabel(sample ?? { path: '', fileExists: false, connectionId: null })}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void addGroup()} title="연결을 묶어 관리할 그룹 만들기">
             <FolderPlus className="size-3.5" /> 새 그룹
           </Button>
@@ -502,6 +541,24 @@ export function ConnectionsView() {
         </div>
       </div>
 
+      {/* 되돌릴 수 없는 동작이라 무엇이 지워지는지 먼저 보인다 — 경로까지. */}
+      {confirmRemake && sample && (
+        <div className="flex shrink-0 items-center gap-3 border-b border-line bg-panel-strong px-5 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] text-fg">샘플 DB 를 새로 만듭니다. 이 파일에 넣은 데이터는 사라집니다.</p>
+            <p className="truncate font-mono text-[11px] text-muted">{sample.path}</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setConfirmRemake(false)}>취소</Button>
+          <Button variant="destructive" size="sm" onClick={() => void onRemake()}>다시 만들기</Button>
+        </div>
+      )}
+      {sampleNote && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-line px-5 py-2 text-[12px] text-muted">
+          <span className="min-w-0 flex-1 truncate">{sampleNote}</span>
+          <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[11px]" onClick={() => setSampleNote(null)}>닫기</Button>
+        </div>
+      )}
+
       {connections.length === 0 && groups.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
           <div className="flex size-12 items-center justify-center rounded-2xl bg-panel-strong text-muted">
@@ -511,9 +568,15 @@ export function ConnectionsView() {
           <p className="max-w-md text-[13px] leading-relaxed text-muted">
             모니터링·조회할 DB 접속을 등록하세요. 설계에 묶지 않아도 Remote 에서 바로 쓸 수 있고, 배포/마이그레이션이 필요하면 나중에 설계에 바인딩합니다.
           </p>
-          <Button size="sm" className="mt-1" onClick={() => openCreate()}>
-            <Plus /> 첫 연결 만들기
-          </Button>
+          <div className="mt-1 flex items-center gap-2">
+            <Button size="sm" onClick={() => openCreate()}>
+              <Plus /> 첫 연결 만들기
+            </Button>
+            {/* 등록할 DB 가 아직 없는 사람을 위한 탈출구 — 준비물 없이 바로 볼 것이 생긴다. */}
+            <Button variant="outline" size="sm" onClick={() => void onSample()}>
+              <Database className="size-3.5" /> 샘플 DB 만들기
+            </Button>
+          </div>
         </div>
       ) : (
         <div ref={scrollRef} className="flex flex-1 flex-col gap-4 overflow-auto p-5">

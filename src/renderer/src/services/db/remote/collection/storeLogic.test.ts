@@ -8,8 +8,8 @@ import { toLibNodes } from './store'
 describe('toLibNodes', () => {
   it('folders/queries 를 LibNode 로 매핑', () => {
     const nodes = toLibNodes(
-      [{ id: 'f1', connectionId: 'c', parentId: null, name: 'F', sortOrder: 0 }],
-      [{ id: 'q1', connectionId: 'c', folderId: 'f1', name: 'Q', description: '', sql: 'SELECT 1', sortOrder: 1 }]
+      [{ id: 'f1', connectionId: 'c', designId: '', parentId: null, name: 'F', sortOrder: 0 }],
+      [{ id: 'q1', connectionId: 'c', designId: '', folderId: 'f1', name: 'Q', description: '', sql: 'SELECT 1', sortOrder: 1 }]
     )
     expect(nodes).toEqual([
       { id: 'f1', parentId: null, kind: 'folder', name: 'F', sortOrder: 0 },

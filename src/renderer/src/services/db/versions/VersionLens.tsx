@@ -43,7 +43,9 @@ export function VersionLens() {
               : 'Draft — 편집할 수 있는 작업본이에요'
           }
           className={cx(
-            'flex shrink-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-[13px] transition-colors',
+            // `min-w-0` — 손잡이가 좁아지면 **자기가 줄어든다**. `shrink-0` 이던 동안은 글자가
+            // 손잡이 테두리 밖으로 삐져나와 잘렸다(2026-08-05 사용자 제보).
+            'flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-[13px] transition-colors',
             'hover:bg-panel-strong data-[state=open]:bg-panel-strong',
             // 읽기 전용은 테라코타 **글자**로만 말한다. 손잡이를 채우면 활성 탭(진한 시안)·구획
             // 라벨과 함께 한 줄에 색 채움이 셋이 된다.
@@ -55,7 +57,7 @@ export function VersionLens() {
           ) : (
             <History size={13} className="shrink-0 text-muted" />
           )}
-          <span className="font-mono text-[12px] font-semibold">{current.label}</span>
+          <span className="truncate font-mono text-[12px] font-semibold">{current.label}</span>
           {/* 좁아지면 상태말부터 접는다 — 자물쇠/시계 아이콘이 같은 말을 이미 하고 있다. */}
           <span
             className={cx(

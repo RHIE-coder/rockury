@@ -167,10 +167,12 @@ export const dbMigration: ServiceMigration = {
     );
     CREATE INDEX IF NOT EXISTS idx_query_history_conn ON query_history(connection_id);
 
-    -- 저장 쿼리 라이브러리 (연결 스코프, 폴더 트리)
+    -- 저장 쿼리 라이브러리 (폴더 트리). 소속은 설계 아니면 연결 한쪽이다 —
+    -- 둘 중 채워진 칸이 주인이고, 판정은 shared/db/libraryOwner 에 있다.
     CREATE TABLE IF NOT EXISTS query_folders (
       id            TEXT PRIMARY KEY,
-      connection_id TEXT NOT NULL,
+      connection_id TEXT NOT NULL DEFAULT '',
+      design_id     TEXT NOT NULL DEFAULT '',
       parent_id     TEXT,
       name          TEXT NOT NULL,
       sort_order    INTEGER NOT NULL DEFAULT 0,
@@ -181,7 +183,8 @@ export const dbMigration: ServiceMigration = {
 
     CREATE TABLE IF NOT EXISTS saved_queries (
       id            TEXT PRIMARY KEY,
-      connection_id TEXT NOT NULL,
+      connection_id TEXT NOT NULL DEFAULT '',
+      design_id     TEXT NOT NULL DEFAULT '',
       folder_id     TEXT,
       name          TEXT NOT NULL,
       description   TEXT NOT NULL DEFAULT '',
@@ -195,7 +198,8 @@ export const dbMigration: ServiceMigration = {
     -- 컬렉션 폴더 (컬렉션도 폴더 트리로 관리 — 저장쿼리 트리와 동형)
     CREATE TABLE IF NOT EXISTS collection_folders (
       id            TEXT PRIMARY KEY,
-      connection_id TEXT NOT NULL,
+      connection_id TEXT NOT NULL DEFAULT '',
+      design_id     TEXT NOT NULL DEFAULT '',
       parent_id     TEXT,
       name          TEXT NOT NULL,
       sort_order    INTEGER NOT NULL DEFAULT 0,
@@ -207,7 +211,8 @@ export const dbMigration: ServiceMigration = {
     -- 컬렉션 (순서 있는 쿼리 묶음 — Run-All)
     CREATE TABLE IF NOT EXISTS collections (
       id            TEXT PRIMARY KEY,
-      connection_id TEXT NOT NULL,
+      connection_id TEXT NOT NULL DEFAULT '',
+      design_id     TEXT NOT NULL DEFAULT '',
       folder_id     TEXT,
       name          TEXT NOT NULL,
       sort_order    INTEGER NOT NULL DEFAULT 0,
@@ -330,5 +335,43 @@ export const dbMigration: ServiceMigration = {
     // diagram_layouts.groups — 다이어그램 그룹(레이어): 이름·색·소속 테이블·접힘.
     // 배치와 같은 행에 둔다 — 스코프(연결/설계)가 같고 언제나 함께 읽고 쓰기 때문.
     addColumnIfMissing(d, 'diagram_layouts', 'groups', `TEXT NOT NULL DEFAULT '[]'`)
+
+    // 라이브러리(저장쿼리·컬렉션)의 **설계 소속** — 왜 여는지는 `@shared/db/libraryOwner` 에 있다.
+    // 요약: 쿼리는 접속 정보가 아니라 스키마에 대해 쓴다. 비어 있으면 예전처럼 연결 소속이라
+    // **컬럼만 얹은 시점에는 동작이 하나도 안 바뀐다** — 옮기는 일은 아래 이사가 따로 한다.
+    for (const t of ['query_folders', 'saved_queries', 'collection_folders', 'collections']) {
+      addColumnIfMissing(d, t, 'design_id', `TEXT NOT NULL DEFAULT ''`)
+    }
+    moveLibraryToBoundDesign(d)
+  }
+}
+
+/**
+ * 연결에 매여 있던 라이브러리를 **그 연결에 물린 설계로 옮긴다**(한 번만, 자동).
+ *
+ * 이걸 안 하면 새 소속은 앞으로 만드는 것에만 걸려, 정작 사용자가 그동안 쌓아 둔 쿼리는
+ * 여전히 연결 하나에 갇힌 채다 — 고쳐 달라던 두 가지가 옛 데이터에선 그대로 남는다.
+ *
+ * **설계가 딱 하나 물린 연결만** 옮긴다. 둘 이상이면 어느 설계 것인지 앱이 고를 수 없고,
+ * 잘못 고르면 남의 설계 화면에 남의 쿼리가 뜬다(`libraryOwner.ownerFor` 와 같은 판정).
+ * `design_id` 가 빈 행만 건드리므로 몇 번을 지나가도 결과가 같다.
+ */
+function moveLibraryToBoundDesign(d: DatabaseSync): void {
+  // 설계를 정확히 하나만 물린 연결 → 그 설계.
+  const pairs = d
+    .prepare(
+      `SELECT connection_id, MIN(design_id) AS design_id FROM environments
+       GROUP BY connection_id HAVING COUNT(DISTINCT design_id) = 1`
+    )
+    .all() as unknown as { connection_id: string; design_id: string }[]
+  if (pairs.length === 0) return
+
+  for (const t of ['query_folders', 'saved_queries', 'collection_folders', 'collections']) {
+    // connection_id 는 비워 둔다 — 소속이 옮겨졌는데 옛 자리가 남아 있으면 "이 연결만의 것"
+    // 목록에 같은 행이 한 번 더 잡힌다.
+    const stmt = d.prepare(
+      `UPDATE ${t} SET design_id = ?, connection_id = '' WHERE design_id = '' AND connection_id = ?`
+    )
+    for (const p of pairs) stmt.run(p.design_id, p.connection_id)
   }
 }

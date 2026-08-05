@@ -27,6 +27,7 @@ import {
   updateCollection,
   updateItem
 } from '../../store/collections'
+import type { LibraryScope } from '../../store/libraryScope'
 import { envelope } from '../envelope'
 
 /**
@@ -34,11 +35,13 @@ import { envelope } from '../envelope'
  */
 export function registerCollectionIpc(): void {
   // ── 저장 쿼리 트리 ──
-  ipcMain.handle('sq:tree', (_e, connectionId: string) => envelope(() => listTree(connectionId)))
-  ipcMain.handle('sq:createFolder', (_e, input: { connectionId: string; parentId: string | null; name: string }) =>
+  // 스코프는 **연결 아니면 설계**다 — 운영 화면은 연결을, 설계 화면은 설계를 준다.
+  // 연결로 물어보면 저장소가 그 연결에 물린 설계까지 찾아 함께 보여 준다(`store/libraryScope`).
+  ipcMain.handle('sq:tree', (_e, scope: LibraryScope) => envelope(() => listTree(scope)))
+  ipcMain.handle('sq:createFolder', (_e, input: { scope: LibraryScope; parentId: string | null; name: string }) =>
     envelope(() => createFolder(input))
   )
-  ipcMain.handle('sq:createQuery', (_e, input: { connectionId: string; folderId: string | null; name: string; sql: string }) =>
+  ipcMain.handle('sq:createQuery', (_e, input: { scope: LibraryScope; folderId: string | null; name: string; sql: string }) =>
     envelope(() => createSavedQuery(input))
   )
   ipcMain.handle('sq:renameFolder', (_e, id: string, name: string) => envelope(() => renameFolder(id, name)))
@@ -52,11 +55,11 @@ export function registerCollectionIpc(): void {
   )
 
   // ── 컬렉션 ──
-  ipcMain.handle('col:list', (_e, connectionId: string) => envelope(() => listCollections(connectionId)))
-  ipcMain.handle('col:folders', (_e, connectionId: string) => envelope(() => listCollectionFolders(connectionId)))
+  ipcMain.handle('col:list', (_e, scope: LibraryScope) => envelope(() => listCollections(scope)))
+  ipcMain.handle('col:folders', (_e, scope: LibraryScope) => envelope(() => listCollectionFolders(scope)))
   ipcMain.handle('col:items', (_e, collectionId: string) => envelope(() => listItems(collectionId)))
-  ipcMain.handle('col:create', (_e, input: { connectionId: string; name: string; folderId?: string | null }) => envelope(() => createCollection(input)))
-  ipcMain.handle('col:createFolder', (_e, input: { connectionId: string; parentId: string | null; name: string }) => envelope(() => createCollectionFolder(input)))
+  ipcMain.handle('col:create', (_e, input: { scope: LibraryScope; name: string; folderId?: string | null }) => envelope(() => createCollection(input)))
+  ipcMain.handle('col:createFolder', (_e, input: { scope: LibraryScope; parentId: string | null; name: string }) => envelope(() => createCollectionFolder(input)))
   ipcMain.handle('col:rename', (_e, id: string, name: string) => envelope(() => renameCollection(id, name)))
   ipcMain.handle('col:update', (_e, id: string, patch: { name?: string; description?: string }) => envelope(() => updateCollection(id, patch)))
   ipcMain.handle('col:renameFolder', (_e, id: string, name: string) => envelope(() => renameCollectionFolder(id, name)))

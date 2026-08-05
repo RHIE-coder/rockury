@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/ui/d
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { RowDetailDialog } from './RowDetailDialog'
 import { useActiveConnection } from '../connections/store'
+import { useActiveDesign } from '../designs/store'
 import { type QueryResult } from './query/store'
 import { flattenTree, getProjection, moveTargets, removeChildrenOf, type FlatNode } from './collection/tree'
 import { toCollLibNodes, toLibNodes, useCollectionStore, type ItemStatus } from './collection/store'
@@ -99,8 +100,29 @@ function CollTreeRow({ node, active, editing, collapsed, dropTarget, onSelect, o
  * 중앙: 선택 컬렉션의 순서 있는 아이템(Run All·개별 실행·편집·제거·SELECT 결과) — 하나의 원자적 트랜잭션.
  * 우: QUERIES 트리 — 저장쿼리를 클릭해 컬렉션에 참조 추가.
  */
+/**
+ * **두 화면이 이 하나를 쓴다**(2026-08-05) — `QueryView` 와 같은 이유·같은 규칙이다.
+ * 모드가 가르는 것은 라이브러리 소속과 "접속이 필요한 동작"(Run All·개별 실행)뿐이고,
+ * 트리·검색·끌어 옮기기·컨텍스트 메뉴·아이템 편집은 두 화면이 똑같이 쓴다.
+ */
+type CollectionMode = 'remote' | 'design'
+
+/** 운영부 — 실 DB 에 붙어 한 트랜잭션으로 돌린다. */
 export function CollectionView() {
-  const conn = useActiveConnection()
+  return <CollectionScreen mode="remote" />
+}
+
+/** 설계부 — 같은 화면, 돌리는 것만 잠근다. 물린 연결들이 이 한 벌을 그대로 물려받는다. */
+export function DesignCollectionView() {
+  return <CollectionScreen mode="design" />
+}
+
+function CollectionScreen({ mode }: { mode: CollectionMode }) {
+  const isDesign = mode === 'design'
+  // 설계 화면에서는 연결을 아예 안 본다 — nav 에 남아 있어도 집어 쓰지 않는다.
+  const navConn = useActiveConnection()
+  const conn = isDesign ? null : navConn
+  const design = useActiveDesign()
   const st = useCollectionStore()
   const [offsetLeft, setOffsetLeft] = useState(0)
   const [dragId, setDragId] = useState<string | null>(null)
@@ -121,13 +143,27 @@ export function CollectionView() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
-  useEffect(() => {
-    if (conn) void st.load(conn.id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conn?.id])
+  // 라이브러리를 어느 소속으로 볼 것인가 — 목록·만들기·이름변경이 전부 이걸 따른다.
+  const scope = isDesign
+    ? design
+      ? { designId: design.id }
+      : null
+    : conn
+      ? { connectionId: conn.id }
+      : null
 
-  if (!conn) {
-    return <PlaceholderView icon={Layers} depth="depth 3 · Remote › Collection" title="연결을 선택하세요" subtitle="Connection 셀렉터에서 대상을 고르면 컬렉션을 관리할 수 있습니다." />
+  const scopeJson = JSON.stringify(scope)
+  useEffect(() => {
+    if (scope) void st.load(scope)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeJson])
+
+  if (!scope) {
+    return isDesign ? (
+      <PlaceholderView icon={Layers} depth="depth 3 · Design › Collection" title="선택된 설계 없음" />
+    ) : (
+      <PlaceholderView icon={Layers} depth="depth 3 · Remote › Collection" title="선택된 연결 없음" />
+    )
   }
 
   const colFlat = flattenTree(toCollLibNodes(st.collectionFolders, st.collections))
@@ -201,7 +237,8 @@ export function CollectionView() {
   return (
     <div className="h-full min-h-0" onClick={() => colCtx && setColCtx(null)}>
       <WorkspacePanels
-        autoSaveId="db.console.collection"
+        // 패널 폭 기억은 화면마다 따로 — 한 열쇠를 나눠 쓰면 한쪽에서 줄인 폭이 다른 쪽까지 따라간다.
+        autoSaveId={isDesign ? 'db.design.collection' : 'db.console.collection'}
         collapsible
         sidebarTitle="Collections"
         sidebarActions={
@@ -314,7 +351,8 @@ export function CollectionView() {
                 ) : st.error && !st.tx ? (
                   <Button size="sm" variant="outline" onClick={() => void st.retry()}><RotateCcw /> 재시도</Button>
                 ) : !st.tx ? (
-                  <Button size="sm" disabled={st.items.length === 0} onClick={() => void st.runAll()}><Play /> Run All ({st.items.length})</Button>
+                  // 접속이 없으면 못 돌린다 — 설계부에서 잠기는 것은 이것과 개별 실행뿐이다.
+                  <Button size="sm" disabled={!conn || st.items.length === 0} title={conn ? undefined : '접속이 있어야 돌릴 수 있습니다 — Remote 에서 돌리세요'} onClick={() => void st.runAll()}><Play /> Run All ({st.items.length})</Button>
                 ) : null}
               </div>
             </div>
@@ -364,7 +402,7 @@ export function CollectionView() {
                             </div>
                             <div className="truncate font-mono text-[11px] text-muted" title={it.sql}>{it.sql || '(empty)'}</div>
                           </div>
-                          <button type="button" onClick={() => void st.runOne(it.id)} onPointerDown={(e) => e.stopPropagation()} disabled={st.running} className="text-muted hover:text-accent disabled:opacity-40" title="이 아이템만 실행(열린 트랜잭션에 이어붙임 · 개별 커밋 안 함)"><Play className="size-3.5" /></button>
+                          <button type="button" onClick={() => void st.runOne(it.id)} onPointerDown={(e) => e.stopPropagation()} disabled={!conn || st.running} className="text-muted hover:text-accent disabled:opacity-40" title={conn ? '이 아이템만 실행(열린 트랜잭션에 이어붙임 · 개별 커밋 안 함)' : '접속이 있어야 돌릴 수 있습니다'}><Play className="size-3.5" /></button>
                           {result && <button type="button" onClick={() => toggle(setExpanded, it.id)} onPointerDown={(e) => e.stopPropagation()} className={cn('hover:text-accent', isOpen ? 'text-accent' : 'text-muted')} title={isOpen ? '결과 접기' : '결과 펼치기'}><Eye className="size-3.5" /></button>}
                           {!it.savedQueryId && <button type="button" onClick={() => setEditItem({ id: it.id, name: it.name, sql: it.sql })} onPointerDown={(e) => e.stopPropagation()} className="text-muted opacity-0 hover:text-accent group-hover/item:opacity-100" title="편집"><Pencil className="size-3.5" /></button>}
                           <button type="button" onClick={() => void st.removeItem(it.id)} onPointerDown={(e) => e.stopPropagation()} className="text-muted hover:text-destructive" title="제거"><Trash2 className="size-3.5" /></button>

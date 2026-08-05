@@ -1,5 +1,6 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import { connectionService, type ConnectionFormData } from '../../services/connectionService'
+import { createSample, resetSample, sampleStatus } from '../../store/sampleDb'
 import { envelope } from '../envelope'
 
 /**
@@ -45,5 +46,16 @@ export function registerConnectionIpc(): void {
   )
   ipcMain.handle('connections:revealPassword', (_e, id: string) =>
     envelope(() => connectionService.revealPassword(id))
+  )
+
+  // ── 샘플 DB — 준비물 없이 앱을 곧장 써 보게 하는 SQLite 하나. userData 아래에만 쓴다. ──
+  ipcMain.handle('connections:sampleStatus', () =>
+    envelope(() => sampleStatus(app.getPath('userData')))
+  )
+  ipcMain.handle('connections:createSample', () =>
+    envelope(() => createSample(app.getPath('userData')))
+  )
+  ipcMain.handle('connections:resetSample', () =>
+    envelope(() => resetSample(app.getPath('userData')))
   )
 }

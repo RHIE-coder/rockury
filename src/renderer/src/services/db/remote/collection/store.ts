@@ -4,11 +4,21 @@ import type { QueryResult } from '../query/store'
 import { allReadOnly, classifyStatement } from '../query/classify'
 
 /** 구조적 레코드 타입(main 과 동일 형태). */
-interface Folder { id: string; connectionId: string; parentId: string | null; name: string; sortOrder: number }
-interface SavedQuery { id: string; connectionId: string; folderId: string | null; name: string; description: string; sql: string; sortOrder: number }
-interface CollFolder { id: string; connectionId: string; parentId: string | null; name: string; sortOrder: number }
-interface Collection { id: string; connectionId: string; folderId: string | null; name: string; description: string; sortOrder: number }
+interface Folder { id: string; connectionId: string; designId: string; parentId: string | null; name: string; sortOrder: number }
+interface SavedQuery { id: string; connectionId: string; designId: string; folderId: string | null; name: string; description: string; sql: string; sortOrder: number }
+interface CollFolder { id: string; connectionId: string; designId: string; parentId: string | null; name: string; sortOrder: number }
+interface Collection { id: string; connectionId: string; designId: string; folderId: string | null; name: string; description: string; sortOrder: number }
 interface Item { id: string; collectionId: string; savedQueryId: string | null; name: string; sql: string; sortOrder: number }
+
+/**
+ * 라이브러리를 **어느 소속으로 볼 것인가**(main 과 동일 형태 · `@shared/db/libraryOwner`).
+ * 설계 화면은 `designId`, 운영 화면은 `connectionId` 를 준다 — 연결로 주면 그 연결에 물린
+ * 설계 것까지 함께 온다. 그래서 같은 설계를 쓰는 DEV·STG·PROD 가 한 벌을 같이 본다.
+ */
+export interface LibraryScope {
+  connectionId?: string | null
+  designId?: string | null
+}
 
 export type ItemStatus = 'pending' | 'running' | 'ok' | 'error' | 'skipped'
 
@@ -17,7 +27,12 @@ export type ItemStatus = 'pending' | 'running' | 'ok' | 'error' | 'skipped'
  * 러너는 2c 트랜잭션 게이트 재사용 — 한 트랜잭션에 아이템을 순차 실행하고 최종 커밋/롤백.
  */
 interface CollectionState {
+  /** 지금 보고 있는 라이브러리의 소속. 목록·만들기가 전부 이걸 기준으로 돈다. */
+  scope: LibraryScope | null
+  /** 실행 대상 연결 — 라이브러리 소속과 **다르다**. 설계 화면엔 없어서 실행이 안 된다. */
   connectionId: string | null
+  /** 지금 보는 라이브러리를 가진 설계. 연결 소속이면 null(그 연결만의 것). */
+  libraryDesignId: string | null
   folders: Folder[]
   queries: SavedQuery[]
   collectionFolders: CollFolder[]
@@ -35,7 +50,7 @@ interface CollectionState {
   /** 읽기 전용 실행처럼 커밋이 필요 없을 때 보여줄 안내(다음 실행/선택 시 사라짐). */
   info: string | null
 
-  load: (connectionId: string) => Promise<void>
+  load: (scope: LibraryScope) => Promise<void>
   selectCollection: (id: string) => Promise<void>
 
   addFolder: (name: string, parentId?: string | null) => Promise<void>
@@ -128,7 +143,9 @@ export function toCollLibNodes(folders: CollFolder[], collections: Collection[])
 }
 
 export const useCollectionStore = create<CollectionState>()((set, get) => ({
+  scope: null,
   connectionId: null,
+  libraryDesignId: null,
   folders: [],
   queries: [],
   collectionFolders: [],
@@ -143,14 +160,30 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
   error: null,
   info: null,
 
-  load: async (connectionId) => {
+  load: async (scope) => {
     try {
+      // 연결로 볼 때는 **어느 설계 것을 보고 있는지**도 같이 알아 둔다 — 운영 화면엔 설계
+      // 손잡이가 안 뜨므로, 이 값이 없으면 "이게 형제 연결과 공유되는 한 벌인지"를 알 길이 없다.
+      const bound =
+        scope.connectionId && !scope.designId
+          ? [...new Set((await window.rockury.environments.listByConnection(scope.connectionId)).map((b) => b.designId))]
+          : []
       const [tree, collections, collectionFolders] = await Promise.all([
-        window.rockury.savedQueries.tree(connectionId),
-        window.rockury.collections.list(connectionId),
-        window.rockury.collections.folders(connectionId)
+        window.rockury.savedQueries.tree(scope),
+        window.rockury.collections.list(scope),
+        window.rockury.collections.folders(scope)
       ])
-      set({ connectionId, folders: tree.folders, queries: tree.queries, collections, collectionFolders })
+      set({
+        scope,
+        // 설계 화면(연결 없음)에서는 비워 둔다 — 실행 버튼이 살아 있으면 안 된다.
+        connectionId: scope.connectionId ?? null,
+        // 물린 설계가 둘 이상이면 만들 자리를 못 고른다(= 연결 소속) → 표시도 안 한다.
+        libraryDesignId: scope.designId ?? (bound.length === 1 ? bound[0] : null),
+        folders: tree.folders,
+        queries: tree.queries,
+        collections,
+        collectionFolders
+      })
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) })
     }
@@ -162,23 +195,25 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
     set({ items })
   },
 
+  // 아래 라이브러리 조작은 전부 **소속(scope)** 을 기준으로 돈다 — 연결이 아니다.
+  // 설계 소속이면 형제 연결(DEV·STG·PROD)에서 만든 것도 같은 목록에 들어온다.
   addFolder: async (name, parentId = null) => {
-    const cid = get().connectionId
-    if (!cid) return
-    await window.rockury.savedQueries.createFolder({ connectionId: cid, parentId, name })
-    await get().load(cid)
+    const sc = get().scope
+    if (!sc) return
+    await window.rockury.savedQueries.createFolder({ scope: sc, parentId, name })
+    await get().load(sc)
   },
   addQuery: async (name, sql, folderId = null) => {
-    const cid = get().connectionId
-    if (!cid) return
-    await window.rockury.savedQueries.createQuery({ connectionId: cid, folderId, name, sql })
-    await get().load(cid)
+    const sc = get().scope
+    if (!sc) return
+    await window.rockury.savedQueries.createQuery({ scope: sc, folderId, name, sql })
+    await get().load(sc)
   },
   rename: async (kind, id, name) => {
     if (kind === 'folder') await window.rockury.savedQueries.renameFolder(id, name)
     else await window.rockury.savedQueries.updateQuery(id, { name })
-    const cid = get().connectionId
-    if (cid) await get().load(cid)
+    const sc = get().scope
+    if (sc) await get().load(sc)
   },
   remove: async (kind, id) => {
     try {
@@ -188,58 +223,58 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
       set({ error: e instanceof Error ? e.message : String(e) })
       return
     }
-    const cid = get().connectionId
-    if (cid) await get().load(cid)
+    const sc = get().scope
+    if (sc) await get().load(sc)
   },
   applyReorder: async (flat) => {
     await window.rockury.savedQueries.reorderTree(flat.map((f, i) => ({ ...f, sortOrder: i })))
-    const cid = get().connectionId
-    if (cid) await get().load(cid)
+    const sc = get().scope
+    if (sc) await get().load(sc)
   },
 
   addCollection: async (name, folderId = null) => {
-    const cid = get().connectionId
-    if (!cid) return
-    const col = await window.rockury.collections.create({ connectionId: cid, name, folderId })
-    await get().load(cid)
+    const sc = get().scope
+    if (!sc) return
+    const col = await window.rockury.collections.create({ scope: sc, name, folderId })
+    await get().load(sc)
     await get().selectCollection(col.id)
   },
   addCollectionFolder: async (name, parentId = null) => {
-    const cid = get().connectionId
-    if (!cid) return
-    await window.rockury.collections.createFolder({ connectionId: cid, parentId, name })
-    await get().load(cid)
+    const sc = get().scope
+    if (!sc) return
+    await window.rockury.collections.createFolder({ scope: sc, parentId, name })
+    await get().load(sc)
   },
   renameCollectionFolder: async (id, name) => {
     await window.rockury.collections.renameFolder(id, name)
-    const cid = get().connectionId
-    if (cid) await get().load(cid)
+    const sc = get().scope
+    if (sc) await get().load(sc)
   },
   removeCollectionFolder: async (id) => {
     await window.rockury.collections.deleteFolder(id)
-    const cid = get().connectionId
-    if (cid) await get().load(cid)
+    const sc = get().scope
+    if (sc) await get().load(sc)
   },
   applyCollectionReorder: async (flat) => {
     await window.rockury.collections.reorderTree(flat.map((f, i) => ({ ...f, sortOrder: i })))
-    const cid = get().connectionId
-    if (cid) await get().load(cid)
+    const sc = get().scope
+    if (sc) await get().load(sc)
   },
   renameCollection: async (id, name) => {
     await window.rockury.collections.rename(id, name)
-    const cid = get().connectionId
-    if (cid) await get().load(cid)
+    const sc = get().scope
+    if (sc) await get().load(sc)
   },
   updateCollection: async (id, patch) => {
     await window.rockury.collections.update(id, patch)
-    const cid = get().connectionId
-    if (cid) await get().load(cid)
+    const sc = get().scope
+    if (sc) await get().load(sc)
   },
   removeCollection: async (id) => {
     await window.rockury.collections.delete(id)
-    const cid = get().connectionId
+    const sc = get().scope
     set({ activeCollectionId: null, items: [] })
-    if (cid) await get().load(cid)
+    if (sc) await get().load(sc)
   },
   addItem: async (name, sql) => {
     const colId = get().activeCollectionId

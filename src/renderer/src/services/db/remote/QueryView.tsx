@@ -44,6 +44,8 @@ import type { TableDef } from '../workspaces/definition/types'
 import type { DialectId } from '../dialects'
 import { downloadText } from '../download'
 import { useActiveConnection } from '../connections/store'
+import { useActiveDesign } from '../designs/store'
+import { useScopedDesignTables } from '../workspaces/definition/store'
 import { qualifiedName, type TableRef } from '../schemaRef'
 import { quoteTable, type SqlDialect } from './data/sqlBuilder'
 import { useRemoteStore } from './store'
@@ -86,17 +88,48 @@ function cell(v: unknown): { text: string; muted?: boolean } {
 }
 
 /**
- * Remote › Query(운영부 · depth 3) — 저장 쿼리를 "객체"로 관리(레거시 rky-mvp 이식).
+ * Query 화면 — 저장 쿼리를 "객체"로 관리(레거시 rky-mvp 이식).
  * 좌: 저장쿼리 폴더/파일 트리(검색·새폴더/쿼리·우클릭 rename/move/delete·DnD).
  * 중앙: 선택 쿼리 편집기(이름/설명 인라인 편집 + 자동저장, {{키워드}} 파라미터, Run/Format/EXPLAIN) + 결과.
  * 우: Schema 패널(토글, 테이블/뷰·컬럼). DML 은 트랜잭션 게이트.
+ *
+ * **두 화면이 이 하나를 쓴다**(2026-08-05). 라이브러리 소속이 연결에서 설계로 옮겨지면서
+ * (`@shared/db/libraryOwner`) 설계부에도 같은 화면이 필요해졌는데, 처음엔 "준비 전용이니
+ * 가벼운 걸로"라며 **줄인 화면을 따로 만들었다.** 그래서 설계부에서는 오른쪽 스키마 패널도,
+ * 필터도, 끌어 옮기기도, 결과 영역도 없었다 — 시킨 것은 옮기는 일이었는데 새로 만든 것이다.
+ * 지금은 한 컴포넌트가 둘을 다 그린다. **모드가 가르는 것은 딱 두 가지뿐이다:**
+ *   ⑴ 라이브러리 소속(`scope`) — 설계부는 설계, 운영부는 연결
+ *   ⑵ 접속이 필요한 동작 — 실행·EXPLAIN·표 미리보기·실 DB 스키마. 설계부엔 접속이 없다.
+ * 나머지(트리·검색·이름 편집·자동저장·파라미터·편집기)는 두 화면이 **똑같이** 쓴다.
  */
+type QueryMode = 'remote' | 'design'
+
+/** 운영부 — 실 DB 에 붙어 돌린다. */
 export function QueryView() {
-  const conn = useActiveConnection()
-  const tables = useRemoteStore((s) => (conn ? s.byEnv[conn.id] : undefined))
+  return <QueryScreen mode="remote" />
+}
+
+/** 설계부 — 같은 화면, 접속이 필요한 것만 잠근다. 여기서 짜 두면 물린 연결들이 그대로 물려받는다. */
+export function DesignQueryView() {
+  return <QueryScreen mode="design" />
+}
+
+function QueryScreen({ mode }: { mode: QueryMode }) {
+  const isDesign = mode === 'design'
+  // 설계 화면에서는 연결을 **아예 안 본다.** nav 컨텍스트에 연결이 남아 있어도(다른 화면에서 고른 것)
+  // 그걸 집어 쓰면 설계부에서 실 DB 를 건드리게 된다.
+  const navConn = useActiveConnection()
+  const conn = isDesign ? null : navConn
+  const design = useActiveDesign()
+
+  const introTables = useRemoteStore((s) => (conn ? s.byEnv[conn.id] : undefined))
   const loadIntro = useRemoteStore((s) => s.load)
   const introError = useRemoteStore((s) => (conn ? s.error[conn.id] : null))
   const introLoading = useRemoteStore((s) => (conn ? s.loading[conn.id] : false))
+  const designTables = useScopedDesignTables()
+  // 오른쪽 패널이 보는 스키마 — 운영부는 실 DB 를 읽어 온 것, 설계부는 그 설계의 정의.
+  // 둘 다 `TableDef[]` 라 패널은 어느 쪽인지 몰라도 된다.
+  const tables = isDesign ? designTables : introTables
   const lib = useCollectionStore()
 
   const sql = useQueryStore((s) => s.sql)
@@ -132,33 +165,43 @@ export function QueryView() {
   const [offsetLeft, setOffsetLeft] = useState(0)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
-  useEffect(() => {
-    if (conn) {
-      void loadIntro(conn.id, conn.id)
-      void lib.load(conn.id)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conn?.id])
+  // 라이브러리를 **어느 소속으로 볼 것인가.** 이 값 하나가 목록·만들기·이름변경을 전부 가른다.
+  const scope = isDesign
+    ? design
+      ? { designId: design.id }
+      : null
+    : conn
+      ? { connectionId: conn.id }
+      : null
+  // 지금 편집 중인 저장쿼리가 **이 화면 것인가**를 가리는 열쇠(자동저장이 남의 쿼리를 덮지 않게).
+  const scopeKey = isDesign ? design?.id ?? null : conn?.id ?? null
+  const dialect = isDesign ? design?.dialect : conn?.dbType
 
-  // 자동저장(디바운스 1s) — 라이브러리 쿼리 SQL. 저장쿼리 연결 스코프.
+  const scopeJson = JSON.stringify(scope)
   useEffect(() => {
-    if (!activeId || activeConn !== conn?.id) return
+    if (!scope) return
+    void lib.load(scope)
+    // 실 DB 스키마는 접속이 있을 때만 읽는다 — 설계부는 자기 정의를 그대로 쓴다.
+    if (conn) void loadIntro(conn.id, conn.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeJson])
+
+  // 자동저장(디바운스 1s) — 라이브러리 쿼리 SQL. 소속이 다르면 건드리지 않는다.
+  useEffect(() => {
+    if (!activeId || activeConn !== scopeKey) return
     const t = setTimeout(() => void window.rockury.savedQueries.updateQuery(activeId, { sql }), 1000)
     return () => clearTimeout(t)
-  }, [sql, activeId, activeConn, conn?.id])
+  }, [sql, activeId, activeConn, scopeKey])
 
   const keywords = useMemo(() => extractKeywords(sql), [sql])
   const [kw, setKw] = useState<Record<string, string>>({})
   const missing = keywords.filter((k) => !(kw[k]?.trim()))
 
-  if (!conn) {
-    return (
-      <PlaceholderView
-        icon={Terminal}
-        depth="depth 3 · Remote › Query"
-        title="연결을 선택하세요"
-        subtitle="상단 컨텍스트 바의 Connection 셀렉터에서 대상을 고르면 SQL 을 실행할 수 있습니다."
-      />
+  if (!scope || !scopeKey) {
+    return isDesign ? (
+      <PlaceholderView icon={Terminal} depth="depth 3 · Design › Query" title="선택된 설계 없음" />
+    ) : (
+      <PlaceholderView icon={Terminal} depth="depth 3 · Remote › Query" title="선택된 연결 없음" />
     )
   }
 
@@ -172,21 +215,22 @@ export function QueryView() {
 
   const rows = result?.rows ?? []
   const shown = rows.slice(0, MAX_ROWS)
-  const canRun = !loading && sql.trim().length > 0 && !tx && missing.length === 0
+  // 접속이 없으면 돌릴 수가 없다 — 설계부에서 잠기는 것은 **이것뿐**이다.
+  const canRun = !!conn && !loading && sql.trim().length > 0 && !tx && missing.length === 0
   const effectiveSql = (): string => applyKeywords(sql, kw)
 
-  const selectQuery = (id: string, s: string): void => loadSaved(id, s, conn.id)
+  const selectQuery = (id: string, s: string): void => loadSaved(id, s, scopeKey)
 
   const newQuery = async (folderId: string | null = null): Promise<void> => {
-    const rec = await window.rockury.savedQueries.createQuery({ connectionId: conn.id, folderId, name: 'Untitled Query', sql: '' })
-    await lib.load(conn.id)
+    const rec = await window.rockury.savedQueries.createQuery({ scope, folderId, name: 'Untitled Query', sql: '' })
+    await lib.load(scope)
     selectQuery(rec.id, '')
   }
 
   const renameNode = (kind: 'folder' | 'query', id: string, name: string): void => void lib.rename(kind, id, name)
   const patchActive = (patch: { name?: string; description?: string }): void => {
     if (!activeId) return
-    void window.rockury.savedQueries.updateQuery(activeId, patch).then(() => lib.load(conn.id))
+    void window.rockury.savedQueries.updateQuery(activeId, patch).then(() => lib.load(scope))
   }
 
   const onDragStart = (e: DragStartEvent): void => { setDragId(String(e.active.id)); setDropParentId(null) }
@@ -232,7 +276,8 @@ export function QueryView() {
   return (
     <div className="h-full min-h-0" onClick={() => ctx && setCtx(null)}>
       <WorkspacePanels
-        autoSaveId="db.console.query"
+        // 패널 폭 기억은 화면마다 따로 — 한 열쇠를 나눠 쓰면 설계부에서 줄인 폭이 운영부까지 따라간다.
+        autoSaveId={isDesign ? 'db.design.query' : 'db.console.query'}
         collapsible
         sidebarTitle="Queries"
         sidebarActions={
@@ -288,7 +333,8 @@ export function QueryView() {
           <SchemaPanel
             tables={tables ?? []}
             onInsert={(name) => setSql(sql + (sql && !sql.endsWith(' ') ? ' ' : '') + name)}
-            onPreview={(t) => setPreview(t)}
+            // 표 미리보기는 실제로 SELECT 를 날린다 — 접속이 없는 설계부에선 단추 자체를 안 단다.
+            onPreview={conn ? (t) => setPreview(t) : undefined}
           />
         }
       >
@@ -324,12 +370,13 @@ export function QueryView() {
         <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-1.5 text-[12px]">
           <span className="font-semibold text-muted">SQL Editor</span>
           <div className="flex items-center gap-1.5">
-            <span className="mr-1 text-[10px] text-muted">⌘+Enter to run</span>
-            <Button size="sm" variant="outline" disabled={!sql.trim()} title="SQL 정형화" onClick={() => setSql(formatSql(sql, conn.dbType))}><WandSparkles /></Button>
-            <Button size="sm" variant="outline" disabled={!sql.trim() || explaining || loading || missing.length > 0} title="실행 계획(EXPLAIN)" onClick={() => void runExplain(conn.id, effectiveSql())}>
+            {/* 접속이 없으면 왜 못 돌리는지 이 자리에서 말한다 — 눌리지 않는 단추만 두면 고장으로 읽힌다. */}
+            <span className="mr-1 text-[10px] text-muted">{conn ? '⌘+Enter to run' : '실행은 Remote 에서'}</span>
+            <Button size="sm" variant="outline" disabled={!sql.trim()} title="SQL 정형화" onClick={() => dialect && setSql(formatSql(sql, dialect))}><WandSparkles /></Button>
+            <Button size="sm" variant="outline" disabled={!conn || !sql.trim() || explaining || loading || missing.length > 0} title={conn ? '실행 계획(EXPLAIN)' : '접속이 있어야 볼 수 있습니다'} onClick={() => conn && void runExplain(conn.id, effectiveSql())}>
               {explaining ? <Loader2 className="animate-spin" /> : <Route />}
             </Button>
-            <Button size="sm" disabled={!canRun} onClick={() => void run(conn.id, effectiveSql())}>
+            <Button size="sm" disabled={!canRun} title={conn ? undefined : '접속이 있어야 돌릴 수 있습니다'} onClick={() => conn && void run(conn.id, effectiveSql())}>
               {loading ? <Loader2 className="animate-spin" /> : <Play />} Run
             </Button>
           </div>
@@ -339,9 +386,9 @@ export function QueryView() {
           <SqlEditor
             value={sql}
             onChange={setSql}
-            onRun={() => canRun && void run(conn.id, effectiveSql())}
+            onRun={() => canRun && conn && void run(conn.id, effectiveSql())}
             schema={buildSchemaMap(tables ?? [])}
-            dialect={conn.dbType}
+            dialect={dialect}
             placeholder="SELECT * FROM users WHERE id = {{userId}};"
           />
         </div>
@@ -371,7 +418,7 @@ export function QueryView() {
           <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-5 py-2 text-[12px] text-muted"><AlertTriangle className="size-3.5" /> DDL 은 즉시 자동 커밋되었습니다(롤백 불가).</div>
         )}
         {/* 연결이 안 되면 Run 도 스키마 패널도 안 된다 — 쓰기 전에 알린다(예전엔 아무 말이 없었다). */}
-        {introError && (
+        {conn && introError && (
           <ConnectionError
             variant="inline"
             error={introError}
@@ -379,7 +426,7 @@ export function QueryView() {
             onRetry={() => void loadIntro(conn.id, conn.id, true)}
           />
         )}
-        {explain && <ExplainPanel explain={explain} dialect={conn.dbType} />}
+        {explain && dialect && <ExplainPanel explain={explain} dialect={dialect} />}
         {error && (
           <div className="flex shrink-0 items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2.5 text-[12px] text-destructive">
             <span className="min-w-0 flex-1 whitespace-pre-wrap font-mono">{error}</span>
@@ -449,7 +496,7 @@ export function QueryView() {
         />
       )}
 
-      {preview && <TablePreviewModal connectionId={conn.id} dialect={conn.dbType} table={preview} onClose={() => setPreview(null)} />}
+      {preview && conn && <TablePreviewModal connectionId={conn.id} dialect={conn.dbType} table={preview} onClose={() => setPreview(null)} />}
 
       {detailRow != null && result && (
         <RowDetailDialog
@@ -509,7 +556,7 @@ function QueryTreeRow({ node, active, editing, collapsed, dropTarget, onSelect, 
 }
 
 /** 스키마 사이드 패널 — 테이블/컬럼 트리 + 검색 + 클릭 삽입 + 테이블 미리보기. */
-function SchemaPanel({ tables, onInsert, onPreview }: { tables: TableDef[]; onInsert: (name: string) => void; onPreview: (table: TableRef) => void }) {
+function SchemaPanel({ tables, onInsert, onPreview }: { tables: TableDef[]; onInsert: (name: string) => void; onPreview?: (table: TableRef) => void }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const query = q.trim().toLowerCase()
@@ -529,7 +576,7 @@ function SchemaPanel({ tables, onInsert, onPreview }: { tables: TableDef[]; onIn
               <div className="flex items-center gap-1 px-2 py-1 text-[12px]">
                 <button type="button" onClick={() => setOpen((o) => ({ ...o, [t.name]: !expanded }))} className="text-muted">{expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}</button>
                 <button type="button" onClick={() => onInsert(t.name)} className={cn('min-w-0 flex-1 truncate text-left font-mono', t.isView ? 'text-accent' : 'font-semibold text-fg', 'hover:text-accent')} title="에디터에 삽입">{t.name}</button>
-                <button type="button" onClick={() => onPreview({ schema: t.schema, name: t.name })} className="text-muted hover:text-accent" title="미리보기(SELECT * LIMIT 50)"><Table2 className="size-3" /></button>
+                {onPreview && <button type="button" onClick={() => onPreview({ schema: t.schema, name: t.name })} className="text-muted hover:text-accent" title="미리보기(SELECT * LIMIT 50)"><Table2 className="size-3" /></button>}
                 <span className="text-[10.5px] text-muted">{t.columns.length}</span>
               </div>
               {expanded && t.columns.map((c) => {

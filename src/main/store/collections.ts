@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from './db'
+import { ownerColumns, ownerWhere, type LibraryScope } from './libraryScope'
 
 /**
- * 컬렉션 저장소(§ops 향상). 순서 있는 쿼리 묶음(Run-All 대상). 연결 스코프.
+ * 컬렉션 저장소(§ops 향상). 순서 있는 쿼리 묶음(Run-All 대상).
+ *
+ * 스코프는 저장쿼리와 같다 — **설계 아니면 연결**(`@shared/db/libraryOwner`). 둘이 갈리면
+ * 컬렉션이 가리키는 저장쿼리가 남의 라이브러리에 있는 일이 생긴다.
+ *
  * 아이템은 **저장쿼리 참조**(saved_query_id, 원본 링크 → 원본 수정 시 반영) 또는
  * **즉석 SQL**(sql_text, 라이브러리에 없는 임시 쿼리) 둘 중 하나. name/sql 은 resolve 된 실효값.
  */
 export interface CollectionFolderRecord {
   id: string
   connectionId: string
+  designId: string
   parentId: string | null
   name: string
   sortOrder: number
@@ -16,6 +22,7 @@ export interface CollectionFolderRecord {
 export interface CollectionRecord {
   id: string
   connectionId: string
+  designId: string
   folderId: string | null
   name: string
   description: string
@@ -36,6 +43,7 @@ export interface CollectionItemRecord {
 interface CollFolderRow {
   id: string
   connection_id: string
+  design_id: string
   parent_id: string | null
   name: string
   sort_order: number
@@ -43,6 +51,7 @@ interface CollFolderRow {
 interface CollRow {
   id: string
   connection_id: string
+  design_id: string
   folder_id: string | null
   name: string
   description: string | null
@@ -59,8 +68,8 @@ interface ItemRow {
   ref_sql: string | null
 }
 
-const toColl = (r: CollRow): CollectionRecord => ({ id: r.id, connectionId: r.connection_id, folderId: r.folder_id, name: r.name, description: r.description ?? '', sortOrder: r.sort_order })
-const toCollFolder = (r: CollFolderRow): CollectionFolderRecord => ({ id: r.id, connectionId: r.connection_id, parentId: r.parent_id, name: r.name, sortOrder: r.sort_order })
+const toColl = (r: CollRow): CollectionRecord => ({ id: r.id, connectionId: r.connection_id, designId: r.design_id ?? '', folderId: r.folder_id, name: r.name, description: r.description ?? '', sortOrder: r.sort_order })
+const toCollFolder = (r: CollFolderRow): CollectionFolderRecord => ({ id: r.id, connectionId: r.connection_id, designId: r.design_id ?? '', parentId: r.parent_id, name: r.name, sortOrder: r.sort_order })
 const toItem = (r: ItemRow): CollectionItemRecord => ({
   id: r.id,
   collectionId: r.collection_id,
@@ -71,10 +80,20 @@ const toItem = (r: ItemRow): CollectionItemRecord => ({
   sortOrder: r.sort_order
 })
 
-export function listCollections(connectionId: string): CollectionRecord[] {
+export function listCollections(scope: LibraryScope): CollectionRecord[] {
+  const w = ownerWhere(scope)
   return (
-    getDb().prepare('SELECT * FROM collections WHERE connection_id = ? ORDER BY sort_order').all(connectionId) as unknown as CollRow[]
+    getDb().prepare(`SELECT * FROM collections WHERE ${w.sql} ORDER BY sort_order`).all(...w.params) as unknown as CollRow[]
   ).map(toColl)
+}
+
+/** 새 것이 설 자리 — **보이는 범위 전체**에서 잰다(저장쿼리 쪽 `nextOrder` 와 같은 이유). */
+function nextOrder(table: string, scope: LibraryScope): number {
+  const w = ownerWhere(scope)
+  const { max } = getDb()
+    .prepare(`SELECT COALESCE(MAX(sort_order),0) AS max FROM ${table} WHERE ${w.sql}`)
+    .get(...w.params) as unknown as { max: number }
+  return max + 1
 }
 
 export function listItems(collectionId: string): CollectionItemRecord[] {
@@ -91,13 +110,13 @@ export function listItems(collectionId: string): CollectionItemRecord[] {
   ).map(toItem)
 }
 
-export function createCollection(input: { connectionId: string; name: string; folderId?: string | null }): CollectionRecord {
+export function createCollection(input: { scope: LibraryScope; name: string; folderId?: string | null }): CollectionRecord {
   const d = getDb()
   const id = `col_${randomUUID()}`
   const now = new Date().toISOString()
-  const { max } = d.prepare('SELECT COALESCE(MAX(sort_order),0) AS max FROM collections WHERE connection_id = ?').get(input.connectionId) as unknown as { max: number }
-  d.prepare('INSERT INTO collections (id, connection_id, folder_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-    id, input.connectionId, input.folderId ?? null, input.name, max + 1, now, now
+  const owner = ownerColumns(input.scope)
+  d.prepare('INSERT INTO collections (id, connection_id, design_id, folder_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id, owner.connectionId, owner.designId, input.folderId ?? null, input.name, nextOrder('collections', input.scope), now, now
   )
   return toColl(d.prepare('SELECT * FROM collections WHERE id = ?').get(id) as unknown as CollRow)
 }
@@ -118,19 +137,20 @@ export function updateCollection(id: string, patch: { name?: string; description
 }
 
 // ── 컬렉션 폴더 트리(저장쿼리 트리와 동형) ──
-export function listCollectionFolders(connectionId: string): CollectionFolderRecord[] {
+export function listCollectionFolders(scope: LibraryScope): CollectionFolderRecord[] {
+  const w = ownerWhere(scope)
   return (
-    getDb().prepare('SELECT * FROM collection_folders WHERE connection_id = ? ORDER BY sort_order').all(connectionId) as unknown as CollFolderRow[]
+    getDb().prepare(`SELECT * FROM collection_folders WHERE ${w.sql} ORDER BY sort_order`).all(...w.params) as unknown as CollFolderRow[]
   ).map(toCollFolder)
 }
 
-export function createCollectionFolder(input: { connectionId: string; parentId: string | null; name: string }): CollectionFolderRecord {
+export function createCollectionFolder(input: { scope: LibraryScope; parentId: string | null; name: string }): CollectionFolderRecord {
   const d = getDb()
   const id = `cf_${randomUUID()}`
   const now = new Date().toISOString()
-  const { max } = d.prepare('SELECT COALESCE(MAX(sort_order),0) AS max FROM collection_folders WHERE connection_id = ?').get(input.connectionId) as unknown as { max: number }
-  d.prepare('INSERT INTO collection_folders (id, connection_id, parent_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-    id, input.connectionId, input.parentId, input.name, max + 1, now, now
+  const owner = ownerColumns(input.scope)
+  d.prepare('INSERT INTO collection_folders (id, connection_id, design_id, parent_id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id, owner.connectionId, owner.designId, input.parentId, input.name, nextOrder('collection_folders', input.scope), now, now
   )
   return toCollFolder(d.prepare('SELECT * FROM collection_folders WHERE id = ?').get(id) as unknown as CollFolderRow)
 }
