@@ -136,7 +136,7 @@ export function moveTab(set: TabSet, id: string, to: number): TabSet {
 }
 
 /**
- * 탭을 창 밖으로 끌어 냈다 — 이 창에서는 지운다. 지운 뒤 남는 것이 없으면(한 장뿐이었으면)
+ * 탭을 줄 밖으로 끌어 냈다 — 이 창에서는 지운다. 지운 뒤 남는 것이 없으면(한 장뿐이었으면)
  * **그대로 둔다**: 빈 창을 남겨 두느니 떼어내기를 없던 일로 한다. 그 경우 부르는 쪽이
  * 새 창을 안 열도록 `detached: false` 로 알린다.
  */
@@ -155,29 +155,47 @@ export function tabTitle(module: Module, view: View | null): string {
   return view ? `${module.label} · ${view.label}` : module.label
 }
 
-/** 창의 화면상 자리 — 끌기가 끝난 지점이 창 안인지 밖인지 가를 때 쓴다. */
-export interface WindowFrame {
-  screenX: number
-  screenY: number
-  outerWidth: number
-  outerHeight: number
+/** 누른 채 이만큼(px) 움직여야 끌기로 친다 — 이게 없으면 탭을 고르는 클릭이 끌기로 먹힌다. */
+export const DRAG_SLOP = 4
+
+/**
+ * 탭 줄 위아래로 이만큼(px) 벗어나면 창으로 떨어져 나간다.
+ *
+ * 줄 높이(32px)와 비슷하게 잡았다 — 더 좁으면 줄 안에서 자리를 옮기다 손이 조금 떨려도 창이
+ * 생기고, 더 넓으면 "빼냈는데 왜 안 나오지" 하고 한참을 더 끌게 된다.
+ */
+export const TEAR_OFF_MARGIN = 28
+
+/**
+ * 탭 줄 밖으로 끌어 냈나 — 그러면 그 탭은 **그 자리에서** 창으로 떨어져 나간다(브라우저와 같다).
+ *
+ * **세로만 본다.** 좌우 끝을 넘어가는 것은 "맨 앞·맨 뒤로 옮기기"라 창을 만들 일이 아니고,
+ * 창을 꽉 채워 놓았을 때 좌우로는 나갈 데도 없다(예전 판정이 "창 밖"이라 여기서 막혔다).
+ */
+export function pulledOutOfStrip(y: number, strip: { top: number; bottom: number }): boolean {
+  return y < strip.top - TEAR_OFF_MARGIN || y > strip.bottom + TEAR_OFF_MARGIN
 }
 
 /**
- * 끌기를 **창 밖**에 놓았나 — 그러면 그 탭은 창으로 떨어져 나간다.
- *
- * 끌기가 취소되면(ESC·놓을 수 없는 곳) 좌표가 `0,0` 으로 온다. 그걸 "창 밖"으로 읽으면
- * 취소했는데 탭이 떨어져 나가므로, 그 한 점만은 안쪽으로 친다 — 창 왼위 모서리가 정확히
- * 화면 원점이고 거기에 정확히 놓는 경우와 겹치지만, 잘못 떼어내는 쪽이 훨씬 나쁘다.
+ * 가로 좌표 `x` 가 어느 틈에 떨어지는지 — **0 부터 탭 수까지**의 끼울 자리 번호.
+ * 탭 상자(`left`·`width`)는 줄에 선 순서대로 준다. 반보다 왼쪽이면 그 탭 앞이다.
  */
-export function droppedOutside(point: { screenX: number; screenY: number }, frame: WindowFrame): boolean {
-  if (point.screenX === 0 && point.screenY === 0) return false
-  return (
-    point.screenX < frame.screenX ||
-    point.screenY < frame.screenY ||
-    point.screenX > frame.screenX + frame.outerWidth ||
-    point.screenY > frame.screenY + frame.outerHeight
-  )
+export function dropIndexAt(boxes: readonly { left: number; width: number }[], x: number): number {
+  for (const [i, box] of boxes.entries()) {
+    if (x < box.left + box.width / 2) return i
+  }
+  return boxes.length
+}
+
+/**
+ * 다른 창에서 건너온 탭을 이 줄에 끼운다 — 끼운 탭이 곧 활성이다(가져다 놓았으면 그걸 보려는 것이다).
+ * 자리 번호는 `dropIndexAt` 이 준 값이라 **탭 수와 같을 수 있다**(맨 뒤).
+ */
+export function insertTab(set: TabSet, loc: NavLocation, index: number): TabSet {
+  const tab: NavTab = { id: nextTabId(set.tabs), ...place(loc) }
+  const tabs = [...set.tabs]
+  tabs.splice(Math.min(Math.max(index, 0), tabs.length), 0, tab)
+  return { tabs, activeTabId: tab.id }
 }
 
 /**

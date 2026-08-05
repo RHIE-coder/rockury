@@ -2,11 +2,29 @@ import { ipcRenderer } from 'electron'
 import { unwrap } from '../envelope'
 import type { FeedbackPayloadInput } from '../../shared/devFeedback'
 import type { ScopedItem, ScopedKind } from '../../main/store/scopedItems'
+import type { NavLocation } from '../../shared/navLocation'
 import { decodeWindowBoot, type WindowBoot, type WindowSession } from '../../shared/windowSession'
 
 export type { FeedbackPayload, FeedbackPayloadInput } from '../../shared/devFeedback'
 export type { ScopedItem, ScopedKind } from '../../main/store/scopedItems'
 export type { WindowBoot, WindowSession } from '../../shared/windowSession'
+
+/**
+ * 탭 끌기가 주고받는 좌표는 전부 **이 창 안 기준**이다(`clientX`·`clientY`).
+ * 화면 좌표로 펴는 일은 메인이 한다 — 렌더러가 직접 재면 창을 옮긴 뒤 값이 낡는다.
+ */
+export interface WindowPoint {
+  x: number
+  y: number
+}
+
+/** 탭 줄이 창 안에서 차지한 자리. */
+export interface TabStripRect {
+  left: number
+  top: number
+  width: number
+  height: number
+}
 
 /** 저장 결과 — 어느 폴더에 떨어졌는지와 그림이 함께 저장됐는지. */
 export interface SaveDevFeedbackResult {
@@ -47,6 +65,38 @@ export const shellApi = {
     report: (session: WindowSession): void => ipcRenderer.send('window:session', session),
     /** 자리를 창 하나로 떼어낸다. 안 주면 이 창이 지금 보는 것을 그대로 문다. */
     open: (session?: WindowSession): void => ipcRenderer.send('window:open', session ?? null),
+    /** 탭 줄이 창 안 어디인지 알린다 — 다른 창에서 끌어 온 탭을 이 줄이 삼킬지 메인이 가른다. */
+    strip: (rect: TabStripRect): void => ipcRenderer.send('window:strip', rect),
+    /**
+     * 탭을 줄 밖으로 끌어 냈다 — 창을 만들어 커서에 붙이고 그 창 번호를 준다(못 만들면 null).
+     * `grab` 은 창 왼위에서 탭을 잡은 지점까지 — 그만큼 물려 놓아야 탭이 커서 밑에 그대로 온다.
+     */
+    tearOff: (input: {
+      loc: NavLocation
+      at: WindowPoint
+      grab: WindowPoint
+    }): Promise<number | null> => ipcRenderer.invoke('window:tearOff', input),
+    /** 끌려 나온 창을 커서 따라 옮긴다. */
+    dragMove: (input: { id: number; at: WindowPoint; grab: WindowPoint }): void =>
+      ipcRenderer.send('window:dragMove', input),
+    /** 손을 놓았다 — 다른 창의 탭 줄 위였으면 그 창이 삼켰다는 뜻으로 true. */
+    dragEnd: (input: { id: number; at: WindowPoint }): Promise<boolean> =>
+      ipcRenderer.invoke('window:dragEnd', input),
+    /**
+     * 끌려 온 탭이 이 창의 줄 위에 있다 — 떨어질 자리(창 안 가로 좌표)를 준다. 벗어나면 null.
+     * 표시만 하는 알림이라 여기서 탭이 늘지는 않는다.
+     */
+    onDragHover: (fn: (x: number | null) => void): (() => void) => {
+      const handler = (_e: unknown, x: number | null): void => fn(x)
+      ipcRenderer.on('window:dragHover', handler)
+      return () => ipcRenderer.removeListener('window:dragHover', handler)
+    },
+    /** 끌려 온 탭을 이 창이 삼켰다 — 받은 자리에 끼우면 된다. */
+    onAdopt: (fn: (input: { loc: NavLocation; x: number }) => void): (() => void) => {
+      const handler = (_e: unknown, input: { loc: NavLocation; x: number }): void => fn(input)
+      ipcRenderer.on('window:adopt', handler)
+      return () => ipcRenderer.removeListener('window:adopt', handler)
+    },
     /** 메뉴 단축키(⌘T·⌘W·⌘1~9 …)가 시키는 일을 받는다. 되부르면 구독이 끊긴다. */
     onCommand: (fn: (command: string) => void): (() => void) => {
       const handler = (_e: unknown, command: string): void => fn(command)

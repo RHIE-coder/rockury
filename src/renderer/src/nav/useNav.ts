@@ -17,6 +17,7 @@ import {
   closeTab as closeTabIn,
   detachTab as detachTabIn,
   fromSession,
+  insertTab as insertTabIn,
   moveActiveTab,
   moveTab as moveTabIn,
   openTab as openTabIn,
@@ -113,8 +114,10 @@ interface NavState {
   stepTab: (delta: number) => void
   /** 끌어서 자리 옮기기 — `to` 는 옮긴 뒤 이 탭이 설 자리 번호. */
   moveTab: (id: string, to: number) => void
-  /** 창 밖으로 끌어 냈다 — 이 창에서 지우고 그 자리를 돌려준다(새 창은 부르는 쪽이 연다). */
+  /** 줄 밖으로 끌어 냈다 — 이 창에서 지우고 그 자리를 돌려준다(새 창은 부르는 쪽이 연다). */
   detachTab: (id: string) => NavLocation | null
+  /** 다른 창에서 끌어 온 탭을 이 줄이 삼켰다 — 받은 자리에 끼우고 그 탭으로 옮겨 간다. */
+  adoptTab: (loc: NavLocation, index: number) => void
 }
 
 /*
@@ -187,7 +190,9 @@ export const useNav = create<NavState>()(
         if (!detached || !leaving) return null
         set(next)
         return { serviceId: leaving.serviceId, moduleId: leaving.moduleId, viewId: leaving.viewId }
-      }
+      },
+
+      adoptTab: (loc, index) => set((s) => insertTabIn(s, loc, index))
     }),
     {
       name: 'rockury.nav',

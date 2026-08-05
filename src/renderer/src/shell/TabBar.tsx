@@ -1,7 +1,7 @@
-import { useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Plus, SquareArrowOutUpRight, X } from 'lucide-react'
 import { resolveTab, useNav } from '../nav/useNav'
-import { droppedOutside, tabTitle, type NavTab } from '../nav/tabs'
+import { DRAG_SLOP, dropIndexAt, pulledOutOfStrip, tabTitle, type NavTab } from '../nav/tabs'
 import { cx } from '../lib/cx'
 import { openInNewWindow, useWindowCommands } from './windowCommands'
 
@@ -16,8 +16,13 @@ import { openInNewWindow, useWindowCommands } from './windowCommands'
  * **줄 하나만 늘린다**(사용자 선택). 세로가 빠듯한 화면이라 높이를 32px(`h-8`)로 조인다 —
  * 제목 줄(36px)보다도 얕다. 대신 탭이 늘면 이름이 줄고(`truncate`) 줄 자체는 안 늘어난다.
  *
- * 끌기는 두 가지 일을 한다 — **놓은 자리가 가른다**:
- *   줄 안에 놓으면 → 자리 옮기기 · 창 밖에 놓으면 → 그 탭이 창으로 떨어져 나간다.
+ * 끌기는 두 가지 일을 한다 — **줄을 벗어났나가 가른다**(2026-08-06 사용자 요청, 브라우저와 같게):
+ *   줄 안에서 옮기면 → 자리 바꾸기 · 줄 밖으로 빼내면 → 그 자리에서 창이 되어 손을 따라온다.
+ *   그 창을 다른 창(혹은 원래 창)의 탭 줄 위에서 놓으면 그 줄이 도로 삼킨다.
+ *
+ * **브라우저 기본 끌기(HTML5 drag-and-drop)를 안 쓴다.** 그쪽은 놓는 순간에야 결과를 알려 줘서
+ * "빼내는 즉시 창"이 안 되고, 판정할 것이 놓은 좌표뿐이라 창을 꽉 채워 놓으면 창 밖이 없어
+ * 영영 안 떨어졌다(예전 코드가 여기서 막혔다). 창을 넘나드는 끌기도 그쪽으로는 안 이어진다.
  */
 export function TabBar() {
   const tabs = useNav((s) => s.tabs)
@@ -25,46 +30,173 @@ export function TabBar() {
   const openTab = useNav((s) => s.openTab)
   const closeTab = useNav((s) => s.closeTab)
   const selectTab = useNav((s) => s.selectTab)
-  const moveTab = useNav((s) => s.moveTab)
-  const detachTab = useNav((s) => s.detachTab)
 
-  // 끌고 있는 탭과, 지금 그것이 떨어질 자리. 자리를 안 그려 두면 놓을 때까지 결과를 알 수 없다.
-  const [dragging, setDragging] = useState<string | null>(null)
+  const stripRef = useRef<HTMLDivElement>(null)
+  /** 지금 끌고 있는 탭(줄 안에 있을 때만 — 창으로 떨어져 나가면 이 줄에서 사라진다). */
+  const [dragId, setDragId] = useState<string | null>(null)
+  /** 떨어질 자리(0 ~ 탭 수). 내 줄에서 옮기는 중이든 다른 창에서 건너오는 중이든 표시는 같다. */
   const [dropAt, setDropAt] = useState<number | null>(null)
-  // 줄 안에 놓였나. 끝맺음(`dragend`)이 그림 그리기보다 늦게 오므로 상태가 아니라 ref 로 든다 —
-  // 상태로 두면 끝맺음이 한 그림 전 값을 읽는다.
-  const droppedInStrip = useRef(false)
 
   useWindowCommands()
 
-  const endDrag = (): void => {
-    setDragging(null)
-    setDropAt(null)
-  }
+  /**
+   * 줄에 선 탭들의 가로 상자 — 어느 틈에 떨어질지 재는 데 쓴다.
+   *
+   * React 상태가 아니라 **화면에서 직접** 읽는다: 탭 폭은 이름 길이·줄 넘침(가로 스크롤)에 따라
+   * 그때그때 다르고, 다른 창에서 건너온 탭의 자리도 같은 자로 재야 표시와 결과가 안 어긋난다.
+   */
+  const tabBoxes = useCallback((): { left: number; width: number }[] => {
+    const strip = stripRef.current
+    if (!strip) return []
+    return [...strip.querySelectorAll<HTMLElement>('[data-nav-tab]')].map((el) => {
+      const box = el.getBoundingClientRect()
+      return { left: box.left, width: box.width }
+    })
+  }, [])
+
+  // 탭 줄이 창 안 어디인지 메인에 알린다 — 끌고 온 탭을 어느 창이 삼킬지는 창 밖에서 가른다.
+  // **창 기준 좌표**로 보낸다: 화면 좌표로 보내면 사용자가 창을 옮긴 순간 낡는데(창 이동에는
+  // resize 가 안 온다) 옮겨진 것을 이쪽은 모른다.
+  useEffect(() => {
+    const report = (): void => {
+      const box = stripRef.current?.getBoundingClientRect()
+      if (!box) return
+      window.rockury?.window?.strip?.({
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height
+      })
+    }
+    report()
+    window.addEventListener('resize', report)
+    return () => window.removeEventListener('resize', report)
+  }, [])
+
+  // 다른 창에서 끌어 온 탭 — 오는 동안은 자리만 표시하고, 놓으면 그 자리에 끼운다.
+  useEffect(() => {
+    const offHover = window.rockury?.window?.onDragHover?.((x) =>
+      setDropAt(x === null ? null : dropIndexAt(tabBoxes(), x))
+    )
+    const offAdopt = window.rockury?.window?.onAdopt?.(({ loc, x }) => {
+      useNav.getState().adoptTab(loc, dropIndexAt(tabBoxes(), x))
+      setDropAt(null)
+    })
+    return () => {
+      offHover?.()
+      offAdopt?.()
+    }
+  }, [tabBoxes])
 
   /**
-   * 끌기가 끝났다 — **줄 안에 안 놓였고** 끝난 자리가 창 밖이면 떼어낸다(브라우저에서 탭을
-   * 끌어 내리는 것과 같다).
-   *
-   * "줄 안에 안 놓였다"를 먼저 보는 이유: 끝맺음은 놓기가 끝난 **뒤에도** 온다. 좌표만 보고
-   * 판정하면, 자리를 옮기려고 줄 안에 잘 놓은 탭이 곧이어 떨어져 나간다. 게다가 좌표는 늘
-   * 믿을 것이 못 된다 — 자동 검사가 만드는 끌기는 화면 좌표 대신 창 안 좌표를 실어 보낸다(실측).
+   * 끌고 있는 한 사건. 상태가 아니라 ref 로 든다 — 마우스 움직임마다 그림을 다시 그리면
+   * 끌기가 뻑뻑해지고, 그림보다 늦게 오는 값(떨어져 나간 창 번호)을 상태로 받으면 한 박자 전
+   * 값을 읽는다.
    */
-  const handleDragEnd = (e: DragEvent, id: string): void => {
-    if (!droppedInStrip.current && droppedOutside(e, window)) {
-      const place = detachTab(id)
-      if (place) openInNewWindow(place)
+  const drag = useRef<{
+    id: string
+    /** 창 왼위에서 탭을 잡은 지점까지. 끌기 시작 판정의 기준점이기도 하다. */
+    grab: { x: number; y: number }
+    started: boolean
+    /** 떨어져 나간 창 번호. 생기고 나면 이후 움직임은 그 창을 옮기는 일이 된다. */
+    torn: number | null
+    /** 창을 만드는 중 — 답이 오기 전에 또 만들면 한 탭이 두 창이 된다. */
+    tearing: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    /** 줄 밖으로 빼냈다 — 이 창에서 탭을 지우고 창으로 세운다. */
+    const tearOff = async (d: NonNullable<typeof drag.current>, at: { x: number; y: number }) => {
+      // 마지막 한 장은 안 뗀다(빈 창이 남는다) — 스토어가 거절하면 그대로 줄에 남는다.
+      const loc = useNav.getState().detachTab(d.id)
+      if (!loc) {
+        d.tearing = false
+        return
+      }
+      const id = (await window.rockury.window.tearOff({ loc, at, grab: d.grab })) ?? null
+      d.tearing = false
+      setDragId(null)
+      setDropAt(null)
+      if (id === null) return
+      // 창을 세우는 사이에 손을 놓았을 수 있다 — 그러면 여기서 바로 끌기를 끝맺는다.
+      if (drag.current === d) d.torn = id
+      else window.rockury.window.dragEnd({ id, at })
     }
-    endDrag()
+
+    const move = (e: PointerEvent): void => {
+      const d = drag.current
+      if (!d) return
+
+      if (!d.started) {
+        if (Math.abs(e.clientX - d.grab.x) < DRAG_SLOP && Math.abs(e.clientY - d.grab.y) < DRAG_SLOP)
+          return
+        d.started = true
+        setDragId(d.id)
+      }
+
+      const at = { x: e.clientX, y: e.clientY }
+      if (d.torn !== null) return window.rockury.window.dragMove({ id: d.torn, at, grab: d.grab })
+      if (d.tearing) return
+
+      const strip = stripRef.current?.getBoundingClientRect()
+      if (strip && pulledOutOfStrip(e.clientY, strip)) {
+        d.tearing = true
+        void tearOff(d, at)
+        return
+      }
+      setDropAt(dropIndexAt(tabBoxes(), e.clientX))
+    }
+
+    const up = (e: PointerEvent): void => {
+      const d = drag.current
+      if (!d) return
+      drag.current = null
+      setDragId(null)
+      setDropAt(null)
+
+      if (d.torn !== null) {
+        void window.rockury.window.dragEnd({ id: d.torn, at: { x: e.clientX, y: e.clientY } })
+        return
+      }
+      // 창을 세우는 중이었으면 그쪽이 끝맺는다(위 tearOff). 안 움직였으면 그냥 고른 것이다.
+      if (!d.started || d.tearing) return
+
+      const nav = useNav.getState()
+      const at = dropIndexAt(tabBoxes(), e.clientX)
+      const from = nav.tabs.findIndex((t) => t.id === d.id)
+      // 자기보다 뒤로 옮길 때는 자기가 빠지면서 뒤엣것들이 한 칸 당겨진다.
+      nav.moveTab(d.id, at > from ? at - 1 : at)
+    }
+
+    // 창 전체에서 듣는다 — 탭 위에서만 들으면 커서가 창 밖으로 나간 순간 끌기가 끊긴다.
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+  }, [tabBoxes])
+
+  const beginDrag = (e: ReactPointerEvent, id: string): void => {
+    if (e.button !== 0) return
+    // 여기서 탭을 고르지 않는다 — 자리를 옮기는 것과 보는 것은 다른 일이다(`tabs.moveTab`).
+    // 그냥 누르기만 했으면 안쪽 단추의 클릭이 골라 준다.
+    drag.current = {
+      id,
+      grab: { x: e.clientX, y: e.clientY },
+      started: false,
+      torn: null,
+      tearing: false
+    }
   }
 
   return (
     <div className="flex h-8 shrink-0 items-stretch border-b border-line bg-panel">
       <div
+        ref={stripRef}
         role="tablist"
         aria-label="열린 화면"
-        className="flex min-w-0 flex-1 items-stretch overflow-x-auto"
-        onDragOver={(e) => e.preventDefault()}
+        className="flex min-w-0 flex-1 select-none items-stretch overflow-x-auto"
       >
         {tabs.map((tab, i) => (
           <Tab
@@ -74,33 +206,13 @@ export function TabBar() {
             // 한 장뿐이면 닫기를 안 그린다 — 닫아도 안 닫히는 단추는 눌러 본 사람을 헷갈리게 한다
             // (마지막 장은 ⌘W 로 창째 닫는다).
             closable={tabs.length > 1}
-            dragging={dragging === tab.id}
+            dragging={dragId === tab.id}
             dropSide={
               dropAt === i ? 'before' : dropAt === i + 1 && i === tabs.length - 1 ? 'after' : null
             }
             onSelect={() => selectTab(tab.id)}
             onClose={() => closeTab(tab.id)}
-            onDragStart={() => {
-              droppedInStrip.current = false
-              setDragging(tab.id)
-            }}
-            onDragEnd={(e) => handleDragEnd(e, tab.id)}
-            onDragOver={(e) => {
-              if (!dragging) return
-              e.preventDefault()
-              // 반보다 왼쪽이면 이 탭 앞, 오른쪽이면 뒤 — 끌어 온 자리에 그대로 꽂히는 느낌.
-              const box = e.currentTarget.getBoundingClientRect()
-              setDropAt(e.clientX < box.left + box.width / 2 ? i : i + 1)
-            }}
-            onDrop={(e) => {
-              e.preventDefault()
-              droppedInStrip.current = true
-              if (!dragging || dropAt === null) return endDrag()
-              const from = tabs.findIndex((t) => t.id === dragging)
-              // 자기보다 뒤로 옮길 때는 자기가 빠지면서 뒤엣것들이 한 칸 당겨진다.
-              moveTab(dragging, dropAt > from ? dropAt - 1 : dropAt)
-              endDrag()
-            }}
+            onPointerDown={(e) => beginDrag(e, tab.id)}
           />
         ))}
       </div>
@@ -136,10 +248,7 @@ function Tab({
   dropSide,
   onSelect,
   onClose,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDrop
+  onPointerDown
 }: {
   tab: NavTab
   active: boolean
@@ -149,10 +258,7 @@ function Tab({
   dropSide: 'before' | 'after' | null
   onSelect: () => void
   onClose: () => void
-  onDragStart: () => void
-  onDragEnd: (e: DragEvent) => void
-  onDragOver: (e: DragEvent) => void
-  onDrop: (e: DragEvent) => void
+  onPointerDown: (e: ReactPointerEvent) => void
 }) {
   const { service, module, view } = resolveTab(tab)
   const Icon = service.icon
@@ -160,11 +266,7 @@ function Tab({
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
+      onPointerDown={onPointerDown}
       // e2e·화면 게이트 훅 — 어느 탭이 떠 있고 어느 것이 켜졌는지를 모양이 아니라 역할로 집는다.
       data-nav-tab={tab.id}
       data-nav-tab-active={active ? '' : undefined}
@@ -206,6 +308,8 @@ function Tab({
         <button
           type="button"
           aria-label="탭 닫기"
+          // 닫기는 끌기가 아니다 — 안 막으면 × 를 누르는 순간 탭 끌기가 함께 시작된다.
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={onClose}
           // 안 켜진 탭의 닫기는 마우스를 올렸을 때만 보인다 — 줄에 ×가 여러 개 늘어서면
           // 탭 이름보다 ×가 먼저 눈에 들어온다. 키보드로 짚으면 그때도 보인다.

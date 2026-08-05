@@ -2,6 +2,7 @@ import { app, BrowserWindow, screen, shell } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { encodeWindowBoot, type WindowSession } from '../shared/windowSession'
+import type { StripRect, WindowStrip } from './windowDrag'
 import { cascadeBounds, defaultWindowBounds, usableBounds, type Rect } from './windowSize'
 import { normalizeWindowStore, type StoredWindow } from './windowStore'
 
@@ -29,6 +30,14 @@ const DEFAULT_SESSION: WindowSession = {
 
 /** 창마다 지금 들고 있는 것. 렌더러가 탭을 만들거나 옮길 때마다 되보고해 갱신된다. */
 const sessions = new WeakMap<BrowserWindow, WindowSession>()
+
+/**
+ * 창마다 탭 줄이 **창 안 어디**인지. 끌고 온 탭을 어느 창이 삼킬지 여기서 가른다.
+ *
+ * 창 기준 좌표로 든다 — 화면 좌표로 받아 두면 사용자가 창을 옮기는 순간 낡는데, 창이 옮겨진
+ * 것을 렌더러는 모른다(창 이동에는 `resize` 가 안 온다). 화면 좌표는 쓸 때 그 자리에서 만든다.
+ */
+const strips = new WeakMap<BrowserWindow, StripRect>()
 
 /**
  * 마지막으로 **비어 있지 않던** 배치. 끌 때 이 값을 파일에 남긴다.
@@ -59,6 +68,25 @@ export function setWindowSession(win: BrowserWindow, session: WindowSession): vo
 /** 이 창이 지금 들고 있는 것 — 새 창을 열 때 물려줄 값을 여기서 뽑는다. */
 export function windowSessionOf(win: BrowserWindow): WindowSession {
   return sessions.get(win) ?? DEFAULT_SESSION
+}
+
+/** 렌더러가 되보고한 탭 줄 자리를 그 창에 새긴다(창 기준 좌표). */
+export function setWindowStrip(win: BrowserWindow, strip: StripRect): void {
+  strips.set(win, strip)
+}
+
+/**
+ * 지금 탭 줄을 내보이고 있는 창들 — 끌고 온 탭을 삼킬 후보다.
+ * 안 보이는 창(최소화·끌려 나오는 중이라 잠시 감춘 창)과 `exclude` 는 뺀다.
+ */
+export function windowStrips(exclude?: number): WindowStrip<number>[] {
+  const out: WindowStrip<number>[] = []
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed() || win.id === exclude || !win.isVisible()) continue
+    const strip = strips.get(win)
+    if (strip) out.push({ id: win.id, content: win.getContentBounds(), strip })
+  }
+  return out
 }
 
 /** 껐을 때의 배치를 파일로 남긴다. 못 써도 앱은 정상 종료한다(다음 실행이 기본 창을 연다). */
@@ -94,7 +122,16 @@ function boundsFor(saved: Rect | null): Rect {
 }
 
 export function createAppWindow(
-  options: { session?: WindowSession; bounds?: Rect; primary?: boolean } = {}
+  options: {
+    session?: WindowSession
+    bounds?: Rect
+    primary?: boolean
+    /**
+     * 초점을 안 가져가고 곧바로 띄운다 — 탭을 끌어 떼어내는 중일 때다.
+     * 마우스를 쥔 쪽은 원래 창이라, 새 창이 앞으로 나서면 끌기가 그 자리에서 끊긴다.
+     */
+    inactive?: boolean
+  } = {}
 ): BrowserWindow {
   const session = options.session ?? DEFAULT_SESSION
   // 브라우저 저장소(대상 선택·마지막 자리 기억)를 쓸 수 있는 창은 하나뿐이다 — 첫 창이 그것이다.
@@ -124,7 +161,14 @@ export function createAppWindow(
 
   sessions.set(win, session)
 
-  win.on('ready-to-show', () => win.show())
+  if (options.inactive) {
+    // 내용이 차기 전에 흰 창을 **먼저** 띄운다 — 탭을 빼낸 손끝에 창이 바로 따라 나와야
+    // "떨어져 나왔다"가 읽힌다. 화면이 그려질 때까지 기다리면 반 박자가 빈다.
+    win.showInactive()
+    win.on('ready-to-show', () => win.showInactive())
+  } else {
+    win.on('ready-to-show', () => win.show())
+  }
   // 자리·크기는 창에서 바로 읽으므로 따로 안 들고, 바뀌었다는 사실만 기억에 반영한다.
   win.on('moved', rememberLayout)
   win.on('resized', rememberLayout)

@@ -55,10 +55,20 @@ export async function run(ctx) {
   check('레일의 켜진 서비스도 함께 돌아온다', (await body()).includes('Design'))
 
   // ── 끌어서 자리 옮기기 ──
-  // 자리만 바뀌고 **보고 있던 탭은 안 바뀐다** — 옮기기와 고르기는 다른 일이다.
+  // 끌기는 브라우저 기본 끌기가 아니라 **마우스를 직접 듣는 방식**이다(TabBar 머리말) —
+  // 그래서 검사도 실제 마우스로 누르고 옮기고 놓는다.
+  const dragTab = async (from, to, dy = 0) => {
+    const a = await tabs().nth(from).boundingBox()
+    const b = await tabs().nth(to).boundingBox()
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(b.x + 4, b.y + b.height / 2 + dy, { steps: 6 })
+    await page.mouse.up()
+    await page.waitForTimeout(400)
+  }
+
   const before = (await titles()).map((t) => t.trim())
-  await tabs().nth(1).dragTo(tabs().nth(0), { targetPosition: { x: 4, y: 12 } })
-  await page.waitForTimeout(400)
+  await dragTab(1, 0)
   const after = (await titles()).map((t) => t.trim())
   check('끌어서 옮기면 순서가 뒤집힌다', after[0] === before[1] && after[1] === before[0])
   check('자리를 옮겨도 보던 탭은 그대로다', (await activeTab().innerText()).trim() === firstTitle)
@@ -116,48 +126,42 @@ export async function run(ctx) {
     Boolean(accel['Copy'] && accel['Paste'] && accel['Select All'] && accel['Quit Rockury'])
   )
 
-  // ── 탭을 창 밖으로 끌어 놓으면 떨어져 나간다 ──
-  // 검사가 만드는 끌기는 화면 좌표를 못 실으므로(창 안 좌표가 온다) 끝맺음만 직접 만들어 준다.
-  // 그 뒤 길 — 창 밖 판정 → 이 창에서 지우기 → 새 창 열기 — 은 전부 실제 코드가 지나간다.
+  // ── 탭을 줄 밖으로 빼내면 그 자리에서 창이 된다 ──
+  // 예전엔 "손을 놓은 자리가 창 밖인가"로 갈랐다 — 창을 꽉 채워 놓으면 창 밖이 없어 영영 안 됐다.
+  // 이제는 **탭 줄을 벗어났나**로 가르므로, 손을 놓기 전에 이미 창이 서 있어야 한다.
   const detachTitle = (await tabs().nth(1).innerText()).trim()
+  const grab = await tabs().nth(1).boundingBox()
+  const grabX = grab.x + grab.width / 2
+  const grabY = grab.y + grab.height / 2
   const detached = ctx.app.waitForEvent('window')
-  await page.evaluate(() => {
-    const el = document.querySelectorAll('[data-nav-tab]')[1]
-    const dataTransfer = new DataTransfer()
-    el.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }))
-    el.dispatchEvent(
-      new DragEvent('dragend', {
-        bubbles: true,
-        dataTransfer,
-        screenX: window.screenX + window.outerWidth + 300,
-        screenY: window.screenY + 200
-      })
-    )
-  })
+  await page.mouse.move(grabX, grabY)
+  await page.mouse.down()
+  await page.mouse.move(grabX, grabY + 200, { steps: 8 })
   const dragWin = await detached
   await dragWin.waitForSelector('[data-nav-tab]', { timeout: 15_000 })
-  check('창 밖에 놓으면 이 창에서 사라진다', (await tabs().count()) === 1)
+  check('줄 밖으로 빼내면 손을 놓기 전에 이미 창이 된다', (await tabs().count()) === 1)
   check(
-    '떨어져 나간 탭이 새 창에 그대로 있다',
+    '빠져나간 탭이 새 창에 그대로 있다',
     (await dragWin.locator('[data-nav-tab]').first().innerText()).trim() === detachTitle
   )
-  await dragWin.close()
-  await page.waitForTimeout(300)
 
-  // 취소한 끌기(끝 좌표 0,0)는 아무 일도 없어야 한다 — 여기서 떼어내면 ESC 가 탭을 날린다.
-  const beforeCancel = await tabs().count()
-  await page.evaluate(() => {
-    const el = document.querySelectorAll('[data-nav-tab]')[0]
-    const dataTransfer = new DataTransfer()
-    el.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }))
-    el.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer, screenX: 0, screenY: 0 }))
-  })
-  await page.waitForTimeout(400)
-  check('취소한 끌기는 탭을 안 떼어낸다', (await tabs().count()) === beforeCancel)
+  // ── 그 창을 탭 줄 위에서 놓으면 도로 흡수된다 ──
+  // 마우스는 아직 눌린 채다 — 손을 놓기까지가 한 사건이라 원래 창이 계속 쥐고 있다.
+  await page.mouse.move(grabX, grabY, { steps: 8 })
+  await page.mouse.up()
+  await page.waitForTimeout(600)
+  check('탭 줄 위에 놓으면 그 창이 도로 삼킨다', (await tabs().count()) === 2)
+  check(
+    '도로 삼킨 탭이 그 자리 그대로다',
+    (await titles()).map((t) => t.trim()).includes(detachTitle)
+  )
+  check('삼켰으면 끌려 나왔던 창은 사라진다', dragWin.isClosed())
 
-  // 다음 검사가 탭 두 장을 전제한다.
-  await page.locator('[data-tab-action="new-tab"]').click()
-  await page.waitForTimeout(300)
+  // 줄 바로 아래(여유 폭 안)까지는 안 뗀다 — 손이 떨릴 때마다 창이 생기면 못 쓴다.
+  const beforeJitter = ctx.app.windows().length
+  await dragTab(1, 0, 40)
+  check('줄 여유 폭 안에서 움직이면 창이 안 생긴다', ctx.app.windows().length === beforeJitter)
+  check('그때 탭도 그대로 두 장이다', (await tabs().count()) === 2)
 
   // ── 새 창: 지금 자리를 그대로 든 창이 하나 더 뜬다 ──
   const openedCount = ctx.app.windows().length

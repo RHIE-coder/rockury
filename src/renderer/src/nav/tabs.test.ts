@@ -3,17 +3,20 @@ import {
   activeTab,
   closeTab,
   detachTab,
-  droppedOutside,
+  dropIndexAt,
   fromSession,
+  insertTab,
   moveActiveTab,
   moveTab,
   nextTabId,
   normalizeTabSet,
   openTab,
+  pulledOutOfStrip,
   selectTab,
   selectTabAt,
   stepTab,
   tabTitle,
+  TEAR_OFF_MARGIN,
   toSession,
   type TabSet
 } from './tabs'
@@ -180,25 +183,81 @@ describe('detachTab — 창 밖으로 끌어 내기', () => {
   })
 })
 
-describe('droppedOutside — 창 밖에 놓았나', () => {
-  // 화면 (100,100) 에 놓인 1000×800 창.
-  const frame = { screenX: 100, screenY: 100, outerWidth: 1000, outerHeight: 800 }
+describe('pulledOutOfStrip — 탭 줄 밖으로 끌어 냈나', () => {
+  // 창 위에서 36px 자리에 놓인 높이 32 의 탭 줄.
+  const strip = { top: 36, bottom: 68 }
 
-  it('창 안에 놓으면 아니다 (자리 옮기기다)', () => {
-    expect(droppedOutside({ screenX: 400, screenY: 300 }, frame)).toBe(false)
-    expect(droppedOutside({ screenX: 100, screenY: 100 }, frame)).toBe(false)
-    expect(droppedOutside({ screenX: 1100, screenY: 900 }, frame)).toBe(false)
+  it('줄 안이면 아니다 (자리 옮기기다)', () => {
+    expect(pulledOutOfStrip(36, strip)).toBe(false)
+    expect(pulledOutOfStrip(52, strip)).toBe(false)
+    expect(pulledOutOfStrip(68, strip)).toBe(false)
   })
 
-  it('네 방향 어디로든 벗어나면 맞다', () => {
-    expect(droppedOutside({ screenX: 99, screenY: 300 }, frame)).toBe(true)
-    expect(droppedOutside({ screenX: 400, screenY: 99 }, frame)).toBe(true)
-    expect(droppedOutside({ screenX: 1101, screenY: 300 }, frame)).toBe(true)
-    expect(droppedOutside({ screenX: 400, screenY: 901 }, frame)).toBe(true)
+  it('여유 폭 안에서는 아직 아니다 — 손 떨림이 창을 만들면 안 된다', () => {
+    expect(pulledOutOfStrip(68 + TEAR_OFF_MARGIN, strip)).toBe(false)
+    expect(pulledOutOfStrip(36 - TEAR_OFF_MARGIN, strip)).toBe(false)
   })
 
-  it('취소된 끌기(0,0)는 창 밖으로 안 친다 — 취소했는데 탭이 떨어져 나가면 안 된다', () => {
-    expect(droppedOutside({ screenX: 0, screenY: 0 }, frame)).toBe(false)
+  it('여유 폭을 넘어 위아래로 벗어나면 맞다', () => {
+    expect(pulledOutOfStrip(68 + TEAR_OFF_MARGIN + 1, strip)).toBe(true)
+    expect(pulledOutOfStrip(36 - TEAR_OFF_MARGIN - 1, strip)).toBe(true)
+  })
+
+  it('창을 꽉 채워도 판정이 산다 — 세로만 보므로 "창 밖"이 없어도 떨어져 나간다', () => {
+    // 예전 판정("놓은 자리가 창 밖인가")이 전체화면에서 영영 거짓이던 자리.
+    expect(pulledOutOfStrip(900, strip)).toBe(true)
+  })
+})
+
+describe('dropIndexAt — 어느 틈에 떨어지나', () => {
+  // 폭 100 짜리 탭 셋: [0,100) [100,200) [200,300)
+  const boxes = [
+    { left: 0, width: 100 },
+    { left: 100, width: 100 },
+    { left: 200, width: 100 }
+  ]
+
+  it('탭의 반보다 왼쪽이면 그 탭 앞이다', () => {
+    expect(dropIndexAt(boxes, 10)).toBe(0)
+    expect(dropIndexAt(boxes, 120)).toBe(1)
+    expect(dropIndexAt(boxes, 210)).toBe(2)
+  })
+
+  it('탭의 반보다 오른쪽이면 그 탭 뒤다', () => {
+    expect(dropIndexAt(boxes, 60)).toBe(1)
+    expect(dropIndexAt(boxes, 160)).toBe(2)
+  })
+
+  it('마지막 탭 오른쪽 끝이면 맨 뒤(= 탭 수)', () => {
+    expect(dropIndexAt(boxes, 280)).toBe(3)
+    expect(dropIndexAt(boxes, 9999)).toBe(3)
+  })
+
+  it('줄이 비어 있으면 0', () => {
+    expect(dropIndexAt([], 100)).toBe(0)
+  })
+})
+
+describe('insertTab — 다른 창에서 건너온 탭을 끼운다', () => {
+  it('가운데에 끼우고, 끼운 탭이 활성이 된다', () => {
+    const got = insertTab(set('a', 'b'), loc('api', 'studio'), 1)
+    expect(got.tabs.map((t) => t.serviceId)).toEqual(['db', 'api', 'db'])
+    expect(activeTab(got)).toMatchObject(loc('api', 'studio'))
+  })
+
+  it('탭 수와 같은 번호면 맨 뒤', () => {
+    const got = insertTab(set('a', 'b'), loc('api', 'studio'), 2)
+    expect(got.tabs[2].serviceId).toBe('api')
+  })
+
+  it('범위를 벗어난 번호는 양 끝으로 조인다', () => {
+    expect(insertTab(set('a', 'b'), loc('api', 'studio'), -5).tabs[0].serviceId).toBe('api')
+    expect(insertTab(set('a', 'b'), loc('api', 'studio'), 99).tabs[2].serviceId).toBe('api')
+  })
+
+  it('id 는 쓰이지 않는 번호로 새로 짓는다 — 건너온 탭의 id 를 물려받지 않는다', () => {
+    const got = insertTab({ tabs: [{ id: 't1', ...loc('db', 'x') }], activeTabId: 't1' }, loc('api', 'studio'), 1)
+    expect(got.tabs.map((t) => t.id)).toEqual(['t1', 't2'])
   })
 })
 
