@@ -83,8 +83,18 @@ export function ModuleTabs() {
           Design 화면은 왼쪽 손잡이만, Remote 는 오른쪽만 있어서 가운데가 그만큼 밀렸다.
           자리가 모자라면 **손잡이가 말줄임으로 줄어든다**(`min-w-0` + 안쪽 `truncate`) — 가운데를
           미는 대신 자기가 줄어든다. 탭 이름은 고정폭이라 안 줄어든다.
+
+          `@container/handle` — 손잡이가 "좁으면 접기"를 판정하는 **자**다. 접기 기준은 원래 화면
+          폭(`max-[1599px]`)이었는데, 손잡이가 실제로 받는 자리는 화면 폭이 아니라 **여기서 남는
+          폭**(= (화면폭 − 사이드바 − 가운데묶음) ÷ 2)이라 둘이 어긋났다. 그 어긋남이 1600~1679px
+          구간에 구멍을 냈다(2026-08-07 사용자 제보): 화면이 1600을 넘는 순간 접기가 풀리는데
+          정작 자리는 559px 뿐이라 581px 짜리 손잡이가 안 들어가 글자가 개행됐다. 화면 검사기는
+          1440px 에서 돌아 늘 접힌 쪽만 보고 있었다.
+          이 자리를 자로 삼으면 가운데 묶음이 넓어지거나 탭 이름이 길어져도 임계값이 따라온다 —
+          마법의 숫자를 손으로 다시 맞출 일이 없다. (자리 폭은 `basis-0` 이라 **안쪽 내용과 무관**
+          하게 정해지므로, 접혀서 좁아지고 좁아져서 또 접히는 되먹임이 생기지 않는다.)
         */}
-        <span className="flex min-w-0 flex-1 basis-0 justify-start">{handleAt('design')}</span>
+        <span className="@container/handle flex min-w-0 flex-1 basis-0 justify-start">{handleAt('design')}</span>
         <Tabs.List aria-label="모듈" className="flex shrink-0 items-center">
           {/*
          * 건너가는 문이 **줄의 한가운데**에 선다(2026-08-04 사용자 요청). 양옆 자리가 남는 폭을
@@ -111,7 +121,7 @@ export function ModuleTabs() {
           className={crossing ? 'flex-1 justify-start' : 'shrink-0 justify-end'}
         />
         </Tabs.List>
-        <span className="flex min-w-0 flex-1 basis-0 justify-end">{handleAt('ops')}</span>
+        <span className="@container/handle flex min-w-0 flex-1 basis-0 justify-end">{handleAt('ops')}</span>
       </div>
     </Tabs.Root>
   )

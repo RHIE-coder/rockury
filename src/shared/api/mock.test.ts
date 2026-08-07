@@ -36,6 +36,7 @@ const spec = (requests: RequestDef[], kind: SpecDef['kind'] = 'rest'): SpecDef =
   id: 's1',
   name: 'S',
   description: '',
+  docs: '',
   kind,
   requests
 })

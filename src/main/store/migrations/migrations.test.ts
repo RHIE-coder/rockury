@@ -114,6 +114,33 @@ describe('서비스별 마이그레이션 분할', () => {
     second.close()
   })
 
+  it('명세 문서 칸이 없던 구 DB 에도 칸이 뒤늦게 붙는다', () => {
+    const file = tempDbFile()
+    const legacy = new DatabaseSync(file)
+    // docs 가 생기기 전 모양. `CREATE TABLE IF NOT EXISTS` 는 이미 있는 표에 칸을 못 더하므로
+    // alter 가 없으면 앱이 명세를 읽자마자 터진다 — 그 자리를 지키는 회귀 테스트.
+    legacy.exec(`CREATE TABLE api_specs (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      kind        TEXT NOT NULL,
+      created_at  TEXT NOT NULL
+    )`)
+    legacy
+      .prepare('INSERT INTO api_specs (id, name, description, kind, created_at) VALUES (?,?,?,?,?)')
+      .run('old', '예전 명세', '', 'rest', '2026-07-27T00:00:00.000Z')
+    legacy.close()
+
+    const d = new DatabaseSync(file)
+    applyMigrations(d)
+    const row = d.prepare('SELECT name, docs FROM api_specs WHERE id = ?').get('old') as unknown as {
+      name: string
+      docs: string
+    }
+    expect(row).toEqual({ name: '예전 명세', docs: '' })
+    d.close()
+  })
+
   it('CASE-pdev-022 두 서비스가 같은 테이블을 선언하면 적용이 실패한다', () => {
     // 분할이 새로 만드는 위험: 서비스 A 와 B 가 같은 이름을 선언하면 `IF NOT EXISTS` 탓에
     // 뒤에 온 쪽이 조용히 무시되고, 한쪽 서비스는 자기가 원한 모양이 아닌 테이블을 쓰게 된다.

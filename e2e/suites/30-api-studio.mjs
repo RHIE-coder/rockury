@@ -105,6 +105,30 @@ export async function run(ctx) {
     check('사람이 쓴 문서가 저장된다', docs.includes('폐기 예정'))
   }
 
+  // ── Docs: 대상 전환 — 명세 전체 문서와 요청 문서가 한 번에 하나만 보인다 ──
+  await click('[data-api-docs-target-option="spec"]')
+  await page.waitForSelector('textarea[data-api-spec-docs]', { timeout: 5_000 })
+  check(
+    '명세 문서로 바꾸면 요청 문서 칸이 사라진다 — 둘이 한 화면에 쌓이지 않는다',
+    (await page.locator('textarea[data-api-docs]').count()) === 0 &&
+      (await page.locator('[data-api-docs-generated]').count()) === 0
+  )
+
+  await page.locator('textarea[data-api-spec-docs]').fill('# 요금과 한도\n하루 100회')
+  await page.waitForTimeout(600)
+  {
+    const specDocs = await page.evaluate(async () => {
+      const spec = await window.rockury.apiSpecs.get('e2e-billing')
+      return { docs: spec.docs, first: spec.requests[0].docs }
+    })
+    check('명세 전체 문서가 저장된다', specDocs.docs.includes('하루 100회'))
+    check('요청 문서는 그대로다 — 두 문서가 서로를 덮지 않는다', specDocs.first.includes('폐기 예정'))
+  }
+
+  await click('[data-api-docs-target-option="request"]')
+  await page.waitForSelector('textarea[data-api-docs]', { timeout: 5_000 })
+  check('요청으로 되돌리면 자동 생성 구획이 다시 나온다', (await page.locator('[data-api-docs-generated]').count()) === 1)
+
   // ── 저장 규칙은 스토어가 강제한다: 화면을 거치지 않는 경로도 막힌다 ──
   {
     const rejected = await page.evaluate(async () => {

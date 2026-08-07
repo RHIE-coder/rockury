@@ -38,6 +38,7 @@ const spec = (over: Partial<SpecDef> = {}): SpecDef => ({
   id: 'billing',
   name: 'Billing',
   description: '결제',
+  docs: '',
   kind: 'rest',
   requests: [req()],
   ...over

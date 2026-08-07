@@ -143,6 +143,7 @@ describe('CASE-apicontract-005 완전 판정도 같은 결과 타입을 낸다',
     id: 's',
     name: 'S',
     description: '',
+    docs: '',
     kind: 'graphql',
     requests: [
       {

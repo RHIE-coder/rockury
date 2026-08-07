@@ -52,7 +52,8 @@ export function DesignScopeSelector() {
           )}
         >
           <Layers size={13} className="shrink-0 text-muted" />
-          <span className="truncate font-mono text-[12px] font-semibold">
+          {/* 자기 상한 안에서만 줄어든다 — 모자란 폭은 설계 이름이 받는다(`ScopeSelector` 와 같은 규칙). */}
+          <span className="max-w-[120px] shrink-0 truncate font-mono text-[12px] font-semibold">
             {designScopeSummary(selected, available)}
           </span>
           <ChevronDown size={12} className="shrink-0 text-muted" />

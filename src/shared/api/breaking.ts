@@ -201,6 +201,7 @@ export function diffRequest(before: RequestLike, after: RequestLike): DiffResult
     id: 's',
     name: 's',
     description: '',
+    docs: '',
     kind: 'rest',
     requests: [{ id: r.name, folder: '', shape: 'unary', request: {}, ...r }]
   })

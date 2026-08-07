@@ -98,7 +98,11 @@ export function ScopeSelector() {
           )}
         >
           <Layers size={13} className="shrink-0 text-muted" />
-          <span className="truncate font-mono text-[12px] font-semibold">{scopeSummary(shown)}</span>
+          {/* 자기 상한 안에서만 줄어든다(`shrink-0` + `max-w`) — 모자란 폭은 연결 이름이 받는다.
+              같이 줄어들던 동안은 `piccard` 가 `picca…` 로 갈렸다(2026-08-07 제보). */}
+          <span className="max-w-[120px] shrink-0 truncate font-mono text-[12px] font-semibold">
+            {scopeSummary(shown)}
+          </span>
           <ChevronDown size={12} className="shrink-0 text-muted" />
         </button>
       </DropdownMenu.Trigger>

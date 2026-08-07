@@ -27,6 +27,7 @@ export const apiMigration: ServiceMigration = {
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
+      docs        TEXT NOT NULL DEFAULT '',
       kind        TEXT NOT NULL,
       created_at  TEXT NOT NULL
     );
@@ -121,6 +122,10 @@ export const apiMigration: ServiceMigration = {
     // api_specs.project_id — 공용 projects 의 소속. **비워 둘 수 있다(무소속)**.
     // 명세에만 붙인다: 요청·환경·버전·실행기록은 전부 명세에 딸려 있어 부모를 타고 정해진다.
     addColumnIfMissing(d, 'api_specs', 'project_id', 'TEXT')
+
+    // api_specs.docs — 명세 전체에 걸리는 사람이 쓴 문서. 부제(description)와 자리가 다르다:
+    // 부제는 목록에 한 줄로 실리고, 이건 Docs 화면에서 펼쳐 읽는다.
+    addColumnIfMissing(d, 'api_specs', 'docs', "TEXT NOT NULL DEFAULT ''")
 
     addColumnIfMissing(d, 'api_runs', 'shape', "TEXT NOT NULL DEFAULT 'unary'")
     addColumnIfMissing(d, 'api_runs', 'messages_json', 'TEXT')

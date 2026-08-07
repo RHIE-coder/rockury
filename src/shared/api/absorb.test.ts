@@ -25,6 +25,7 @@ const spec = (requests: RequestDef[]): SpecDef => ({
   id: 's1',
   name: 'S',
   description: '',
+  docs: '',
   kind: 'rest',
   requests
 })

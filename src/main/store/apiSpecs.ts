@@ -89,8 +89,10 @@ export function listSpecs(): SpecSummary[] {
 export function getSpec(id: string): SpecDef | undefined {
   const d = getDb()
   const row = d
-    .prepare('SELECT id, name, description, kind FROM api_specs WHERE id = ?')
-    .get(id) as unknown as { id: string; name: string; description: string; kind: string } | undefined
+    .prepare('SELECT id, name, description, docs, kind FROM api_specs WHERE id = ?')
+    .get(id) as unknown as
+    | { id: string; name: string; description: string; docs: string; kind: string }
+    | undefined
   if (!row) return undefined
   return { ...row, kind: row.kind as InterfaceKind, requests: listRequests(id) }
 }
@@ -123,16 +125,20 @@ export function createSpec(input: CreateSpecInput): SpecSummary {
   }
 }
 
-/** 이름·설명만 고친다 — 인터페이스 종류는 고정 속성이라 입력 표면에 없다(spec §2). */
+/** 이름·설명·문서만 고친다 — 인터페이스 종류는 고정 속성이라 입력 표면에 없다(spec §2). */
 export function updateSpec(
   id: string,
-  patch: { name: string; description: string; projectId?: string | null }
+  patch: { name: string; description: string; docs?: string; projectId?: string | null }
 ): SpecSummary {
   const d = getDb()
   requireSpec(id)
   const name = patch.name.trim()
   if (!name) throw new Error('명세 이름이 비어 있습니다.')
   d.prepare('UPDATE api_specs SET name = ?, description = ? WHERE id = ?').run(name, patch.description.trim(), id)
+  // 문서는 **다듬지 않는다** — 글자마다 저장되는 칸이라 끝의 줄바꿈을 떼면 빈 줄을 못 넣는다.
+  // 안 주면(undefined) 그대로 둔다: 이름만 고치는 호출이 문서를 지우면 안 된다.
+  if (patch.docs !== undefined)
+    d.prepare('UPDATE api_specs SET docs = ? WHERE id = ?').run(patch.docs, id)
   // 소속 옮기기 — null 이 "무소속으로 되돌리기" 라서 undefined 와 갈라야 한다.
   if (patch.projectId !== undefined)
     d.prepare('UPDATE api_specs SET project_id = ? WHERE id = ?').run(patch.projectId, id)

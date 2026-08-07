@@ -39,6 +39,8 @@ interface ApiState {
   selectRequest: (name: string | null) => void
   /** 요청 전량 교체 후 재조회. 실패하면 화면에 이유를 올리고 상태를 되돌린다. */
   saveRequests: (requests: RequestDef[]) => Promise<boolean>
+  /** 명세 전체 문서 저장. 글자마다 불리므로 재조회하지 않는다. */
+  saveSpecDocs: (docs: string) => Promise<boolean>
   clearError: () => void
 }
 
@@ -98,6 +100,32 @@ export const useApiStore = create<ApiState>()((set, get) => ({
       return true
     } catch (e) {
       set({ error: ipcErrorText(e) })
+      return false
+    }
+  },
+
+  saveSpecDocs: async (docs) => {
+    const spec = get().active
+    if (!spec) return false
+    // 글자를 치는 족족 불린다. 화면부터 바꾸고 저장한다 — 왕복을 기다리면 커서가 튄다.
+    // 재조회도 안 한다: 문서는 다른 무엇도 파생시키지 않아 다시 읽을 이유가 없다.
+    set({ active: { ...spec, docs } })
+    try {
+      await window.rockury.apiSpecs.update(spec.id, {
+        name: spec.name,
+        description: spec.description,
+        docs
+      })
+      set({ error: null })
+      return true
+    } catch (e) {
+      // 저장이 막혔으면 화면도 되돌린다 — 안 그러면 안 남은 글이 남은 듯 보인다.
+      // 그 사이 다른 명세로 옮겼으면 손대지 않는다: 남의 화면에 이 명세의 글을 쓰게 된다.
+      set((s) =>
+        s.active?.id === spec.id
+          ? { active: { ...s.active, docs: spec.docs }, error: ipcErrorText(e) }
+          : { error: ipcErrorText(e) }
+      )
       return false
     }
   },

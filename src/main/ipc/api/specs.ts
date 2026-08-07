@@ -25,8 +25,11 @@ export function registerApiSpecIpc(): void {
   ipcMain.handle('api:createSpec', (_e, input: CreateSpecInput) => createSpec(input))
   ipcMain.handle(
     'api:updateSpec',
-    (_e, id: string, patch: { name: string; description: string; projectId?: string | null }) =>
-      updateSpec(id, patch)
+    (
+      _e,
+      id: string,
+      patch: { name: string; description: string; docs?: string; projectId?: string | null }
+    ) => updateSpec(id, patch)
   )
   ipcMain.handle('api:setSpec', (_e, specId: string, requests: RequestDef[]) =>
     replaceRequests(specId, requests)

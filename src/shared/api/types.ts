@@ -236,7 +236,14 @@ export interface RequestDef {
 export interface SpecDef {
   id: string
   name: string
+  /** 한 줄 부제 — 목록·드롭다운이 이름 밑에 그린다. 길어질 것은 `docs` 로 간다. */
   description: string
+  /**
+   * 명세 전체에 걸리는 사람이 쓴 문서(markdown). 요청 하나에 매이지 않는 것만 담는다
+   * — 인증 방식·요금과 한도·이용 조건처럼 어느 요청을 부르든 걸리는 것.
+   * 요청 하나에만 걸리는 것은 그 요청의 `docs` 로 간다.
+   */
+  docs: string
   /** 생성 시 결정되는 고정 속성 — 편집으로 바꾸지 않는다(spec §2). */
   kind: InterfaceKind
   requests: RequestDef[]

@@ -35,6 +35,14 @@ const AREA_TINT: Record<ModuleArea, string> = {
  *
  * 구획 뱃지('설계'·'운영')는 안 단다 — 모듈 줄이 이미 그 이름을 붙였다. 셋째로 또 적으면
  * 한 화면에 같은 말이 셋이다.
+ *
+ * **"좁으면 접기"는 자기를 담은 자리를 보고 판정한다**(`@container/handle` · 2026-08-07).
+ * 그 자를 세우는 것은 손잡이가 아니라 **자리 쪽**이다(`ModuleTabs`) — 자리 폭이 안쪽 내용과
+ * 무관해야(`basis-0`) 접혀서 좁아지고 좁아져서 또 접히는 되먹임이 안 생기기 때문이다.
+ * 그래서 자를 안 세운 자리(뷰 탭 줄 오른쪽 끝)에서는 접기가 아예 안 걸리고 손잡이가 늘 펴진
+ * 채로 선다 — 그 자리는 `shrink-0` 이라 자연폭을 그대로 받으므로 접을 까닭도 없다.
+ * (지금 그 자리를 쓰는 화면은 없다: DB 의 세 모듈이 전부 `sides` 이고, 나머지 네 서비스는
+ * 구획 셀렉터가 없어 컨텍스트 바를 쓴다.)
  */
 export function AreaHandle({
   service,
@@ -59,7 +67,12 @@ export function AreaHandle({
         // 말줄임으로 접힌다). `shrink-0` 이던 동안은 손잡이가 길어질수록 가운데 문이 밀려났다.
         // `overflow-hidden` 은 마지막 방어선이다 — 안쪽 칸 하나가 줄어들 줄 모르더라도
         // 둥근 테두리 밖으로 글자가 삐져나오지는 않는다(2026-08-05 사용자 제보: "public 글자가 툭 튀어나오네").
-        'flex min-w-0 items-center gap-1.5 overflow-hidden rounded-[9px] border bg-canvas px-1.5 py-1',
+        //
+        // `whitespace-nowrap` 은 **개행 금지의 바닥선**이다(2026-08-07 사용자 제보: "글씨가 개행되며
+        // UI가 깨진다"). 자리가 모자랄 때 손잡이는 **가로로 줄어들어야지 세로로 자라면 안 된다** —
+        // 두 어절짜리 라벨("편집 중")이 줄바꿈되면 이 줄 하나가 11px 높아져 화면 전체가 밀린다.
+        // 여기 한 번만 걸면 된다: `white-space` 는 상속되므로 안쪽 글자가 전부 따라온다.
+        'flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[9px] border bg-canvas px-1.5 py-1',
         tinted ? AREA_TINT[area] : 'border-line'
       )}
     >
@@ -111,14 +124,20 @@ function HandleSelector({ sel }: { sel: ContextSelector }) {
           {Icon && <Icon size={14} className="shrink-0 text-muted" />}
           {current ? (
             <>
-              {/* 좁아지면 이름부터 조인다 — 탭 글자를 잃는 것보다 이름이 줄어드는 편이 낫다. */}
-              <span className="max-w-[180px] truncate font-medium text-fg max-[1599px]:max-w-[140px]">
+              {/*
+                이름은 이 손잡이에서 **유일하게 줄어드는 칸**이다 — 나머지(시점·범위)는 짧고
+                `shrink-0` 이라, 모자란 폭을 이 칸 하나가 다 받는다. 나눠 받던 동안은 `Draft` 가
+                `Dra…` 로 갈려 못 읽는 글자만 남았다(2026-08-07 제보).
+                상한은 자리에 맞춰 세 단이다: 넉넉하면 260px(대부분의 이름이 통째로 들어간다),
+                보통 180px, 빠듯하면 140px.
+              */}
+              <span className="max-w-[180px] truncate font-medium text-fg @max-[493px]/handle:max-w-[140px] @min-[672px]/handle:max-w-[260px]">
                 {current.label}
               </span>
               <HintChip hint={current.hint} dot={current.dot} compact />
             </>
           ) : (
-            <span className="italic text-muted">{sel.placeholder ?? 'Select…'}</span>
+            <span className="shrink-0 italic text-muted">{sel.placeholder ?? 'Select…'}</span>
           )}
           <ChevronDown size={13} className="shrink-0 text-muted" />
         </button>

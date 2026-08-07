@@ -57,11 +57,17 @@ export function VersionLens() {
           ) : (
             <History size={13} className="shrink-0 text-muted" />
           )}
-          <span className="truncate font-mono text-[12px] font-semibold">{current.label}</span>
-          {/* 좁아지면 상태말부터 접는다 — 자물쇠/시계 아이콘이 같은 말을 이미 하고 있다. */}
+          {/* `Draft`·`v0.1.0` 은 짧고 통째로 읽혀야 뜻이 산다 — 모자란 폭은 설계 이름이 받는다. */}
+          <span className="shrink-0 font-mono text-[12px] font-semibold">{current.label}</span>
+          {/*
+            손잡이 자리가 빠듯해지면 상태말부터 접는다 — 자물쇠/시계 아이콘이 같은 말을 이미
+            하고 있다. 기준이 화면 폭이던 동안 이 칸이 "편집" / "중" 으로 개행돼 줄 높이를
+            11px 밀어 올렸다(2026-08-07 제보). 자리를 자로 삼아 접기가 제때 걸리게 하고,
+            `shrink-0` 으로 이 칸이 압축돼 두 어절이 갈라지는 길 자체를 없앤다.
+          */}
           <span
             className={cx(
-              'max-[1599px]:hidden',
+              'shrink-0 @max-[583px]/handle:hidden',
               current.readOnly ? 'text-[11px] text-accent-2' : 'text-[11px] text-muted'
             )}
           >

@@ -65,6 +65,37 @@ describe('명세 CRUD', () => {
     expect(() => updateSpec('없음', { name: 'x', description: '' })).toThrow(/없습니다/)
   })
 
+  it('명세 문서는 빈 글로 시작해 저장한 그대로 되읽힌다', () => {
+    const s = createSpec({ name: 'Doc Spec', kind: 'rest' })
+    expect(getSpec(s.id)!.docs).toBe('')
+    updateSpec(s.id, { name: s.name, description: '', docs: '# 인증\n\nBearer 키' })
+    expect(getSpec(s.id)!.docs).toBe('# 인증\n\nBearer 키')
+  })
+
+  it('문서를 안 주면 그대로 둔다 — 이름만 고치는 호출이 문서를 지우면 안 된다', () => {
+    const s = createSpec({ name: 'Keep Docs', kind: 'rest' })
+    updateSpec(s.id, { name: s.name, description: '', docs: '살아남아야 한다' })
+    updateSpec(s.id, { name: '새 이름', description: '새 부제' })
+    expect(getSpec(s.id)!.docs).toBe('살아남아야 한다')
+  })
+
+  it('문서는 다듬지 않는다 — 끝의 줄바꿈을 떼면 빈 줄을 못 넣는다', () => {
+    const s = createSpec({ name: 'Raw Docs', kind: 'rest' })
+    updateSpec(s.id, { name: s.name, description: '  부제  ', docs: '  앞뒤 공백\n\n' })
+    const after = getSpec(s.id)!
+    expect(after.docs).toBe('  앞뒤 공백\n\n')
+    // 부제는 반대다 — 한 줄로 목록에 실리므로 다듬는다.
+    expect(after.description).toBe('부제')
+  })
+
+  it('명세 문서가 버전 스냅샷에 함께 얼어붙는다', () => {
+    const s = createSpec({ name: 'Doc Snapshot', kind: 'rest' })
+    updateSpec(s.id, { name: s.name, description: '', docs: '컷 시점의 글' })
+    createVersion(s.id, '1.0.0')
+    updateSpec(s.id, { name: s.name, description: '', docs: '그 뒤에 고친 글' })
+    expect(listVersions(s.id)[0].snapshot.docs).toBe('컷 시점의 글')
+  })
+
   it('삭제하면 소속 요청·버전도 함께 사라진다', () => {
     const s = createSpec({ name: 'Doomed', kind: 'rest' })
     replaceRequests(s.id, [req('a')])

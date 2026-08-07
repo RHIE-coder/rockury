@@ -179,7 +179,13 @@ export const API_TOOL_DEFS: ToolDef[] = [
           )
       }
       return {
-        spec: { id: spec.id, name: spec.name, description: spec.description, kind: spec.kind },
+        spec: {
+          id: spec.id,
+          name: spec.name,
+          description: spec.description,
+          docs: spec.docs,
+          kind: spec.kind
+        },
         requests: chosen.map((r) => ({
           name: r.name,
           folder: r.folder,
@@ -319,17 +325,27 @@ export const API_TOOL_DEFS: ToolDef[] = [
   {
     name: 'api_update_spec',
     description:
-      '명세의 이름·설명을 고친다. 인터페이스 종류는 고정 속성이라 입력 표면에 없다(바꾸려면 새 명세를 만든다).',
+      '명세의 이름·부제(description)·문서(docs)를 고친다. 인터페이스 종류는 고정 속성이라 입력 표면에 없다(바꾸려면 새 명세를 만든다).',
     inputSchema: {
       specId: z.string(),
       name: z.string().optional(),
-      description: z.string().optional()
+      description: z
+        .string()
+        .optional()
+        .describe('한 줄 부제 — 목록·드롭다운이 이름 밑에 그린다. 길어질 것은 docs 로.'),
+      docs: z
+        .string()
+        .optional()
+        .describe(
+          '명세 전체에 걸리는 문서(markdown) — 인증·요금과 한도·이용 조건처럼 어느 요청을 부르든 걸리는 것. 요청 하나에만 걸리는 것은 그 요청의 docs 로.'
+        )
     },
-    handler: ({ specId, name, description }) => {
+    handler: ({ specId, name, description, docs }) => {
       const spec = requireSpecDef(specId)
       const out = updateSpec(spec.id, {
         name: name === undefined ? spec.name : String(name),
-        description: description === undefined ? spec.description : String(description)
+        description: description === undefined ? spec.description : String(description),
+        ...(docs === undefined ? {} : { docs: String(docs) })
       })
       notifyApiChanged({ domain: 'specs', specId: spec.id })
       return out

@@ -16,8 +16,10 @@ import { HintChip, SelectorMenu, useSelector } from './contextSelector'
  * `activeInAreas` 로 특정 구획에서만 활성화된다.
  * 옵션이 런타임 데이터인 셀렉터는 `nav/contextOptions` 레지스트리가 정적 옵션을 대체한다.
  */
+// `whitespace-nowrap` — 손잡이와 같은 바닥선(`AreaHandle`): 자리가 모자라면 가로로 줄어들지
+// 세로로 자라면 안 된다. 두 어절짜리 라벨이 줄바꿈되면 이 바 하나가 통째로 높아진다.
 const chip =
-  'flex items-center gap-1.5 rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-[13px] transition'
+  'flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-[13px] transition'
 
 function isEnabled(sel: ContextSelector, area: ModuleArea): boolean {
   return !sel.activeInAreas || sel.activeInAreas.includes(area)

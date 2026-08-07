@@ -15,7 +15,10 @@ import type { ContextOption, ContextSelector } from '../nav/types'
 
 /**
  * 옵션 hint 렌더 — dot(벤더 컬러)이 있으면 "점 + 라벨" 배지 문구로, 없으면 흐린 텍스트로.
- * `compact` 는 좁은 창에서 글자를 접고 점만 남긴다(폭을 벌어야 하는 손잡이 전용).
+ *
+ * `compact` 는 **손잡이 자리가 빠듯해지면** 글자를 접고 점만 남긴다(폭을 벌어야 하는 손잡이 전용).
+ * 기준은 화면 폭이 아니라 손잡이가 실제로 받는 자리다(`ModuleTabs` 의 `@container/handle`) —
+ * 화면 폭으로 재던 동안 둘이 어긋나 1600~1679px 구간에서 안 접힌 채 글자가 개행됐다.
  */
 export function HintChip({
   hint,
@@ -34,7 +37,7 @@ export function HintChip({
       className="flex shrink-0 items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10.5px] font-medium text-fg"
     >
       <span className="size-1.5 rounded-full" style={{ background: dot }} />
-      {compact ? <span className="max-[1599px]:hidden">{hint}</span> : hint}
+      {compact ? <span className="@max-[540px]/handle:hidden">{hint}</span> : hint}
     </span>
   )
 }
