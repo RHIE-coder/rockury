@@ -5,6 +5,7 @@ import { encodeWindowBoot, type WindowSession } from '../shared/windowSession'
 import type { StripRect, WindowStrip } from './windowDrag'
 import { cascadeBounds, defaultWindowBounds, usableBounds, type Rect } from './windowSize'
 import { normalizeWindowStore, type StoredWindow } from './windowStore'
+import { isE2E } from './e2eMode'
 
 /**
  * 앱 창 만들기·되살리기 — 창은 **여러 개** 뜬다(2026-08-05 사용자 요청: "여러 화면을 대조하며 보고 싶다").
@@ -165,6 +166,9 @@ export function createAppWindow(
     // 내용이 차기 전에 흰 창을 **먼저** 띄운다 — 탭을 빼낸 손끝에 창이 바로 따라 나와야
     // "떨어져 나왔다"가 읽힌다. 화면이 그려질 때까지 기다리면 반 박자가 빈다.
     win.showInactive()
+    win.on('ready-to-show', () => win.showInactive())
+  } else if (isE2E()) {
+    // 검사로 뜬 창은 앞으로 안 나선다 — 몇 분 도는 동안 사람의 일을 가로채면 안 된다.
     win.on('ready-to-show', () => win.showInactive())
   } else {
     win.on('ready-to-show', () => win.show())

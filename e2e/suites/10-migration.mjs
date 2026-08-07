@@ -26,6 +26,25 @@ export async function run(ctx) {
     for (const d of ds) n += (await window.rockury.versions.list(d.id)).length
     return n
   })
+  // version-up 대상은 **이 스위트가 만든 설계**다. 활성 설계를 그대로 쓰면 03·04 가 쌓아 둔
+  // commerce-core 의 draft 가 실 DB 스키마로 갈아치워진다 — 실 `orders` 에는 `order_number` 가
+  // 없어서, 04 가 시드에 넣은 값이 **칸째 사라져** 화면에서 지워진 것처럼 보였다(저장소에는 그대로).
+  // 그 여파를 99(콜드 재시작 후 시드 잔존)가 뒤집어썼다(2026-08-07 실측).
+  await page.evaluate(async () => {
+    const d = await window.rockury.designs.create({
+      name: 'e2e-versionup',
+      dialect: 'mysql',
+      description: '운영→설계 version-up 대상(이 스위트 전용)'
+    })
+    window.__rockuryNav.setContextValue('design', d.id)
+  })
+  // 화면 밖(IPC)에서 만든 설계라 이 창의 목록엔 아직 없다 — 한 번 새로 그려 저장소에서
+  // 다시 읽힌다. 안 그러면 `useActiveDesign()` 이 null 이라 가져오기 창이 "새 설계" 모드로 열린다.
+  await page.reload()
+  await page.waitForSelector('text=Design', { timeout: 15_000 })
+  await click('button:has-text("Migration")')
+  await page.waitForTimeout(500)
+
   const vBefore = await countVersions()
   // 되먹임의 문은 **뷰 하나**다 — 2026-08-06(804e7a4)에 Drift 머리글 버튼에서 옮겨졌는데
   // 이 스위트가 안 따라와, 그 뒤로 Drift 화면에서 없는 버튼을 누르고 있었다.
@@ -189,5 +208,6 @@ export async function run(ctx) {
     )
     check('시드 반영: 정리 후 실 DB 원복', (await countRole(ROLE)) === 0)
   }
+
 
 }

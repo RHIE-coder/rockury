@@ -159,7 +159,10 @@ useApiStore.subscribe((s, prev) => {
   if (s.specs !== prev.specs) syncSpecOptions()
 })
 useProjectStore.subscribe((s, prev) => {
-  if (s.scope !== prev.scope) syncSpecOptions()
+  if (s.scope !== prev.scope) {
+    syncSpecOptions()
+    useNav.getState().keepContextWithin('spec', filterByScope(useApiStore.getState().specs, s.scope, 'strict').map((x) => x.id))
+  }
   // 소속 정리 창이 저장소를 직접 고쳤다 — 우리가 든 사본은 아직 옛 소속이라 다시 읽는다.
   if (s.itemsRevision !== prev.itemsRevision) void useApiStore.getState().init()
 })

@@ -73,4 +73,5 @@ export async function run(ctx) {
       check('Remote › Data: 헤더도 연결 안 됨으로 말한다', text.includes('연결 안 됨'))
     }
   }
+
 }

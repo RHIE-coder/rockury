@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { useContextOptions } from '@renderer/nav/contextOptions'
-import { useContextValue } from '@renderer/nav/useNav'
+import { useContextValue, useNav } from '@renderer/nav/useNav'
 import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
 import { useProjectStore } from '@renderer/shell/projectStore'
 import { dialectInfo, type DialectId } from '../dialects'
@@ -140,7 +140,12 @@ useDesignsStore.subscribe((s, prev) => {
 })
 // 프로젝트를 바꾸면 셀렉터 목록도 그 자리에서 따라온다.
 useProjectStore.subscribe((s, prev) => {
-  if (s.scope !== prev.scope) syncDesignOptions()
+  if (s.scope !== prev.scope) {
+    syncDesignOptions()
+    // 범위 밖으로 나간 설계는 놓는다 — 안 그러면 손잡이는 "안 골랐다"고 말하는데 화면은
+    // 남의 프로젝트 설계를 계속 붙들고 있다(2026-08-07 실측).
+    useNav.getState().keepContextWithin('design', filterByScope(useDesignsStore.getState().designs, s.scope, 'strict').map((d) => d.id))
+  }
   // 소속 정리 창이 저장소를 직접 고쳤다 — 우리가 든 사본은 아직 옛 소속이라 다시 읽는다.
   if (s.itemsRevision !== prev.itemsRevision) void useDesignsStore.getState().init()
 })

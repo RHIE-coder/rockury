@@ -48,11 +48,13 @@ export async function run(ctx) {
   await page.waitForSelector('text=새 프로젝트…', { timeout: 5_000 })
   await page.locator('text=새 프로젝트…').click()
   await page.waitForSelector('[data-project-field="name"]', { timeout: 5_000 })
-  await page.locator('[data-project-field="name"]').fill('쿠팡')
-  await page.locator('[data-project-field="key"]').fill('coupang')
+  // 이름·키는 **앞 스위트가 안 쓰는 것**으로 — 20(UI/UX)이 이미 쿠팡/coupang 을 만들어 두어
+  // 같은 키를 쓰면 저장소가 거절하고 "옮겨간다" 검사가 조용히 넘어졌다(2026-08-07 실측).
+  await page.locator('[data-project-field="name"]').fill('마켓')
+  await page.locator('[data-project-field="key"]').fill('market')
   await page.locator('button[type="submit"]:has-text("만들기")').click()
   await page.waitForTimeout(600)
-  check('만든 프로젝트로 범위가 옮겨간다', (await sel.innerText()).includes('쿠팡'))
+  check('만든 프로젝트로 범위가 옮겨간다', (await sel.innerText()).includes('마켓'))
 
   // ── 좁혀졌다: 무소속 설계는 셀렉터에서 숨는다(strict) ──
   await page.locator('text=Design').first().click()
@@ -73,7 +75,7 @@ export async function run(ctx) {
 
   await page.locator('section:has(h3:text("DB 설계")) li').first().locator('button').click()
   await page.waitForTimeout(300)
-  await page.locator('[role="menuitem"]:has-text("쿠팡")').first().click()
+  await page.locator('[role="menuitem"]:has-text("마켓")').first().click()
   await page.waitForTimeout(500)
 
   const moved = await page.evaluate(() => window.rockury.designs.list())
@@ -92,12 +94,16 @@ export async function run(ctx) {
 
   // ── 프로젝트를 지워도 설계는 살아남는다(무소속으로 되돌아온다) ──
   // 프로젝트는 이름표일 뿐이고 설계는 그보다 무거운 산출물이다.
+  // **이 스위트가 만든 것**을 지운다 — 앞 스위트(20)가 만든 프로젝트도 목록에 있어서
+  // 첫 항목을 집으면 엉뚱한 것을 지우고, 옮겨 둔 설계의 소속이 안 풀린다.
   const projects = await page.evaluate(() => window.rockury.projects.list())
-  await page.evaluate((id) => window.rockury.projects.remove(id), projects[0].id)
+  const mine = projects.find((p) => p.key === 'market') ?? projects[0]
+  await page.evaluate((id) => window.rockury.projects.remove(id), mine.id)
   await page.waitForTimeout(400)
   const survived = await page.evaluate(() => window.rockury.designs.list())
   check(
     '프로젝트를 지워도 설계는 남고 소속만 풀린다',
     survived.length === moved.length && survived.every((d) => d.project_id === null)
   )
+
 }

@@ -3,10 +3,12 @@ import { unwrap } from '../envelope'
 import type { FeedbackPayloadInput } from '../../shared/devFeedback'
 import type { ScopedItem, ScopedKind } from '../../main/store/scopedItems'
 import { decodeWindowBoot, type SessionTab, type WindowBoot, type WindowSession } from '../../shared/windowSession'
+import type { DownloadDone } from '../../shared/downloads'
 
 export type { FeedbackPayload, FeedbackPayloadInput } from '../../shared/devFeedback'
 export type { ScopedItem, ScopedKind } from '../../main/store/scopedItems'
 export type { SessionTab, WindowBoot, WindowSession } from '../../shared/windowSession'
+export type { DownloadDone } from '../../shared/downloads'
 
 /**
  * 탭 끌기가 주고받는 좌표는 전부 **이 창 안 기준**이다(`clientX`·`clientY`).
@@ -115,6 +117,15 @@ export const shellApi = {
       ipcRenderer.on('window:command', handler)
       return () => ipcRenderer.removeListener('window:command', handler)
     }
+  },
+  /**
+   * 내려받기가 어떻게 끝났나 — 저장 창 너머는 이 창이 못 본다. 되부르면 구독이 끊긴다.
+   * 내보내기처럼 `<a download>` 로 파일을 뽑는 화면이 "됐다"를 **끝난 뒤에** 말하려고 쓴다.
+   */
+  onDownloadDone: (fn: (done: DownloadDone) => void): (() => void) => {
+    const handler = (_e: unknown, done: DownloadDone): void => fn(done)
+    ipcRenderer.on('download:done', handler)
+    return () => ipcRenderer.removeListener('download:done', handler)
   },
   /** 프로젝트 범위 — 셸 셀렉터가 쓰고, 각 서비스 목록이 그 선택을 따른다. */
   projects: {

@@ -376,6 +376,10 @@ export async function run(ctx) {
     }, specId)
     await click('[data-api-env-card="E2E-GAPS"] button[data-api-env-select]')
     await click('[data-nav-module="runner"]')
+    await page.waitForTimeout(300)
+    // 모듈만 누르면 **마지막에 보던 뷰**로 되돌아간다(`nav/recall`). 앞 스위트가 Runner 를
+    // Inbox 에 두고 나가면 여기가 Inbox 로 열려 보낼 요청이 없다 — 뷰까지 짚어야 순서를 안 탄다.
+    await click('[data-nav-view="send"]')
     await page.waitForTimeout(400)
     await click('[data-api-send-pick="slowOne"]')
     await page.waitForTimeout(300)

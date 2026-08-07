@@ -20,6 +20,7 @@ import {
   detachTab as detachTabIn,
   fromSession,
   insertTab as insertTabIn,
+  keepContextWithin as keepContextWithinIn,
   moveActiveTab,
   moveTab as moveTabIn,
   openTab as openTabIn,
@@ -109,6 +110,11 @@ interface NavState {
    * 나머지 탭에 어제 고른 운영 환경이나 없는 대상이 그대로 살아 있게 된다.
    */
   clearContextInAllTabs: (selectorId: string, optionId?: string) => void
+  /**
+   * 이 셀렉터에서 **고를 수 있는 것**이 줄었다 — 밖으로 나간 선택은 모든 탭에서 놓는다.
+   * 프로젝트 범위를 옮길 때 각 서비스 스토어가 부른다.
+   */
+  keepContextWithin: (selectorId: string, allowed: readonly string[]) => void
   /** 탭 열기 — 안 주면 **지금 탭을 복제**한다(탭 줄의 `+`). 대상 선택까지 복제된다. */
   openTab: (seed?: SessionTab) => void
   closeTab: (id: string) => void
@@ -187,6 +193,9 @@ export const useNav = create<NavState>()(
 
       clearContextInAllTabs: (selectorId, optionId) =>
         set((s) => clearContextEverywhere(s, selectorId, optionId)),
+
+      keepContextWithin: (selectorId, allowed) =>
+        set((s) => keepContextWithinIn(s, selectorId, new Set(allowed))),
 
       openTab: (seed) => set((s) => openTabIn(s, seed ?? activeTab(s))),
       closeTab: (id) => set((s) => closeTabIn(s, id)),

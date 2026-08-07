@@ -31,6 +31,14 @@ const nodeTypes = { infra: InfraNode }
 /** 내보내기 이미지의 사방 여백(px). 콘텐츠가 테두리에 붙어 잘려 보이지 않을 만큼만. */
 const EXPORT_PAD = 48
 
+/** 내보내기 표시 문구. 취소는 실패와 가른다 — 스스로 그만둔 것을 오류로 알리면 안 된다. */
+const EXPORT_LABEL = {
+  saving: '저장 중…',
+  ok: '내보냈습니다',
+  cancelled: '취소됨',
+  err: '내보내기 실패'
+} as const
+
 /**
  * 설계본 캔버스.
  *
@@ -65,7 +73,19 @@ function DiagramInner(): React.JSX.Element {
   const [filter, setFilter] = useState('')
   const [nodeQuery, setNodeQuery] = useState('')
   const [showVerdicts, setShowVerdicts] = useState(false)
-  const [exportStatus, setExportStatus] = useState<'idle' | 'ok' | 'err'>('idle')
+  /**
+   * 내보내기가 어디까지 갔나. **`saving` 이 있는 이유**: 파일을 뽑는 것과 저장되는 것은 다른
+   * 일이다 — 그 사이에 OS 저장 창이 끼어들고, 사용자가 거기서 그만둘 수 있다. 예전엔 창이
+   * 뜨자마자 "내보냈습니다"를 켜서, 취소해도 초록으로 남았다(2026-08-07).
+   */
+  const [exportStatus, setExportStatus] = useState<'idle' | 'saving' | 'ok' | 'cancelled' | 'err'>('idle')
+
+  // 저장의 끝은 저장 창 너머라 이 창이 못 본다 — 메인이 알려 준다(`main/downloads.ts`).
+  useEffect(() => {
+    return window.rockury.onDownloadDone(({ state }) => {
+      setExportStatus(state === 'completed' ? 'ok' : state === 'cancelled' ? 'cancelled' : 'err')
+    })
+  }, [])
 
   useEffect(() => {
     if (!notice) return
@@ -193,7 +213,8 @@ function DiagramInner(): React.JSX.Element {
         document.body.appendChild(a)
         a.click()
         a.remove()
-        setExportStatus('ok')
+        // 여기까지는 "넘겼다"일 뿐이다. 저장됐는지는 메인이 끝을 알려 줄 때 정해진다.
+        setExportStatus('saving')
       } catch {
         setExportStatus('err')
       }
@@ -356,11 +377,13 @@ function DiagramInner(): React.JSX.Element {
               <span
                 className={cn(
                   'rounded px-1.5 py-0.5 text-[10px]',
-                  exportStatus === 'ok' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-900'
+                  exportStatus === 'ok' && 'bg-emerald-100 text-emerald-800',
+                  exportStatus === 'err' && 'bg-rose-100 text-rose-900',
+                  (exportStatus === 'saving' || exportStatus === 'cancelled') && 'bg-panel-strong text-muted'
                 )}
                 data-export-status={exportStatus}
               >
-                {exportStatus === 'ok' ? '내보냈습니다' : '내보내기 실패'}
+                {EXPORT_LABEL[exportStatus]}
               </span>
             )}
           </Panel>

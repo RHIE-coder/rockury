@@ -7,6 +7,7 @@ import {
   dropIndexAt,
   fromSession,
   insertTab,
+  keepContextWithin,
   moveActiveTab,
   moveTab,
   nextTabId,
@@ -379,6 +380,31 @@ describe('clearContextEverywhere — 남아 있으면 안 되는 선택 풀기',
     const before = twoConns()
     expect(clearContextEverywhere(before, 'env')).toBe(before)
     expect(clearContextEverywhere(before, 'conn', '없음')).toBe(before)
+  })
+})
+
+describe('keepContextWithin — 고를 수 없게 된 선택 놓기', () => {
+  it('허용 목록 밖을 고른 탭만 놓는다 — 프로젝트를 옮기면 남의 것이 남으면 안 된다', () => {
+    const got = keepContextWithin(twoConns(), 'conn', new Set(['c1']))
+    expect(got.tabs.map((t) => t.context.conn)).toEqual(['c1', undefined])
+  })
+
+  it('다 허용되면 같은 묶음을 그대로', () => {
+    const before = twoConns()
+    expect(keepContextWithin(before, 'conn', new Set(['c1', 'c2']))).toBe(before)
+  })
+
+  it('아직 안 고른 탭은 안 건드린다 — 못 고르게 된 것과 결과가 같다', () => {
+    const before = set('t1', 't2')
+    expect(keepContextWithin(before, 'conn', new Set())).toBe(before)
+  })
+
+  it('다른 셀렉터는 안 건드린다', () => {
+    const s: TabSet = {
+      tabs: [{ id: 't1', ...loc('db', 'remote'), context: { conn: 'c1', design: 'd1' } }],
+      activeTabId: 't1'
+    }
+    expect(activeTab(keepContextWithin(s, 'conn', new Set())).context).toEqual({ design: 'd1' })
   })
 })
 

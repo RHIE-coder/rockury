@@ -42,6 +42,13 @@ suites/NN-*.mjs       실제 체크. export const meta = { name, needsDb, desc }
 - Radix 메뉴아이템에서 곧바로 Dialog 를 열면 body `pointer-events:none` 이 잔존 → 앱 UI 가 코드에선 이미 `setTimeout(onSelect,0)` 로 회피(ContextBar).
 - `node:sqlite` 는 ExperimentalWarning 를 stderr 로 출력(무해, 필터 가능).
 - 선택 커밋은 `button[type="submit"]` 등으로 다이얼로그 버튼을 특정(타임라인의 "버전 컷"과 다이얼로그 "… 컷"이 텍스트로 겹침).
+- **모듈만 누르면 "마지막에 보던 뷰"로 열린다**(`nav/recall`). 그래서 특정 뷰의 요소를 집을
+  거면 `[data-nav-module="…"]` 뒤에 `[data-nav-view="…"]` 까지 눌러야 한다. 안 그러면
+  **단독으로는 통과하고 앞 스위트를 붙이면 30초 타임아웃**으로 죽는다 — 앞 스위트가 그 모듈을
+  다른 뷰에 두고 나갔기 때문이다(2026-08-07 실측: `36-api-inbox` 가 Runner 를 Inbox 에 두고
+  나가 `37-api-gaps` 의 Send 화면 조작이 통째로 막혔다). 흔들리는 것처럼 보이지만 **순서 의존**이다.
+- 어디서 막혔는지 모르겠으면 `E2E_TRACE=1` 을 붙인다 — `ctx.click` 이 누를 선택자를 먼저 찍는다.
+  마지막에 찍힌 줄이 곧 막힌 자리다.
 
 ## 확장
 새 플로우는 **알맞은 스위트에 `check(...)` 를 더한다**(지우지 않는다 — 누적 회귀 자산).

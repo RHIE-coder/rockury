@@ -163,6 +163,36 @@ export function clearContextEverywhere(set: TabSet, selectorId: string, optionId
 }
 
 /**
+ * 고를 수 있는 것 밖으로 나간 선택을 **모든 탭에서** 놓는다.
+ *
+ * 프로젝트 범위를 옮기면 고를 수 있는 목록이 줄어드는데, 그 전에 고른 것이 남아 있으면
+ * 손잡이는 "안 골랐다"고 말하면서 화면은 남의 프로젝트 것을 계속 붙들고 있다(2026-08-07 실측:
+ * 프로젝트를 바꿔도 앞 프로젝트의 설계가 그대로 열려 있었다). 고른 것과 보이는 것은 같아야 한다.
+ *
+ * 값이 없는 탭은 안 건드린다 — "아직 안 골랐다"와 "고를 수 없게 됐다"는 결과가 같아서다.
+ */
+export function keepContextWithin(
+  set: TabSet,
+  selectorId: string,
+  allowed: ReadonlySet<string>
+): TabSet {
+  const strayed = (t: NavTab): boolean => {
+    const id = t.context[selectorId]
+    return id !== undefined && !allowed.has(id)
+  }
+  if (!set.tabs.some(strayed)) return set
+  return {
+    tabs: set.tabs.map((t) => {
+      if (!strayed(t)) return t
+      const context = { ...t.context }
+      delete context[selectorId]
+      return { ...t, context }
+    }),
+    activeTabId: set.activeTabId
+  }
+}
+
+/**
  * 아직 아무 대상도 없는 탭들에만 주어진 대상을 심는다 — 옛 저장본을 한 번 옮겨 올 때 쓴다.
  *
  * **대상이 이미 있는 탭이 하나라도 있으면 통째로 안 건드린다.** 메인이 실어 보낸 탭(껐다 켠

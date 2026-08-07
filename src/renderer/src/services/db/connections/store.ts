@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { SampleResult, SampleStatus } from '@shared/db/samplePlan'
 import { useContextOptions } from '@renderer/nav/contextOptions'
-import { useContextValue } from '@renderer/nav/useNav'
+import { useContextValue, useNav } from '@renderer/nav/useNav'
 import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
 import { useProjectStore } from '@renderer/shell/projectStore'
 import { dialectInfo, type DialectId } from '../dialects'
@@ -314,7 +314,11 @@ useConnectionsStore.subscribe((s, prev) => {
   if (s.connections !== prev.connections) syncConnOptions()
 })
 useProjectStore.subscribe((s, prev) => {
-  if (s.scope !== prev.scope) syncConnOptions()
+  if (s.scope !== prev.scope) {
+    syncConnOptions()
+    // 무소속(공용)은 늘 남으므로 여기서 놓이는 것은 **남의 프로젝트 접속**뿐이다.
+    useNav.getState().keepContextWithin('conn', filterByScope(useConnectionsStore.getState().connections, s.scope, 'shared').map((c) => c.id))
+  }
   // 소속 정리 창이 저장소를 직접 고쳤다 — 우리가 든 사본은 아직 옛 소속이라 다시 읽는다.
   if (s.itemsRevision !== prev.itemsRevision) void useConnectionsStore.getState().init()
 })

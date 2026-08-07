@@ -25,7 +25,20 @@ export async function run(ctx) {
   await click('[data-nav-service="db"]')
   await page.waitForTimeout(300)
   await click('[data-nav-module="remote"]')
+  await page.waitForTimeout(300)
+  // 모듈만 누르면 **마지막에 보던 뷰**로 열린다(`nav/recall`) — 앞 스위트가 Connections 에 두고
+  // 나가면 범위 손잡이가 없는 화면에서 재게 된다. 범위를 쓰는 화면을 짚는다.
+  await click('[data-nav-view="definition"]')
   await page.waitForTimeout(400)
+
+  // 06 이 만든 MySQL 연결을 **실제로 고른다** — 머리말이 그렇게 적어 두었지만 고르지는 않고
+  // 있었다. 그 사이 12(연결 실패 알림)가 활성 연결을 죽은 PostgreSQL 로 바꿔 놓아, 범위 목록이
+  // 영영 안 떴다(2026-08-07 실측).
+  await page.evaluate(async () => {
+    const conn = (await window.rockury.connections.list()).find((c) => c.name === 'E2E-mysql')
+    if (conn) window.__rockuryNav.setContextValue('conn', conn.id)
+  })
+  await page.waitForTimeout(900)
 
   check('범위: 운영 손잡이 안에 있다', (await page.locator('[data-area-handle="ops"] [data-scope-selector]').count()) === 1)
 

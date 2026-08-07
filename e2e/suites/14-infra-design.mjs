@@ -182,16 +182,22 @@ export async function run(ctx) {
   )
 
   // ── 내보내기 — 그려진 것을 그림 파일로 ─────────────────────────────────
+  // 화면의 "됐다"만 보면 부족하다 — 그 표시는 저장이 끝나야 켜지지만(2026-08-07), 표시보다
+  // 확실한 것은 파일이다. 떨어진 파일로 못박는다.
+  // (검사로 뜬 앱은 저장 창 없이 userData/downloads 로 받는다 — `main/e2eMode.ts`.)
+  const downloads = ctx.path.join(ctx.USER_DATA, 'downloads')
+  const waitForFile = async (ext) => {
+    const has = () =>
+      ctx.fs.existsSync(downloads) && ctx.fs.readdirSync(downloads).some((f) => f.endsWith(ext))
+    for (let i = 0; i < 40 && !has(); i++) await page.waitForTimeout(250)
+    return has()
+  }
   await click('[data-infra-export="png"]')
-  await page.waitForSelector('[data-export-status]', { timeout: 10_000 })
-  check(
-    'CASE-iarch-074 PNG 내보내기가 캔버스를 캡처한다',
-    (await page.locator('[data-export-status="ok"]').count()) > 0
-  )
+  check('CASE-iarch-074 PNG 내보내기가 캔버스를 캡처한다', await waitForFile('.png'))
   await click('[data-infra-export="svg"]')
-  await page.waitForTimeout(600)
+  check('CASE-iarch-074 SVG 내보내기도 캡처한다', await waitForFile('.svg'))
   check(
-    'CASE-iarch-074 SVG 내보내기도 캡처한다',
+    'CASE-iarch-074 저장이 끝난 뒤에 됐다고 말한다',
     (await page.locator('[data-export-status="ok"]').count()) > 0
   )
 

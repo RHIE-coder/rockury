@@ -396,4 +396,18 @@ export async function run(ctx) {
   check('Features: 에이전트가 적은 확인이 집계에 반영된다', (await page.locator('[data-uiux-progress="1"]').count()) === 1)
   // 화면 둘(로그인·홈) — Flows 검증에서 하나를 더 만들었다.
   check('Features: 화면 목록에서 설계로 건너뛸 수 있다', (await page.locator('[data-uiux-feature-surface]').count()) === 2)
+
+  // ── 뒷정리: 옮겨 놓은 **셸 프로젝트 범위**를 전체로 되돌린다 ────────────────
+  // 화면 설계는 프로젝트 안에 담기므로 이 스위트는 프로젝트를 만들며 범위를 옮긴다. 그 범위는
+  // 다섯 서비스가 함께 쓰는 값이라, 두고 나가면 뒤 DB 스위트들이 무소속 시드(설계·접속)를
+  // 못 보고 "설계 선택" 인 채로 30초씩 타임아웃을 낸다(2026-08-07 실측 — 50·51·52).
+  await click('[data-project-selector]')
+  await page.waitForTimeout(300)
+  await page.locator('[role="menuitem"]:has-text("전체")').first().click()
+  await page.waitForTimeout(400)
+  check(
+    '뒷정리: 프로젝트 범위를 전체로 되돌렸다',
+    (await page.locator('[data-project-selector]').first().innerText()).includes('전체')
+  )
+
 }

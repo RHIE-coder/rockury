@@ -12,6 +12,8 @@ import { installAppMenu } from './menu'
 import { startAiServer, stopAiServer } from './ai/http'
 import { setStoreChangeNotifier } from './ai/tools'
 import { createKeychainTokenStore } from './ai/tokenStore'
+import { acceptDownloadsSilently, isE2E, stayOutOfTheWay } from './e2eMode'
+import { watchDownloads } from './downloads'
 
 // 미패키징 실행에서도 userData 경로가 'Electron' 이 아닌 앱 이름으로 잡히도록 명시.
 app.setName('Rockury')
@@ -52,6 +54,14 @@ app.whenReady().then(() => {
     writeFileSync(INSTANCE_FILE, __SOURCE_ROOT__)
   } catch {
     // 못 써도 앱은 정상 동작한다(안내가 덜 친절해질 뿐).
+  }
+  // 내려받기의 끝을 화면에 알린다 — 저장 창 너머는 렌더러가 못 본다(`downloads.ts`).
+  watchDownloads()
+  // 검사(e2e)로 떴으면 OS 가 그리는 것 둘을 끈다 — 저장 창과 초점 뺏기(`e2eMode` 머리말).
+  // 사람이 쓰는 앱은 이 갈래에 안 들어온다.
+  if (isE2E()) {
+    acceptDownloadsSilently()
+    stayOutOfTheWay()
   }
   // 로컬 저장소 DB 경로 주입(userData). getDb() 첫 호출 전에 설정한다.
   setDbPath(join(app.getPath('userData'), 'rockury.db'))

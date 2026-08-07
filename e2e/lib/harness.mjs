@@ -80,15 +80,27 @@ export async function createContext() {
       executablePath: electronBin,
       args: [MAIN, `--user-data-dir=${USER_DATA}`],
       // MCP 포트 0 = OS 배정 — 개발 앱(기본 41729)과 충돌 없이 격리 구동. 실제 주소는 상태 IPC 로 확인.
-      env: { ...process.env, ROCKURY_MCP_PORT: '0' },
+      // ROCKURY_E2E=1 — OS 가 그리는 것 둘을 끈다: 내려받기 저장 창(뜨면 창이 얼어붙는데 닫을
+      // 손이 없다)과 초점 뺏기(검사가 도는 동안 사람이 다른 일을 못 한다). `main/e2eMode.ts` 참고.
+      env: { ...process.env, ROCKURY_MCP_PORT: '0', ROCKURY_E2E: '1' },
       timeout: 30_000
     })
-  // 미저장 변경 가드 등 window.confirm 은 자동 수락(사용자가 "예"를 누른 것으로).
-  const acceptDialogs = (p) => p.on('dialog', (d) => d.accept().catch(() => {}))
+  /**
+   * 미저장 변경 가드 등 `window.confirm`·`alert` 은 자동 수락(사용자가 "예"를 누른 것으로).
+   *
+   * **모든 창에** 건다. 예전엔 첫 창에만 걸어서, 탭을 떼어낸 창처럼 나중에 생긴 창에서 물음이
+   * 뜨면 아무도 안 눌렀다 — 그 창은 통째로 멈추고 뒤 스위트가 전부 타임아웃으로 흘렀다
+   * (2026-08-07 실측). 물음은 렌더러를 붙잡는 것이라 자동화가 스스로 빠져나올 길이 없다.
+   */
+  const acceptDialogs = (electronApp) => {
+    const arm = (p) => p.on('dialog', (d) => d.accept().catch(() => {}))
+    electronApp.on('window', arm)
+    for (const p of electronApp.windows()) arm(p)
+  }
 
   const app = await launch()
   const page = await app.firstWindow()
-  acceptDialogs(page)
+  acceptDialogs(app)
   const got = await pinWindow(app)
   if (!got || got.w !== WINDOW.w || got.h !== WINDOW.h) {
     console.warn(
@@ -105,7 +117,10 @@ export async function createContext() {
     path,
     /** 현재 스위트가 기록될 체크포인트 — runner 가 갈아 끼운다. */
     onCheck: null,
-    click: (sel) => ctx.page.locator(sel).first().click(),
+    click: (sel) => {
+      if (process.env.E2E_TRACE) console.log('[click]', sel)
+      return ctx.page.locator(sel).first().click()
+    },
     body: () => ctx.page.evaluate(() => document.body.innerText),
     /**
      * 컨텍스트 바 선택을 심는다 — "이 접속·이 명세를 보고 있는 상태"를 만든다.
@@ -138,7 +153,7 @@ export async function createContext() {
       await ctx.app.close()
       ctx.app = await launch()
       ctx.page = await ctx.app.firstWindow()
-      acceptDialogs(ctx.page)
+      acceptDialogs(ctx.app)
       await pinWindow(ctx.app)
       await ctx.page.waitForSelector('text=Design', { timeout: 15_000 })
       return ctx.page

@@ -32,6 +32,10 @@ export async function run(ctx) {
   const page = ctx.page
 
   await click('[data-nav-service="db"]')
+  await page.waitForTimeout(300)
+  // 서비스만 누르면 **마지막에 보던 모듈**로 열린다(`nav/recall`) — 앞 스위트가 DB 를 Remote 에
+  // 두고 나가므로 설계부 검사를 하려면 모듈까지 짚어야 한다(안 그러면 Remote 의 뷰 줄을 재게 된다).
+  await click('[data-nav-module="design"]')
   await page.waitForTimeout(400)
 
   // ── 모듈 구성 ──────────────────────────────────────────────
