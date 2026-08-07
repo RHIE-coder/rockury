@@ -76,7 +76,10 @@ export function SelectorMenu({
         <DropdownMenu.Content
           align="start"
           sideOffset={6}
-          className="z-50 min-w-[180px] rounded-lg border border-line bg-canvas p-1 shadow-lg"
+          // 폭 상한이 없으면 항목 안의 `truncate` 가 영영 안 걸린다 — 메뉴가 내용만큼 늘어나
+          // 자를 일이 없어지기 때문. 라벨·부제는 남이 써 넣는 글(가져온 명세·에이전트 작성)이라
+          // 길이를 믿을 수 없다. 화면에 남은 폭(Radix 가 재 준 값)과 420px 중 작은 쪽으로 묶는다.
+          className="z-50 min-w-[180px] max-w-[min(420px,var(--radix-dropdown-menu-content-available-width))] rounded-lg border border-line bg-canvas p-1 shadow-lg"
         >
           {state.options.length === 0 && (
             <div className="px-2 py-1.5 text-[12px] italic text-muted">아직 항목이 없어요</div>
@@ -96,9 +99,12 @@ export function SelectorMenu({
                     <span className="w-3.5 shrink-0" />
                   )}
                   <span className="flex min-w-0 flex-col">
-                    <span className="truncate">{o.label}</span>
+                    {/* 잘린 글은 마우스를 올리면 전문이 뜬다 — 자르기만 하면 읽을 길이 사라진다. */}
+                    <span className="truncate" title={o.label}>
+                      {o.label}
+                    </span>
                     {o.subtitle && (
-                      <span className="truncate text-[11px] font-normal text-muted">
+                      <span className="truncate text-[11px] font-normal text-muted" title={o.subtitle}>
                         {o.subtitle}
                       </span>
                     )}
