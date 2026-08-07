@@ -227,6 +227,40 @@ describe('columnKeyKinds', () => {
 // 2026-07-30 실측 콘솔 오류: `k:testdb.api_keys.fk_api_keys_user` 가 두 번 나와 React 가
 // "두 자식이 같은 key" 로 경고했다. MySQL 이 FK 를 만들 때 **같은 이름의 인덱스**를 함께 만들어,
 // 이름만으로 id 를 만들면 FK 와 인덱스가 같은 id 가 된다.
+describe('normalizeSchema — CHECK', () => {
+  const ir = {
+    dialect: 'mysql' as const,
+    schemas: ['app'],
+    tables: [{ schema: 'app', name: 'items', comment: '' }],
+    columns: [
+      {
+        schema: 'app',
+        table: 'items',
+        name: 'price',
+        type: 'int',
+        nullable: false,
+        default: null,
+        comment: '',
+        ordinal: 1
+      }
+    ],
+    keys: [],
+    foreignKeys: [],
+    checks: [{ schema: 'app', table: 'items', name: 'chk_price', expression: '`price` > 0' }]
+  }
+
+  it('식을 단 제약으로 접힌다 — 컬럼에 안 매인다', () => {
+    const [t] = normalizeSchema(ir, 'd')
+    const con = t.constraints.find((c) => c.kind === 'check')!
+    expect([con.name, con.expression, con.columns.length]).toEqual(['chk_price', '`price` > 0', 0])
+  })
+
+  it('checks 가 없는 옛 응답도 그대로 읽힌다', () => {
+    const [t] = normalizeSchema({ ...ir, checks: undefined }, 'd')
+    expect(t.constraints.filter((c) => c.kind === 'check')).toEqual([])
+  })
+})
+
 describe('normalizeSchema — MySQL 의 FK 와 동명 인덱스', () => {
   it('같은 이름이어도 종류가 달라 id 가 안 겹친다', () => {
     const tables = normalizeSchema(

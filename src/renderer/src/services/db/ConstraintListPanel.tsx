@@ -89,9 +89,12 @@ export function ConstraintListPanel({
                   <KindBadge kind={c.kind} />
                   <span className="min-w-0 truncate font-mono text-[11.5px] text-fg">{c.name}</span>
                 </span>
-                <span className="min-w-0 truncate font-mono text-[10.5px] text-muted">
-                  {c.columns.join(', ')}
-                </span>
+                {/* CHECK 는 컬럼에 안 매인다 — 그 자리에 조건식을 보인다(비면 줄 자체를 뺀다). */}
+                {(c.kind === 'check' ? c.expression : c.columns.join(', ')) && (
+                  <span className="min-w-0 truncate font-mono text-[10.5px] text-muted">
+                    {c.kind === 'check' ? c.expression : c.columns.join(', ')}
+                  </span>
+                )}
                 {c.refLabel && (
                   <span className="min-w-0 truncate font-mono text-[10.5px] text-accent">{c.refLabel}</span>
                 )}

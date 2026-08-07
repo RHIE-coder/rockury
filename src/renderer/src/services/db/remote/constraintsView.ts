@@ -20,6 +20,8 @@ export interface FlatConstraint {
   refLabel?: string
   /** fk 전용 — 정책까지 붙인 표기(폭이 있는 표에서 사용). */
   refDetail?: string
+  /** check 전용 — 조건식. CHECK 는 컬럼이 비어 있어서 이게 없으면 이름만 남는다. */
+  expression?: string
 }
 
 /** 전 테이블의 제약을 평탄화. 컬럼 id 는 컬럼명으로 해석. 정렬: 테이블→종류→이름. */
@@ -35,7 +37,8 @@ export function flattenConstraints(tables: TableDef[]): FlatConstraint[] {
         name: con.name,
         columns: con.columns.map((ref) => nameById.get(ref.columnId) ?? ref.columnId),
         refLabel: fkRefText(con),
-        refDetail: fkRefText(con, true)
+        refDetail: fkRefText(con, true),
+        expression: con.expression
       })
     }
   }

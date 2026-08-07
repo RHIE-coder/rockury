@@ -5,6 +5,7 @@ import { Network, Layers, Loader2, Pencil, RefreshCw, LayoutGrid } from 'lucide-
 import { Button } from '@renderer/ui/button'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useActiveConnection } from '../connections/store'
+import { IntrospectNotice } from './IntrospectNotice'
 import { useRemoteStore } from './store'
 import { useRemoteFocus, useRemoteFocusStore } from './focus'
 import { useScope } from './useScope'
@@ -123,6 +124,8 @@ export function DiagramView() {
           )}
         </div>
       </div>
+
+      <IntrospectNotice connId={conn.id} />
 
       {isEditing ? (
         <DiagramEdit conn={conn} />

@@ -2,11 +2,13 @@ import type { Client } from 'pg'
 import {
   toFkAction,
   type IntrospectedSchema,
+  type RawCheck,
   type RawColumn,
   type RawForeignKey,
   type RawKey,
   type RawTable
 } from './types'
+import { stripCheckKeyword } from './sqlText'
 
 /**
  * PostgreSQL 역설계 — **넘겨받은 스키마 목록**의 pg_catalog 를 읽는다(§db-remote.scope).
@@ -154,7 +156,28 @@ export async function introspectPg(client: Client, schemas: string[] = []): Prom
     onUpdate: toFkAction(r.upd)
   }))
 
-  return { dialect: 'postgresql', schemas: scope, tables, columns, keys, foreignKeys }
+  // CHECK — pg_get_constraintdef 이 `CHECK ((expr))` 로 돌려주므로 `CHECK ` 를 떼고 괄호 한 겹을 벗긴다
+  // (설계부의 식은 괄호 없이 저장되고, DDL 생성기가 `CHECK (...)` 를 다시 씌운다).
+  // NOT NULL 은 PostgreSQL 에서 제약 행이 아니라 컬럼 속성이라 여기 안 들어온다 — 컬럼의 nullable 이 이미 말한다.
+  const checkRows = await q<{ schema: string; tbl: string; name: string; def: string }>(
+    `SELECT n.nspname AS schema, cl.relname AS tbl, con.conname AS name,
+            pg_get_constraintdef(con.oid) AS def
+     FROM pg_constraint con
+     JOIN pg_class cl ON cl.oid = con.conrelid
+     JOIN pg_namespace n ON n.oid = cl.relnamespace
+     WHERE con.contype = 'c' AND ${inScope} AND NOT cl.relispartition
+     ORDER BY n.nspname, cl.relname, con.conname`,
+    [scope]
+  )
+  const checks: RawCheck[] = checkRows.map((r) => ({
+    schema: r.schema,
+    table: r.tbl,
+    name: r.name,
+    expression: stripCheckKeyword(r.def)
+  }))
+
+  // pg_catalog 는 권한으로 조용히 가려지지 않는다(못 보면 오류로 터진다) — 경고할 구멍이 없다.
+  return { dialect: 'postgresql', schemas: scope, tables, columns, keys, foreignKeys, checks, warnings: [] }
 }
 
 /** 시스템 스키마 — 사람이 고를 목록에서 뺀다. */

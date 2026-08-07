@@ -10,6 +10,7 @@ import { classifyOutsideRefs } from './outsideRef'
 import { useScope } from './useScope'
 import { TableSidePanel } from '../TableSidePanel'
 import { useActiveConnection } from '../connections/store'
+import { IntrospectNotice } from './IntrospectNotice'
 import { useRemoteStore } from './store'
 import { useRemoteFocus, useRemoteFocusStore } from './focus'
 import { resolveActiveTable } from './definition/select'
@@ -155,6 +156,8 @@ export function DefinitionView() {
           )}
         </div>
       </div>
+
+      <IntrospectNotice connId={conn.id} />
 
       {error && !isEditing ? (
         <ConnectionError

@@ -7,6 +7,7 @@ import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import type { ConstraintKind, TableDef } from '../workspaces/definition/types'
 import { useActiveConnection } from '../connections/store'
 import { columnKeyKinds } from './introspection'
+import { IntrospectNotice } from './IntrospectNotice'
 import { useRemoteStore } from './store'
 import { ConnectionError } from './ConnectionError'
 
@@ -162,6 +163,8 @@ export function ObjectView() {
           {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
         </Button>
       </div>
+
+      <IntrospectNotice connId={conn.id} />
 
       {error ? (
         <ConnectionError

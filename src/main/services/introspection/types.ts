@@ -51,6 +51,15 @@ export interface RawForeignKey {
   onUpdate: FkAction
 }
 
+/** CHECK 제약. 컬럼에 매이지 않고 식(expression) 하나가 본체다. */
+export interface RawCheck {
+  schema: string
+  table: string
+  name: string
+  /** `CHECK (…)` 의 괄호 **안쪽**만. 바깥 `CHECK(...)` 는 DDL 생성기가 씌운다. */
+  expression: string
+}
+
 export interface IntrospectedSchema {
   dialect: IntroDbType
   /** 이번에 읽은 스키마들. 화면이 "무엇을 보고 있나"를 알기 위한 것. */
@@ -59,6 +68,13 @@ export interface IntrospectedSchema {
   columns: RawColumn[]
   keys: RawKey[]
   foreignKeys: RawForeignKey[]
+  checks: RawCheck[]
+  /**
+   * **결과가 불완전할 수 있는 사유.** 빈 목록이면 "다 읽었다"는 뜻이다.
+   * 권한 때문에 못 읽은 것을 조용히 0으로 돌려주면 사용자는 있는 것을 없다고 믿는다 —
+   * 그래서 못 읽은 사실 자체를 값으로 실어 화면까지 올린다.
+   */
+  warnings: string[]
 }
 
 /** 벤더 규칙 텍스트/코드를 FkAction 으로 정규화(모르면 NO ACTION). */
