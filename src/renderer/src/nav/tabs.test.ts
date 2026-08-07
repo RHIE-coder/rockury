@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeTab,
+  clearContextEverywhere,
   closeTab,
   detachTab,
   dropIndexAt,
@@ -12,8 +13,10 @@ import {
   normalizeTabSet,
   openTab,
   pulledOutOfStrip,
+  seedContext,
   selectTab,
   selectTabAt,
+  setActiveContext,
   stepTab,
   tabTitle,
   TEAR_OFF_MARGIN,
@@ -30,7 +33,7 @@ const loc = (serviceId: string, moduleId: string, viewId: string | null = null) 
 
 function set(...ids: string[]): TabSet {
   return {
-    tabs: ids.map((id) => ({ id, ...loc('db', id) })),
+    tabs: ids.map((id) => ({ id, ...loc('db', id), context: {} })),
     activeTabId: ids[0]
   }
 }
@@ -45,7 +48,7 @@ describe('nextTabId — 쓰이지 않는 가장 작은 번호', () => {
   })
 
   it('연달아 열어도 겹치지 않는다', () => {
-    let s: TabSet = { tabs: [{ id: 't1', ...loc('db', 'remote') }], activeTabId: 't1' }
+    let s: TabSet = { tabs: [{ id: 't1', ...loc('db', 'remote'), context: {} }], activeTabId: 't1' }
     for (let i = 0; i < 5; i++) s = openTab(s, loc('db', 'remote'))
     expect(new Set(s.tabs.map((t) => t.id)).size).toBe(s.tabs.length)
   })
@@ -67,11 +70,11 @@ describe('openTab — 활성 오른쪽에 끼운다', () => {
   it('탭 자신을 자리로 넘겨도 id 는 새로 짓는다 — 회귀', () => {
     // 탭 줄의 `+` 가 넘기는 값이 바로 활성 탭이다. 예전엔 그 탭을 통째로 펼쳐 id 까지 물려받아,
     // 같은 id 를 가진 탭이 두 장 생기고 둘 다 켜진 것처럼 보였다(실측).
-    const before: TabSet = { tabs: [{ id: 't1', ...loc('db', 'remote', 'collections') }], activeTabId: 't1' }
+    const before: TabSet = { tabs: [{ id: 't1', ...loc('db', 'remote', 'collections'), context: {} }], activeTabId: 't1' }
     const after = openTab(before, activeTab(before))
     expect(after.tabs.map((t) => t.id)).toEqual(['t1', 't2'])
     expect(after.activeTabId).toBe('t2')
-    expect(after.tabs[1]).toEqual({ id: 't2', ...loc('db', 'remote', 'collections') })
+    expect(after.tabs[1]).toEqual({ id: 't2', ...loc('db', 'remote', 'collections'), context: {} })
   })
 })
 
@@ -111,7 +114,7 @@ describe('moveActiveTab — 자리 옮김은 활성 탭에만 걸린다', () => 
   })
 
   it('같은 자리로 옮기면 같은 객체를 그대로 돌려준다 — 헛도는 구독·저장 방지', () => {
-    const s = { tabs: [{ id: 't1', ...loc('db', 'remote', 'collections') }], activeTabId: 't1' }
+    const s = { tabs: [{ id: 't1', ...loc('db', 'remote', 'collections'), context: {} }], activeTabId: 't1' }
     expect(moveActiveTab(s, loc('db', 'remote', 'collections'))).toBe(s)
   })
 })
@@ -256,7 +259,7 @@ describe('insertTab — 다른 창에서 건너온 탭을 끼운다', () => {
   })
 
   it('id 는 쓰이지 않는 번호로 새로 짓는다 — 건너온 탭의 id 를 물려받지 않는다', () => {
-    const got = insertTab({ tabs: [{ id: 't1', ...loc('db', 'x') }], activeTabId: 't1' }, loc('api', 'studio'), 1)
+    const got = insertTab({ tabs: [{ id: 't1', ...loc('db', 'x'), context: {} }], activeTabId: 't1' }, loc('api', 'studio'), 1)
     expect(got.tabs.map((t) => t.id)).toEqual(['t1', 't2'])
   })
 })
@@ -265,8 +268,8 @@ describe('toSession · fromSession — 메인과 주고받는 모양', () => {
   it('접었다 펴면 순서와 활성이 그대로다', () => {
     const before: TabSet = {
       tabs: [
-        { id: 'a', ...loc('db', 'remote', 'collections') },
-        { id: 'b', ...loc('api', 'studio') }
+        { id: 'a', ...loc('db', 'remote', 'collections'), context: {} },
+        { id: 'b', ...loc('api', 'studio'), context: {} }
       ],
       activeTabId: 'b'
     }
@@ -276,14 +279,129 @@ describe('toSession · fromSession — 메인과 주고받는 모양', () => {
   })
 
   it('id 는 안 보낸다 — 창을 다시 열 때 새로 짓는다', () => {
-    const s = toSession({ tabs: [{ id: 'zz', ...loc('db', 'remote') }], activeTabId: 'zz' })
-    expect(s.tabs[0]).toEqual(loc('db', 'remote'))
+    const s = toSession({ tabs: [{ id: 'zz', ...loc('db', 'remote'), context: {} }], activeTabId: 'zz' })
+    expect(s.tabs[0]).toEqual({ ...loc('db', 'remote'), context: {} })
     expect(fromSession(s).tabs[0].id).toBe('t1')
   })
 
   it('활성 탭이 목록에 없으면 첫 탭을 활성으로 보낸다', () => {
-    const s = toSession({ tabs: [{ id: 'a', ...loc('db', 'remote') }], activeTabId: '없음' })
+    const s = toSession({ tabs: [{ id: 'a', ...loc('db', 'remote'), context: {} }], activeTabId: '없음' })
     expect(s.active).toBe(0)
+  })
+
+  it('탭마다의 대상을 실어 보내고 되받는다 — 껐다 켜도 탭별로 돌아온다', () => {
+    const before: TabSet = {
+      tabs: [
+        { id: 'a', ...loc('db', 'remote'), context: { conn: 'c1' } },
+        { id: 'b', ...loc('db', 'remote'), context: { conn: 'c2' } }
+      ],
+      activeTabId: 'a'
+    }
+    const after = fromSession(toSession(before))
+    expect(after.tabs.map((t) => t.context.conn)).toEqual(['c1', 'c2'])
+  })
+})
+
+describe('탭별 대상 격리 — 2026-08-07 결정', () => {
+  it('`+` 로 연 탭은 보던 대상을 물려받는다', () => {
+    const before: TabSet = {
+      tabs: [{ id: 't1', ...loc('db', 'remote'), context: { conn: 'c1' } }],
+      activeTabId: 't1'
+    }
+    expect(activeTab(openTab(before, activeTab(before))).context).toEqual({ conn: 'c1' })
+  })
+
+  it('물려받은 대상은 **사본**이다 — 한쪽에서 고쳐도 원래 탭이 안 따라간다', () => {
+    const before: TabSet = {
+      tabs: [{ id: 't1', ...loc('db', 'remote'), context: { conn: 'c1' } }],
+      activeTabId: 't1'
+    }
+    const after = openTab(before, activeTab(before))
+    activeTab(after).context.conn = 'c2'
+    expect(after.tabs[0].context.conn).toBe('c1')
+  })
+
+  it('자리를 옮겨도 그 탭의 대상은 그대로다 — 서비스·모듈 이동이 선택을 지우지 않는다', () => {
+    const before: TabSet = {
+      tabs: [{ id: 't1', ...loc('db', 'remote'), context: { conn: 'c1' } }],
+      activeTabId: 't1'
+    }
+    expect(activeTab(moveActiveTab(before, loc('db', 'migration'))).context).toEqual({ conn: 'c1' })
+  })
+
+  it('건너온 탭도 제 대상을 들고 끼워진다 — 떼어낸 창이 보던 접속을 문다', () => {
+    const got = insertTab(set('a', 'b'), { ...loc('api', 'studio'), context: { spec: 's1' } }, 1)
+    expect(got.tabs[1].context).toEqual({ spec: 's1' })
+  })
+})
+
+/** 탭 두 장에 서로 다른 접속을 물린 묶음 — 격리를 보는 테스트들의 출발점. */
+function twoConns(): TabSet {
+  return {
+    tabs: [
+      { id: 't1', ...loc('db', 'remote'), context: { conn: 'c1' } },
+      { id: 't2', ...loc('db', 'remote'), context: { conn: 'c2' } }
+    ],
+    activeTabId: 't1'
+  }
+}
+
+describe('setActiveContext — 대상은 활성 탭에만 걸린다', () => {
+  it('다른 탭의 선택을 안 건드린다 — 이게 2026-08-07 요청의 핵심이다', () => {
+    const got = setActiveContext(twoConns(), (c) => ({ ...c, conn: 'c9' }))
+    expect(got.tabs.map((t) => t.context.conn)).toEqual(['c9', 'c2'])
+  })
+
+  it('바뀐 게 없으면 같은 묶음을 그대로 — 구독자가 헛돌지도, 메인에 되보고가 나가지도 않는다', () => {
+    const before = twoConns()
+    expect(setActiveContext(before, (c) => ({ ...c }))).toBe(before)
+    expect(setActiveContext(before, (c) => ({ ...c, conn: 'c1' }))).toBe(before)
+  })
+
+  it('아직 안 고른 셀렉터에만 기본값을 채우는 쓰임 — 이미 고른 것은 안 덮는다', () => {
+    const got = setActiveContext(twoConns(), (c) => ({ conn: 'default', env: 'dev', ...c }))
+    expect(activeTab(got).context).toEqual({ conn: 'c1', env: 'dev' })
+  })
+})
+
+describe('clearContextEverywhere — 남아 있으면 안 되는 선택 풀기', () => {
+  it('값을 안 주면 모든 탭에서 푼다 — 앱을 켤 때 환경 선택이 그렇다', () => {
+    const got = clearContextEverywhere(twoConns(), 'conn')
+    expect(got.tabs.map((t) => t.context)).toEqual([{}, {}])
+  })
+
+  it('값을 주면 그 값을 고른 탭만 — 남의 선택까지 지우지 않는다', () => {
+    const got = clearContextEverywhere(twoConns(), 'conn', 'c2')
+    expect(got.tabs.map((t) => t.context.conn)).toEqual(['c1', undefined])
+  })
+
+  it('풀 것이 없으면 같은 묶음을 그대로', () => {
+    const before = twoConns()
+    expect(clearContextEverywhere(before, 'env')).toBe(before)
+    expect(clearContextEverywhere(before, 'conn', '없음')).toBe(before)
+  })
+})
+
+describe('seedContext — 옛 저장본(창에 하나였던 선택) 옮겨 심기', () => {
+  it('아무 탭도 대상이 없으면 전부에 심는다', () => {
+    const got = seedContext(set('t1', 't2'), { conn: 'c1' })
+    expect(got.tabs.map((t) => t.context.conn)).toEqual(['c1', 'c1'])
+  })
+
+  it('심은 값은 탭마다 **사본**이다 — 한 탭에서 고치면 다른 탭이 따라가면 안 된다', () => {
+    const got = seedContext(set('t1', 't2'), { conn: 'c1' })
+    got.tabs[0].context.conn = 'c9'
+    expect(got.tabs[1].context.conn).toBe('c1')
+  })
+
+  it('대상을 이미 든 탭이 있으면 통째로 안 건드린다 — 떼어낸 창이 물고 온 것을 덮지 않는다', () => {
+    const before = twoConns()
+    expect(seedContext(before, { conn: 'c-옛것' })).toBe(before)
+  })
+
+  it('심을 것이 없으면 그대로', () => {
+    const before = set('t1')
+    expect(seedContext(before, {})).toBe(before)
   })
 })
 
@@ -313,7 +431,9 @@ describe('normalizeTabSet — 저장본 걸러 받기', () => {
       [{ id: 't1', serviceId: 'db', moduleId: 'remote', viewId: 'collections' }, { id: 't2' }],
       't1'
     )
-    expect(s?.tabs).toEqual([{ id: 't1', serviceId: 'db', moduleId: 'remote', viewId: 'collections' }])
+    expect(s?.tabs).toEqual([
+      { id: 't1', serviceId: 'db', moduleId: 'remote', viewId: 'collections', context: {} }
+    ])
   })
 
   it('id 가 겹치면 뒤엣것을 버린다 — 겹치면 눌러도 늘 앞엣것만 켜진다', () => {

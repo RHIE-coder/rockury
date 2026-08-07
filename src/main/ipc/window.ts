@@ -1,6 +1,11 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
-import { decodeNavLocation, encodeNavLocation, type NavLocation } from '../../shared/navLocation'
-import { normalizeSession, type WindowSession } from '../../shared/windowSession'
+import { decodeNavLocation, encodeNavLocation } from '../../shared/navLocation'
+import {
+  normalizeContext,
+  normalizeSession,
+  type SessionTab,
+  type WindowSession
+} from '../../shared/windowSession'
 import { stripUnderPoint, tearOffBounds, type Point, type StripRect } from '../windowDrag'
 import { defaultWindowSize } from '../windowSize'
 import {
@@ -41,17 +46,21 @@ function asStrip(raw: unknown): StripRect | null {
   return width > 0 && height > 0 ? { left, top, width, height } : null
 }
 
-/** 자리 하나를 되풀어 확인한다 — 접힌 글자열로 오므로 되펴서 모양을 본다. */
-function asLocation(raw: unknown): NavLocation | null {
-  const loc = raw as Partial<NavLocation> | null
-  if (!loc || typeof loc.serviceId !== 'string' || typeof loc.moduleId !== 'string') return null
-  return decodeNavLocation(
+/**
+ * 탭 하나를 되풀어 확인한다 — 자리는 접힌 글자열로 되펴서 모양을 보고, 그 탭이 보던 대상은
+ * 따로 거른다. 대상까지 실어야 탭을 떼어낸 창이 보던 접속·설계를 그대로 물고 열린다.
+ */
+function asTab(raw: unknown): SessionTab | null {
+  const tab = raw as (Partial<SessionTab> & { context?: unknown }) | null
+  if (!tab || typeof tab.serviceId !== 'string' || typeof tab.moduleId !== 'string') return null
+  const loc = decodeNavLocation(
     encodeNavLocation({
-      serviceId: loc.serviceId,
-      moduleId: loc.moduleId,
-      viewId: typeof loc.viewId === 'string' ? loc.viewId : null
+      serviceId: tab.serviceId,
+      moduleId: tab.moduleId,
+      viewId: typeof tab.viewId === 'string' ? tab.viewId : null
     })
   )
+  return loc ? { ...loc, context: normalizeContext(tab.context) } : null
 }
 
 function liveWindow(id: number | null): BrowserWindow | null {
@@ -127,6 +136,20 @@ export function registerWindowIpc(): void {
   })
 
   /**
+   * 이 창이 **지금** 들고 있는 것 — 화면이 다시 그려질 때(개발 중 새로고침·e2e) 묻는다.
+   *
+   * 창을 만들 때 실은 실행 인자는 **그때의 스냅샷**이라, 그 뒤 탭을 늘리거나 대상을 고친 것이
+   * 안 들어 있다. 새로고침이 그 낡은 인자로 되돌아가면 열어 둔 탭이 사라진다.
+   *
+   * 동기(sendSync)다 — 첫 그림을 그리기 전에 답이 있어야 기본 자리가 한 번 그려졌다
+   * 갈아치워지지 않는다(실행 인자를 쓴 이유와 같다).
+   */
+  ipcMain.on('window:session:get', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    event.returnValue = win ? windowSessionOf(win) : null
+  })
+
+  /**
    * 자리를 창 하나로 떼어낸다 — 탭 줄의 "새 창" 단추와 메뉴의 `⌘N`.
    * 무엇을 열지는 렌더러가 보낸 세션이 정하고, 안 보내면 부른 창이 지금 보는 것을 그대로 문다.
    */
@@ -154,10 +177,10 @@ export function registerWindowIpc(): void {
   ipcMain.handle('window:tearOff', (event, raw: unknown) => {
     const from = BrowserWindow.fromWebContents(event.sender)
     const input = raw as { loc?: unknown; at?: unknown; grab?: unknown } | null
-    const loc = asLocation(input?.loc)
+    const tab = asTab(input?.loc)
     const at = asPoint(input?.at)
     const grab = asPoint(input?.grab)
-    if (!from || !loc || !at || !grab) return null
+    if (!from || !tab || !at || !grab) return null
 
     const cursor = toScreen(from, at)
     const work = screen.getDisplayNearestPoint(cursor).workArea
@@ -168,7 +191,7 @@ export function registerWindowIpc(): void {
         : { width: source.width, height: source.height }
 
     const win = createAppWindow({
-      session: { tabs: [loc], active: 0 },
+      session: { tabs: [tab], active: 0 },
       bounds: tearOffBounds(size, cursor, grab, work),
       primary: false,
       inactive: true

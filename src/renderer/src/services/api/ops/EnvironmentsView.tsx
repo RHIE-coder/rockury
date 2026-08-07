@@ -4,7 +4,7 @@ import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { cn } from '@renderer/lib/utils'
-import { useNav } from '@renderer/nav/useNav'
+import { useNav, useContextValue } from '@renderer/nav/useNav'
 import { envHealth } from '@shared/api/envHealth'
 import type { EnvValue, EnvironmentDef, RequestDef } from '@shared/api/types'
 import { useOpsStore, useOpsSync } from './store'
@@ -21,7 +21,7 @@ import { useApiStore } from '../store'
 /** 운영 표식 환경이 골라져 있으면 화면 어디서든 보이는 띠. */
 export function OpsGuardBand() {
   const env = useOpsStore((s) => s.environments)
-  const id = useNav((s) => s.contextValues['env'])
+  const id = useContextValue('env')
   const active = env.find((e) => e.id === id)
   if (!active?.production) return null
   return (
@@ -112,7 +112,7 @@ function EnvironmentCard({ env, requests }: { env: EnvironmentDef; requests: Req
   const save = useOpsStore((s) => s.saveEnvironment)
   const duplicate = useOpsStore((s) => s.duplicateEnvironment)
   const remove = useOpsStore((s) => s.deleteEnvironment)
-  const activeId = useNav((s) => s.contextValues['env'])
+  const activeId = useContextValue('env')
   const setContextValue = useNav((s) => s.setContextValue)
   const [draft, setDraft] = useState(env)
   const dirty = JSON.stringify(draft) !== JSON.stringify(env)

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
-import { useNav } from '@renderer/nav/useNav'
+import { useContextValue } from '@renderer/nav/useNav'
 import { diffSpecs, type DiffResult } from '@shared/api/breaking'
 import type { SpecDef } from '@shared/api/types'
 import { useApiStore } from '../store'
@@ -82,7 +82,7 @@ export const useVersionsStore = create<VersionsState>()((set, get) => ({
 }))
 
 export function useVersionsSync(): void {
-  const specId = useNav((s) => s.contextValues['spec']) || null
+  const specId = useContextValue('spec') || null
   useEffect(() => {
     void useApiStore.getState().loadSpec(specId)
     void useVersionsStore.getState().load(specId)

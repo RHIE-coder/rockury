@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { useContextOptions } from '@renderer/nav/contextOptions'
-import { useNav } from '@renderer/nav/useNav'
+import { useNav, useContextValue, activeContext } from '@renderer/nav/useNav'
 import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
 import { useProjectStore } from '@renderer/shell/projectStore'
 import { interfaceMeta, type InterfaceKind, type RequestDef, type SpecDef } from '@shared/api/types'
@@ -173,13 +173,13 @@ export function useScopedSpecs(): SpecSummary[] {
 
 /** 컨텍스트 바 선택이 바뀌면 그 명세를 통째로 읽어 온다. */
 useNav.subscribe((s, prev) => {
-  if (s.contextValues['spec'] !== prev.contextValues['spec']) {
-    void useApiStore.getState().loadSpec(s.contextValues['spec'] ?? null)
+  if (activeContext(s)['spec'] !== activeContext(prev)['spec']) {
+    void useApiStore.getState().loadSpec(activeContext(s)['spec'] ?? null)
   }
 })
 
 export function useActiveSpecId(): string | null {
-  return useNav((s) => s.contextValues['spec']) ?? null
+  return useContextValue('spec') ?? null
 }
 
 /**
@@ -189,7 +189,7 @@ export function useActiveSpecId(): string | null {
  * 화면 밖에서 바뀐 것(에이전트 쓰기·다른 화면의 저장)도 여기서 따라잡는다.
  */
 export function useSpecSync(): void {
-  const specId = useNav((s) => s.contextValues['spec']) || null
+  const specId = useContextValue('spec') || null
   useEffect(() => {
     void useApiStore.getState().loadSpec(specId)
   }, [specId])

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { useContextOptions } from '@renderer/nav/contextOptions'
-import { useNav } from '@renderer/nav/useNav'
+import { useContextValue } from '@renderer/nav/useNav'
 import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
 import { useProjectStore } from '@renderer/shell/projectStore'
 import { dialectInfo, type DialectId } from '../dialects'
@@ -147,7 +147,7 @@ useProjectStore.subscribe((s, prev) => {
 
 /** 컨텍스트 바에서 선택된 활성 Design. 미선택이면 null. */
 export function useActiveDesign(): DesignDef | null {
-  const designId = useNav((s) => s.contextValues['design'])
+  const designId = useContextValue('design')
   const designs = useDesignsStore((s) => s.designs)
   return designs.find((d) => d.id === designId) ?? null
 }

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check } from 'lucide-react'
-import { useNav } from '../nav/useNav'
+import { useContextValue, useNav } from '../nav/useNav'
 import { useContextOptions } from '../nav/contextOptions'
 import type { ContextOption, ContextSelector } from '../nav/types'
 
@@ -50,13 +50,13 @@ export interface SelectorState {
 
 /** 셀렉터의 지금 상태 — 런타임 옵션이 등록돼 있으면 정적 옵션을 대체한다. */
 export function useSelector(sel: ContextSelector): SelectorState {
-  const values = useNav((s) => s.contextValues)
+  const value = useContextValue(sel.id)
   const setValue = useNav((s) => s.setContextValue)
   const runtimeOptions = useContextOptions((s) => s.options)
 
   const options = runtimeOptions[sel.id] ?? sel.options
-  // 초기 contextValues 는 비어 있으므로 defaultOptionId 는 읽기 시점에 폴백한다.
-  const selectedId = values[sel.id] ?? sel.defaultOptionId
+  // 아직 안 고른 탭은 값이 없으므로 defaultOptionId 는 읽기 시점에 폴백한다.
+  const selectedId = value ?? sel.defaultOptionId
   const current = options.find((o) => o.id === selectedId) ?? null
 
   return { options, current, select: (optionId) => setValue(sel.id, optionId) }

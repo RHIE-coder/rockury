@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, Database, FolderOpen, FolderPlus, GripVertical, Link2, Loader2, PauseCircle, Pencil, Plug, Plus, RefreshCw, Server, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
-import { useNav } from '@renderer/nav/useNav'
+import { useNav, useContextValue } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { dialectInfo } from '../dialects'
 import { useConnectionBindings, useEnvManageStore } from '../environments/store'
@@ -162,6 +162,7 @@ export function ConnectionsView() {
   const loaded = useConnectionsStore((s) => s.loaded)
   const openCreate = useConnectionsStore((s) => s.openCreate)
   const testAll = useConnectionsStore((s) => s.testAll)
+  const refresh = useConnectionsStore((s) => s.refresh)
   const statusMap = useConnectionsStore((s) => s.statusMap)
   const createGroup = useConnectionsStore((s) => s.createGroup)
   const renameGroup = useConnectionsStore((s) => s.renameGroup)
@@ -169,7 +170,7 @@ export function ConnectionsView() {
   const sample = useConnectionsStore((s) => s.sample)
   const makeSample = useConnectionsStore((s) => s.makeSample)
   const remakeSample = useConnectionsStore((s) => s.remakeSample)
-  const activeId = useNav((s) => s.contextValues['conn'])
+  const activeId = useContextValue('conn')
   const setActiveConn = useNav((s) => s.setContextValue)
 
   const [confirmRemake, setConfirmRemake] = useState(false)
@@ -532,7 +533,7 @@ export function ConnectionsView() {
           <Button variant="outline" size="sm" onClick={() => void addGroup()} title="연결을 묶어 관리할 그룹 만들기">
             <FolderPlus className="size-3.5" /> 새 그룹
           </Button>
-          <Button variant="outline" size="sm" onClick={() => void testAll()} disabled={checking || connections.length === 0} title="전체 연결 상태 새로고침 (자동 확인 제외 연결은 미확인으로 표시)">
+          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={checking} title="목록과 연결 상태를 저장소 기준으로 다시 읽는다 (자동 확인 제외 연결은 미확인으로 표시)">
             <RefreshCw className={cn('size-3.5', checking && 'animate-spin')} /> 새로고침
           </Button>
           <Button size="sm" onClick={() => openCreate()}>

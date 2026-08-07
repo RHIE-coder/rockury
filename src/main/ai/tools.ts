@@ -6,6 +6,7 @@ import { listTables, replaceTablesForDesign, type TableRecord } from '../store/t
 import { createVersion, listVersions } from '../store/versions'
 import { DIALECT_IDS, DIALECT_META } from '../../shared/dialects'
 import { formatVersion, nextVersion, parseVersion } from '../../shared/versionNumber'
+import type { StoreChangedEvent } from '../../shared/storeChanged'
 import { applyOperations, assertTablesConsistent, patchOpSchema } from './patch'
 import { UIUX_TOOL_DEFS } from './uiuxTools'
 import { assertCleanText } from './textGuard'
@@ -36,10 +37,8 @@ export interface ToolDef {
 // 쓰기 도구가 성공했을 때만 발행(spec tools.rehydration AC-1). electron 을 여기서
 // import 하지 않는 기존 테스트 seam 유지 — 실제 창 전파는 main/index.ts 가 주입한다.
 
-export interface StoreChangedEvent {
-  domain: 'designs' | 'tables' | 'versions'
-  designId: string
-}
+// 모양은 공용(@shared/storeChanged)이 든다 — 화면발 쓰기도 같은 채널을 쓰기 때문이다.
+export type { StoreChangedEvent }
 
 let notifyStoreChanged: (e: StoreChangedEvent) => void = () => {}
 

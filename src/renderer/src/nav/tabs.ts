@@ -2,10 +2,12 @@
  * 탭 목록 다루기 — 브라우저 탭과 같은 뜻으로, **사용자가 만들고 지우는 자리 묶음**이다.
  * (모듈 탭·뷰 탭은 이름만 같은 고정 메뉴다. 그쪽은 nav 트리가 정한다.)
  *
- * 탭 하나가 드는 것은 **자리뿐**이다(2026-08-05 사용자 결정). "지금 어느 설계·접속·시점을
- * 보나"는 안 든다 — 그건 창을 하나 더 띄워서 가른다. 창은 렌더러가 통째로 따로 뜨므로 대상이
- * 저절로 갈리지만, 한 창 안 탭끼리 대상을 가르려면 다섯 서비스의 스토어 전부를 탭 단위로
- * 쪼개야 한다. 얻는 것에 비해 판이 너무 커서 여기서 선을 그었다.
+ * 탭 하나는 **자리와 대상**을 든다. 대상(= 지금 어느 설계·접속을 보나)은 2026-08-05 에 창에
+ * 딸리게 정했다가 2026-08-07 에 탭으로 내렸다 — 탭 두 장으로 접속을 나란히 보려는데 한쪽을
+ * 고르면 다른 쪽까지 바뀌었기 때문이다.
+ *
+ * 서비스 스토어를 탭 단위로 쪼개지는 않았다. 쪼개는 대신 **고른 id 만** 탭이 들고, 스토어는
+ * 그 id 로 읽는다(`useContextValue`). 목록·상태는 창 하나에 하나로 남는다.
  *
  * 탭 **묶음의 주인은 메인 프로세스**다(`main/windows.ts`) — 창끼리 부딪히지 않고, 껐다 켜도
  * 창 배치째 돌아온다. 여기 있는 것은 창 안에서 도는 사본이고, 바뀔 때마다 메인에 되보고한다.
@@ -15,11 +17,16 @@
  */
 
 import type { NavLocation } from '@shared/navLocation'
-import type { WindowSession } from '@shared/windowSession'
+import { normalizeContext, type SessionTab, type WindowSession } from '@shared/windowSession'
 import type { Module, View } from './types'
 
 export interface NavTab extends NavLocation {
   id: string
+  /**
+   * 이 탭이 고른 대상들(셀렉터 id → 옵션 id). **탭마다 따로 논다** — 탭1 은 접속 A,
+   * 탭2 는 접속 B. 값이 없는 셀렉터는 키가 아예 없다("아직 안 골랐다").
+   */
+  context: Record<string, string>
 }
 
 /** 탭 목록과 그중 활성 — 조작 함수들이 이 짝을 통째로 주고받는다(둘이 늘 함께 바뀐다). */
@@ -55,11 +62,22 @@ function place(loc: NavLocation): NavLocation {
 }
 
 /**
+ * 새 탭 하나를 짓는다 — 자리에 **대상까지** 얹는다.
+ *
+ * `+` 로 여는 탭은 지금 탭의 사본이라 보던 대상도 따라와야 한다("이 화면을 하나 더"). 거기서
+ * 대상을 바꾸면 그 탭에서만 갈린다. 사본을 뜨는 이유는 `place` 와 같다 — 같은 객체를 두 탭이
+ * 나눠 쥐면 한쪽에서 고른 것이 다른 쪽에도 비친다.
+ */
+function newTab(seed: SessionTab, id: string): NavTab {
+  return { id, ...place(seed), context: { ...(seed.context ?? {}) } }
+}
+
+/**
  * 탭 하나를 연다. **활성 탭 바로 오른쪽**에 끼우고 새 탭으로 옮겨 간다 — 브라우저와 같은 자리다
  * (맨 끝에 붙이면 방금 연 탭이 화면 밖으로 밀려나 어디 생겼는지 눈으로 못 쫓는다).
  */
-export function openTab(set: TabSet, loc: NavLocation): TabSet {
-  const tab: NavTab = { id: nextTabId(set.tabs), ...place(loc) }
+export function openTab(set: TabSet, seed: SessionTab): TabSet {
+  const tab = newTab(seed, nextTabId(set.tabs))
   const at = set.tabs.findIndex((t) => t.id === set.activeTabId)
   const tabs = [...set.tabs]
   tabs.splice(at < 0 ? tabs.length : at + 1, 0, tab)
@@ -98,6 +116,63 @@ export function moveActiveTab(set: TabSet, loc: NavLocation): TabSet {
     tabs: set.tabs.map((t) => (t.id === current.id ? { ...t, ...place(loc) } : t)),
     activeTabId: set.activeTabId
   }
+}
+
+/**
+ * 활성 탭의 대상 선택만 갈아 끼운다 — 대상을 고치는 길은 여기 하나다.
+ *
+ * 바뀐 게 없으면 **같은 묶음을 그대로** 돌려준다. 새 배열을 만들면 구독자가 헛돌고, 탭이
+ * 바뀐 줄 알고 메인에 되보고까지 나간다(`moveActiveTab` 과 같은 결).
+ */
+export function setActiveContext(
+  set: TabSet,
+  edit: (context: Record<string, string>) => Record<string, string>
+): TabSet {
+  const current = activeTab(set)
+  const next = edit(current.context)
+  const same =
+    Object.keys(next).length === Object.keys(current.context).length &&
+    Object.entries(next).every(([k, v]) => current.context[k] === v)
+  if (same) return set
+  return {
+    tabs: set.tabs.map((t) => (t.id === current.id ? { ...t, context: next } : t)),
+    activeTabId: set.activeTabId
+  }
+}
+
+/**
+ * 이 셀렉터의 선택을 **모든 탭에서** 푼다. `optionId` 를 주면 그 값을 고른 탭만.
+ *
+ * 탭마다 따로 노는 것이 규칙이지만 "여기서는 절대 남아 있으면 안 된다"는 것이 있다 —
+ * 앱을 켤 때의 환경 선택과 방금 지운 대상. 활성 탭만 풀면 나머지 탭에 그대로 살아 있다.
+ */
+export function clearContextEverywhere(set: TabSet, selectorId: string, optionId?: string): TabSet {
+  const hit = (t: NavTab): boolean =>
+    t.context[selectorId] !== undefined &&
+    (optionId === undefined || t.context[selectorId] === optionId)
+  if (!set.tabs.some(hit)) return set
+  return {
+    tabs: set.tabs.map((t) => {
+      if (!hit(t)) return t
+      const context = { ...t.context }
+      delete context[selectorId]
+      return { ...t, context }
+    }),
+    activeTabId: set.activeTabId
+  }
+}
+
+/**
+ * 아직 아무 대상도 없는 탭들에만 주어진 대상을 심는다 — 옛 저장본을 한 번 옮겨 올 때 쓴다.
+ *
+ * **대상이 이미 있는 탭이 하나라도 있으면 통째로 안 건드린다.** 메인이 실어 보낸 탭(껐다 켠
+ * 창·떼어낸 창)이 제 대상을 들고 오는데 거기에 옛 값을 덮으면, 창을 열 때마다 마지막에 고른
+ * 하나로 되돌아간다.
+ */
+export function seedContext(set: TabSet, context: Record<string, string>): TabSet {
+  if (Object.keys(context).length === 0) return set
+  if (set.tabs.some((t) => Object.keys(t.context).length > 0)) return set
+  return { tabs: set.tabs.map((t) => ({ ...t, context: { ...context } })), activeTabId: set.activeTabId }
 }
 
 export function selectTab(set: TabSet, id: string): TabSet {
@@ -191,8 +266,8 @@ export function dropIndexAt(boxes: readonly { left: number; width: number }[], x
  * 다른 창에서 건너온 탭을 이 줄에 끼운다 — 끼운 탭이 곧 활성이다(가져다 놓았으면 그걸 보려는 것이다).
  * 자리 번호는 `dropIndexAt` 이 준 값이라 **탭 수와 같을 수 있다**(맨 뒤).
  */
-export function insertTab(set: TabSet, loc: NavLocation, index: number): TabSet {
-  const tab: NavTab = { id: nextTabId(set.tabs), ...place(loc) }
+export function insertTab(set: TabSet, seed: SessionTab, index: number): TabSet {
+  const tab = newTab(seed, nextTabId(set.tabs))
   const tabs = [...set.tabs]
   tabs.splice(Math.min(Math.max(index, 0), tabs.length), 0, tab)
   return { tabs, activeTabId: tab.id }
@@ -205,18 +280,19 @@ export function insertTab(set: TabSet, loc: NavLocation, index: number): TabSet 
 export function toSession(set: TabSet): WindowSession {
   const active = set.tabs.findIndex((t) => t.id === set.activeTabId)
   return {
-    tabs: set.tabs.map((t) => place(t)),
+    tabs: set.tabs.map((t) => ({ ...place(t), context: t.context })),
     active: active < 0 ? 0 : active
   }
 }
 
 /** 메인이 실어 보낸 것을 탭 묶음으로 편다. id 는 여기서 새로 짓는다. */
 export function fromSession(session: WindowSession): TabSet {
-  const tabs = session.tabs.map((loc, i) => ({ id: `t${i + 1}`, ...place(loc) }))
+  const tabs = session.tabs.map((tab, i) => newTab(tab, `t${i + 1}`))
   return { tabs, activeTabId: tabs[Math.min(session.active, tabs.length - 1)].id }
 }
 
-function isTab(value: unknown): value is NavTab {
+/** 대상(context)은 여기서 안 본다 — 없어도 되는 값이라 `normalizeContext` 가 뒤에서 채운다. */
+function isTab(value: unknown): value is NavLocation & { id: string } {
   const t = value as Partial<NavTab> | null
   return (
     !!t &&
@@ -243,7 +319,13 @@ export function normalizeTabSet(tabs: unknown, activeTabId: unknown): TabSet | n
   for (const raw of tabs) {
     if (!isTab(raw) || seen.has(raw.id)) continue
     seen.add(raw.id)
-    out.push({ id: raw.id, serviceId: raw.serviceId, moduleId: raw.moduleId, viewId: raw.viewId })
+    out.push({
+      id: raw.id,
+      serviceId: raw.serviceId,
+      moduleId: raw.moduleId,
+      viewId: raw.viewId,
+      context: normalizeContext((raw as Partial<NavTab>).context)
+    })
   }
   if (out.length === 0) return null
   const active = typeof activeTabId === 'string' && seen.has(activeTabId) ? activeTabId : out[0].id

@@ -1,5 +1,5 @@
 import { useApiStore } from './store'
-import { useNav } from '@renderer/nav/useNav'
+import { useNav, activeContext } from '@renderer/nav/useNav'
 
 /**
  * 에이전트(MCP) 쓰기 리하이드레이션 — 메인이 보내는 `api:changed` 를 받아 해당 스코프만
@@ -14,12 +14,12 @@ window.rockury.apiSpecs.onChanged((e) => {
     if (e.domain === 'specs') {
       await useApiStore.getState().init()
       // 지금 보고 있는 명세면 내용까지 다시 읽는다.
-      if (useNav.getState().contextValues['spec'] === e.specId) {
+      if (activeContext(useNav.getState())['spec'] === e.specId) {
         await useApiStore.getState().loadSpec(e.specId)
       }
       return
     }
-    if (useNav.getState().contextValues['spec'] === e.specId) {
+    if (activeContext(useNav.getState())['spec'] === e.specId) {
       await useApiStore.getState().loadSpec(e.specId)
     }
     await useApiStore.getState().init()

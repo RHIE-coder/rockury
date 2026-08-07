@@ -19,6 +19,9 @@ export const shellCoverage: ServiceCoverage = {
     'window:session':
       'UI 창 상태 보고 — 화면이 자기 탭 목록을 메인에 되보고하는 통로다. 저장소가 아니라 ' +
       '창 배치 기억이라 에이전트가 읽거나 쓸 것이 없다.',
+    'window:session:get':
+      'UI 창 상태 조회 — 화면이 다시 그려질 때 자기 탭 목록을 되묻는 통로다. ' +
+      'window:session 과 짝이고, 같은 이유로 에이전트가 볼 것이 없다.',
     // ── 탭 끌기: 마우스 한 번의 도막들이라 따로 부를 것이 없다 ──
     'window:strip':
       'UI 창 상태 보고 — 화면이 자기 탭 줄 자리를 알리는 통로다. 끌기 판정용 좌표라 ' +

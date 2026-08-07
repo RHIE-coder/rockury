@@ -1,5 +1,5 @@
 import type { Rect } from './windowSize'
-import { normalizeSession, type WindowSession } from '../shared/windowSession'
+import { normalizeContext, normalizeSession, type SessionTab, type WindowSession } from '../shared/windowSession'
 
 /**
  * 창 배치 저장본 다루기 — **순수**(파일도 electron 도 안 건드린다). 읽고 쓰는 일은 `windows.ts` 가 한다.
@@ -51,7 +51,7 @@ export function normalizeWindowStore(value: unknown): StoredWindow[] {
   for (const w of raw.windows.slice(0, MAX_WINDOWS)) {
     const item = w as { tabs?: unknown; active?: unknown; bounds?: unknown }
     const session = normalizeSession({
-      tabs: Array.isArray(item?.tabs) ? item.tabs.map(asLocation) : [],
+      tabs: Array.isArray(item?.tabs) ? item.tabs.map(asTab) : [],
       active: typeof item?.active === 'number' ? item.active : 0
     })
     if (!session) continue
@@ -63,11 +63,20 @@ export function normalizeWindowStore(value: unknown): StoredWindow[] {
   return out
 }
 
-function asLocation(value: unknown): { serviceId: string; moduleId: string; viewId: string | null } | null {
-  const t = value as { serviceId?: unknown; moduleId?: unknown; viewId?: unknown } | null
+/**
+ * 저장본의 탭 하나. `context`(그 탭이 보던 대상)는 없어도 된다 — 탭마다 대상을 가르기 전
+ * (2026-08-07 이전) 저장본에는 없다. 거르는 일은 `normalizeSession` 이 이어서 한다.
+ */
+function asTab(value: unknown): SessionTab | null {
+  const t = value as { serviceId?: unknown; moduleId?: unknown; viewId?: unknown; context?: unknown } | null
   if (!t || typeof t !== 'object') return null
   if (typeof t.serviceId !== 'string' || t.serviceId === '') return null
   if (typeof t.moduleId !== 'string') return null
   if (t.viewId !== null && typeof t.viewId !== 'string') return null
-  return { serviceId: t.serviceId, moduleId: t.moduleId, viewId: t.viewId }
+  return {
+    serviceId: t.serviceId,
+    moduleId: t.moduleId,
+    viewId: t.viewId,
+    context: normalizeContext(t.context)
+  }
 }

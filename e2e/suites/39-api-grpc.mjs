@@ -12,14 +12,12 @@ export const meta = {
   desc: 'API gRPC — reflection 으로 정의 받기 · 완전 판정 · 스트리밍 전송'
 }
 
-/** 컨텍스트 바를 이 명세로 옮긴다 — 35번 스위트와 같은 방식(nav 저장소 + 새로고침). */
+/** 컨텍스트 바를 이 명세로 옮긴다 — 지금 보는 탭에 바로 세운다. */
 async function switchSpec(page, click, specId) {
-  await page.evaluate((id) => {
-    const nav = JSON.parse(localStorage.getItem('rockury.nav') ?? '{}')
-    nav.state = nav.state ?? {}
-    nav.state.contextValues = { ...(nav.state.contextValues ?? {}), spec: id }
-    localStorage.setItem('rockury.nav', JSON.stringify(nav))
-  }, specId)
+  // 대상 선택은 탭에 딸린다 — 저장소에 써 놓고 새로고침하는 옛 길은 안 먹는다(하네스 주석).
+  // 세운 **뒤에** 새로 그린다: 명세를 화면 밖(IPC)에서 만들어 이 창의 목록이 아직 낡았기 때문이다.
+  // 대상은 메인이 들고 있어 새로고침을 견딘다.
+  await page.evaluate((id) => window.__rockuryNav.setContextValue('spec', id), specId)
   await page.reload()
   await page.waitForTimeout(1_200)
   await click('[data-nav-service="api"]')

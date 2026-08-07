@@ -117,10 +117,15 @@
 ### Section ai-server.tools.rehydration — 쓰기 반영(렌더러 리하이드레이션)
 - **AC-1** MCP 쓰기 도구가 **성공했을 때만** 메인이 열린 모든 창에 `store:changed`
   (`{domain: 'designs'|'tables'|'versions', designId}`)를 보낸다 — `isError` 결과는 이벤트 없음.
-- **AC-2** 이벤트를 받은 렌더러 스토어(designs/definition/versions)는 해당 domain·designId
-  스코프만 다시 읽는다 — 열린 Design 화면에 `set_schema` 결과가 즉시 보인다(e2e).
-- **AC-3** 자기 메아리 금지: 렌더러발 저장(IPC)은 `store:changed` 를 유발하지 않고,
-  리하이드레이션으로 갱신된 tables 는 write-through 를 되쏘지 않는다 — 쓰기 1회당 저장 1회(루프 0).
+- **AC-2** 이벤트를 받은 렌더러 스토어(designs/definition/versions/connections)는 해당
+  domain·designId 스코프만 다시 읽는다 — 열린 Design 화면에 `set_schema` 결과가 즉시 보인다(e2e).
+- **AC-3** 자기 메아리 금지: 쓰기를 **한 창에는** `store:changed` 가 가지 않고(그 창은 낙관
+  반영으로 이미 화면을 고쳤다), 리하이드레이션으로 갱신된 tables 는 write-through 를 되쏘지
+  않는다 — 쓰기 1회당 저장 1회(루프 0).
+- **AC-4 (2026-08-07)** 화면발 쓰기도 **다른 창들에는** 같은 채널로 간다 — 창마다 목록 사본을
+  시작 때 한 번만 읽으므로, 안 보내면 한 창에서 만든 접속이 다른 창에 영영 안 뜨고 그 창에서
+  편집하면 낡은 폼을 통째로 저장해 남의 수정을 지운다(2026-08-07 사용자 실측).
+  지금 덮는 도메인은 `connections`(접속·그룹·샘플 DB)다.
 
 ## Surface: ai-server.agents (AI › Agents 화면 — 좌측 레일 맨 아래 서비스, 내부 id 는 `mcp`)
 

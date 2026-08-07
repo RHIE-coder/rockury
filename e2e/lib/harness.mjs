@@ -107,6 +107,18 @@ export async function createContext() {
     onCheck: null,
     click: (sel) => ctx.page.locator(sel).first().click(),
     body: () => ctx.page.evaluate(() => document.body.innerText),
+    /**
+     * 컨텍스트 바 선택을 심는다 — "이 접속·이 명세를 보고 있는 상태"를 만든다.
+     *
+     * 대상 선택은 **탭에 딸린다**(2026-08-07). 그래서 브라우저 저장소에 써 놓고 reload 하는
+     * 예전 방식은 안 먹는다: 탭의 주인은 메인이라 새로고침해도 메인이 든 값이 이긴다.
+     * 지금 보고 있는 탭에 바로 세운다 — 화면을 눌러 고르는 것과 같은 길이다.
+     */
+    setContext: (selectorId, optionId) =>
+      ctx.page.evaluate(
+        ([id, opt]) => window.__rockuryNav.setContextValue(id, opt),
+        [selectorId, optionId]
+      ),
     // CodeMirror(.cm-content)에 SQL 입력 — 전체선택→삭제→타이핑→자동완성 팝업 닫기.
     typeSql: async (text) => {
       await ctx.page.locator('.cm-content').click()

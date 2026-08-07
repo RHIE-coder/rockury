@@ -15,7 +15,7 @@ export const meta = {
  * 개발자 문구만 보였다. 화면이 비는 이유가 연결 탓인지 앱 탓인지 가릴 수 없던 것이 문제다.
  */
 export async function run(ctx) {
-  const { check, body } = ctx
+  const { check, body, click } = ctx
   const page = ctx.page
   await page.evaluate(() => localStorage.clear())
   await page.reload()
@@ -35,23 +35,24 @@ export async function run(ctx) {
     })
   )
 
+  // 방금 만든 접속은 **화면 밖(IPC)에서** 생긴 것이라 이 창의 목록엔 아직 없다.
+  // 다른 창에는 알림이 가지만 쓴 창에는 안 간다(자기 메아리 금지) — 여기선 한 번 새로 그려
+  // 저장소에서 다시 읽힌다. 사람이 쓰는 길(새 연결 단추)은 스토어를 거치므로 이 일이 없다.
+  await page.reload()
+  await page.waitForSelector('text=Design', { timeout: 15_000 })
+
+  // 죽은 접속을 이 탭의 대상으로 세운다 — 대상은 탭에 딸리므로 지금 보는 탭에 바로 선다.
+  await page.evaluate((id) => window.__rockuryNav.setContextValue('conn', id), conn.id)
+  await click('[data-nav-service="db"]')
+  await page.waitForTimeout(300)
+  await click('[data-nav-module="remote"]')
+  await page.waitForTimeout(300)
+
   const VIEWS = ['definition', 'diagram', 'data', 'query', 'object']
   for (const view of VIEWS) {
-    await page.evaluate(
-      ([id, v]) => {
-        const nav = JSON.parse(localStorage.getItem('rockury.nav') ?? '{"state":{},"version":0}')
-        nav.state = {
-          ...(nav.state ?? {}),
-          serviceId: 'db',
-          moduleId: 'remote',
-          viewId: v,
-          contextValues: { ...(nav.state?.contextValues ?? {}), conn: id }
-        }
-        localStorage.setItem('rockury.nav', JSON.stringify(nav))
-      },
-      [conn.id, view]
-    )
-    await page.reload()
+    // 뷰 탭을 눌러 옮긴다 — 예전엔 저장소에 자리를 써 넣고 새로고침했는데, 자리의 주인이
+    // 메인으로 옮겨 가면서(2026-08-05) 그 길은 아무 일도 안 하고 있었다(다섯 번 같은 화면).
+    await click(`[data-nav-view="${view}"]`)
     await page.waitForSelector('[data-connection-error]', { timeout: 20_000 })
     const text = await body()
 

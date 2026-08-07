@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { SampleResult, SampleStatus } from '@shared/db/samplePlan'
 import { useContextOptions } from '@renderer/nav/contextOptions'
-import { useNav } from '@renderer/nav/useNav'
+import { useContextValue } from '@renderer/nav/useNav'
 import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
 import { useProjectStore } from '@renderer/shell/projectStore'
 import { dialectInfo, type DialectId } from '../dialects'
@@ -81,6 +81,13 @@ interface ConnectionsState {
   editing: ConnectionDef | null
 
   init: () => Promise<void>
+  /**
+   * 새로고침 단추 — **목록을 다시 읽고** 나서 연결을 확인한다.
+   *
+   * 예전엔 확인만 했다. 그래서 다른 창이 만든 접속이 안 보일 때 새로고침을 눌러도 그대로였고,
+   * 창을 껐다 켜는 것 말고는 맞출 길이 없었다(2026-08-07 실측).
+   */
+  refresh: () => Promise<void>
   create: (form: ConnFormInput) => Promise<ConnectionDef>
   update: (id: string, form: Partial<ConnFormInput>) => Promise<void>
   remove: (id: string) => Promise<void>
@@ -123,6 +130,11 @@ export const useConnectionsStore = create<ConnectionsState>()((set, get) => ({
       window.rockury.connectionGroups.list() as Promise<ConnGroupDef[]>
     ])
     set({ connections: rows, groups, loaded: true })
+  },
+
+  refresh: async () => {
+    await get().init()
+    await get().testAll()
   },
 
   create: async (form) => {
@@ -316,7 +328,7 @@ export function useScopedConnections(): ConnectionDef[] {
 
 /** 컨텍스트 바에서 선택된 활성 Connection. 미선택이면 null. */
 export function useActiveConnection(): ConnectionDef | null {
-  const connId = useNav((s) => s.contextValues['conn'])
+  const connId = useContextValue('conn')
   const connections = useConnectionsStore((s) => s.connections)
   return connections.find((c) => c.id === connId) ?? null
 }

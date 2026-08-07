@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { decodeWindowBoot, encodeWindowBoot, normalizeSession } from './windowSession'
+import { decodeWindowBoot, encodeWindowBoot, normalizeContext, normalizeSession } from './windowSession'
 
+/** 탭 하나. `context`(그 탭이 고른 대상)는 안 주면 빈 것으로 정규화된다. */
 const loc = (serviceId: string, moduleId: string, viewId: string | null = null) => ({
   serviceId,
   moduleId,
-  viewId
+  viewId,
+  context: {}
 })
 
 describe('windowSession — 창이 들고 나오는 것', () => {
@@ -49,8 +51,48 @@ describe('windowSession — 창이 들고 나오는 것', () => {
     expect(s?.tabs).toEqual([loc('db', 'remote')])
   })
 
+  it('탭마다의 대상을 실행 인자에 실어 보낸다 — 떼어낸 창이 보던 접속을 물고 열린다', () => {
+    const boot = {
+      primary: false,
+      session: {
+        tabs: [
+          { ...loc('db', 'remote'), context: { conn: 'c1' } },
+          { ...loc('db', 'remote'), context: { conn: 'c2' } }
+        ],
+        active: 0
+      }
+    }
+    expect(decodeWindowBoot([encodeWindowBoot(boot)])).toEqual(boot)
+  })
+
+  it('대상 선택이 없는 옛 인자도 성하다 — 빈 것으로 편다', () => {
+    const raw = encodeWindowBoot({ primary: true, session: { tabs: [loc('db', 'remote')], active: 0 } })
+    expect(decodeWindowBoot([raw])?.session.tabs[0].context).toEqual({})
+  })
+
   it('탭이 터무니없이 많으면 잘라 낸다 — 깨진 저장본이 창을 못 그리게 되는 것 방지', () => {
     const many = Array.from({ length: 500 }, () => loc('db', 'remote'))
     expect(normalizeSession({ tabs: many, active: 0 })?.tabs.length).toBe(60)
+  })
+})
+
+describe('normalizeContext — 탭이 고른 대상 걸러 받기', () => {
+  it('문자열 짝만 살린다 — 저장본이 깨져도 화면이 이상한 값을 고른 것처럼 보이지 않게', () => {
+    expect(normalizeContext({ conn: 'c1', design: 42, spec: null, env: 's' })).toEqual({
+      conn: 'c1',
+      env: 's'
+    })
+  })
+
+  it('모양이 아니면 빈 것', () => {
+    expect(normalizeContext(null)).toEqual({})
+    expect(normalizeContext('nope')).toEqual({})
+    expect(normalizeContext(['conn', 'c1'])).toEqual({})
+  })
+
+  it('터무니없이 많거나 긴 값은 잘라 낸다', () => {
+    const many = Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`k${i}`, 'v']))
+    expect(Object.keys(normalizeContext(many)).length).toBe(20)
+    expect(normalizeContext({ conn: 'x'.repeat(500) })).toEqual({})
   })
 })

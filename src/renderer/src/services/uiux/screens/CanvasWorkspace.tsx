@@ -1,5 +1,5 @@
 import { Frame, MonitorSmartphone } from 'lucide-react'
-import { useNav } from '@renderer/nav/useNav'
+import { useContextValue } from '@renderer/nav/useNav'
 import { isSamePlace } from '../preview/dnd'
 import { VIEWPORT_LABEL, VIEWPORT_WIDTH } from '../preview/tokens'
 import { moveComponent } from '../tree'
@@ -30,7 +30,7 @@ function CanvasPane() {
   const selectNode = useSpecStore((s) => s.selectNode)
   const editContent = useSpecStore((s) => s.editContent)
   const tree = useTree()
-  const viewport = (useNav((s) => s.contextValues['viewport']) ?? 'pc') as Viewport
+  const viewport = (useContextValue('viewport') ?? 'pc') as Viewport
 
   const surface = tree.surfaces.find((s) => s.id === surfaceId)
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { NavLocation } from '@shared/navLocation'
+import { normalizeContext, type SessionTab } from '@shared/windowSession'
 import { initialSession, windowStorage } from '../shell/windowSession'
 import { navRegistry } from './registryRef'
 import {
@@ -14,6 +15,7 @@ import {
 } from './recall'
 import {
   activeTab,
+  clearContextEverywhere,
   closeTab as closeTabIn,
   detachTab as detachTabIn,
   fromSession,
@@ -21,8 +23,10 @@ import {
   moveActiveTab,
   moveTab as moveTabIn,
   openTab as openTabIn,
+  seedContext,
   selectTab as selectTabIn,
   selectTabAt as selectTabAtIn,
+  setActiveContext,
   stepTab as stepTabIn,
   toSession,
   type NavTab,
@@ -71,7 +75,7 @@ function defaultContext(service: Service): Record<string, string> {
 }
 
 function oneTab(loc: NavLocation): TabSet {
-  return { tabs: [{ id: 't1', ...loc }], activeTabId: 't1' }
+  return { tabs: [{ id: 't1', ...loc, context: {} }], activeTabId: 't1' }
 }
 
 function initialTabs(): TabSet {
@@ -87,13 +91,6 @@ interface NavState {
    */
   tabs: NavTab[]
   activeTabId: string
-  /**
-   * 상단 컨텍스트 바의 선택값 (selectorId → optionId).
-   *
-   * **탭이 아니라 창에 딸린다** — 탭을 옮겨도 안 바뀐다. 대상이 다른 화면을 나란히 보려면
-   * 창을 하나 더 띄운다(창마다 이 스토어가 따로 산다 · 2026-08-05 사용자 결정).
-   */
-  contextValues: Record<string, string>
   /** 서비스·모듈마다 "마지막에 본 자리". 다시 들어올 때 첫 항목 대신 여기로 돌아온다. */
   recall: NavRecall
   /** 서비스 전환 → 마지막에 보던 모듈·뷰(없으면 첫 모듈·첫 뷰), 컨텍스트 기본값 채움 */
@@ -102,10 +99,18 @@ interface NavState {
   selectModule: (moduleId: string) => void
   /** 뷰 전환 */
   selectView: (viewId: string) => void
-  /** 컨텍스트 셀렉터 선택 변경 */
+  /** 컨텍스트 셀렉터 선택 변경 — **지금 보는 탭에만** 걸린다. */
   setContextValue: (selectorId: string, optionId: string) => void
-  /** 탭 열기 — 자리를 안 주면 **지금 자리를 복제**한다(탭 줄의 `+`). */
-  openTab: (loc?: NavLocation) => void
+  /**
+   * 이 셀렉터의 선택을 **모든 탭에서** 푼다. `optionId` 를 주면 그 값을 고른 탭만.
+   *
+   * 탭마다 따로 노는 것이 규칙이지만, "여기서는 절대 남아 있으면 안 된다"는 것이 있다 —
+   * 앱을 켤 때의 환경(Env) 선택(guard AC-1)과 방금 지운 대상이 그렇다. 활성 탭만 풀면
+   * 나머지 탭에 어제 고른 운영 환경이나 없는 대상이 그대로 살아 있게 된다.
+   */
+  clearContextInAllTabs: (selectorId: string, optionId?: string) => void
+  /** 탭 열기 — 안 주면 **지금 탭을 복제**한다(탭 줄의 `+`). 대상 선택까지 복제된다. */
+  openTab: (seed?: SessionTab) => void
   closeTab: (id: string) => void
   selectTab: (id: string) => void
   /** 번호로 고르기(`⌘1~9`). 범위를 넘으면 마지막 탭. */
@@ -114,10 +119,13 @@ interface NavState {
   stepTab: (delta: number) => void
   /** 끌어서 자리 옮기기 — `to` 는 옮긴 뒤 이 탭이 설 자리 번호. */
   moveTab: (id: string, to: number) => void
-  /** 줄 밖으로 끌어 냈다 — 이 창에서 지우고 그 자리를 돌려준다(새 창은 부르는 쪽이 연다). */
-  detachTab: (id: string) => NavLocation | null
-  /** 다른 창에서 끌어 온 탭을 이 줄이 삼켰다 — 받은 자리에 끼우고 그 탭으로 옮겨 간다. */
-  adoptTab: (loc: NavLocation, index: number) => void
+  /**
+   * 줄 밖으로 끌어 냈다 — 이 창에서 지우고 그 탭이 들던 것을 돌려준다(새 창은 부르는 쪽이 연다).
+   * 대상 선택까지 돌려줘야 떼어낸 창이 보던 접속·설계를 그대로 물고 열린다.
+   */
+  detachTab: (id: string) => SessionTab | null
+  /** 다른 창에서 끌어 온 탭을 이 줄이 삼켰다 — 받은 것을 끼우고 그 탭으로 옮겨 간다. */
+  adoptTab: (seed: SessionTab, index: number) => void
 }
 
 /*
@@ -132,7 +140,6 @@ export const useNav = create<NavState>()(
       // 열자마자 들 탭들은 **메인이 실행 인자로 실어 보낸다** — 창 배치의 주인이 메인이라
       // 첫 그림부터 제자리다. 못 받았으면(개발 중 새로고침 등) 기본 한 장.
       ...initialTabs(),
-      contextValues: {},
       recall: emptyRecall(),
 
       selectService: (serviceId) => {
@@ -141,11 +148,13 @@ export const useNav = create<NavState>()(
         const module = findModule(service, recallModule(get().recall, serviceId))
         const view = findView(module, recallView(get().recall, serviceId, module.id))
         set((s) => ({
-          ...moveActiveTab(s, { serviceId, moduleId: module.id, viewId: view?.id ?? null }),
-          recall: remember(s.recall, serviceId, module.id, view?.id ?? null),
-          // 컨텍스트 선택(예: Design)은 유지한다 — 서비스를 오가도 다시 고르지 않도록.
-          // 아직 안 고른 셀렉터에만 서비스 기본값을 채운다.
-          contextValues: { ...defaultContext(service), ...s.contextValues }
+          ...setActiveContext(
+            moveActiveTab(s, { serviceId, moduleId: module.id, viewId: view?.id ?? null }),
+            // 컨텍스트 선택(예: Design)은 유지한다 — 서비스를 오가도 다시 고르지 않도록.
+            // 아직 안 고른 셀렉터에만 서비스 기본값을 채운다.
+            (context) => ({ ...defaultContext(service), ...context })
+          ),
+          recall: remember(s.recall, serviceId, module.id, view?.id ?? null)
         }))
       },
 
@@ -174,9 +183,12 @@ export const useNav = create<NavState>()(
         }),
 
       setContextValue: (selectorId, optionId) =>
-        set((s) => ({ contextValues: { ...s.contextValues, [selectorId]: optionId } })),
+        set((s) => setActiveContext(s, (context) => ({ ...context, [selectorId]: optionId }))),
 
-      openTab: (loc) => set((s) => openTabIn(s, loc ?? activeTab(s))),
+      clearContextInAllTabs: (selectorId, optionId) =>
+        set((s) => clearContextEverywhere(s, selectorId, optionId)),
+
+      openTab: (seed) => set((s) => openTabIn(s, seed ?? activeTab(s))),
       closeTab: (id) => set((s) => closeTabIn(s, id)),
       selectTab: (id) => set((s) => selectTabIn(s, id)),
       selectTabAt: (index) => set((s) => selectTabAtIn(s, index)),
@@ -189,10 +201,15 @@ export const useNav = create<NavState>()(
         const { set: next, detached } = detachTabIn(s, id)
         if (!detached || !leaving) return null
         set(next)
-        return { serviceId: leaving.serviceId, moduleId: leaving.moduleId, viewId: leaving.viewId }
+        return {
+          serviceId: leaving.serviceId,
+          moduleId: leaving.moduleId,
+          viewId: leaving.viewId,
+          context: leaving.context
+        }
       },
 
-      adoptTab: (loc, index) => set((s) => insertTabIn(s, loc, index))
+      adoptTab: (seed, index) => set((s) => insertTabIn(s, seed, index))
     }),
     {
       name: 'rockury.nav',
@@ -200,20 +217,24 @@ export const useNav = create<NavState>()(
       storage: createJSONStorage(windowStorage),
       /*
        * **탭은 여기 안 담는다** — 창 배치의 주인은 메인 프로세스다(`main/windows.ts`). 저장소는
-       * 창끼리 하나뿐이라 탭을 여기 담으면 두 창이 서로를 덮어쓴다. 남는 것은 창을 가리지 않는
-       * 두 가지다: 지금 고른 대상(설계·접속 …)과 서비스·모듈마다의 "마지막에 본 자리".
+       * 창끼리 하나뿐이라 탭을 여기 담으면 두 창이 서로를 덮어쓴다.
+       *
+       * 지금 고른 대상도 여기 없다(2026-08-07) — 탭에 딸리게 되면서 탭과 함께 메인이 든다.
+       * 남는 것은 창을 가리지 않는 하나뿐이다: 서비스·모듈마다의 "마지막에 본 자리".
        */
-      partialize: (s) => ({ contextValues: s.contextValues, recall: s.recall }),
+      partialize: (s) => ({ recall: s.recall }),
       merge: (persisted, current) => {
         // 저장본은 이 기능이 없던 시절 것일 수 있다 — 항목마다 걸러 받는다.
         // (옛 저장본에 남아 있는 자리·탭 키는 흘려 넣지 않는다. 그건 이제 메인이 든다.)
-        const saved = (persisted ?? {}) as Partial<NavState>
+        const saved = (persisted ?? {}) as Partial<NavState> & { contextValues?: unknown }
         return {
           ...current,
-          contextValues:
-            saved.contextValues && typeof saved.contextValues === 'object'
-              ? saved.contextValues
-              : current.contextValues,
+          /*
+           * 2026-08-07 이전 저장본에는 대상 선택이 **창에 하나**로 들어 있다 — 그것을 탭으로
+           * 한 번 옮겨 심는다. 옮기고 나면 저장소에는 더 안 쓰이므로(`partialize`) 다음 저장
+           * 때 그 키가 사라진다.
+           */
+          ...seedContext(current, normalizeContext(saved.contextValues)),
           recall: normalizeRecall(saved.recall)
         }
       }
@@ -223,7 +244,7 @@ export const useNav = create<NavState>()(
 
 /*
  * 탭이 바뀌면 **메인에 되보고한다** — 창 배치의 주인이 메인이라, 이 보고가 곧 다음 실행에
- * 되살아날 값이다. 대상 선택(contextValues)이 바뀌었을 때는 안 보낸다: 그건 창 안 이야기다.
+ * 되살아날 값이다. 대상 선택도 이제 탭에 실려 있으므로 같은 길로 함께 나간다(2026-08-07).
  *
  * 스토어를 만든 **뒤에** 붙는다(파일 읽는 도중이 아니다) — 여기서 남을 부르면 임포트 고리에
  * 걸린다(`registryRef` 주석 참고).
@@ -232,6 +253,46 @@ useNav.subscribe((s, prev) => {
   if (s.tabs === prev.tabs && s.activeTabId === prev.activeTabId) return
   window.rockury?.window?.report?.(toSession(s))
 })
+
+/*
+ * e2e 시드용 손잡이 — 스위트가 "이 접속·이 명세를 고른 상태"를 만들고 화면을 검사한다.
+ *
+ * 예전엔 브라우저 저장소(`rockury.nav`)에 직접 써서 시드했는데, 대상이 탭으로 옮겨 가면서
+ * 그 길이 막혔다(탭의 주인은 메인이고, 저장소에는 더 안 담긴다). 화면을 눌러 고르는 길은
+ * 서비스마다 달라, 스위트마다 다른 화면을 먼저 거쳐야 한다.
+ *
+ * 배포본에서도 붙는다 — 빌드된 앱으로 e2e 를 돌리기 때문이다. 새 권한은 아니다: 이 창의
+ * 스크립트는 어차피 같은 스토어를 부를 수 있고, 여기 실리는 것은 이름 하나뿐이다.
+ */
+;(window as unknown as { __rockuryNav?: unknown }).__rockuryNav = {
+  setContextValue: (selectorId: string, optionId: string): void =>
+    useNav.getState().setContextValue(selectorId, optionId),
+  activeContext: (): Record<string, string> => activeContext(useNav.getState())
+}
+
+/**
+ * 지금 보는 탭이 고른 대상들. 훅이 아닌 곳(스토어 구독·액션)이 읽는 문이다.
+ * 상태 하나를 통째로 받으므로 `useNav.subscribe` 의 `prev` 에도 그대로 쓴다.
+ */
+export function activeContext(s: NavState): Record<string, string> {
+  return activeTab(s).context
+}
+
+/**
+ * 지금 보는 탭의 id — 구독하는 쪽이 **"탭을 옮긴 것"과 "이 탭 안에서 바뀐 것"을 가를 때** 쓴다.
+ * 둘은 대응이 다르다: 탭을 옮긴 것은 그 탭이 이미 골라 둔 값을 존중해야 한다.
+ */
+export function activeTabId(s: NavState): string {
+  return activeTab(s).id
+}
+
+/**
+ * 지금 보는 탭이 고른 대상 하나. 안 골랐으면 `undefined`.
+ * 탭을 옮기면 값도 함께 갈린다 — 탭마다 따로 놀기 때문이다.
+ */
+export function useContextValue(selectorId: string): string | undefined {
+  return useNav((s) => activeTab(s).context[selectorId])
+}
 
 /**
  * 현재 활성 경로를 registry 기준으로 해석한다.

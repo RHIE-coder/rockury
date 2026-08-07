@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_WINDOWS, normalizeWindowStore } from './windowStore'
 
+/** 탭 하나. `context`(그 탭이 고른 대상)는 안 주면 빈 것으로 정규화된다. */
 const loc = (serviceId: string, moduleId: string, viewId: string | null = null) => ({
   serviceId,
   moduleId,
-  viewId
+  viewId,
+  context: {}
 })
 const bounds = { x: 10, y: 20, width: 1200, height: 800 }
 
@@ -50,5 +52,26 @@ describe('normalizeWindowStore — 창 배치 저장본 걸러 받기', () => {
   it('활성 번호가 범위를 벗어나면 첫 탭으로 되돌린다', () => {
     const saved = { windows: [{ tabs: [loc('db', 'remote')], active: 9, bounds }] }
     expect(normalizeWindowStore(saved)[0].active).toBe(0)
+  })
+
+  it('탭마다 고른 대상을 살린다 — 껐다 켜도 탭별 접속이 돌아온다', () => {
+    const saved = {
+      windows: [
+        {
+          tabs: [
+            { serviceId: 'db', moduleId: 'remote', viewId: null, context: { conn: 'c1' } },
+            { serviceId: 'db', moduleId: 'remote', viewId: null, context: { conn: 'c2' } }
+          ],
+          active: 1,
+          bounds
+        }
+      ]
+    }
+    expect(normalizeWindowStore(saved)[0].tabs.map((t) => t.context?.conn)).toEqual(['c1', 'c2'])
+  })
+
+  it('대상이 없던 옛 저장본도 성하다 — 빈 것으로 채운다', () => {
+    const saved = { windows: [{ tabs: [{ serviceId: 'db', moduleId: 'remote', viewId: null }], active: 0, bounds }] }
+    expect(normalizeWindowStore(saved)[0].tabs[0].context).toEqual({})
   })
 })

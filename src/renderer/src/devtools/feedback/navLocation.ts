@@ -1,5 +1,5 @@
 import type { FeedbackLocation } from '@shared/devFeedback'
-import { useActive, useNav } from '../../nav/useNav'
+import { activeContext, useActive, useNav } from '../../nav/useNav'
 import { useContextOptions } from '../../nav/contextOptions'
 
 /**
@@ -11,7 +11,7 @@ import { useContextOptions } from '../../nav/contextOptions'
  */
 export function useFeedbackLocation(): FeedbackLocation {
   const { service, module, view } = useActive()
-  const values = useNav((s) => s.contextValues)
+  const values = useNav(activeContext)
   const runtimeOptions = useContextOptions((s) => s.options)
 
   const parts = [service.id, module.id, ...(view ? [view.id] : [])]

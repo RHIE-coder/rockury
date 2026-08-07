@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNav } from '@renderer/nav/useNav'
+import { useContextValue } from '@renderer/nav/useNav'
 import { DRAFT_LENS, useVersionsStore } from './store'
 
 /**
@@ -15,7 +15,7 @@ import { DRAFT_LENS, useVersionsStore } from './store'
  * 없는 버전 번호를 든 채 Design 으로 들어가게 된다.
  */
 export function VersionSync(): null {
-  const designId = useNav((s) => s.contextValues['design'])
+  const designId = useContextValue('design')
   const ensureLoaded = useVersionsStore((s) => s.ensureLoaded)
 
   useEffect(() => {

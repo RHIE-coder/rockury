@@ -17,7 +17,7 @@ import type {
   MigrationLogRecord,
   SnapshotRecord
 } from '../../main/store/migration'
-import type { StoreChangedEvent } from '../../main/ai/tools'
+import type { StoreChangedEvent } from '../../shared/storeChanged'
 
 // 메인 프로세스 타입을 렌더러 쪽으로 그대로 통과시킨다 — 화면이 main 을 직접 import 하지 않게.
 export type {

@@ -197,7 +197,7 @@ export async function run(ctx) {
   // Definition·Diagram·Object 는 처음부터 역설계를 다시 읽고 있었고 Data 만 행만 읽고 있었다.
   {
     const connId = await page.evaluate(() => window.rockury.nav?.connId ?? null)
-    const conn = connId ?? (await page.evaluate(() => JSON.parse(localStorage.getItem('rockury.nav') ?? '{}')?.state?.contextValues?.conn ?? null))
+    const conn = connId ?? (await page.evaluate(() => window.__rockuryNav.activeContext().conn ?? null))
     const run = (sql) => page.evaluate(([id, s]) => window.rockury.query.run(id, s), [conn, sql])
     // 셀 값은 <input> 안에 있어 innerText 로는 안 잡힌다.
     const cellValues = () =>

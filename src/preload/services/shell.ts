@@ -2,12 +2,11 @@ import { ipcRenderer } from 'electron'
 import { unwrap } from '../envelope'
 import type { FeedbackPayloadInput } from '../../shared/devFeedback'
 import type { ScopedItem, ScopedKind } from '../../main/store/scopedItems'
-import type { NavLocation } from '../../shared/navLocation'
-import { decodeWindowBoot, type WindowBoot, type WindowSession } from '../../shared/windowSession'
+import { decodeWindowBoot, type SessionTab, type WindowBoot, type WindowSession } from '../../shared/windowSession'
 
 export type { FeedbackPayload, FeedbackPayloadInput } from '../../shared/devFeedback'
 export type { ScopedItem, ScopedKind } from '../../main/store/scopedItems'
-export type { WindowBoot, WindowSession } from '../../shared/windowSession'
+export type { SessionTab, WindowBoot, WindowSession } from '../../shared/windowSession'
 
 /**
  * 탭 끌기가 주고받는 좌표는 전부 **이 창 안 기준**이다(`clientX`·`clientY`).
@@ -60,7 +59,14 @@ export const shellApi = {
      * 이 창이 무엇을 들고 열렸나 — 탭 목록·활성, 그리고 브라우저 저장소의 주인인지.
      * 메인이 실행 인자로 실어 보낸 것이라 **첫 그림을 그리기 전에** 이미 여기 있다.
      */
-    boot: (): WindowBoot | null => decodeWindowBoot(process.argv),
+    boot: (): WindowBoot | null => {
+      const fromArgs = decodeWindowBoot(process.argv)
+      if (!fromArgs) return null
+      // 실행 인자는 창을 만들 때의 스냅샷이다 — 그 뒤 늘린 탭·고른 대상은 메인이 든다.
+      // 새로고침이 옛 스냅샷으로 되돌아가지 않게 **지금 값**을 먼저 묻는다(없으면 인자 그대로).
+      const live = ipcRenderer.sendSync('window:session:get') as WindowSession | null
+      return live ? { ...fromArgs, session: live } : fromArgs
+    },
     /** 탭이 생기거나 닫히거나 자리를 옮겼다고 메인에 알린다 — 창 배치의 주인이 메인이다. */
     report: (session: WindowSession): void => ipcRenderer.send('window:session', session),
     /** 자리를 창 하나로 떼어낸다. 안 주면 이 창이 지금 보는 것을 그대로 문다. */
@@ -72,7 +78,8 @@ export const shellApi = {
      * `grab` 은 창 왼위에서 탭을 잡은 지점까지 — 그만큼 물려 놓아야 탭이 커서 밑에 그대로 온다.
      */
     tearOff: (input: {
-      loc: NavLocation
+      /** 떼어낼 탭 — 자리뿐 아니라 **그 탭이 고른 대상**까지 실어야 보던 화면 그대로 열린다. */
+      loc: SessionTab
       at: WindowPoint
       grab: WindowPoint
     }): Promise<number | null> => ipcRenderer.invoke('window:tearOff', input),
@@ -97,8 +104,8 @@ export const shellApi = {
       return () => ipcRenderer.removeListener('window:dragHover', handler)
     },
     /** 끌려 온 탭을 이 창이 삼켰다 — 받은 자리에 끼우면 된다. */
-    onAdopt: (fn: (input: { loc: NavLocation; x: number }) => void): (() => void) => {
-      const handler = (_e: unknown, input: { loc: NavLocation; x: number }): void => fn(input)
+    onAdopt: (fn: (input: { loc: SessionTab; x: number }) => void): (() => void) => {
+      const handler = (_e: unknown, input: { loc: SessionTab; x: number }): void => fn(input)
       ipcRenderer.on('window:adopt', handler)
       return () => ipcRenderer.removeListener('window:adopt', handler)
     },

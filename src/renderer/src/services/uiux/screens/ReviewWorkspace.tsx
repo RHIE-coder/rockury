@@ -1,6 +1,6 @@
 import { Check, MessageSquare, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { useNav } from '@renderer/nav/useNav'
+import { useContextValue } from '@renderer/nav/useNav'
 import { cx } from '@renderer/lib/cx'
 import { Button } from '@renderer/ui/button'
 import { kindLabel } from '../catalog'
@@ -34,7 +34,7 @@ function ReviewPane() {
   const selectNode = useSpecStore((s) => s.selectNode)
   const notes = useSpecStore((s) => s.notes)
   const tree = useTree()
-  const viewport = (useNav((s) => s.contextValues['viewport']) ?? 'pc') as Viewport
+  const viewport = (useContextValue('viewport') ?? 'pc') as Viewport
 
   const surface = tree.surfaces.find((s) => s.id === surfaceId)
   if (!surface || !content) {

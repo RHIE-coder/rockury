@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { useContextOptions } from '@renderer/nav/contextOptions'
-import { useNav } from '@renderer/nav/useNav'
+import { activeContext, activeTabId, useContextValue, useNav } from '@renderer/nav/useNav'
 import { cryptoUnavailable, type FunctionEnv } from '@shared/api/functions'
 import type { EnvironmentDef, RunRecord } from '@shared/api/types'
 import { useApiStore } from '../store'
@@ -105,7 +105,8 @@ export const useOpsStore = create<OpsState>()((set, get) => ({
       return msg
     }
     if (env) await get().loadEnvironments(env.specId)
-    if (useNav.getState().contextValues['env'] === id) useNav.getState().setContextValue('env', '')
+    // 지운 환경은 **어느 탭에도** 골라진 채로 남으면 안 된다 — 없는 곳을 가리키는 선택이 된다.
+    useNav.getState().clearContextInAllTabs('env', id)
     return null
   },
 
@@ -182,19 +183,27 @@ useOpsStore.subscribe((s, prev) => {
 })
 
 // **앱을 켤 때마다 환경 선택을 푼다**(guard AC-1).
-// nav 는 컨텍스트 선택을 localStorage 에 저장하는데, 그러면 어제 PROD 를 골라 둔 채로
-// 앱이 열린다 — 어제의 선택으로 오늘 첫 요청이 운영에 나가는 사고가 여기서 난다.
-useNav.getState().setContextValue('env', '')
+// 컨텍스트 선택은 껐다 켜도 되살아난다 — 그러면 어제 PROD 를 골라 둔 채로 앱이 열려,
+// 어제의 선택으로 오늘 첫 요청이 운영에 나가는 사고가 여기서 난다.
+// **모든 탭에서** 푼다: 탭마다 따로 노는 값이라 활성 탭만 풀면 나머지 탭에 그대로 남는다.
+useNav.getState().clearContextInAllTabs('env')
 
-// 명세가 바뀌면 환경·기록을 다시 읽고 **환경 선택을 푼다** —
-// 다른 명세의 환경이 골라진 채로 남으면 "어디로 보내는지"가 흐려진다(guard AC-1).
+/*
+ * 명세가 바뀌면 환경·기록을 다시 읽고 **환경 선택을 푼다** —
+ * 다른 명세의 환경이 골라진 채로 남으면 "어디로 보내는지"가 흐려진다(guard AC-1).
+ *
+ * 단, **탭을 옮긴 것은 명세를 갈아탄 것이 아니다.** 그 탭이 고른 환경은 그 탭의 명세에 맞춰
+ * 고른 것이라 그대로 둔다 — 안 그러면 탭을 오갈 때마다 환경을 다시 골라야 한다.
+ */
 useNav.subscribe((s, prev) => {
-  const spec = s.contextValues['spec'] ?? null
-  if (spec !== (prev.contextValues['spec'] ?? null)) {
-    useNav.getState().setContextValue('env', '')
-    void useOpsStore.getState().loadEnvironments(spec)
-    void useOpsStore.getState().loadRuns(spec)
-  }
+  const spec = activeContext(s)['spec'] ?? null
+  const before = activeContext(prev)['spec'] ?? null
+  const movedTab = activeTabId(s) !== activeTabId(prev)
+  if (spec === before && !movedTab) return
+
+  if (!movedTab) useNav.getState().setContextValue('env', '')
+  void useOpsStore.getState().loadEnvironments(spec)
+  void useOpsStore.getState().loadRuns(spec)
 })
 
 /**
@@ -205,7 +214,7 @@ useNav.subscribe((s, prev) => {
  * 화면 밖에서 바뀐 것(에이전트·다른 화면)도 여기서 따라잡는다.
  */
 export function useOpsSync(): void {
-  const specId = useNav((s) => s.contextValues['spec']) || null
+  const specId = useContextValue('spec') || null
   useEffect(() => {
     // 명세 본문까지 다시 읽는다 — 화면 밖(에이전트·다른 화면)에서 요청이 늘었을 수 있다.
     void useApiStore.getState().loadSpec(specId)
@@ -216,7 +225,7 @@ export function useOpsSync(): void {
 
 /** 컨텍스트 바에서 고른 환경. **고르기 전에는 null** 이고, 그동안 실행이 막힌다. */
 export function useActiveEnvironment(): EnvironmentDef | null {
-  const id = useNav((s) => s.contextValues['env'])
+  const id = useContextValue('env')
   const envs = useOpsStore((s) => s.environments)
   return envs.find((e) => e.id === id) ?? null
 }

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
-import { useNav } from '@renderer/nav/useNav'
+import { useContextValue } from '@renderer/nav/useNav'
 import type { DriftResult } from '@shared/api/drift'
 import type { AbsorbPreview } from '@shared/api/absorb'
 import type { ContractLog } from '../../../../../preload/services/api'
@@ -94,7 +94,7 @@ export const useContractStore = create<ContractState>()((set, get) => ({
 
 /** 판정 화면이 뜰 때 지난 결과·이력을 읽는다. */
 export function useContractSync(): void {
-  const specId = useNav((s) => s.contextValues['spec']) || null
+  const specId = useContextValue('spec') || null
   useEffect(() => {
     void useApiStore.getState().loadSpec(specId)
     void useContractStore.getState().load(specId)

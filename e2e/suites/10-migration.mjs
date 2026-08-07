@@ -27,6 +27,10 @@ export async function run(ctx) {
     return n
   })
   const vBefore = await countVersions()
+  // 되먹임의 문은 **뷰 하나**다 — 2026-08-06(804e7a4)에 Drift 머리글 버튼에서 옮겨졌는데
+  // 이 스위트가 안 따라와, 그 뒤로 Drift 화면에서 없는 버튼을 누르고 있었다.
+  await click('[data-nav-view="import"]')
+  await page.waitForTimeout(400)
   await click('button:has-text("설계로 가져오기")')
   await page.waitForSelector('text=실 DB 에서', { timeout: 15_000 })
   check('운영→설계: 가져오기 다이얼로그 역설계 미리보기', (await body()).includes('실 DB 에서'))
