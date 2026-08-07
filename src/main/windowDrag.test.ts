@@ -71,6 +71,12 @@ describe('tearOffBounds — 떨어져 나간 창을 놓을 자리', () => {
     expect(b.y).toBe(25)
   })
 
+  it('잡은 지점이 창 크기를 넘으면 창 안으로 조인다 — 꽉 찬 창에서 빼내면 창이 작아진다', () => {
+    // 1920 폭 창의 오른쪽 끝(1700)을 잡았는데 창이 1000 폭으로 작아진 경우.
+    const b = tearOffBounds(size, { x: 1700, y: 400 }, { x: 1700, y: 50 }, work)
+    expect(b.x).toBe(700)
+  })
+
   it('창이 작업영역보다 크면 왼위에 붙인다', () => {
     const b = tearOffBounds({ width: 2000, height: 1200 }, { x: 500, y: 500 }, { x: 0, y: 0 }, work)
     expect(b.x).toBe(0)

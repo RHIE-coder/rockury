@@ -72,11 +72,15 @@ export function stripUnderPoint<T>(
  * 작업영역 밖으로는 안 내보낸다 — 화면 밖에 뜬 창은 다시 잡을 수도 닫을 수도 없다.
  */
 export function tearOffBounds(size: Size, cursor: Point, grab: Point, work: Rect): Rect {
+  // 잡은 지점이 창 크기를 넘을 수 있다 — 꽉 채운 창에서 빼낼 때 창이 작아지기 때문이다.
+  // 그대로 쓰면 창이 커서에서 멀찍이 떨어진 자리에 선다.
+  const gx = clamp(grab.x, 0, size.width)
+  const gy = clamp(grab.y, 0, size.height)
   return {
     width: size.width,
     height: size.height,
-    x: clamp(Math.round(cursor.x - grab.x), work.x, work.x + work.width - size.width),
-    y: clamp(Math.round(cursor.y - grab.y), work.y, work.y + work.height - size.height)
+    x: clamp(Math.round(cursor.x - gx), work.x, work.x + work.width - size.width),
+    y: clamp(Math.round(cursor.y - gy), work.y, work.y + work.height - size.height)
   }
 }
 

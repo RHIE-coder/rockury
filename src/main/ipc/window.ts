@@ -70,11 +70,14 @@ function toScreen(win: BrowserWindow, at: Point): Point {
 }
 
 /**
- * 지금 손에 끌려 나온 창 하나. `hovering` 은 놓으면 이 탭을 삼킬 창이다.
+ * 지금 손에 끌려가는 창 하나. `hovering` 은 놓으면 이 탭을 삼킬 창이다.
  *
  * 한 번에 하나뿐이라 모듈 변수로 든다 — 마우스는 하나고, 끌기는 놓을 때까지 이어지는 한 사건이다.
+ *
+ * `self` 는 **탭을 떼어내 만든 창이 아니라 원래 창 자신**이라는 뜻이다(마지막 한 장을 끌 때).
+ * 그 창은 마우스를 쥐고 있어서 감출 수 없다 — 다루는 법이 갈리므로 표시해 둔다.
  */
-let dragging: { id: number; hovering: number | null } | null = null
+let dragging: { id: number; hovering: number | null; self: boolean } | null = null
 
 /** 삼킬 상대가 바뀌었다 — 예전 상대의 떨어질 자리 표시를 지운다. */
 function clearHover(id: number | null): void {
@@ -170,7 +173,23 @@ export function registerWindowIpc(): void {
       primary: false,
       inactive: true
     })
-    dragging = { id: win.id, hovering: null }
+    dragging = { id: win.id, hovering: null, self: false }
+    return win.id
+  })
+
+  /**
+   * 마지막 한 장을 줄 밖으로 빼냈다 — 뗄 것이 없으니 **이 창을 통째로** 끈다(브라우저와 같다).
+   * 떼어내면 빈 창이 남을 뿐이라, 남길 창이 곧 끌고 갈 창이다.
+   *
+   * 꽉 채운 창은 먼저 되돌린다 — 화면만 한 창은 손을 따라와도 옮겨진 티가 안 나고, 다른 창의
+   * 탭 줄을 통째로 덮어 어디에 놓는지도 안 보인다. 전체화면은 아예 안 받는다(제 화면을 따로
+   * 쓰는 창이라 끌어 옮길 자리가 없다).
+   */
+  ipcMain.handle('window:dragSelf', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isFullScreen()) return null
+    if (win.isMaximized()) win.unmaximize()
+    dragging = { id: win.id, hovering: null, self: true }
     return win.id
   })
 
@@ -193,10 +212,16 @@ export function registerWindowIpc(): void {
     if (target !== dragging.hovering) {
       clearHover(dragging.hovering)
       dragging.hovering = target
-      if (target !== null) win.hide()
+      // 창 자신을 끌고 있으면 **감추지 않는다** — 마우스를 쥔 창이라 감추면 끌기가 그 자리에서
+      // 끊겨 창이 사라진 채로 남는다. 대신 비쳐 보이게 해서 뒤에 깔린 상대 줄의 표시를 읽힌다.
+      if (dragging.self) win.setOpacity(target === null ? 1 : 0.4)
+      else if (target !== null) win.hide()
       else win.showInactive()
     }
 
+    // 상대 줄에 얹힌 동안은 **멈춰 세운다.** 감춘 창이야 옮길 것도 없고, 창 자신을 끄는 중이라도
+    // 얹혀 있는데 창이 계속 떠다니면 어느 틈에 놓이는지가 손끝에서 흔들린다(줄 위에서는 창이
+    // 아니라 떨어질 자리 표시가 답해야 한다). 줄을 벗어나면 다시 손을 따라온다.
     if (target !== null) {
       const into = liveWindow(target)
       if (into) into.webContents.send('window:dragHover', cursor.x - into.getContentBounds().x)
@@ -209,8 +234,8 @@ export function registerWindowIpc(): void {
   })
 
   /**
-   * 손을 놓았다 — 다른 창의 탭 줄 위였으면 그 창이 삼키고 끌려 나온 창은 사라진다.
-   * 아니면 그 자리에 창으로 남는다.
+   * 손을 놓았다 — 다른 창의 탭 줄 위였으면 그 창이 삼키고 끌려가던 창은 사라진다.
+   * 아니면 그 자리에 창으로 남는다(마지막 한 장을 끌었으면 원래 창이 그 자리로 옮겨진 것이다).
    */
   ipcMain.handle('window:dragEnd', (event, raw: unknown) => {
     const from = BrowserWindow.fromWebContents(event.sender)
@@ -220,9 +245,11 @@ export function registerWindowIpc(): void {
     if (!win || dragging?.id !== win.id) return false
 
     const into = liveWindow(dragging.hovering)
+    const self = dragging.self
     dragging = null
 
     if (!into || !from || !at) {
+      if (self) win.setOpacity(1)
       win.show()
       win.focus()
       return false
@@ -232,7 +259,7 @@ export function registerWindowIpc(): void {
     const cursor = toScreen(from, at)
     into.webContents.send('window:adopt', { loc, x: cursor.x - into.getContentBounds().x })
     into.focus()
-    // 삼켜졌으니 이 창은 저장할 배치도 아니다 — 닫기 확인 없이 곧바로 없앤다.
+    // 들고 있던 탭이 상대 줄로 넘어갔으니 남는 것은 빈 창이다 — 곧바로 없앤다.
     win.destroy()
     return true
   })

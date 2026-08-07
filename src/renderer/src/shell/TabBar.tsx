@@ -19,6 +19,7 @@ import { openInNewWindow, useWindowCommands } from './windowCommands'
  * 끌기는 두 가지 일을 한다 — **줄을 벗어났나가 가른다**(2026-08-06 사용자 요청, 브라우저와 같게):
  *   줄 안에서 옮기면 → 자리 바꾸기 · 줄 밖으로 빼내면 → 그 자리에서 창이 되어 손을 따라온다.
  *   그 창을 다른 창(혹은 원래 창)의 탭 줄 위에서 놓으면 그 줄이 도로 삼킨다.
+ *   **마지막 한 장이면 이 창째** 끌린다 — 떼어내 봐야 빈 창이 남을 뿐이라 남길 창이 곧 끌 창이다.
  *
  * **브라우저 기본 끌기(HTML5 drag-and-drop)를 안 쓴다.** 그쪽은 놓는 순간에야 결과를 알려 줘서
  * "빼내는 즉시 창"이 안 되고, 판정할 것이 놓은 좌표뿐이라 창을 꽉 채워 놓으면 창 밖이 없어
@@ -98,29 +99,40 @@ export function TabBar() {
     /** 창 왼위에서 탭을 잡은 지점까지. 끌기 시작 판정의 기준점이기도 하다. */
     grab: { x: number; y: number }
     started: boolean
-    /** 떨어져 나간 창 번호. 생기고 나면 이후 움직임은 그 창을 옮기는 일이 된다. */
-    torn: number | null
-    /** 창을 만드는 중 — 답이 오기 전에 또 만들면 한 탭이 두 창이 된다. */
+    /**
+     * 손에 끌려가는 창 번호 — 떼어낸 새 창이거나, **마지막 한 장이면 이 창 자신**이다.
+     * 정해지고 나면 이후 움직임은 그 창을 옮기는 일이 된다.
+     */
+    windowId: number | null
+    /** 창을 세우는 중 — 답이 오기 전에 또 부르면 한 탭이 두 창이 된다. */
     tearing: boolean
   } | null>(null)
 
   useEffect(() => {
-    /** 줄 밖으로 빼냈다 — 이 창에서 탭을 지우고 창으로 세운다. */
-    const tearOff = async (d: NonNullable<typeof drag.current>, at: { x: number; y: number }) => {
-      // 마지막 한 장은 안 뗀다(빈 창이 남는다) — 스토어가 거절하면 그대로 줄에 남는다.
-      const loc = useNav.getState().detachTab(d.id)
-      if (!loc) {
-        d.tearing = false
-        return
+    /**
+     * 줄 밖으로 빼냈다 — 탭이 여럿이면 그 탭만 창으로 떼어내고, **마지막 한 장이면 이 창째** 끈다
+     * (브라우저와 같다). 한 장을 떼어내 봐야 빈 창이 남을 뿐이라, 남길 창이 곧 끌고 갈 창이다.
+     */
+    const pullOut = async (d: NonNullable<typeof drag.current>, at: { x: number; y: number }) => {
+      const nav = useNav.getState()
+      let id: number | null
+      if (nav.tabs.length > 1) {
+        const loc = nav.detachTab(d.id)
+        if (!loc) {
+          d.tearing = false
+          return
+        }
+        id = (await window.rockury.window.tearOff({ loc, at, grab: d.grab })) ?? null
+      } else {
+        id = (await window.rockury.window.dragSelf()) ?? null
       }
-      const id = (await window.rockury.window.tearOff({ loc, at, grab: d.grab })) ?? null
       d.tearing = false
       setDragId(null)
       setDropAt(null)
       if (id === null) return
       // 창을 세우는 사이에 손을 놓았을 수 있다 — 그러면 여기서 바로 끌기를 끝맺는다.
-      if (drag.current === d) d.torn = id
-      else window.rockury.window.dragEnd({ id, at })
+      if (drag.current === d) d.windowId = id
+      else void window.rockury.window.dragEnd({ id, at })
     }
 
     const move = (e: PointerEvent): void => {
@@ -135,13 +147,14 @@ export function TabBar() {
       }
 
       const at = { x: e.clientX, y: e.clientY }
-      if (d.torn !== null) return window.rockury.window.dragMove({ id: d.torn, at, grab: d.grab })
+      if (d.windowId !== null)
+        return window.rockury.window.dragMove({ id: d.windowId, at, grab: d.grab })
       if (d.tearing) return
 
       const strip = stripRef.current?.getBoundingClientRect()
       if (strip && pulledOutOfStrip(e.clientY, strip)) {
         d.tearing = true
-        void tearOff(d, at)
+        void pullOut(d, at)
         return
       }
       setDropAt(dropIndexAt(tabBoxes(), e.clientX))
@@ -154,11 +167,11 @@ export function TabBar() {
       setDragId(null)
       setDropAt(null)
 
-      if (d.torn !== null) {
-        void window.rockury.window.dragEnd({ id: d.torn, at: { x: e.clientX, y: e.clientY } })
+      if (d.windowId !== null) {
+        void window.rockury.window.dragEnd({ id: d.windowId, at: { x: e.clientX, y: e.clientY } })
         return
       }
-      // 창을 세우는 중이었으면 그쪽이 끝맺는다(위 tearOff). 안 움직였으면 그냥 고른 것이다.
+      // 창을 세우는 중이었으면 그쪽이 끝맺는다(위 pullOut). 안 움직였으면 그냥 고른 것이다.
       if (!d.started || d.tearing) return
 
       const nav = useNav.getState()
@@ -185,7 +198,7 @@ export function TabBar() {
       id,
       grab: { x: e.clientX, y: e.clientY },
       started: false,
-      torn: null,
+      windowId: null,
       tearing: false
     }
   }

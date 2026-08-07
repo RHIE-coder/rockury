@@ -190,6 +190,86 @@ export async function run(ctx) {
   await page.waitForTimeout(300)
   check('떼어낸 창을 닫아도 첫 창은 살아 있다', (await tabs().count()) === 2)
 
+  // ── 한 장뿐인 창은 **창째** 끌린다 ──
+  // 뗄 것이 없으니 남길 창이 곧 끌 창이다(브라우저와 같다).
+  //
+  // ⚠ 이 검사는 마우스를 **한 걸음씩** 옮긴다. 창이 움직이면 크로미움이 진짜 OS 커서를 기준으로
+  //   마우스 이동을 다시 쏘는데, 검사 도구가 찍는 커서는 가상이라 그 둘이 어긋난다 — 창이 한 번
+  //   움직인 뒤로는 검사가 커서를 못 쥔다(실제 사용에는 커서가 하나뿐이라 없는 일이다).
+  //   그래서 "창이 따라오나"와 "줄에 놓으면 합쳐지나"를 **창을 따로 써서** 하나씩 본다.
+  const openSolo = async () => {
+    const coming = ctx.app.waitForEvent('window')
+    await page.locator('[data-tab-action="new-window"]').click()
+    const win = await coming
+    await win.waitForSelector('[data-nav-tab]', { timeout: 15_000 })
+    const handle = await ctx.app.browserWindow(win)
+    // 작게 잡아 둔다 — 화면을 거의 채운 창은 작업영역 경계에 걸려 얼마나 움직였는지를 못 잰다.
+    await handle.evaluate((w, b) => w.setContentBounds(b), {
+      x: work.x + 40,
+      y: work.y + 40,
+      width: 900,
+      height: 600
+    })
+    await win.waitForTimeout(400)
+    const tab = await win.locator('[data-nav-tab]').first().boundingBox()
+    return { win, handle, grab: { x: tab.x + tab.width / 2, y: tab.y + tab.height / 2 } }
+  }
+  const work = await ctx.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea)
+
+  // ⑴ 빼내면 창이 손을 따라온다
+  const a = await openSolo()
+  const aBefore = await a.handle.evaluate((w) => w.getContentBounds())
+  await a.win.mouse.move(a.grab.x, a.grab.y)
+  await a.win.mouse.down()
+  // 첫 걸음은 창을 끌기 대상으로 세우기만 한다. 옮기는 것은 그 다음 걸음부터다.
+  await a.win.mouse.move(a.grab.x, a.grab.y + 200)
+  await a.win.waitForTimeout(350)
+  await a.win.mouse.move(a.grab.x + 120, a.grab.y + 260)
+  await a.win.waitForTimeout(350)
+  const aAfter = await a.handle.evaluate((w) => w.getContentBounds())
+  check('한 장뿐인 창은 탭을 빼내면 창째 따라온다', aAfter.x !== aBefore.x || aAfter.y !== aBefore.y)
+  await a.win.mouse.up()
+  await a.win.waitForTimeout(300)
+  check('탭 줄이 아닌 데 놓으면 그대로 창으로 남는다', !a.win.isClosed())
+  await a.win.close()
+  await page.waitForTimeout(300)
+
+  // ⑵ 다른 창의 탭 줄에 놓으면 그 창이 삼키고 빈 창은 사라진다
+  const homeHandle = await ctx.app.browserWindow(page)
+  const homeAt = await homeHandle.evaluate((w) => w.getContentBounds())
+  const lastTab = await tabs().last().boundingBox()
+  // 받을 자리 — 첫 창 탭 줄의 오른쪽 빈 곳(화면 좌표).
+  const dropOn = {
+    x: homeAt.x + lastTab.x + lastTab.width + 30,
+    y: homeAt.y + lastTab.y + lastTab.height / 2
+  }
+
+  const b = await openSolo()
+  const bAt = await b.handle.evaluate((w) => w.getContentBounds())
+  const soloTitle = (await b.win.locator('[data-nav-tab]').first().innerText()).trim()
+  await b.win.mouse.move(b.grab.x, b.grab.y)
+  await b.win.mouse.down()
+  await b.win.mouse.move(b.grab.x, b.grab.y + 200)
+  await b.win.waitForTimeout(350)
+  // 창은 아직 제자리다 — 받을 자리를 이 창 안 좌표로 바꿔 한 번에 겨눈다.
+  await b.win.mouse.move(dropOn.x - bAt.x, dropOn.y - bAt.y)
+  await b.win.waitForTimeout(350)
+  check(
+    '상대 줄에 얹히면 끌려온 창이 비쳐 보인다',
+    (await b.handle.evaluate((w) => w.getOpacity())) < 1
+  )
+  await b.win.mouse.up()
+  await page.waitForTimeout(700)
+
+  check('한 장짜리 창을 탭 줄에 놓으면 그 창이 삼킨다', (await tabs().count()) === 3)
+  check('합쳐진 탭이 맨 뒤에 선다', (await titles()).map((t) => t.trim())[2] === soloTitle)
+  check('합쳐졌으면 빈 창은 사라진다', b.win.isClosed())
+
+  // 뒤 검사(콜드 재시작)는 이 창의 탭을 그대로 비교한다 — 늘린 한 장을 도로 접는다.
+  await page.locator('[data-nav-tab]').nth(2).locator('button[aria-label="탭 닫기"]').click()
+  await page.waitForTimeout(300)
+  check('정리 후 두 장으로 돌아왔다', (await tabs().count()) === 2)
+
   // ── 껐다 켜면 탭이 그대로 돌아온다 ──
   // 탭 묶음의 주인은 메인 프로세스다(브라우저 저장소가 아니다) — 이 검사가 그 사실을 지킨다.
   const beforeQuit = (await titles()).map((t) => t.trim())

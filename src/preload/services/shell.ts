@@ -76,7 +76,12 @@ export const shellApi = {
       at: WindowPoint
       grab: WindowPoint
     }): Promise<number | null> => ipcRenderer.invoke('window:tearOff', input),
-    /** 끌려 나온 창을 커서 따라 옮긴다. */
+    /**
+     * 마지막 한 장을 줄 밖으로 빼냈다 — 뗄 것이 없으니 **이 창을 통째로** 끈다.
+     * 창 번호를 준다(전체화면이라 못 끌면 null). 이후 움직임·끝맺음은 떼어낸 창과 같은 길이다.
+     */
+    dragSelf: (): Promise<number | null> => ipcRenderer.invoke('window:dragSelf'),
+    /** 끌려가는 창을 커서 따라 옮긴다. */
     dragMove: (input: { id: number; at: WindowPoint; grab: WindowPoint }): void =>
       ipcRenderer.send('window:dragMove', input),
     /** 손을 놓았다 — 다른 창의 탭 줄 위였으면 그 창이 삼켰다는 뜻으로 true. */
