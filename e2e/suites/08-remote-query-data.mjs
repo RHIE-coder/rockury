@@ -241,6 +241,72 @@ export async function run(ctx) {
     await run('DROP TABLE IF EXISTS refresh_probe')
   }
 
+  // ⭐ 회귀(2026-08-08 제보) — §db-remote.data.grid AC-8 · CASE-remote-04R.
+  //
+  // 표를 바꾸면 헤더는 새 표(역설계)에서 곧장 오는데 행만 옛것으로 남아, 없는 키로 값을 꺼내
+  // 편집 칸마다 글자 `undefined` 가 찍혔다.
+  //
+  // 로컬 도커 조회는 눈 깜짝할 새 끝나서, 전환 뒤에 한 번 들여다보는 식으로는 그 순간을 놓치고
+  // **조용히 통과**한다. 늦추려고 `window.rockury.query.runParams` 를 감싸 봤지만 안 된다 —
+  // contextBridge 로 건너온 객체는 렌더러에서 못 덮어쓴다(실측). 그래서 지켜보는 쪽을 바꾼다:
+  // 전환 **전에** MutationObserver 를 걸어 그 사이 그려진 **모든 프레임**을 훑는다. 로딩이
+  // 1ms 든 1s 든 React 가 그린 적이 있으면 반드시 걸린다.
+  {
+    await click('[data-table-row="users"]')
+    await page.waitForSelector('th:has-text("email")', { timeout: 15_000 })
+
+    await page.evaluate(() => {
+      const SPIN = '[role="status"][aria-label="불러오는 중"]'
+      window.__watch = { undef: false, spin: false, rowsWhileSpin: -1 }
+      const scan = () => {
+        // 셀 값은 <input> 안에 있어 textContent 로는 안 잡힌다.
+        for (const td of document.querySelectorAll('tbody td')) {
+          const i = td.querySelector('input')
+          if ((i ? i.value : td.textContent) === 'undefined') window.__watch.undef = true
+        }
+      }
+      const obs = new MutationObserver((records) => {
+        for (const r of records) {
+          for (const n of r.addedNodes) {
+            if (n.nodeType !== 1) continue
+            if (n.matches?.(SPIN) || n.querySelector?.(SPIN)) {
+              window.__watch.spin = true
+              // 도는 표시가 떠 있는 그 프레임에 옛 행이 남아 있었는지 — 이게 회귀의 핵심이다.
+              window.__watch.rowsWhileSpin = document.querySelectorAll('tbody tr').length
+            }
+          }
+        }
+        scan()
+      })
+      obs.observe(document.body, { childList: true, subtree: true, characterData: true })
+      window.__stopWatch = () => obs.disconnect()
+    })
+
+    await click('[data-table-row="user_roles"]')
+    await page.waitForSelector('th:has-text("role_id")', { timeout: 15_000 })
+    await page.waitForTimeout(600)
+    const w = await page.evaluate(() => {
+      window.__stopWatch?.()
+      return window.__watch
+    })
+    const done = await page.evaluate(() =>
+      [...document.querySelectorAll('tbody td')].map((td) => {
+        const i = td.querySelector('input')
+        return i ? i.value : td.innerText.trim()
+      })
+    )
+
+    check('Remote › Data: 표를 바꾸는 내내 undefined 가 한 번도 안 찍힌다', !w.undef)
+    check('Remote › Data: 표를 바꾸면 불러오는 동안 도는 표시가 뜬다', w.spin)
+    // 도는 표시를 못 봤으면 옛 행 검사는 판정할 게 없다 — 조용히 통과시키지 않고 그대로 드러낸다.
+    check(
+      'Remote › Data: 도는 표시가 뜬 그 순간 옛 표의 행이 없다',
+      w.spin && w.rowsWhileSpin === 0
+    )
+    check('Remote › Data: 다 읽고 나면 새 표의 행이 뜬다', done.length > 0)
+    check('Remote › Data: 다 읽은 뒤에도 undefined 가 없다', !done.join(' ').includes('undefined'))
+  }
+
   // ⭐ CASE-remote-04K/04L/04M/04N — 쪽 넘김·필터·저장 필터(2026-08-07 사용자 요청)
   // §db-remote.data.paging · data.filter · data.saved-filter
   {

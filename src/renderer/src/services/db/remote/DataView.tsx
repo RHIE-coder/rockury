@@ -242,9 +242,12 @@ export function DataView() {
    */
   const refreshWithSchema = async (id: string, dia: DialectId): Promise<void> => {
     await loadIntro(id, id, true)
-    if (!active) return
+    // 역설계를 읽는 동안 사용자가 **다른 표를 골랐을 수 있다** — 그러면 그 표가 이긴다.
+    // 클로저에 잡힌 옛 선택을 그대로 쓰면 새로고침이 끝나며 화면을 아까 표로 되돌려 놓는다.
+    const current = useDataStore.getState().table
+    if (!current) return
     const fresh = useRemoteStore.getState().byEnv[id] ?? []
-    const target = fresh.find((t) => sameTable(t, active))
+    const target = fresh.find((t) => sameTable(t, current))
     // 표 자체가 사라졌으면 옛 행을 그대로 두지 않는다 — 없는 표의 데이터가 남아 있으면 거짓말이다.
     if (target) await d.selectTable(id, dia, target)
     else useDataStore.setState({ table: null, rows: [], columns: [] })
@@ -367,8 +370,18 @@ export function DataView() {
         >
           <div className="flex h-full min-w-0 flex-col">
             {!selected ? (
-              <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-muted">
                 선택된 테이블 없음
+                {/* 보던 표가 밖에서 지워지면 이 자리가 된다 — 툴바가 통째로 사라지는 자리라
+                    여기에 다시 읽기가 없으면, 새로 만든 표를 목록에 올릴 길이 앱 재시작뿐이다. */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={introLoading}
+                  onClick={() => connId && dialect && void refreshWithSchema(connId, dialect)}
+                >
+                  {introLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
+                </Button>
               </div>
             ) : (
             <>
@@ -525,7 +538,8 @@ export function DataView() {
 
               <div ref={gridRef} className="min-h-0 flex-1 overflow-auto">
                 <table
-                  className="table-fixed border-collapse text-[12px]"
+                  // 쪽을 넘기거나 정렬을 바꾸는 동안은 아직 앞 쪽의 행이다 — 흐리게 두어 "지금 것이 아니다"를 보인다.
+                  className={cn('table-fixed border-collapse text-[12px]', d.loading && d.rows.length > 0 && 'opacity-50')}
                   style={{ width: NUM_COL_W + (editable ? ACT_COL_W : 0) + shownColumns.reduce((s, c) => s + widthOf(c.name), 0) }}
                 >
                   <colgroup>
@@ -660,6 +674,13 @@ export function DataView() {
                       ))}
                   </tbody>
                 </table>
+                {/* 표를 새로 고르면 행이 빈 채로 헤더만 서 있는 순간이 있다 — 그때 "행이 없습니다"
+                    를 보이면 거짓말이라, 아직 읽는 중임을 대신 보인다. */}
+                {d.rows.length === 0 && d.loading && (
+                  <div className="py-8 text-center" role="status" aria-label="불러오는 중">
+                    <Loader2 className="mx-auto size-4 animate-spin text-muted" />
+                  </div>
+                )}
                 {d.rows.length === 0 && !d.loading && <div className="py-8 text-center text-[13px] text-muted">행이 없습니다</div>}
               </div>
 
@@ -909,7 +930,9 @@ function EditableCell({
 
   // FK 컬럼은 종류/NULL 무관하게 항상 참조 선택 트리거를 보인다(값 클릭 또는 FK 버튼 → 모달).
   if (fk) {
-    const isNull = value === null
+    // `== null` 로 잡는다 — 밖에서 컬럼이 바뀌어 행에 그 키가 아예 없으면 `undefined` 가 오는데,
+    // `=== null` 로 재면 그대로 `String(undefined)` 가 되어 칸에 "undefined" 가 찍힌다.
+    const isNull = value == null
     const t = isNull ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value)
     return (
       <div className="flex items-center">
@@ -923,7 +946,7 @@ function EditableCell({
   if (kind === 'date') return <DateCell value={value} changed={changed} disabled={disabled} tzMode={tzMode} tz={tz} onChange={onChange} onReset={onReset} />
   if (kind === 'uuid') return <UuidCell value={value} changed={changed} disabled={disabled} onChange={onChange} />
 
-  if (value === null) {
+  if (value == null) {
     return (
       <div className="flex items-center">
         <input value="" placeholder="NULL" disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cn(base, 'italic')} />
@@ -968,7 +991,7 @@ function DateCell({ value, changed, disabled, tzMode, tz, onChange, onReset }: {
   const [focused, setFocused] = useState(false)
   const ref = useRef<HTMLInputElement>(null)
   const escaping = useRef(false)
-  const isNull = value === null
+  const isNull = value == null // 키가 없어 들어온 undefined 도 NULL 로 — 안 그러면 "undefined" 가 찍힌다.
   const raw = isNull ? '' : String(value)
   const shown = focused || isNull ? raw : formatDateCell(value, tzMode, tz)
   const keep = (e: React.MouseEvent): void => e.preventDefault() // 버튼 클릭이 input blur 를 먼저 일으키지 않도록
@@ -1006,7 +1029,7 @@ function UuidCell({ value, changed, disabled, onChange }: {
   value: unknown; changed: boolean; disabled: boolean; onChange: (v: unknown) => void
 }) {
   const [focused, setFocused] = useState(false)
-  const isNull = value === null
+  const isNull = value == null // 위와 같은 이유 — undefined 를 글자로 흘리지 않는다.
   const text = isNull ? '' : String(value)
   const keep = (e: React.MouseEvent): void => e.preventDefault()
   return (

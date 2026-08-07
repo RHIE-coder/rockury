@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TableDef } from '../../workspaces/definition/types'
 import { rowKey, useDataStore, viewKey } from './store'
 
@@ -137,6 +137,87 @@ describe('표마다 조건을 기억한다', () => {
     const s = useDataStore.getState()
     expect(s.filtersEnabled).toBe(false)
     expect(s.filters).toEqual(cond) // 배지가 세는 개수도 그대로 1
+  })
+})
+
+/**
+ * 회귀(2026-08-08 제보) — "조회할 때 로딩 때문에 undefined 뜬다".
+ *
+ * 헤더는 새 표의 역설계 결과에서 곧장 오는데 행만 옛 표 것으로 남으면, 화면이 없는 키로 값을
+ * 꺼내 편집 칸마다 `String(undefined)` 가 찍혔다. 표를 고르는 그 순간 행을 비워야 한다.
+ */
+describe('표를 바꾸면 옛 행이 남지 않는다', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('selectTable 은 첫 응답 전에 행·컬럼을 비우고 로딩을 켠다', async () => {
+    // 조회를 붙들어 "불러오는 중" 상태를 그대로 들여다본다.
+    const waiting: Array<(v: unknown) => void> = []
+    const runParams = vi.fn(() => new Promise((resolve) => waiting.push(resolve)))
+    vi.stubGlobal('window', { rockury: { query: { runParams, txRollback: vi.fn() } } })
+    useDataStore.setState({
+      table: { name: 'other' },
+      rows,
+      columns: ['id', 'name'],
+      error: '옛 오류',
+      loading: false
+    })
+
+    const done = useDataStore.getState().selectTable('env', 'postgresql', tableDef)
+
+    const mid = useDataStore.getState()
+    expect(mid.rows).toEqual([])
+    expect(mid.columns).toEqual([])
+    expect(mid.error).toBeNull() // 옛 표의 오류를 새 표 헤더 아래 남기지 않는다
+    expect(mid.loading).toBe(true) // 화면은 이 값으로 로딩 표시를 낸다
+
+    waiting.forEach((resolve) => resolve({ columns: ['id', 'name'], rows }))
+    await done
+
+    const after = useDataStore.getState()
+    expect(after.rows).toEqual(rows)
+    expect(after.loading).toBe(false)
+  })
+
+  // 같은 어긋남의 두 번째 갈래: 표를 비우는 것만으로는 안 막힌다. 표 A 를 고른 직후 B 를 고르면
+  // A 의 응답이 나중에 도착해 **B 헤더 밑에 A 행**이 박힌다 — 없는 키라 칸마다 undefined.
+  it('늦게 온 조회는 버린다 — 뒤에 고른 표의 행이 이긴다', async () => {
+    const waiting: Array<(v: unknown) => void> = []
+    const runParams = vi.fn(() => new Promise((resolve) => waiting.push(resolve)))
+    vi.stubGlobal('window', { rockury: { query: { runParams, txRollback: vi.fn() } } })
+
+    const other = { ...tableDef, name: 'other', columns: [tableDef.columns[0]] }
+    const first = useDataStore.getState().load('env', 'postgresql', other) // 표 A
+    const second = useDataStore.getState().load('env', 'postgresql', tableDef) // 표 B
+
+    // A 가 B 보다 **늦게** 답한다 — 옛 응답이 최신 화면을 덮으면 안 된다.
+    waiting[1]({ columns: ['id', 'name'], rows })
+    waiting[0]({ columns: ['id'], rows: [{ id: 99 }] })
+    await Promise.all([first, second])
+
+    const s = useDataStore.getState()
+    expect(s.rows).toEqual(rows)
+    expect(s.columns).toEqual(['id', 'name'])
+    expect(s.loading).toBe(false)
+  })
+
+  it('늦게 온 실패는 남의 오류를 띄우지 않는다', async () => {
+    const waiting: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => void }> = []
+    const runParams = vi.fn(() => new Promise((resolve, reject) => waiting.push({ resolve, reject })))
+    vi.stubGlobal('window', { rockury: { query: { runParams, txRollback: vi.fn() } } })
+
+    const other = { ...tableDef, name: 'other' }
+    const first = useDataStore.getState().load('env', 'postgresql', other)
+    const second = useDataStore.getState().load('env', 'postgresql', tableDef)
+
+    waiting[1].resolve({ columns: ['id', 'name'], rows })
+    waiting[0].reject(new Error('옛 표 조회 실패'))
+    await Promise.all([first, second])
+
+    const s = useDataStore.getState()
+    expect(s.error).toBeNull()
+    expect(s.rows).toEqual(rows)
   })
 })
 

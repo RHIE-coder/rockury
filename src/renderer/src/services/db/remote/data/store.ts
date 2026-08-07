@@ -80,6 +80,14 @@ interface DataState {
   counting: boolean
   /** 셈 요청 일련번호 — 늦게 온 결과가 최신 화면을 덮지 않게 한다(§AC-5). */
   countSeq: number
+  /**
+   * 조회 요청 일련번호 — 셈과 같은 이유로 행 조회에도 필요하다.
+   *
+   * 표 A 를 고른 직후 B 를 고르면 A 의 응답이 나중에 도착해 **B 헤더 밑에 A 행**이 박힌다.
+   * 없는 키로 값을 꺼내니 칸마다 `undefined` 가 찍힌다 — 표를 고를 때 행을 비우는 것만으로는
+   * 안 막히는 두 번째 갈래다(§data.grid AC-8c).
+   */
+  loadSeq: number
 
   // pending 편집 버퍼
   edits: Record<string, Record<string, unknown>>
@@ -150,6 +158,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
   total: null,
   counting: false,
   countSeq: 0,
+  loadSeq: 0,
   edits: {},
   deletes: {},
   inserts: [],
@@ -183,7 +192,9 @@ export const useDataStore = create<DataState>()((set, get) => ({
     const table: TableRef = { schema: tableDef.schema, name: tableDef.name }
     // 이 표를 보던 상태를 되살린다(§AC-2). 처음 여는 표면 빈 상태.
     const saved = get().views[viewKey(table)] ?? DEFAULT_VIEW
-    set({ table, ...saved, total: null, ...clearPending() })
+    // 옛 표의 행·오류는 그 자리에서 버린다 — 헤더는 새 표(역설계)에서 곧장 오는데 행만 옛것이면
+    // 불러오는 동안 없는 키로 값을 꺼내 편집 칸마다 "undefined" 가 찍힌다(2026-08-08 제보).
+    set({ table, ...saved, rows: [], columns: [], total: null, error: null, ...clearPending() })
     await Promise.all([
       get().load(envId, dialect, tableDef),
       get().countRows(envId, dialect, tableDef)
@@ -191,7 +202,8 @@ export const useDataStore = create<DataState>()((set, get) => ({
   },
 
   load: async (envId, dialect, tableDef) => {
-    set({ loading: true, error: null })
+    const seq = get().loadSeq + 1
+    set({ loadSeq: seq, loading: true, error: null })
     try {
       const { pageSize, page, orderBy, filters, filtersEnabled } = get()
       const { sql, params } = buildSelect(dialect, tableDef, {
@@ -201,6 +213,8 @@ export const useDataStore = create<DataState>()((set, get) => ({
         filters: filtersEnabled ? filters : []
       })
       const r = await window.rockury.query.runParams(envId, sql, params)
+      // 늦게 온 조회는 버린다 — 그 사이 다른 표·조건으로 옮겼으면 이 행들은 남의 것이다.
+      if (seq !== get().loadSeq) return
       // 역설계 순서를 우선하되 실제 결과와 맞춘다 — 밖에서 스키마가 바뀌면 헤더와 행의 키가
       // 어긋나 모든 칸이 undefined 로 보인다(displayColumns 주석 참고).
       const columns = displayColumns(
@@ -209,6 +223,7 @@ export const useDataStore = create<DataState>()((set, get) => ({
       )
       set({ rows: r.rows, columns, loading: false })
     } catch (e) {
+      if (seq !== get().loadSeq) return // 늦게 온 실패도 마찬가지 — 남의 오류를 띄우지 않는다
       set({ error: e instanceof Error ? e.message : String(e), loading: false })
     }
   },
