@@ -11,6 +11,7 @@ import type { FolderRecord, SavedQueryRecord } from '../../main/store/savedQueri
 import type { LibraryScope } from '../../main/store/libraryScope'
 import type { CollectionRecord, CollectionItemRecord, CollectionFolderRecord } from '../../main/store/collections'
 import type { DiagramLayoutRecord, SaveLayoutInput } from '../../main/store/diagramLayouts'
+import type { SaveFilterInput, SavedFilterRecord } from '../../shared/db/savedFilter'
 import type {
   CreateLogInput,
   CreateSnapshotInput,
@@ -300,5 +301,17 @@ export const dbApi = {
       unwrap(ipcRenderer.invoke('diagram:saveLayout', input)),
     clearLayout: (connectionId: string): Promise<void> =>
       unwrap(ipcRenderer.invoke('diagram:clearLayout', connectionId))
+  },
+  // 운영부 — Data 화면의 저장 필터(표마다 이름 붙여 남긴 조건 묶음).
+  dataFilters: {
+    list: (connectionId: string, schema: string, table: string): Promise<SavedFilterRecord[]> =>
+      unwrap(ipcRenderer.invoke('dataFilters:list', connectionId, schema, table)),
+    listByConnection: (connectionId: string): Promise<SavedFilterRecord[]> =>
+      unwrap(ipcRenderer.invoke('dataFilters:listByConnection', connectionId)),
+    save: (input: SaveFilterInput): Promise<SavedFilterRecord> =>
+      unwrap(ipcRenderer.invoke('dataFilters:save', input)),
+    delete: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('dataFilters:delete', id)),
+    deleteMany: (ids: string[]): Promise<number> =>
+      unwrap(ipcRenderer.invoke('dataFilters:deleteMany', ids))
   }
 }

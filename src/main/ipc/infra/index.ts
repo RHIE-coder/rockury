@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { envelope } from '../envelope'
 import { decrypt, encrypt } from '../../infra/crypto'
 import { prepareCommand, redactSecrets, runCli } from './command'
@@ -35,6 +35,8 @@ import {
 } from './store'
 import { redisRun } from './middleware/redis'
 import { flattenReply, isRespError, type RespValue } from './middleware/resp'
+import { notifyPeersOn } from '../peers'
+import type { Envelope } from '../envelope'
 
 /**
  * Infra 서비스의 IPC 채널.
@@ -272,20 +274,30 @@ async function runMw(input: RunMwInput): Promise<RunMwResult> {
   }
 }
 
+/**
+ * 인프라 쓰기 하나 — 성공하면 **다른 창들**에 `infra:changed` 를 보낸다.
+ * 안 보내면 창마다 시작할 때 읽은 목록이 영영 안 맞는다(`ipc/peers.ts` 머리말).
+ */
+async function writing<T>(event: IpcMainInvokeEvent, run: () => T | Promise<T>): Promise<Envelope<T>> {
+  const out = await envelope(run)
+  if (out.success) notifyPeersOn('infra:changed', event.sender, { domain: 'infra' })
+  return out
+}
+
 export function registerInfraIpc(): void {
   // --- 카탈로그 ---
   ipcMain.handle('infra:listCatalogs', () => envelope(() => listCatalogs()))
-  ipcMain.handle('infra:saveCatalog', (_e, input: SaveCatalogInput) =>
-    envelope(() => saveCatalog(input))
+  ipcMain.handle('infra:saveCatalog', (e, input: SaveCatalogInput) =>
+    writing(e, () => saveCatalog(input))
   )
-  ipcMain.handle('infra:deleteCatalog', (_e, id: string) => envelope(() => deleteCatalog(id)))
+  ipcMain.handle('infra:deleteCatalog', (e, id: string) => writing(e, () => deleteCatalog(id)))
 
   // --- 공급자 연결 ---
   ipcMain.handle('infra:listProviders', () => envelope(() => listProviders().map(toPublic)))
   ipcMain.handle(
     'infra:saveProvider',
     (
-      _e,
+      e,
       input: {
         id?: string
         catalogId: string
@@ -294,7 +306,7 @@ export function registerInfraIpc(): void {
         credentials?: Record<string, string>
       }
     ) =>
-      envelope(() => {
+      writing(e, () => {
         // 평문은 여기서 곧바로 암호문이 된다 — 저장 계층으로는 암호문만 내려간다.
         const existing = input.id ? getProvider(input.id) : null
         const credEncrypted = input.credentials
@@ -303,28 +315,28 @@ export function registerInfraIpc(): void {
         return toPublic(saveProvider({ ...input, credEncrypted }))
       })
   )
-  ipcMain.handle('infra:deleteProvider', (_e, id: string) => envelope(() => deleteProvider(id)))
+  ipcMain.handle('infra:deleteProvider', (e, id: string) => writing(e, () => deleteProvider(id)))
 
   // --- 설계본 ---
   ipcMain.handle('infra:listDesigns', () => envelope(() => listDesigns()))
   ipcMain.handle(
     'infra:createDesign',
-    (_e, input: { name: string; description?: string; projectId?: string | null }) =>
-      envelope(() => createDesign(input))
+    (e, input: { name: string; description?: string; projectId?: string | null }) =>
+      writing(e, () => createDesign(input))
   )
   ipcMain.handle(
     'infra:updateDesign',
-    (_e, id: string, patch: { name?: string; description?: string; projectId?: string | null }) =>
-      envelope(() => updateDesign(id, patch))
+    (e, id: string, patch: { name?: string; description?: string; projectId?: string | null }) =>
+      writing(e, () => updateDesign(id, patch))
   )
-  ipcMain.handle('infra:deleteDesign', (_e, id: string) => envelope(() => deleteDesign(id)))
+  ipcMain.handle('infra:deleteDesign', (e, id: string) => writing(e, () => deleteDesign(id)))
   ipcMain.handle('infra:getGraph', (_e, designId: string) =>
     envelope(() => ({ nodes: listNodes(designId), edges: listEdges(designId) }))
   )
   ipcMain.handle(
     'infra:saveGraph',
-    (_e, designId: string, nodes: Omit<NodeRow, 'designId'>[], edges: Omit<EdgeRow, 'designId'>[]) =>
-      envelope(() => replaceGraph(designId, nodes, edges))
+    (e, designId: string, nodes: Omit<NodeRow, 'designId'>[], edges: Omit<EdgeRow, 'designId'>[]) =>
+      writing(e, () => replaceGraph(designId, nodes, edges))
   )
 
   // --- 실물 스냅샷 ---
@@ -332,8 +344,8 @@ export function registerInfraIpc(): void {
   // 메인은 명령을 돌리고 결과를 담아 둘 뿐이다.
   ipcMain.handle(
     'infra:saveSnapshot',
-    (_e, input: { providerId: string; probes: ProbeOutcomeRow[]; resources: ResourceRow[] }) =>
-      envelope(() => saveSnapshot(input))
+    (e, input: { providerId: string; probes: ProbeOutcomeRow[]; resources: ResourceRow[] }) =>
+      writing(e, () => saveSnapshot(input))
   )
   ipcMain.handle('infra:latestSnapshot', (_e, providerId: string) =>
     envelope(() => latestSnapshot(providerId))

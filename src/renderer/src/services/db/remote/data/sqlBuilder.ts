@@ -1,6 +1,7 @@
 import type { TableDef } from '../../workspaces/definition/types'
 import type { TableRef } from '../../schemaRef'
 import type { DialectId } from '../../dialects'
+import { NO_VALUE_OPS as NO_VALUE, type Filter } from '@shared/db/savedFilter'
 
 /**
  * 데이터 편집 SQL 빌더(§ops-plan Phase 2b) — **파라미터 바인드**로 문을 만든다(문자열 조립 금지).
@@ -36,16 +37,10 @@ export function quoteTable(dialect: SqlDialect, t: TableRef): string {
 const ph = (dialect: SqlDialect, i: number): string => (dialect === 'postgresql' ? `$${i}` : '?')
 const safeInt = (n: number): number => Math.max(0, Math.floor(Number.isFinite(n) ? n : 0))
 
-/** 필터 연산자 — 값 없는 IS NULL / IS NOT NULL 포함. */
-export type FilterOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IS NULL' | 'IS NOT NULL'
-export const FILTER_OPS: FilterOp[] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IS NULL', 'IS NOT NULL']
-export const NO_VALUE_OPS: FilterOp[] = ['IS NULL', 'IS NOT NULL']
-
-export interface Filter {
-  column: string
-  op: FilterOp
-  value: string
-}
+// 필터의 모양은 저장 필터(메인 저장소)와 함께 쓰므로 `@shared/db/savedFilter` 가 정본이다.
+// 여기서 다시 내보내는 건 이 모듈로 들어오던 기존 import 를 그대로 두기 위해서다.
+export { FILTER_OPS, NO_VALUE_OPS } from '@shared/db/savedFilter'
+export type { Filter, FilterOp } from '@shared/db/savedFilter'
 
 export interface SelectOptions {
   limit: number
@@ -54,28 +49,54 @@ export interface SelectOptions {
   filters?: Filter[]
 }
 
-/** SELECT * … [WHERE …] [ORDER BY …] LIMIT/OFFSET. WHERE 값은 파라미터 바인드(문자열 조립 금지). */
-export function buildSelect(dialect: SqlDialect, table: TableRef, opts: SelectOptions): Statement {
+/**
+ * 필터 → `WHERE …` 조각과 바인드 값. **조회와 행 수 세기가 이 한 함수를 같이 쓴다** —
+ * 절을 두 벌로 만들면 한쪽만 고쳐져 "보이는 행 수"와 "총 쪽수"가 조용히 어긋난다.
+ * 조건이 없으면 빈 문자열(앞의 공백까지 포함)을 돌려줘 부르는 쪽이 그냥 이어 붙이면 된다.
+ */
+function whereClause(dialect: SqlDialect, filters: readonly Filter[] | undefined): Statement {
   const q = (n: string): string => quoteIdent(dialect, n)
   const params: unknown[] = []
   let i = 1
-  let sql = `SELECT * FROM ${quoteTable(dialect, table)}`
-
-  const clauses = (opts.filters ?? [])
-    .filter((f) => f.column && (NO_VALUE_OPS.includes(f.op) || f.value !== ''))
+  const clauses = (filters ?? [])
+    .filter((f) => f.column && (NO_VALUE.includes(f.op) || f.value !== ''))
     .map((f) => {
       if (f.op === 'IS NULL') return `${q(f.column)} IS NULL`
       if (f.op === 'IS NOT NULL') return `${q(f.column)} IS NOT NULL`
       params.push(f.value)
       return `${q(f.column)} ${f.op} ${ph(dialect, i++)}`
     })
-  if (clauses.length) sql += ` WHERE ${clauses.join(' AND ')}`
+  return { sql: clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '', params }
+}
+
+/** SELECT * … [WHERE …] [ORDER BY …] LIMIT/OFFSET. WHERE 값은 파라미터 바인드(문자열 조립 금지). */
+export function buildSelect(dialect: SqlDialect, table: TableRef, opts: SelectOptions): Statement {
+  const q = (n: string): string => quoteIdent(dialect, n)
+  const where = whereClause(dialect, opts.filters)
+  let sql = `SELECT * FROM ${quoteTable(dialect, table)}${where.sql}`
 
   if (opts.orderBy) {
     sql += ` ORDER BY ${q(opts.orderBy.column)} ${opts.orderBy.direction === 'DESC' ? 'DESC' : 'ASC'}`
   }
   sql += ` LIMIT ${safeInt(opts.limit)} OFFSET ${safeInt(opts.offset)}`
-  return { sql, params }
+  return { sql, params: where.params }
+}
+
+/**
+ * 조건에 맞는 **전체 행 수**. 총 쪽수를 알려면 이게 필요한데, 행이 아주 많은 표에선 몇 초가
+ * 걸린다 — 그래서 조회와 **따로** 띄우고(§db-remote.data.paging AC-4) 여기엔 정렬·LIMIT 을
+ * 붙이지 않는다(결과가 한 줄이라 무의미하고, 정렬은 셈을 느리게만 한다).
+ */
+export function buildCount(
+  dialect: SqlDialect,
+  table: TableRef,
+  filters?: readonly Filter[]
+): Statement {
+  const where = whereClause(dialect, filters)
+  return {
+    sql: `SELECT COUNT(*) AS total FROM ${quoteTable(dialect, table)}${where.sql}`,
+    params: where.params
+  }
 }
 
 export function buildInsert(

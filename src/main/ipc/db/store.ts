@@ -15,46 +15,79 @@ import {
   setEnvVariable
 } from '../../store/envVariables'
 import { createVersion, deleteVersion, listVersions, updateVersionNote, type CreateVersionInput } from '../../store/versions'
+import { writingRaw } from '../peers'
 
 /**
  * 로컬 메타 저장소 IPC — 렌더러가 preload(window.rockury.*)를 통해 호출한다.
  * invoke/handle(비동기 요청-응답)로 데이터를 주고받는다.
+ *
+ * 쓰기는 전부 `writingRaw` 를 거친다 — 성공하면 **다른 창들**이 그 스코프만 다시 읽는다
+ * (`ipc/peers.ts`). 봉투를 안 쓰는 옛 핸들러라 raw 쪽을 쓴다.
  */
 export function registerStoreIpc(): void {
   ipcMain.handle('designs:list', () => listDesigns())
-  ipcMain.handle('designs:create', (_event, input: CreateDesignInput) => createDesign(input))
+  ipcMain.handle('designs:create', (event, input: CreateDesignInput) =>
+    writingRaw(event, (d) => ({ domain: 'designs', designId: d.id }), () => createDesign(input))
+  )
   ipcMain.handle(
     'designs:update',
     (
-      _event,
+      event,
       id: string,
       patch: { name?: string; description?: string; schemas?: string[]; projectId?: string | null }
-    ) => updateDesign(id, patch)
+    ) => writingRaw(event, { domain: 'designs', designId: id }, () => updateDesign(id, patch))
   )
-  ipcMain.handle('designs:delete', (_event, id: string) => deleteDesign(id))
+  ipcMain.handle('designs:delete', (event, id: string) =>
+    writingRaw(event, { domain: 'designs', designId: id }, () => deleteDesign(id))
+  )
 
   ipcMain.handle('tables:list', () => listTables())
   // 설계 스코프 저장 — 전량 교체(tables:replaceAll)는 제거됨(spec ai-server 쓰기 경합 차단).
-  ipcMain.handle('tables:replaceForDesign', (_event, designId: string, records: TableRecord[]) =>
-    replaceTablesForDesign(designId, records)
+  ipcMain.handle('tables:replaceForDesign', (event, designId: string, records: TableRecord[]) =>
+    writingRaw(event, { domain: 'tables', designId }, () => replaceTablesForDesign(designId, records))
   )
 
   // Design › Seed — 시드 세트도 tables 와 같은 설계 스코프 규칙으로 저장한다.
   ipcMain.handle('seedSets:list', () => listSeedSets())
-  ipcMain.handle('seedSets:replaceForDesign', (_event, designId: string, records: SeedSetRecord[]) =>
-    replaceSeedSetsForDesign(designId, records)
+  ipcMain.handle('seedSets:replaceForDesign', (event, designId: string, records: SeedSetRecord[]) =>
+    writingRaw(event, { domain: 'seeds', designId }, () => replaceSeedSetsForDesign(designId, records))
   )
 
   // 환경 변수 값 — 목록은 평문을 싣지 않고, 평문은 반영 직전 resolve 로만 나간다.
   ipcMain.handle('envVars:list', (_event, envId: string) => listEnvVariables(envId))
-  ipcMain.handle('envVars:set', (_event, envId: string, name: string, value: string) =>
-    setEnvVariable(envId, name, value)
+  ipcMain.handle('envVars:set', (event, envId: string, name: string, value: string) =>
+    writingRaw(event, { domain: 'environments' }, () => setEnvVariable(envId, name, value))
   )
-  ipcMain.handle('envVars:delete', (_event, envId: string, name: string) => deleteEnvVariable(envId, name))
+  ipcMain.handle('envVars:delete', (event, envId: string, name: string) =>
+    writingRaw(event, { domain: 'environments' }, () => deleteEnvVariable(envId, name))
+  )
   ipcMain.handle('envVars:resolve', (_event, envId: string) => resolveEnvVariables(envId))
 
   ipcMain.handle('versions:list', (_event, designId: string) => listVersions(designId))
-  ipcMain.handle('versions:create', (_event, input: CreateVersionInput) => createVersion(input))
-  ipcMain.handle('versions:delete', (_event, id: string) => deleteVersion(id))
-  ipcMain.handle('versions:updateNote', (_event, id: string, note: string) => updateVersionNote(id, note))
+  ipcMain.handle('versions:create', (event, input: CreateVersionInput) =>
+    writingRaw(event, { domain: 'versions', designId: input.designId }, () => createVersion(input))
+  )
+  ipcMain.handle('versions:delete', (event, id: string) =>
+    // 버전은 id 로만 지운다 — 어느 설계였는지는 지우기 전에 찾아 둔다(지운 뒤엔 못 찾는다).
+    writingRaw(
+      event,
+      { domain: 'versions', designId: designIdOfVersion(id) },
+      () => deleteVersion(id)
+    )
+  )
+  ipcMain.handle('versions:updateNote', (event, id: string, note: string) =>
+    writingRaw(
+      event,
+      { domain: 'versions', designId: designIdOfVersion(id) },
+      () => updateVersionNote(id, note)
+    )
+  )
+}
+
+/** 이 버전이 어느 설계 것인가 — 못 찾으면 빈 문자열(받는 쪽이 무시한다). */
+function designIdOfVersion(id: string): string {
+  for (const d of listDesigns()) {
+    if (listVersions(d.id).some((v) => v.id === id)) return d.id
+  }
+  return ''
 }

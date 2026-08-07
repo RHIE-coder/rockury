@@ -27,7 +27,8 @@ export const dbMigration: ServiceMigration = {
     'collection_items',
     'seed_sets',
     'env_variables',
-    'diagram_layouts'
+    'diagram_layouts',
+    'db_data_filters'
   ],
 
   before(d: DatabaseSync): void {
@@ -265,6 +266,22 @@ export const dbMigration: ServiceMigration = {
       groups        TEXT NOT NULL DEFAULT '[]',
       updated_at    TEXT NOT NULL
     );
+
+    -- 저장 필터 — Data 화면에서 이름 붙여 남긴 조건 묶음(§db-remote.data.saved-filter).
+    -- 주인이 셋(연결·스키마·표)인 이유: 이름만으로 가르면 범위에 스키마가 둘 이상 켜졌을 때
+    -- 같은 이름 표의 필터가 섞인다. 스키마 빈 문자열 = 기본 스키마(§db/schemaRef 와 같은 규칙).
+    CREATE TABLE IF NOT EXISTS db_data_filters (
+      id            TEXT PRIMARY KEY,
+      connection_id TEXT NOT NULL,
+      schema_name   TEXT NOT NULL DEFAULT '',
+      table_name    TEXT NOT NULL,
+      name          TEXT NOT NULL,
+      filters       TEXT NOT NULL DEFAULT '[]',
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_db_data_filters_table
+      ON db_data_filters(connection_id, schema_name, table_name);
   `,
 
   alter(d: DatabaseSync): void {

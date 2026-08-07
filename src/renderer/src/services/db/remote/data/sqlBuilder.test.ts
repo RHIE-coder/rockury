@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TableDef } from '../../workspaces/definition/types'
 import {
+  buildCount,
   buildDelete,
   buildInsert,
   buildSelect,
@@ -8,7 +9,8 @@ import {
   canEdit,
   pkColumns,
   quoteIdent,
-  quoteTable
+  quoteTable,
+  type Filter
 } from './sqlBuilder'
 
 describe('quoteIdent', () => {
@@ -97,6 +99,47 @@ describe('buildSelect', () => {
     const s = buildSelect('mysql', { name: 't' }, { limit: 50, offset: 0, filters: [{ column: 'a', op: '=', value: '' }] })
     expect(s.sql).toBe('SELECT * FROM `t` LIMIT 50 OFFSET 0')
     expect(s.params).toEqual([])
+  })
+})
+
+/** CASE-remote-060 — 총 쪽수를 세는 문(db-remote.data.paging AC-3). */
+describe('buildCount', () => {
+  it('조건이 없으면 WHERE 절 자체가 없다', () => {
+    expect(buildCount('postgresql', { name: 'users' }, [])).toEqual({
+      sql: 'SELECT COUNT(*) AS total FROM "users"',
+      params: []
+    })
+  })
+
+  it('조회와 **같은 WHERE·같은 바인드**를 만든다 — 정렬·LIMIT·OFFSET 은 붙이지 않는다', () => {
+    const filters: Filter[] = [
+      { column: 'email', op: 'LIKE', value: '%a%' },
+      { column: 'age', op: '>', value: '18' },
+      { column: 'deleted_at', op: 'IS NULL', value: '' }
+    ]
+    const count = buildCount('postgresql', { name: 'users' }, filters)
+    const select = buildSelect('postgresql', { name: 'users' }, { limit: 50, offset: 0, filters })
+
+    expect(count.sql).toBe(
+      'SELECT COUNT(*) AS total FROM "users" WHERE "email" LIKE $1 AND "age" > $2 AND "deleted_at" IS NULL'
+    )
+    expect(count.params).toEqual(select.params)
+    // 절이 두 벌로 갈라지면 언젠가 어긋난다 — 같은 문자열이 조회문 안에 그대로 들어 있어야 한다.
+    expect(select.sql).toContain(count.sql.slice(count.sql.indexOf('WHERE')))
+    expect(count.sql).not.toMatch(/ORDER BY|LIMIT|OFFSET/)
+  })
+
+  it('스키마가 있으면 한정 이름을 쓴다', () => {
+    expect(buildCount('mysql', { schema: 'service1', name: 'u' }, []).sql).toBe(
+      'SELECT COUNT(*) AS total FROM `service1`.`u`'
+    )
+  })
+
+  it('빈 값 필터는 조회와 똑같이 무시한다(IS NULL 제외)', () => {
+    expect(buildCount('mysql', { name: 't' }, [{ column: 'a', op: '=', value: '' }])).toEqual({
+      sql: 'SELECT COUNT(*) AS total FROM `t`',
+      params: []
+    })
   })
 })
 

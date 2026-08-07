@@ -46,11 +46,63 @@ async function pinWindow(app) {
   }, WINDOW)
 }
 
+/** `src/` 에서 가장 최근에 고쳐진 파일의 시각. 없으면 0. */
+function newestSourceMtime(dir = path.join(APP, 'src')) {
+  let newest = 0
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name)
+    newest = Math.max(newest, e.isDirectory() ? newestSourceMtime(p) : fs.statSync(p).mtimeMs)
+  }
+  return newest
+}
+
+/**
+ * 빌드 산출물이 있고 **소스보다 새것인지** 확인한다.
+ *
+ * 없을 때만 막던 예전 판은, 고친 뒤 빌드를 안 하고 앱을 띄우는 경우를 못 잡았다 —
+ * 그때 뜨는 것은 **옛 화면**이라 "고친 게 반영이 안 됐다"는 거짓 실패를 보고,
+ * 더 나쁘게는 이미 깨진 것을 "통과"로 읽는다(2026-08-07 실측: 문구를 고치고 빌드를 안 해
+ * 라벨 검사 두 개가 거짓으로 실패했다). 사람이 지키기로 한 규칙이었는데 안 지켜져서 기계로 내린다.
+ */
 export function requireBuild() {
   if (!fs.existsSync(MAIN)) {
     console.error('먼저 `npm run build` 를 실행하세요 (out/main/index.js 없음).')
     process.exit(1)
   }
+  const built = fs.statSync(MAIN).mtimeMs
+  const src = newestSourceMtime()
+  if (src > built) {
+    console.error(
+      '빌드가 소스보다 낡았습니다 — 먼저 `npm run build` 를 실행하세요.\n' +
+        `  out/main/index.js : ${new Date(built).toLocaleString()}\n` +
+        `  가장 최근 소스     : ${new Date(src).toLocaleString()}\n` +
+        '  (낡은 산출물로 띄우면 옛 화면을 보고 "안 고쳐졌다"는 거짓 결과가 납니다.)'
+    )
+    process.exit(1)
+  }
+}
+
+/**
+ * 계산된 CSS 색이 **빨간 계열인가** — `getComputedStyle(...).color` 같은 값을 그대로 넣는다.
+ *
+ * 왜 함수로 두나: 표기가 하나가 아니다. 불투명한 색은 `rgb(176, 82, 76)` 로 나오지만
+ * **투명도가 붙으면 Tailwind v4 는 `oklab(...)` 으로 낸다**(`border-destructive/40` 등).
+ * 숫자 세 개만 읽는 정규식을 각자 쓰면 후자에서 조용히 "빨갛지 않다"가 나온다
+ * (2026-08-07 실측 — 앱은 멀쩡한데 검사가 틀렸다). 그 실수를 한 번만 하도록 여기 모은다.
+ *
+ * 판정: `oklab(L a b)` 의 `a` 는 초록(-)↔빨강(+) 축이라 양수면 빨간 쪽.
+ * `rgb()` 는 R 이 G·B 보다 뚜렷이 클 때.
+ */
+export function isRedFamily(cssColor) {
+  if (!cssColor) return false
+  const v = String(cssColor).trim()
+  // oklab/oklch 둘 다 두 번째 숫자가 붉기를 가른다(oklch 는 채도라 0 보다 크면 유채색).
+  if (v.startsWith('oklab') || v.startsWith('oklch')) {
+    const m = v.match(/ok(?:lab|lch)\(\s*[\d.]+%?\s+(-?[\d.]+)/)
+    return m != null && Number(m[1]) > 0.05
+  }
+  const p = v.match(/[\d.]+/g)?.map(Number) ?? []
+  return p.length >= 3 && p[0] > p[1] + 40 && p[0] > p[2] + 40
 }
 
 /** test-db 가 떠 있나(TCP 접속 가능) — 깊은 곳에서 15초 타임아웃으로 죽지 않게 미리 본다. */

@@ -2,9 +2,11 @@ import { useSpecStore } from './store'
 import { useProjectStore } from '@renderer/shell/projectStore'
 
 /**
- * 에이전트(MCP) 쓰기 리하이드레이션 — 메인이 보내는 `uiux:changed` 를 받아 **그 스코프만**
- * 다시 읽는다(spec `uiux-ia.md` §8). 화면발 저장은 도구를 안 거치므로 이 이벤트를 만들지
- * 않는다 — 여기 도착한 변경은 전부 "화면 밖에서 온 것"이라 자기 메아리가 없다.
+ * 리하이드레이션 — 메인이 보내는 `uiux:changed` 를 받아 **그 스코프만** 다시 읽는다
+ * (spec `uiux-ia.md` §8).
+ *
+ * 여기 도착한 변경은 전부 **이 창 밖에서 온 것**이다: 에이전트(MCP) 쓰기이거나, 다른 창이 한
+ * 쓰기다(2026-08-08). 이 창이 한 쓰기는 안 온다 — 그건 낙관 반영으로 이미 화면에 있다.
  *
  * DB 의 `store:changed`·API 의 `api:changed` 를 빌려 쓰지 않는다 — 서비스끼리 런타임으로
  * 얽히면 병렬 개발의 전제가 깨진다.

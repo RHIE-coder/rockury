@@ -118,5 +118,13 @@ export const dbCoverage: ServiceCoverage = {
     'diagram:getLayout': 'ERD 노드 위치(UI 상태) — 노출 실익 없음',
     'diagram:saveLayout': 'ERD 노드 위치(UI 상태) — 노출 실익 없음',
     'diagram:clearLayout': 'ERD 노드 위치(UI 상태) — 노출 실익 없음',
+
+    // ── Data 저장 필터: 사람이 화면에서 만든 조회 편의 설정(UI 상태 계열) ──
+    //   에이전트는 조건을 SQL 로 직접 쓰면 되므로 남의 저장 필터를 읽거나 고칠 실익이 없다.
+    'dataFilters:list': 'Data 화면 조회 편의 설정(UI 상태) — 노출 실익 없음',
+    'dataFilters:listByConnection': 'Data 화면 조회 편의 설정(UI 상태) — 노출 실익 없음',
+    'dataFilters:save': 'Data 화면 조회 편의 설정(UI 상태) — 노출 실익 없음',
+    'dataFilters:delete': '파괴적 쓰기 — 파괴적 조작은 사람이 앱에서만, 노출 금지',
+    'dataFilters:deleteMany': '파괴적 쓰기 — 파괴적 조작은 사람이 앱에서만, 노출 금지',
   }
 }

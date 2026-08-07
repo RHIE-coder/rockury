@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import type { TableDef } from '../../workspaces/definition/types'
-import type { TableRef } from '../../schemaRef'
+import { qualifiedName, type TableRef } from '../../schemaRef'
 import type { DialectId } from '../../dialects'
 import {
+  buildCount,
   buildDelete,
   buildInsert,
   buildSelect,
@@ -23,6 +24,26 @@ export const PAGE_SIZE = 50
 export const PAGE_SIZES = [25, 50, 100, 200] as const
 export type SortState = { column: string; direction: 'ASC' | 'DESC' } | null
 
+/**
+ * 표 하나를 보던 상태(§db-remote.data.filter AC-2) — 표를 옮겼다 돌아오면 그대로 되살린다.
+ *
+ * 예전엔 표를 고를 때마다 조건을 비웠는데, 정작 화면의 필터 바는 자기 안에 초안을 들고
+ * 다시 만들어지지 않아 **적용도 안 한 남의 표 조건**이 떠 있었다("어떻게 공통의 필터값이
+ * 생길 수 있냐" — 2026-08-07). 기억할 곳을 여기 한 군데로 모아 그 어긋남을 없앤다.
+ */
+export interface TableView {
+  filters: Filter[]
+  /** 조건을 지우지 않고 잠시 안 거는 스위치(§AC-3). */
+  filtersEnabled: boolean
+  page: number
+  orderBy: SortState
+}
+
+const DEFAULT_VIEW: TableView = { filters: [], filtersEnabled: true, page: 0, orderBy: null }
+
+/** 표별 기억의 열쇠 — 이름만 쓰면 스키마가 둘 이상 켜졌을 때 동명 표끼리 섞인다(§db/schemaRef). */
+export const viewKey = (t: TableRef): string => qualifiedName(t)
+
 /** 행 식별 키 — PK 컬럼 값들의 직렬화(원본 행 기준). */
 export function rowKey(pkCols: string[], row: Record<string, unknown>): string {
   return JSON.stringify(pkCols.map((c) => row[c] ?? null))
@@ -42,12 +63,23 @@ interface DataState {
   table: TableRef | null
   columns: string[]
   rows: Record<string, unknown>[]
-  page: number
   pageSize: number
-  orderBy: SortState
-  filters: Filter[]
   loading: boolean
   error: string | null
+
+  // 지금 보고 있는 표의 보기 상태. `views` 에 든 것과 늘 같다(`patchView` 한 곳에서만 쓴다).
+  page: number
+  orderBy: SortState
+  filters: Filter[]
+  filtersEnabled: boolean
+  /** 표별 기억(§AC-2) — 세션 동안만이다. 앱을 넘는 영속은 저장 필터가 맡는다(§AC-2a). */
+  views: Record<string, TableView>
+
+  /** 조건에 맞는 전체 행 수. `null` 은 **모름**(아직 안 셌거나 셈이 실패). */
+  total: number | null
+  counting: boolean
+  /** 셈 요청 일련번호 — 늦게 온 결과가 최신 화면을 덮지 않게 한다(§AC-5). */
+  countSeq: number
 
   // pending 편집 버퍼
   edits: Record<string, Record<string, unknown>>
@@ -57,12 +89,28 @@ interface DataState {
   // 트랜잭션 게이트
   tx: { txId: string; affected: number; statements: number } | null
 
+  /**
+   * 보기 상태를 고친다 — **지금 보는 값과 표별 기억을 한 번에** 쓰는 유일한 통로.
+   * 두 자리를 따로 고칠 수 있게 두면 언젠가 한쪽만 고쳐져 예전의 어긋남이 되돌아온다.
+   */
+  patchView: (patch: Partial<TableView>) => void
   selectTable: (envId: string, dialect: DialectId, tableDef: TableDef) => Promise<void>
   load: (envId: string, dialect: DialectId, tableDef: TableDef) => Promise<void>
+  /** 행 수를 따로 센다 — 행 조회를 막지 않는다(§AC-4). */
+  countRows: (envId: string, dialect: DialectId, tableDef: TableDef) => Promise<void>
+  /** 도착한 셈 결과를 반영한다. 일련번호가 최신이 아니면 버린다(§AC-5). */
+  applyCount: (seq: number, total: number | null) => void
   setPage: (envId: string, dialect: DialectId, tableDef: TableDef, page: number) => Promise<void>
   setPageSize: (envId: string, dialect: DialectId, tableDef: TableDef, size: number) => Promise<void>
   toggleSort: (envId: string, dialect: DialectId, tableDef: TableDef, column: string) => Promise<void>
   setFilters: (envId: string, dialect: DialectId, tableDef: TableDef, filters: Filter[]) => Promise<void>
+  /** 조건은 그대로 두고 적용만 켜고 끈다(§AC-3). */
+  setFiltersEnabled: (
+    envId: string,
+    dialect: DialectId,
+    tableDef: TableDef,
+    enabled: boolean
+  ) => Promise<void>
 
   editCell: (key: string, col: string, value: unknown) => void
   resetCell: (key: string, col: string) => void
@@ -91,16 +139,36 @@ export const useDataStore = create<DataState>()((set, get) => ({
   table: null,
   columns: [],
   rows: [],
-  page: 0,
   pageSize: PAGE_SIZE,
-  orderBy: null,
-  filters: [],
   loading: false,
   error: null,
+  page: 0,
+  orderBy: null,
+  filters: [],
+  filtersEnabled: true,
+  views: {},
+  total: null,
+  counting: false,
+  countSeq: 0,
   edits: {},
   deletes: {},
   inserts: [],
   tx: null,
+
+  patchView: (patch) => {
+    const s = get()
+    const next: TableView = {
+      filters: patch.filters ?? s.filters,
+      filtersEnabled: patch.filtersEnabled ?? s.filtersEnabled,
+      page: patch.page ?? s.page,
+      orderBy: patch.orderBy !== undefined ? patch.orderBy : s.orderBy
+    }
+    // 지금 보는 값과 표별 기억을 **한 번에** 쓴다 — 두 자리를 따로 고치면 언젠가 어긋난다.
+    set({
+      ...next,
+      views: s.table ? { ...s.views, [viewKey(s.table)]: next } : s.views
+    })
+  },
 
   selectTable: async (envId, dialect, tableDef) => {
     // 커밋 대기 중인 트랜잭션이 열려 있으면 먼저 롤백한다 — 안 그러면 main 세션이 락을 문 채 방치된다(고아 tx).
@@ -112,25 +180,25 @@ export const useDataStore = create<DataState>()((set, get) => ({
         // 이미 정리됐을 수 있음
       }
     }
-    set({
-      table: { schema: tableDef.schema, name: tableDef.name },
-      page: 0,
-      orderBy: null,
-      filters: [],
-      ...clearPending()
-    })
-    await get().load(envId, dialect, tableDef)
+    const table: TableRef = { schema: tableDef.schema, name: tableDef.name }
+    // 이 표를 보던 상태를 되살린다(§AC-2). 처음 여는 표면 빈 상태.
+    const saved = get().views[viewKey(table)] ?? DEFAULT_VIEW
+    set({ table, ...saved, total: null, ...clearPending() })
+    await Promise.all([
+      get().load(envId, dialect, tableDef),
+      get().countRows(envId, dialect, tableDef)
+    ])
   },
 
   load: async (envId, dialect, tableDef) => {
     set({ loading: true, error: null })
     try {
-      const { pageSize, page, orderBy, filters } = get()
+      const { pageSize, page, orderBy, filters, filtersEnabled } = get()
       const { sql, params } = buildSelect(dialect, tableDef, {
         limit: pageSize,
         offset: page * pageSize,
         orderBy: orderBy ?? undefined,
-        filters
+        filters: filtersEnabled ? filters : []
       })
       const r = await window.rockury.query.runParams(envId, sql, params)
       // 역설계 순서를 우선하되 실제 결과와 맞춘다 — 밖에서 스키마가 바뀌면 헤더와 행의 키가
@@ -145,13 +213,40 @@ export const useDataStore = create<DataState>()((set, get) => ({
     }
   },
 
+  countRows: async (envId, dialect, tableDef) => {
+    const seq = get().countSeq + 1
+    set({ countSeq: seq, counting: true })
+    const { filters, filtersEnabled } = get()
+    const { sql, params } = buildCount(dialect, tableDef, filtersEnabled ? filters : [])
+    try {
+      const r = await window.rockury.query.runParams(envId, sql, params)
+      const first = r.rows[0] as Record<string, unknown> | undefined
+      // 방언마다 별칭 대소문자가 다를 수 있어 첫 칸 값을 그대로 읽는다.
+      const raw = first ? (first.total ?? Object.values(first)[0]) : null
+      const n = Number(raw)
+      get().applyCount(seq, Number.isFinite(n) ? n : null)
+    } catch {
+      // 셈이 실패해도 목록은 이미 떠 있다 — 총 쪽수만 "모름"으로 두고 오류 띠는 안 띄운다(§AC-4).
+      get().applyCount(seq, null)
+    }
+  },
+
+  applyCount: (seq, total) => {
+    // 늦게 온 결과는 버린다 — 조건을 빠르게 바꾸면 옛 셈이 나중에 도착한다(§AC-5).
+    if (seq !== get().countSeq) return
+    set({ total, counting: false })
+  },
+
   setPage: async (envId, dialect, tableDef, page) => {
-    set({ page: Math.max(0, page) })
+    // 쪽만 옮기는 것은 전체 행 수를 안 바꾼다 — 다시 세지 않는다.
+    get().patchView({ page: Math.max(0, page) })
     await get().load(envId, dialect, tableDef)
   },
 
   setPageSize: async (envId, dialect, tableDef, size) => {
-    set({ pageSize: size, page: 0 })
+    // 총 쪽수는 `전체 행 수 ÷ 쪽 크기` 로 화면이 계산한다 — 행 수 자체는 그대로라 다시 안 센다.
+    set({ pageSize: size })
+    get().patchView({ page: 0 })
     await get().load(envId, dialect, tableDef)
   },
 
@@ -163,13 +258,24 @@ export const useDataStore = create<DataState>()((set, get) => ({
         : cur.direction === 'ASC'
           ? { column, direction: 'DESC' }
           : null
-    set({ orderBy: next, page: 0 })
+    get().patchView({ orderBy: next, page: 0 })
     await get().load(envId, dialect, tableDef)
   },
 
   setFilters: async (envId, dialect, tableDef, filters) => {
-    set({ filters, page: 0 })
-    await get().load(envId, dialect, tableDef)
+    get().patchView({ filters, page: 0 })
+    await Promise.all([
+      get().load(envId, dialect, tableDef),
+      get().countRows(envId, dialect, tableDef)
+    ])
+  },
+
+  setFiltersEnabled: async (envId, dialect, tableDef, enabled) => {
+    get().patchView({ filtersEnabled: enabled, page: 0 })
+    await Promise.all([
+      get().load(envId, dialect, tableDef),
+      get().countRows(envId, dialect, tableDef)
+    ])
   },
 
   editCell: (key, col, value) =>
@@ -280,7 +386,11 @@ export const useDataStore = create<DataState>()((set, get) => ({
         }
       }
       set({ ...clearPending() })
-      await get().load(envId, dialect, tableDef)
+      // 행을 넣거나 지웠으면 전체 행 수가 바뀐다 — 총 쪽수를 다시 센다.
+      await Promise.all([
+        get().load(envId, dialect, tableDef),
+        get().countRows(envId, dialect, tableDef)
+      ])
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), tx: null })
     }

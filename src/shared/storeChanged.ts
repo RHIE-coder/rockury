@@ -5,7 +5,7 @@
  * ⑴ 에이전트(MCP) 쓰기 — 창 밖에서 왔으므로 **모든 창**에.
  * ⑵ 화면발 쓰기(IPC) — **쓴 창만 빼고** 나머지 창에(`ipc/peers.ts`).
  *
- * ⑵ 가 없으면 창마다 시작할 때 한 번 읽은 사본이 영영 안 맞는다 — 한쪽에서 접속을 만들어도
+ * ⑵ 가 없으면 창마다 시작할 때 한 번 읽은 사본이 영영 안 맞는다 — 한쪽에서 만들어도
  * 다른 창은 모르고, 그 창에서 편집하면 폼을 통째로 덮어써 남의 수정을 지운다(2026-08-07 실측).
  *
  * 메인·preload·렌더러 셋이 함께 읽는 모양이라 공용(@shared)에 둔다.
@@ -13,13 +13,30 @@
 
 /** 설계 스코프를 갖는 갈래 — 어느 설계가 바뀌었는지까지 알려야 그 설계만 다시 읽는다. */
 export interface DesignScopedChange {
-  domain: 'designs' | 'tables' | 'versions'
+  domain: 'designs' | 'tables' | 'versions' | 'seeds'
   designId: string
 }
 
-/** 설계와 무관한 전역 목록 — 목록 전체를 다시 읽으면 되므로 스코프가 없다. */
+/**
+ * 설계와 무관한 전역 목록 — 목록 전체를 다시 읽으면 되므로 스코프가 없다.
+ *
+ * `library` 는 저장쿼리와 컬렉션을 함께 가리킨다: 한 화면(Remote › Query·Collection)의
+ * 같은 나무를 둘이 나눠 들고 있어서, 한쪽만 다시 읽으면 트리가 반만 맞는다.
+ */
 export interface GlobalListChange {
-  domain: 'connections'
+  domain:
+    | 'connections'
+    | 'environments'
+    | 'projects'
+    | 'library'
+    | 'diagram'
+    | 'migrationLogs'
+    | 'queryHistory'
 }
 
 export type StoreChangedEvent = DesignScopedChange | GlobalListChange
+
+/** 설계 스코프 갈래인가 — 렌더러가 `designId` 를 읽기 전에 가른다. */
+export function isDesignScoped(e: StoreChangedEvent): e is DesignScopedChange {
+  return e.domain === 'designs' || e.domain === 'tables' || e.domain === 'versions' || e.domain === 'seeds'
+}

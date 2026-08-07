@@ -196,9 +196,14 @@ export async function run(ctx) {
   check('CASE-iarch-074 PNG 내보내기가 캔버스를 캡처한다', await waitForFile('.png'))
   await click('[data-infra-export="svg"]')
   check('CASE-iarch-074 SVG 내보내기도 캡처한다', await waitForFile('.svg'))
+  // 파일이 디스크에 보이는 것과 화면이 "됐다"를 켜는 것은 **다른 시점**이다 — 내려받기 완료
+  // 알림은 파일이 쓰인 뒤에 온다. 곧바로 세면 경쟁이 나므로 켜질 때까지 기다린다.
   check(
     'CASE-iarch-074 저장이 끝난 뒤에 됐다고 말한다',
-    (await page.locator('[data-export-status="ok"]').count()) > 0
+    await page
+      .waitForSelector('[data-export-status="ok"]', { timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false)
   )
 
   // ── 노드 검색·포커싱 — 놓인 노드를 이름으로 찾는다 ─────────────────────

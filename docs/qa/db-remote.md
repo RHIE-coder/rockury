@@ -30,6 +30,19 @@
 - **CASE-remote-01A** JSON 요약: 객체는 키 수·배열은 항목 수·빈 값·깨진 값(invalid)을 가르고, 정렬 저장된 값도 미리보기는 한 줄, 상한에서 말줄임. (data.json-cell AC-1) → `console/data/jsonCell.test.ts`
 - **CASE-remote-01B** JSON 정렬/압축 왕복: 정렬→압축이 원래 압축형과 같고, 깨진 JSON 은 손대지 않고 원문 유지. 형식 오류 판정은 빈 값을 오류로 보지 않는다. (data.json-cell AC-3/AC-5)
 
+## Scenario S2c — Data 쪽 넘김 · 필터 · 저장 필터 (순수 로직 + 저장소)
+- **CASE-remote-060** 행 수 세기 SQL: `buildCount` 가 조회와 **같은 WHERE·같은 바인드 파라미터**를 만들고, `ORDER BY`·`LIMIT`·`OFFSET` 은 붙이지 않는다. 조건이 없으면 `WHERE` 절 자체가 없다. (data.paging AC-3) → `remote/data/sqlBuilder.test.ts`
+- **CASE-remote-061** 쪽 번호 정규화: 총 쪽수를 알 때 0 이하는 1쪽, 초과는 마지막 쪽으로 당겨 잡는다. 숫자가 아니면 원래 쪽을 그대로 돌려준다. **총 쪽수를 모를 때(`null`)는 위쪽 상한을 걸지 않는다** — 모른다는 이유로 이동을 막으면 안 된다. 행이 0이면 총 쪽수는 1쪽이다(빈 표에 "0쪽"은 없다). (data.paging AC-2/AC-4a) → `remote/data/paging.test.ts`
+- **CASE-remote-062** 늦은 셈 무시: 셈 요청마다 일련번호를 매기고, 도착한 번호가 마지막에 띄운 번호가 아니면 결과를 버린다. (data.paging AC-5) → `remote/data/paging.test.ts`
+- **CASE-remote-063** 표별 보기 상태: 표 A 에 조건을 걸고 B 로 옮겼다 A 로 돌아오면 A 의 조건·정렬·쪽·켬끔이 되살아나고, B 는 빈 상태로 남는다. 스키마가 다른 같은 이름 표는 **서로 다른 표**로 친다. (data.filter AC-2) → `remote/data/storeLogic.test.ts`
+- **CASE-remote-064** 조건 켬/끔: 끄면 `WHERE` 없이 조회하되 조건 목록은 그대로 남고, 켜면 같은 조건이 다시 걸린다. 조건 수 배지는 꺼져 있어도 개수를 그대로 센다(0으로 만들지 않는다). (data.filter AC-3/AC-3a) → `remote/data/storeLogic.test.ts`
+- **CASE-remote-065** 검색 카드 거르기·정렬: 부분일치로 거르고 **앞글자 일치를 위로** 올린다(`user` → `user_id` 가 `created_by_user` 보다 앞). 대소문자 무시. 검색어가 비면 원래 순서 그대로. 맞는 것이 없으면 빈 목록. (data.filter AC-1b) → `ui/searchSelect.test.ts`
+- **CASE-remote-066** 검색 카드 키보드 커서: ↑↓ 가 걸러진 목록 안에서만 움직이고 양 끝에서 감싸돈다. 검색어를 고쳐 목록이 줄면 커서가 범위 밖으로 나가지 않는다. 빈 목록에서는 Enter 가 아무것도 안 고른다. (data.filter AC-1b) → `ui/searchSelect.test.ts`
+- **CASE-remote-067** 저장 필터 저장소 왕복: 저장→목록→이름 수정→삭제가 `연결·스키마·표` 단위로 갈린다. 같은 이름 표라도 스키마가 다르면 섞이지 않고, 다른 표의 것은 목록에 안 나온다. (data.saved-filter AC-2/AC-3) → `main/store/stores.test.ts`
+- **CASE-remote-068** 저장 필터 상태 판정: 조건이 쓰는 컬럼이 다 있으면 정상, 하나라도 없으면 **없는 컬럼 이름 목록과 함께** 못 쓰는 상태를 돌려준다. 값이 필요 없는 연산자(`IS NULL`)도 컬럼은 있어야 한다. 조건이 0개면 정상으로 친다. (data.saved-filter AC-4) → `remote/data/savedFilter.test.ts`
+- **CASE-remote-069** 표 삭제 정리 **후보** 계산: 역설계 목록에 없는 저장 필터가 후보다 — 지금 안 보는 스키마의 것도, 표 목록이 통째로 빈 경우(그 접속의 마지막 표를 지운 경우)도 후보에 들어간다. 여기서는 아무것도 결정하지 않는다(결정은 06A). (data.saved-filter AC-5a) → `remote/data/savedFilter.test.ts`
+- **CASE-remote-06A** "그 표 없음" 오류 판정: MySQL/MariaDB(`Table … doesn't exist`·`ER_NO_SUCH_TABLE`) · PostgreSQL(`relation … does not exist`·`42P01`) · SQLite(`no such table`) 만 참이다. **권한 거부·접속 오류·데이터베이스/스키마 없음·컬럼 없음은 전부 거짓** — 이 함수가 틀리면 사용자가 만든 저장 필터가 되돌릴 수 없이 사라진다. (data.saved-filter AC-5a) → `remote/data/tableGone.test.ts`
+
 ## Scenario S3 — Query (순수 로직)
 - **CASE-remote-020** 키워드 추출: bare `{{x}}` 만 추출, `'{{x}}'` 는 제외. (query.editor AC-2)
 - **CASE-remote-021** 키워드 치환: 숫자/NULL 은 그대로, 문자열은 싱글쿼트+이스케이프. (query.editor AC-2)
@@ -57,6 +70,14 @@
 - **CASE-remote-04A** Diagram 좌측 목록 패널이 있고, 항목을 누르면 캔버스 뷰포트가 실제로 움직인다(포커싱). (diagram.table-panel AC-1/AC-2)
 - **CASE-remote-04B** Data 의 JSON 셀이 구조 요약으로 보이고, 눌러 열면 뷰어가 형식 정상 여부와 정렬/한 줄 도구를 보인다. (data.json-cell AC-1/AC-2/AC-3)
 - **CASE-remote-04B2** Data 의 **행 번호**를 누르면 행 상세 모달이 열리고(셀 편집과 부딪히지 않는 자리), 숨긴 컬럼까지 자르지 않고 보인다. (result-grid.row-detail AC-1a/AC-1b)
+- **CASE-remote-04K** Data 쪽 넘김: 총 쪽수가 채워지고(`…` → 숫자), 쪽 입력에 숫자를 쳐서 이동하고, `마지막`·`처음` 이 동작하며, 쪽을 옮기면 표가 **맨 위로** 돌아간다(스크롤 위치 0). (data.paging AC-1/AC-2/AC-4/AC-6)
+- **CASE-remote-04L** Data 필터: 컬럼 칸을 눌러 **검색 카드**가 열리고 타이핑으로 컬럼이 좁혀진다. 조건을 적용한 뒤 **켬/끔 스위치를 끄면 전체 행이 돌아오고 조건 줄은 남아 있으며**, 다시 켜면 같은 조건이 걸린다. (data.filter AC-1/AC-1b/AC-3)
+- **CASE-remote-04M** Data 필터 표별 기억: 표 A 에 조건을 걸고 B 로 옮기면 B 에는 조건이 없고, A 로 돌아오면 A 의 조건이 그대로다. (data.filter AC-2)
+- **CASE-remote-04N** 저장 필터: 이름을 붙여 저장 → 조건을 지운 뒤 목록에서 골라 되살린다 → **앱을 껐다 켜도 남는다.** 다른 표에서는 그 항목이 목록에 없다. (data.saved-filter AC-1/AC-2/AC-3)
+- **CASE-remote-04O** 컬럼이 사라진 저장 필터가 **빨간 계열로** 표시되고 적용이 막힌다 — 없어진 컬럼 이름과 이유를 그 자리에 밝히고, 같은 표의 멀쩡한 저장 필터는 그대로 쓸 수 있다. 색은 계산된 값으로 잰다(`rgb()`·`oklab()` 두 표기 모두 — Tailwind v4 는 투명도가 붙으면 `oklab()` 으로 낸다). (data.saved-filter AC-4)
+- **CASE-remote-04P** **쪽 크기 회귀** — 마지막 쪽에 서 있다가 다른 표에서 쪽 크기를 키우고 돌아오면, 범위 밖이 된 쪽이 마지막 쪽으로 스스로 되돌아온다(빈 표에 `9 / 2` 가 뜨지 않는다). 쪽 번호는 표마다 기억하는데 쪽 크기는 전체가 하나를 쓰기 때문에 생기는 어긋남. (data.paging AC-2)
+- **CASE-remote-04Q** **오삭제 회귀** — **권한이 없어 목록에서만 빠진** 표의 저장 필터는 살아남는다. 픽스처가 심는 제한 권한 계정(`rky_limited` — `testdb.roles` 만 볼 수 있다)으로 붙어, 보이지 않는 `users` 의 저장 필터가 정리되지 않는지 본다. 반대편(진짜 지워진 표는 정리된다)은 전권 계정을 쓰는 위 `filter_probe` 블록이 덮는다. (data.saved-filter AC-5a)
+  > **미검증(의도적)**: "권한은 남아 있는데 표만 지워진" 조합은 MySQL 이 **없는 표에도 권한 부족을 먼저 답해서**(`ER_TABLEACCESS_DENIED` 우선) 제한 계정으로는 재현되지 않는다. 그건 우리 판정이 아니라 벤더 규칙이고, 우리 쪽 판정(`isTableMissingError`)은 실 DB 에서 받아 온 오류 문구로 `CASE-remote-06A` 가 전수 고정한다.
 - **CASE-remote-04C** **배치 유실 회귀** — 노드를 옮기고 캔버스도 옮긴 **직후** 다른 화면(Remote 밖 뷰)으로 나갔다 Diagram 으로 돌아오면 노드 위치와 화면 위치가 그대로다. 디바운스가 끝나기 전에 떠나도 저장된다. (diagram.layout AC-2)
 - **CASE-remote-04D** 그룹 만들기 → 테이블 두 개를 영역에 넣고 **영역을 끌면 두 노드가 같은 거리만큼 함께 움직인다.** 그룹 안 노드 하나만 끌면 그것만 움직인다. (diagram.group AC-1/AC-2)
 - **CASE-remote-04E** 그룹 접기 → 소속 노드가 캔버스에서 사라지고 그룹 상자는 남는다. 펴면 접기 전 자리로 돌아온다. (diagram.group AC-4)

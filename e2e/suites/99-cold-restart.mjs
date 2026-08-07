@@ -37,6 +37,23 @@ export async function run(ctx) {
     )
   }
 
+  // ⭐ CASE-remote-04N — Data 의 저장 필터도 콜드 재시작을 넘긴다(§db-remote.data.saved-filter AC-3).
+  //    (08 에서 `users` 에 만든 `메일에 a` 가 조건까지 그대로 있어야 한다. 앱을 껐다 켜도
+  //     남는 것이 이 기능의 존재 이유라, 화면 안에서만 살아 있는 것으로는 요구를 못 채운다.)
+  {
+    // 연결 단위로 읽는다 — 스키마 칸에 무엇이 들어가는지는 벤더마다 다르므로 짐작하지 않는다.
+    const saved = await page.evaluate(async () => {
+      const cid = (await window.rockury.connections.list())[0].id
+      return window.rockury.dataFilters.listByConnection(cid)
+    })
+    const hit = saved.find((s) => s.name === '메일에 a' && s.table === 'users')
+    check('콜드 재시작 후 Data 저장 필터 잔존(이름)', !!hit)
+    check(
+      '콜드 재시작 후 저장 필터의 조건까지 그대로',
+      !!hit && hit.filters.some((f) => f.column === 'email' && f.op === 'LIKE' && f.value === '%a%')
+    )
+  }
+
   // 시드 세트도 콜드 재시작을 넘긴다 — CASE-design-044(선언·행 잔존).
   // 설계 손잡이는 설계부 화면에만 뜬다(2026-08-02) → 먼저 설계부로 들어간다.
   await click('[data-nav-module="design"]')

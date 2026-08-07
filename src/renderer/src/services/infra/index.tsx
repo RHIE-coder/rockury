@@ -11,6 +11,7 @@ import { MiddlewareView } from './middleware/MiddlewareView'
 import { ProvidersView } from './catalog/ProvidersView'
 import { TypesView } from './catalog/TypesView'
 import { useInfraStore } from './store'
+import './rehydration' // 다른 창·에이전트 쓰기 → infra:changed → 목록 재조회(부수효과 모듈)
 
 /**
  * Infra 서비스 IA.

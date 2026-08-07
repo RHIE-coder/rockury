@@ -20,7 +20,6 @@ import {
   X
 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
-import { Input } from '@renderer/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
@@ -37,7 +36,7 @@ import { ConnectionError } from './ConnectionError'
 import { TableSidePanel } from '../TableSidePanel'
 import { RowDetailDialog } from './RowDetailDialog'
 import { columnKeyKinds } from './introspection'
-import { canEdit, pkColumns, quoteTable, type Filter, type SqlDialect } from './data/sqlBuilder'
+import { canEdit, pkColumns, quoteTable, type SqlDialect } from './data/sqlBuilder'
 import { columnKind } from './data/cellKind'
 import { autoColumnWidths, COL_WIDTH_DEFAULTS } from './data/colWidth'
 import { compactJson, jsonError, prettyJson, summarizeJson } from './data/jsonCell'
@@ -47,7 +46,10 @@ import { normalizeDateTime, nowDateTime } from './data/timeValue'
 import { formatDateCell, timezoneOptions, TZ_MODES, type TzMode } from './data/timezone'
 import { useOutsideClose } from '@renderer/lib/useOutsideClose'
 import { toCsv, toJson, toSqlInsert } from './data/exportRows'
-import { PAGE_SIZES, rowKey, useDataStore } from './data/store'
+import { PAGE_SIZES, rowKey, useDataStore, viewKey } from './data/store'
+import { FilterBar } from './data/FilterBar'
+import { PagingBar } from './data/PagingBar'
+import { useSavedFilterStore } from './data/savedFilterStore'
 import { shouldFollowFocus, useRemoteFocus, useRemoteFocusStore } from './focus'
 
 function display(v: unknown): string {
@@ -124,6 +126,8 @@ export function DataView() {
   // 컬럼 폭(리사이즈). 이름→px. 없으면 기본폭.
   const [colW, setColW] = useState<Record<string, number>>({})
   const resizing = useRef<{ name: string; startX: number; startW: number } | null>(null)
+  /** 그리드의 스크롤 상자 — 쪽을 옮길 때 맨 위로 되돌리려면 이 자리를 잡아야 한다. */
+  const gridRef = useRef<HTMLDivElement>(null)
   // 툴바 드롭다운은 바깥 클릭/Esc 로 닫는다(안 닫히던 문제).
   const tzRef = useOutsideClose<HTMLDivElement>(showTz, () => setShowTz(false))
   const colsRef = useOutsideClose<HTMLDivElement>(showCols, () => setShowCols(false))
@@ -166,6 +170,26 @@ export function DataView() {
     setColW({})
     setDetailRow(null)
   }, [d.table?.schema, d.table?.name])
+
+  /**
+   * 쪽을 옮기면 표를 맨 위로 되돌린다(§db-remote.data.paging AC-6).
+   * 20번째 행을 보다 다음 쪽으로 넘어가면 새 쪽도 20번째 행부터 보이던 것이 문제였다.
+   */
+  useEffect(() => {
+    if (gridRef.current) gridRef.current.scrollTop = 0
+  }, [d.page, d.table?.schema, d.table?.name])
+
+  /**
+   * 사라진 표의 저장 필터 정리(§db-remote.data.saved-filter AC-5).
+   * **역설계가 성공한 뒤에만** 돈다 — `tables` 가 있다는 것이 곧 그 신호다. 오류가 났거나
+   * 아직 못 읽었으면 목록이 없어 여기까지 오지 않는다(정리 판정도 빈 목록엔 손대지 않는다).
+   * 목록에 없다는 것만으로 지우지는 않는다 — 스토어가 그 표에 직접 물어 확인한다.
+   */
+  const prune = useSavedFilterStore((s) => s.pruneMissingTables)
+  useEffect(() => {
+    if (!connId || !dialect || !tables || introError) return
+    void prune(connId, dialect, tables)
+  }, [connId, dialect, tables, introError, prune])
 
   /**
    * 고른 표 따라가기 — Definition·Diagram 에서 고른 표를 이 화면도 그대로 연다
@@ -405,7 +429,11 @@ export function DataView() {
                     )}
                   </div>
                   <Button size="sm" variant={showFilters ? 'soft' : 'ghost'} onClick={() => setShowFilters((v) => !v)}>
-                    <FilterIcon /> 필터{d.filters.length ? ` (${d.filters.length})` : ''}
+                    <FilterIcon /> 필터
+                    {d.filters.length > 0 && (
+                      // 꺼져 있으면 흐리게 — 조건은 남아 있지만 지금 안 걸려 있다는 뜻(§data.filter AC-3a).
+                      <span className={cn(!d.filtersEnabled && 'opacity-40')}> ({d.filters.length})</span>
+                    )}
                   </Button>
                   <Button size="sm" variant="ghost" title="현재 페이지를 CSV 로 클립보드에 복사" disabled={d.rows.length === 0} onClick={copyCsv}>
                     <Copy /> {copiedCsv ? '복사됨 ✓' : 'CSV 복사'}
@@ -445,7 +473,19 @@ export function DataView() {
               )}
 
               {showFilters && (
-                <FilterBar columns={selected.columns.map((c) => c.name)} filters={d.filters} onChange={(f) => dialect && void d.setFilters(connId!, dialect, selected, f)} />
+                // 표마다 새로 만든다 — 예전엔 이 부품이 살아남아 안에 든 조건 초안이 다음 표로
+                // 따라갔다(§db-remote.data.filter AC-2 가 고친 것).
+                <FilterBar
+                  key={viewKey(selected)}
+                  connectionId={connId!}
+                  table={selected}
+                  columns={selected.columns.map((c) => c.name)}
+                  columnTypes={Object.fromEntries(selected.columns.map((c) => [c.name, typeLabel(c.type)]))}
+                  filters={d.filters}
+                  enabled={d.filtersEnabled}
+                  onApply={(f) => dialect && void d.setFilters(connId!, dialect, selected, f)}
+                  onToggleEnabled={(on) => dialect && void d.setFiltersEnabled(connId!, dialect, selected, on)}
+                />
               )}
 
               {editable && pendingCount > 0 && !d.tx && (
@@ -483,7 +523,7 @@ export function DataView() {
                 </div>
               )}
 
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div ref={gridRef} className="min-h-0 flex-1 overflow-auto">
                 <table
                   className="table-fixed border-collapse text-[12px]"
                   style={{ width: NUM_COL_W + (editable ? ACT_COL_W : 0) + shownColumns.reduce((s, c) => s + widthOf(c.name), 0) }}
@@ -627,17 +667,23 @@ export function DataView() {
                   또 두지 않는다(서비스 문구 규칙: 같은 정보는 한 화면에 한 번). */}
               <div className="flex shrink-0 items-center justify-between border-t border-line px-4 py-2 text-[12px] text-muted">
                 <div className="flex items-center gap-2">
-                  <span>{d.rows.length}행 · 페이지 {d.page + 1}</span>
+                  {/* 쪽 번호는 아래 쪽 넘김 칸이 말한다 — 같은 정보를 한 줄에 두 번 두지 않는다. */}
+                  <span>{d.rows.length}행{d.total != null && ` · 전체 ${d.total.toLocaleString()}`}</span>
                   <select value={d.pageSize} onChange={(e) => dialect && void d.setPageSize(connId!, dialect, selected, Number(e.target.value))} className="rounded border border-line bg-canvas px-1.5 py-0.5 text-[11px] outline-none">
                     {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}/p</option>)}
                   </select>
                   {/* 위 툴바에 CSV 복사가 생겼으므로 여기 라벨에 형식을 밝힌다 — 같은 화면에 "복사" 두 개면 뭘 뜨는지 모른다. */}
                   <button type="button" title="현재 페이지를 JSON 으로 복사" onClick={() => copy(toJson(d.rows))} className="flex items-center gap-1 text-muted hover:text-accent"><Copy className="size-3" /> JSON 복사</button>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button size="sm" variant="ghost" disabled={d.page === 0 || d.loading} onClick={() => dialect && void d.setPage(connId!, dialect, selected, d.page - 1)}><ChevronLeft /></Button>
-                  <Button size="sm" variant="ghost" disabled={d.rows.length < d.pageSize || d.loading} onClick={() => dialect && void d.setPage(connId!, dialect, selected, d.page + 1)}><ChevronRight /></Button>
-                </div>
+                <PagingBar
+                  page={d.page}
+                  pageSize={d.pageSize}
+                  total={d.total}
+                  counting={d.counting}
+                  rowsOnPage={d.rows.length}
+                  loading={d.loading}
+                  onGo={(p) => dialect && void d.setPage(connId!, dialect, selected, p)}
+                />
               </div>
               </>
             )}
@@ -993,35 +1039,6 @@ function NewCell({ kind, value, fk, onFk, onChange }: { kind: ReturnType<typeof 
       {fk && onFk && <button type="button" onClick={() => onFk(fk)} className="shrink-0 px-1 text-[10px] font-bold text-sky-600 hover:text-accent" title={`${fk.table} 참조 선택`}>FK</button>}
       {!fk && kind === 'uuid' && <button type="button" onClick={() => onChange(genUuid())} className="px-1 text-[10px] text-muted hover:text-accent" title="UUID 생성">UUID</button>}
       {!fk && kind === 'date' && <button type="button" onClick={() => onChange(nowDateTime())} className="px-1 text-[10px] text-muted hover:text-accent" title="현재 시각">NOW</button>}
-    </div>
-  )
-}
-
-/** 필터 바 — 컬럼/연산자/값 행 추가·삭제. */
-function FilterBar({ columns, filters, onChange }: { columns: string[]; filters: Filter[]; onChange: (f: Filter[]) => void }) {
-  const [draft, setDraft] = useState<Filter[]>(filters.length ? filters : [{ column: columns[0] ?? '', op: '=', value: '' }])
-  const set = (i: number, patch: Partial<Filter>): void => setDraft((ds) => ds.map((f, j) => (j === i ? { ...f, ...patch } : f)))
-  return (
-    <div className="flex shrink-0 flex-col gap-1.5 border-b border-line bg-panel/40 px-4 py-2">
-      {draft.map((f, i) => (
-        <div key={i} className="flex items-center gap-1.5 text-[12px]">
-          <select value={f.column} onChange={(e) => set(i, { column: e.target.value })} className="rounded border border-line bg-canvas px-1.5 py-1 font-mono text-[11px] outline-none">
-            {columns.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select value={f.op} onChange={(e) => set(i, { op: e.target.value as Filter['op'] })} className="rounded border border-line bg-canvas px-1.5 py-1 text-[11px] outline-none">
-            {['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IS NULL', 'IS NOT NULL'].map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-          {f.op !== 'IS NULL' && f.op !== 'IS NOT NULL' && (
-            <Input value={f.value} onChange={(e) => set(i, { value: e.target.value })} placeholder="값" className="h-7 w-40 text-[12px]" />
-          )}
-          <button type="button" onClick={() => setDraft((ds) => ds.filter((_, j) => j !== i))} className="text-muted hover:text-destructive"><X className="size-3.5" /></button>
-        </div>
-      ))}
-      <div className="flex items-center gap-1.5">
-        <Button size="sm" variant="ghost" onClick={() => setDraft((ds) => [...ds, { column: columns[0] ?? '', op: '=', value: '' }])}><Plus /> 조건</Button>
-        <Button size="sm" onClick={() => onChange(draft)}>적용</Button>
-        {filters.length > 0 && <Button size="sm" variant="ghost" onClick={() => { setDraft([{ column: columns[0] ?? '', op: '=', value: '' }]); onChange([]) }}>초기화</Button>}
-      </div>
     </div>
   )
 }

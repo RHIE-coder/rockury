@@ -78,6 +78,39 @@ for (const name of CONTAINERS) {
   else warn(`${name} did not become healthy within ${MAX_WAIT / 1000}s`);
 }
 
+// 3.5 제한 권한 계정 — **볼 수 있는 표가 딱 하나뿐인** 계정을 심는다.
+//
+// 왜 픽스처에 두나: "역설계 목록에 없다"가 삭제인지 권한인지 가르는 동작(§db-remote.data
+// .saved-filter AC-5a)은 **권한이 실제로 빠진 계정**이 없으면 검증할 수 없다. 그런데 앱이 쓰는
+// `test` 계정에는 CREATE USER·GRANT 권한이 없어(의도) 검사가 실행 중에 만들 수도 없다.
+// init/*.sql 은 빈 볼륨에서만 도므로 이미 떠 있는 컨테이너에는 안 먹는다 → 매번 멱등하게 심는다.
+log('Provisioning limited-privilege account (rky_limited)...');
+{
+  // `roles` 만 볼 수 있다. 나머지 표는 **존재하지만 이 계정 눈에는 안 보인다** — 그 상태가
+  // "지워진 표"와 구별돼야 한다는 것이 이 계정의 존재 이유다.
+  const sql = [
+    "CREATE USER IF NOT EXISTS 'rky_limited'@'%' IDENTIFIED BY 'rky_limited';",
+    "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'rky_limited'@'%';",
+    "GRANT SELECT ON testdb.roles TO 'rky_limited'@'%';",
+    'FLUSH PRIVILEGES;'
+  ].join(' ')
+  for (const [name, cli] of [
+    ['rockury-test-mysql', 'mysql'],
+    ['rockury-test-mariadb', 'mariadb']
+  ]) {
+    try {
+      execSync(`docker exec ${name} ${cli} -uroot -proot -e ${JSON.stringify(sql)}`, {
+        stdio: ['ignore', 'ignore', 'ignore'],
+        env: dockerEnv()
+      });
+      ok(`${name}: rky_limited`);
+    } catch {
+      // 없어도 앱은 멀쩡히 돌아간다 — 이 계정을 쓰는 검사만 못 돈다.
+      warn(`${name}: rky_limited 계정을 못 심었습니다(권한 검증 스모크만 영향).`);
+    }
+  }
+}
+
 // 4. 접속 정보 출력
 const b = (s) => styleText('bold', s);
 const svc = (s) => styleText('blue', s);

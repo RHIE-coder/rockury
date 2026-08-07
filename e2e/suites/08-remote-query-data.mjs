@@ -2,6 +2,8 @@
 // 실행: `npm run e2e`(e2e/smoke.mjs 러너가 순서대로 부른다). 단독 실행용 진입점은 없다.
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 
+import { isRedFamily } from '../lib/harness.mjs'
+
 export const meta = {
   name: '08-remote-query-data',
   needsDb: true,
@@ -239,4 +241,334 @@ export async function run(ctx) {
     await run('DROP TABLE IF EXISTS refresh_probe')
   }
 
+  // ⭐ CASE-remote-04K/04L/04M/04N — 쪽 넘김·필터·저장 필터(2026-08-07 사용자 요청)
+  // §db-remote.data.paging · data.filter · data.saved-filter
+  {
+    await click('button:has-text("새로고침")')
+    await page.waitForSelector('[data-table-row="users"]', { timeout: 15_000 })
+    await click('[data-table-row="users"]')
+    await page.waitForSelector('th:has-text("email")', { timeout: 15_000 })
+    await page.waitForTimeout(1000) // 행 수 세기는 조회와 따로 돈다(§paging AC-4)
+
+    const pageInput = () => page.locator('input[aria-label="쪽 번호"]')
+    const valueBox = () => page.locator('input[placeholder="값"]').first()
+    const rows = () => page.locator('tbody tr').count()
+    // 필터 바는 표를 바꿔도 열린 채 남는다(패널 토글) — 이미 열렸는데 또 누르면 닫힌다.
+    const openFilterBar = async () => {
+      if ((await page.locator('[data-filter-toggle]').count()) === 0) await click('button:has-text("필터")')
+      await page.waitForSelector('[data-filter-toggle]', { timeout: 5_000 })
+    }
+
+    check('Remote › Data: 쪽 입력 칸이 1쪽을 가리킨다', (await pageInput().inputValue()) === '1')
+    check('Remote › Data: 조건에 맞는 전체 행 수를 보인다', /전체 \d/.test(await body()))
+
+    // ── 필터 바: 컬럼·연산자를 **검색 카드**로 고른다(§data.filter AC-1/AC-1b) ──
+    const baseRows = await rows()
+    await openFilterBar()
+    check('Remote › Data: 필터 바 스위치가 켜져 있다', (await body()).includes('조건 켬'))
+
+    await click('[data-search-select="filter-column"]')
+    await page.waitForSelector('input[placeholder="컬럼 검색"]', { timeout: 5_000 })
+    await page.locator('input[placeholder="컬럼 검색"]').fill('ema')
+    await page.waitForTimeout(250)
+    const card = await page.locator('div:has(> div > input[placeholder="컬럼 검색"])').last().innerText()
+    check('Remote › Data: 검색 카드가 타이핑으로 컬럼을 좁힌다', card.includes('email') && !/\bid\b/.test(card))
+    await page.keyboard.press('Enter') // 키보드만으로 고를 수 있다
+    await page.waitForTimeout(250)
+
+    await click('[data-search-select="filter-op"]')
+    await page.waitForSelector('input[placeholder="연산자 검색"]', { timeout: 5_000 })
+    await page.locator('input[placeholder="연산자 검색"]').fill('비슷')
+    await page.waitForTimeout(250)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(250)
+    check(
+      'Remote › Data: 연산자도 검색으로 고른다(LIKE)',
+      (await page.locator('[data-search-select="filter-op"]').first().innerText()).includes('LIKE')
+    )
+
+    await valueBox().fill('%a%')
+    // `:has-text` 는 부분일치라 "조건 켬" 스위치까지 걸린다 — 정확히 "적용"인 버튼을 집는다.
+    await page.locator('button:text-is("적용")').first().click()
+    await page.waitForTimeout(1200)
+    const filtered = await rows()
+    check('Remote › Data: 필터 적용', filtered <= baseRows)
+
+    // ── 켬/끔: 조건을 지우지 않고 전체를 본다(§data.filter AC-3) ──
+    await click('[data-filter-toggle="on"]')
+    await page.waitForTimeout(1200)
+    check('Remote › Data: 필터를 끄면 전체 목록이 돌아온다', (await rows()) >= filtered)
+    check('Remote › Data: 꺼도 조건 줄은 그대로 남는다', (await valueBox().inputValue()) === '%a%')
+    await click('[data-filter-toggle="off"]')
+    await page.waitForTimeout(1200)
+    check('Remote › Data: 다시 켜면 같은 조건이 걸린다', (await rows()) === filtered)
+
+    // ── 저장 필터(§data.saved-filter AC-1/AC-2) ──
+    await click('[data-saved-filters]')
+    await page.waitForTimeout(300)
+    check('Remote › Data: 저장한 필터가 아직 없다', (await body()).includes('저장한 필터 없음'))
+    await page.keyboard.press('Escape')
+
+    await click('[data-save-filter]')
+    await page.waitForSelector('input[placeholder="필터 이름"]', { timeout: 5_000 })
+    await page.locator('input[placeholder="필터 이름"]').fill('메일에 a')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(800)
+    await click('[data-saved-filters]')
+    await page.waitForSelector('[data-saved-filter="메일에 a"]', { timeout: 5_000 })
+    check('Remote › Data: 이름 붙여 저장한 필터가 목록에 뜬다', (await page.locator('[data-saved-filter="메일에 a"]').count()) === 1)
+    await page.keyboard.press('Escape')
+
+    await click('button:has-text("조건 지우기")')
+    await page.waitForTimeout(1200)
+    check('Remote › Data: 조건 지우기는 조건을 비운다', (await valueBox().inputValue()) === '')
+    await click('[data-saved-filters]')
+    await page.waitForSelector('[data-saved-filter="메일에 a"]', { timeout: 5_000 })
+    await page.locator('[data-saved-filter="메일에 a"] button').first().click()
+    await page.waitForTimeout(1200)
+    check('Remote › Data: 저장 필터를 골라 조건이 되살아난다', (await valueBox().inputValue()) === '%a%')
+
+    // ── 표마다 따로 산다(§data.filter AC-2 · saved-filter AC-2) ──
+    await click('[data-table-row="user_roles"]')
+    await page.waitForTimeout(1500)
+    check('Remote › Data: 다른 표에 조건이 옮겨붙지 않는다', (await valueBox().inputValue().catch(() => '')) === '')
+    await click('[data-saved-filters]')
+    await page.waitForTimeout(400)
+    check('Remote › Data: 저장 필터도 그 표에만 보인다', (await page.locator('[data-saved-filter="메일에 a"]').count()) === 0)
+    await page.keyboard.press('Escape')
+    await click('[data-table-row="users"]')
+    await page.waitForTimeout(1500)
+    check('Remote › Data: 표를 옮겼다 돌아오면 그 표의 조건이 그대로다', (await valueBox().inputValue()) === '%a%')
+
+    // ── 쪽 넘김: 행이 많은 표에서 총 쪽수·직접 이동·처음/마지막·맨 위로(§paging) ──
+    await click('[data-table-row="audit_logs"]')
+    await page.waitForTimeout(1500)
+    await page.locator('select').last().selectOption('25')
+    await page.waitForTimeout(1500)
+    const totalPages = await page.evaluate(() => {
+      const el = [...document.querySelectorAll('span')].find((s) => s.previousElementSibling?.textContent === '/')
+      return el?.textContent?.trim()
+    })
+    check('Remote › Data: 총 쪽수가 숫자로 채워진다', /^\d+$/.test(totalPages ?? ''))
+    const last = Number(totalPages)
+
+    if (last > 1) {
+      // 맨 위로 돌아오는지 보려면 먼저 굴려 내려가 있어야 한다.
+      const scrollTop = () =>
+        page.evaluate(() => {
+          const g = [...document.querySelectorAll('div.overflow-auto')].find((d) => d.querySelector('table'))
+          return g?.scrollTop ?? -1
+        })
+      await page.evaluate(() => {
+        const g = [...document.querySelectorAll('div.overflow-auto')].find((d) => d.querySelector('table'))
+        if (g) g.scrollTop = 200
+      })
+      await page.waitForTimeout(200)
+      await pageInput().fill('2')
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(1500)
+      check('Remote › Data: 쪽 번호를 쳐서 곧장 이동한다', (await pageInput().inputValue()) === '2')
+      check('Remote › Data: 쪽을 옮기면 표가 맨 위로 돌아온다', (await scrollTop()) === 0)
+
+      await click('button[aria-label="마지막"]')
+      await page.waitForTimeout(1500)
+      check('Remote › Data: 마지막 쪽으로 한 번에 뛴다', (await pageInput().inputValue()) === String(last))
+      await click('button[aria-label="처음"]')
+      await page.waitForTimeout(1500)
+      check('Remote › Data: 처음 쪽으로 한 번에 돌아온다', (await pageInput().inputValue()) === '1')
+
+      await pageInput().fill('9999')
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(1500)
+      check('Remote › Data: 범위 밖 쪽 번호는 가장 가까운 쪽으로 당겨 잡는다', (await pageInput().inputValue()) === String(last))
+
+      // ⭐ 회귀 — 쪽 번호는 표마다 기억하는데 쪽 크기는 전체가 하나를 쓴다. 마지막 쪽에 서
+      // 있다가 다른 표에서 쪽 크기를 키우고 돌아오면 예전엔 **빈 표에 `9 / 2`** 가 떴다.
+      await click('[data-table-row="users"]')
+      await page.waitForTimeout(1200)
+      await page.locator('select').last().selectOption('200')
+      await page.waitForTimeout(1200)
+      await click('[data-table-row="audit_logs"]')
+      await page.waitForTimeout(2500)
+      check('Remote › Data: 쪽 크기를 키운 뒤 돌아와도 빈 쪽에 서지 않는다', (await rows()) > 0)
+      check('Remote › Data: 범위 밖이 된 쪽은 마지막 쪽으로 스스로 되돌아온다', Number(await pageInput().inputValue()) <= 2)
+      await page.locator('select').last().selectOption('50') // 뒤 검사에 영향 없게 되돌린다
+      await page.waitForTimeout(1000)
+    } else {
+      check(`Remote › Data: 쪽 이동 검사(테스트 DB audit_logs 가 25행 이하라 건너뜀 — 총 ${last}쪽)`, false)
+    }
+  }
+
+  // ⭐ 표가 사라지면 그 표의 저장 필터도 사라진다(§data.saved-filter AC-5)
+  {
+    const conn = await page.evaluate(() => window.__rockuryNav.activeContext().conn ?? null)
+    const run = (sql) => page.evaluate(([id, s]) => window.rockury.query.run(id, s), [conn, sql])
+
+    await run('DROP TABLE IF EXISTS filter_probe')
+    await run('CREATE TABLE filter_probe (id int primary key, note text)')
+    await click('button:has-text("새로고침")')
+    await page.waitForSelector('[data-table-row="filter_probe"]', { timeout: 15_000 })
+    await click('[data-table-row="filter_probe"]')
+    await page.waitForSelector('th:has-text("note")', { timeout: 10_000 })
+
+    if ((await page.locator('[data-filter-toggle]').count()) === 0) await click('button:has-text("필터")')
+    await page.waitForSelector('[data-filter-toggle]', { timeout: 5_000 })
+    await page.waitForTimeout(400)
+    await page.locator('input[placeholder="값"]').first().fill('x')
+    await click('[data-save-filter]')
+    await page.waitForSelector('input[placeholder="필터 이름"]', { timeout: 5_000 })
+    await page.locator('input[placeholder="필터 이름"]').fill('probe 필터')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(800)
+    const saved = await page.evaluate((id) => window.rockury.dataFilters.listByConnection(id), conn)
+    check('Remote › Data: 표에 저장 필터가 붙었다', saved.some((s) => s.name === 'probe 필터'))
+
+    // 표를 지우고 역설계를 다시 읽으면 그 표의 저장 필터가 정리된다.
+    await run('DROP TABLE IF EXISTS filter_probe')
+    await click('button:has-text("새로고침")')
+    await page.waitForTimeout(2500)
+    const after = await page.evaluate((id) => window.rockury.dataFilters.listByConnection(id), conn)
+    check('Remote › Data: 표를 지우면 그 표의 저장 필터도 사라진다', !after.some((s) => s.name === 'probe 필터'))
+    // 다른 표(users)의 저장 필터는 그대로 — 범위 안이라고 싸잡아 지우지 않는다.
+    check('Remote › Data: 남아 있는 표의 저장 필터는 그대로다', after.some((s) => s.name === '메일에 a'))
+  }
+
+  // ⭐ CASE-remote-04O — 컬럼이 사라진 저장 필터는 빨갛게 막힌다(§data.saved-filter AC-4)
+  {
+    const conn = await page.evaluate(() => window.__rockuryNav.activeContext().conn ?? null)
+    const run = (sql) => page.evaluate(([id, s]) => window.rockury.query.run(id, s), [conn, sql])
+
+    await run('DROP TABLE IF EXISTS broken_probe')
+    await run('CREATE TABLE broken_probe (id int primary key, nickname varchar(50), note text)')
+    await run("INSERT INTO broken_probe VALUES (1, 'kim', 'hello')")
+    await click('button:has-text("새로고침")')
+    await page.waitForSelector('[data-table-row="broken_probe"]', { timeout: 15_000 })
+    await page.waitForTimeout(600) // 목록이 막 그려진 직후의 클릭은 삼켜진다
+    await click('[data-table-row="broken_probe"]')
+    await page.waitForSelector('th:has-text("nickname")', { timeout: 15_000 })
+
+    if ((await page.locator('[data-filter-toggle]').count()) === 0) await click('button:has-text("필터")')
+    await page.waitForSelector('[data-filter-toggle]', { timeout: 5_000 })
+    await page.waitForTimeout(400)
+
+    // 컬럼 둘에 각각 저장 필터 — 하나는 곧 깨지고 하나는 멀쩡히 남는다.
+    const pickColumn = async (col) => {
+      await click('[data-search-select="filter-column"]')
+      await page.waitForSelector('input[placeholder="컬럼 검색"]', { timeout: 5_000 })
+      await page.locator('input[placeholder="컬럼 검색"]').fill(col)
+      await page.waitForTimeout(250)
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(300)
+    }
+    const saveAs = async (name) => {
+      await click('[data-save-filter]')
+      await page.waitForSelector('input[placeholder="필터 이름"]', { timeout: 5_000 })
+      await page.locator('input[placeholder="필터 이름"]').fill(name)
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(800)
+    }
+    await pickColumn('nickname')
+    await page.locator('input[placeholder="값"]').first().fill('kim')
+    await saveAs('별명이 kim')
+    await pickColumn('note')
+    await page.locator('input[placeholder="값"]').first().fill('hello')
+    await saveAs('메모가 hello')
+
+    // 밖에서 컬럼 하나를 지운다.
+    await run('ALTER TABLE broken_probe DROP COLUMN nickname')
+    await click('button:has-text("새로고침")')
+    // 고정 대기가 아니라 **헤더에서 컬럼이 실제로 빠질 때까지** 기다린다.
+    await page.waitForFunction(
+      () => !document.querySelector('th')?.closest('table')?.innerText.includes('nickname'),
+      null,
+      { timeout: 20_000 }
+    )
+    await page.waitForTimeout(500)
+    if ((await page.locator('[data-filter-toggle]').count()) === 0) await click('button:has-text("필터")')
+    await page.waitForTimeout(400)
+    await click('[data-saved-filters]')
+    await page.waitForSelector('[data-saved-filter="별명이 kim"]', { timeout: 8_000 })
+
+    const broken = page.locator('[data-saved-filter="별명이 kim"]')
+    const intact = page.locator('[data-saved-filter="메모가 hello"]')
+    const brokenText = await broken.innerText()
+    check('Remote › Data: 컬럼이 사라진 저장 필터가 못 쓰는 상태로 표시된다', (await broken.getAttribute('data-saved-filter-broken')) !== null)
+    check('Remote › Data: 멀쩡한 저장 필터는 그대로 쓸 수 있다', (await intact.getAttribute('data-saved-filter-broken')) === null)
+    check('Remote › Data: 없어진 컬럼 이름과 이유를 밝힌다', brokenText.includes('nickname') && brokenText.includes('적용할 수 없습니다'))
+    check('Remote › Data: 못 쓰는 저장 필터는 적용이 막힌다', await broken.locator('button').first().isDisabled())
+
+    // 색 판정은 하네스의 `isRedFamily` 를 쓴다 — 표기가 rgb()/oklab() 둘이라 손으로 재면 틀린다.
+    const colors = await page.evaluate(() => {
+      const box = document.querySelector('[data-saved-filter-broken]')
+      const warn = [...box.querySelectorAll('div')].find((d) => d.textContent.includes('적용할 수 없습니다'))
+      return { warn: getComputedStyle(warn).color, border: getComputedStyle(box).borderColor }
+    })
+    check(
+      'Remote › Data: 경고가 빨간 계열이다(글자·테두리)',
+      isRedFamily(colors.warn) && isRedFamily(colors.border)
+    )
+
+    await page.keyboard.press('Escape')
+    await run('DROP TABLE IF EXISTS broken_probe')
+  }
+
+  // ⭐ CASE-remote-04Q — 오삭제 회귀(§data.saved-filter AC-5a)
+  //
+  // "역설계 목록에 없다"에는 두 가지가 섞여 있다: 진짜 없는 것과 **표는 있는데 권한이 없어
+  // 안 보이는 것**. 앞은 앞 블록(`filter_probe`, 전권 계정)이 "지워진다"로 덮었고, 여기서는
+  // 뒤가 **살아남는지**를 본다 — 못 가르면 계정 권한이 바뀐 사이 사용자가 만든 필터가
+  // 되돌릴 수 없이 날아간다. 그래서 목록만 믿지 않고 그 표에 직접 물어본다.
+  //
+  // 제한 권한 계정(`rky_limited`, `testdb.roles` 만 볼 수 있음)은 **테스트 DB 픽스처**가 심는다
+  // (`npm run db:up`). 앱이 쓰는 `test` 계정엔 GRANT 권한이 없어 검사가 실행 중에 못 만든다.
+  {
+    const limitedId = await page.evaluate(async () => {
+      const c = await window.rockury.connections.create({
+        name: 'E2E-limited',
+        dbType: 'mysql',
+        host: '127.0.0.1',
+        port: 13306,
+        database: 'testdb',
+        user: 'rky_limited',
+        password: 'rky_limited',
+        sslEnabled: false,
+        autoCheckDisabled: true
+      })
+      // 저장 필터를 IPC 로 심는다 — 이 검사의 관심사는 정리 판정이지 저장 화면이 아니다.
+      //   roles : 이 계정에 보인다        → 후보도 아니다
+      //   users : 표는 있는데 권한이 없다 → 후보지만 **살아남아야** 한다(이 검사의 핵심)
+      for (const t of ['roles', 'users']) {
+        await window.rockury.dataFilters.save({
+          connectionId: c.id,
+          schema: 'testdb',
+          table: t,
+          name: `f:${t}`,
+          filters: [{ column: 'id', op: '=', value: '1' }]
+        })
+      }
+      return c.id
+    })
+
+    // IPC 로 만든 연결은 렌더러의 연결 목록이 아직 모른다 — 창을 다시 읽혀 목록을 맞춘다.
+    await page.reload()
+    await page.waitForSelector('text=Design', { timeout: 20_000 })
+    await click('[data-nav-module="remote"]')
+    await page.waitForTimeout(400)
+    await page.evaluate((id) => window.__rockuryNav.setContextValue('conn', id), limitedId)
+    await page.waitForTimeout(800)
+    await click('button:has-text("Data")')
+    await page.waitForSelector('[data-table-row="roles"]', { timeout: 20_000 })
+    await page.waitForTimeout(4000) // 정리는 확인 질의를 거치므로 목록이 뜬 뒤에도 한 박자 더 걸린다
+
+    const left = await page.evaluate((id) => window.rockury.dataFilters.listByConnection(id), limitedId)
+    const has = (t) => left.some((s) => s.table === t)
+    check('Remote › Data: 권한에 가려졌을 뿐인 표의 저장 필터는 살아남는다', has('users'))
+    check('Remote › Data: 보이는 표의 저장 필터는 그대로다', has('roles'))
+
+    // 뒷정리 — 뒤 스위트가 이 연결을 보지 않게 한다(연결을 지우면 그 저장 필터도 무의미해진다).
+    await page.evaluate((id) => window.rockury.connections.delete(id), limitedId)
+    const back = await page.evaluate(() => window.rockury.connections.list().then((l) => l[0].id))
+    await page.evaluate((id) => window.__rockuryNav.setContextValue('conn', id), back)
+    await page.waitForTimeout(600)
+  }
 }

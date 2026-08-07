@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron'
 import { unwrap } from '../envelope'
 import type { CatalogSource, ProviderPublic, RunOutcome } from '../../main/ipc/infra/contract'
+import type { InfraChangedEvent } from '../../shared/infraChanged'
 import type {
   RunActionInput,
   RunMwInput,
@@ -53,8 +54,19 @@ export type GraphEdge = Omit<EdgeRow, 'designId'>
  * 최상위 키는 `infra` 하나 — 다른 서비스와 겹치면 조립이 실패한다(preload 네임스페이스 규칙).
  * 자격증명은 **넣는 길만 있고 꺼내는 길이 없다** — 평문을 렌더러로 돌려주는 채널을 아예 만들지 않았다.
  */
+export type { InfraChangedEvent } from '../../shared/infraChanged'
+
 export const infraApi = {
   infra: {
+    /**
+     * 저장소가 바뀌었다 — 다른 창(또는 에이전트)이 쓴 것. 되부르면 구독이 끊긴다.
+     * 창마다 목록 사본을 들고 시작 때 한 번만 읽으므로, 이게 없으면 사본이 영영 안 맞는다.
+     */
+    onChanged: (fn: (e: InfraChangedEvent) => void): (() => void) => {
+      const handler = (_ev: unknown, e: InfraChangedEvent): void => fn(e)
+      ipcRenderer.on('infra:changed', handler)
+      return () => ipcRenderer.removeListener('infra:changed', handler)
+    },
     // 카탈로그
     listCatalogs: (): Promise<CatalogRow[]> => unwrap(ipcRenderer.invoke('infra:listCatalogs')),
     saveCatalog: (input: SaveCatalogInput): Promise<CatalogRow> =>

@@ -6,6 +6,7 @@ import { registerQueryIpc } from './query'
 import { registerMigrationIpc } from './migration'
 import { registerCollectionIpc } from './collections'
 import { registerDiagramIpc } from './diagram'
+import { registerDataFilterIpc } from './dataFilters'
 
 /**
  * DB 서비스의 IPC 채널 전부. 설계부(store)와 운영부(connections~diagram)를 함께 등록한다.
@@ -23,4 +24,5 @@ export function registerDbIpc(): void {
   registerMigrationIpc()
   registerCollectionIpc()
   registerDiagramIpc()
+  registerDataFilterIpc()
 }

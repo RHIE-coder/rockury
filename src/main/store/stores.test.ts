@@ -30,6 +30,13 @@ import { listTables, replaceTablesForDesign, type TableRecord } from './tables'
 import { listSeedSets, replaceSeedSetsForDesign, type SeedSetRecord } from './seedSets'
 import { createDesign, deleteDesign } from './designs'
 import { clearLayout, getLayout, saveLayout } from './diagramLayouts'
+import {
+  deleteDataFilter,
+  deleteDataFilters,
+  listDataFilters,
+  listDataFiltersByConnection,
+  saveDataFilter
+} from './dataFilters'
 import { appendLog, latestSnapshot, listLogs, saveSnapshot } from './migration'
 import { createVersion, deleteVersion, listVersions, updateVersionNote } from './versions'
 import {
@@ -736,5 +743,79 @@ describe('샘플 DB — 파일과 접속을 따로 판정 (db-connections.sample
     } finally {
       chmodSync(join(baseDir, SAMPLE_DIR), 0o700)
     }
+  })
+})
+
+// CASE-remote-067 — 저장 필터 저장소 왕복(§db-remote.data.saved-filter AC-2/AC-3)
+describe('dataFilters (Data 저장 필터 영속)', () => {
+  const CONN = 'conn_filters'
+  const mk = (schema: string, table: string, name: string) =>
+    saveDataFilter({
+      connectionId: CONN,
+      schema,
+      table,
+      name,
+      filters: [{ column: 'email', op: 'LIKE', value: '%a%' }]
+    })
+
+  it('저장 → 그 표의 목록에 뜬다', () => {
+    const rec = mk('public', 'users', '가입 대기')
+    expect(rec.name).toBe('가입 대기')
+    expect(rec.filters).toEqual([{ column: 'email', op: 'LIKE', value: '%a%' }])
+    expect(listDataFilters(CONN, 'public', 'users').map((r) => r.id)).toEqual([rec.id])
+  })
+
+  it('다른 표의 것은 목록에 안 나온다', () => {
+    mk('public', 'orders', '주문 필터')
+    expect(listDataFilters(CONN, 'public', 'users').map((r) => r.name)).toEqual(['가입 대기'])
+  })
+
+  it('이름이 같은 표라도 스키마가 다르면 섞이지 않는다', () => {
+    // 범위(scope)에 스키마가 둘 이상 켜지면 같은 이름 표가 여럿 올라온다(§db/schemaRef).
+    mk('service2', 'users', '다른 스키마')
+    expect(listDataFilters(CONN, 'public', 'users').map((r) => r.name)).toEqual(['가입 대기'])
+    expect(listDataFilters(CONN, 'service2', 'users').map((r) => r.name)).toEqual(['다른 스키마'])
+  })
+
+  it('연결이 다르면 안 보인다', () => {
+    saveDataFilter({ connectionId: 'conn_other', schema: 'public', table: 'users', name: '남의 것', filters: [] })
+    expect(listDataFilters(CONN, 'public', 'users').map((r) => r.name)).toEqual(['가입 대기'])
+  })
+
+  it('id 를 주면 이름과 조건을 고친다 — 새로 만들지 않는다', () => {
+    const rec = listDataFilters(CONN, 'public', 'users')[0]
+    const updated = saveDataFilter({
+      id: rec.id,
+      connectionId: CONN,
+      schema: 'public',
+      table: 'users',
+      name: '이름 바꿈',
+      filters: [{ column: 'age', op: '>', value: '18' }]
+    })
+    expect(updated.id).toBe(rec.id)
+    expect(updated.name).toBe('이름 바꿈')
+    expect(updated.filters).toEqual([{ column: 'age', op: '>', value: '18' }])
+    expect(listDataFilters(CONN, 'public', 'users').length).toBe(1)
+  })
+
+  it('연결 단위 목록은 그 연결의 전부를 준다 — 표 삭제 정리가 이걸 쓴다', () => {
+    const names = listDataFiltersByConnection(CONN).map((r) => r.name).sort()
+    expect(names).toEqual(['다른 스키마', '이름 바꿈', '주문 필터'])
+  })
+
+  it('하나 지우기 · 여럿 지우기', () => {
+    const one = listDataFilters(CONN, 'public', 'orders')[0]
+    deleteDataFilter(one.id)
+    expect(listDataFilters(CONN, 'public', 'orders')).toEqual([])
+
+    const rest = listDataFiltersByConnection(CONN).map((r) => r.id)
+    expect(deleteDataFilters(rest)).toBe(rest.length)
+    expect(listDataFiltersByConnection(CONN)).toEqual([])
+  })
+
+  it('빈 목록을 지우라고 하면 아무 일도 안 한다', () => {
+    mk('public', 'users', '남을 것')
+    expect(deleteDataFilters([])).toBe(0)
+    expect(listDataFiltersByConnection(CONN).length).toBe(1)
   })
 })
