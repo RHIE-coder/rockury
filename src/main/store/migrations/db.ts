@@ -28,6 +28,7 @@ export const dbMigration: ServiceMigration = {
     'seed_sets',
     'env_variables',
     'diagram_layouts',
+    'db_grant_sets',
     'db_data_filters'
   ],
 
@@ -282,6 +283,16 @@ export const dbMigration: ServiceMigration = {
     );
     CREATE INDEX IF NOT EXISTS idx_db_data_filters_table
       ON db_data_filters(connection_id, schema_name, table_name);
+
+    -- 권한 세트(§db-remote.grants.sets) — 연결 참조가 **없다**: 연결을 지워도 세트는 남아
+    -- 다른 환경에 재적용된다(재활용이 존재 이유). items 는 (테이블 패턴 × 권한들) JSON.
+    CREATE TABLE IF NOT EXISTS db_grant_sets (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      items      TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `,
 
   alter(d: DatabaseSync): void {

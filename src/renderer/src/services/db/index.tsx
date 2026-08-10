@@ -45,6 +45,7 @@ import { ScopeSelector } from './connections/ScopeSelector'
 import { VersionLens } from './versions/VersionLens'
 import { ConnectionsView } from './connections/ConnectionsView'
 import { ObjectView } from './remote/ObjectView'
+import { GrantView } from './remote/GrantView'
 import { DiagramView } from './remote/DiagramView'
 import { DefinitionView } from './remote/DefinitionView'
 import { QueryView } from './remote/QueryView'
@@ -264,7 +265,9 @@ export const dbService: Service = {
         { id: 'query', label: 'Query', icon: Terminal, workspace: QueryView },
         { id: 'collection', label: 'Collection', icon: Layers, workspace: CollectionView },
         { id: 'history', label: 'History', icon: History, workspace: HistoryView },
-        { id: 'object', label: 'Object', icon: Boxes, workspace: ObjectView }
+        { id: 'object', label: 'Object', icon: Boxes, workspace: ObjectView },
+        // 뷰 줄 맨 뒤 — 조회·편집이 아니라 운영 관리 성격(§db-remote.grants)
+        { id: 'grants', label: 'Grant', icon: ShieldCheck, workspace: GrantView }
       ]
     }
   ]

@@ -28,6 +28,7 @@ import {
 import { appendHistory, listHistory } from './queryHistory'
 import { listTables, replaceTablesForDesign, type TableRecord } from './tables'
 import { listSeedSets, replaceSeedSetsForDesign, type SeedSetRecord } from './seedSets'
+import { createGrantSet, deleteGrantSet, listGrantSets, updateGrantSet } from './grantSets'
 import { createDesign, deleteDesign } from './designs'
 import { clearLayout, getLayout, saveLayout } from './diagramLayouts'
 import {
@@ -465,6 +466,45 @@ describe('tables — 설계 스코프 교체 (replaceTablesForDesign)', () => {
     // 롤백: 새 배치의 x10 도 없고, 기존 x9 는 살아 있다.
     expect(listTables().filter((t) => t.designId === 'scope_x').map((t) => t.id)).toEqual(['x9'])
     expect(listTables().filter((t) => t.designId === 'scope_y')).toHaveLength(1)
+  })
+})
+
+// CASE-remote-074 — 권한 세트 저장소 왕복 + 연결 삭제 생존(회귀: 재활용 동기의 핵심)
+describe('grantSets — 권한 세트 (연결 독립)', () => {
+  it('저장→목록→수정→삭제 왕복', () => {
+    const created = createGrantSet('서비스-읽기', [{ pattern: 'orders_*', privileges: ['SELECT'] }])
+    expect(listGrantSets().map((s) => s.name)).toContain('서비스-읽기')
+
+    const renamed = updateGrantSet(created.id, { name: '서비스-읽기 v2' })
+    expect(renamed.name).toBe('서비스-읽기 v2')
+    expect(renamed.items).toEqual([{ pattern: 'orders_*', privileges: ['SELECT'] }]) // 이름만 고치면 내용은 그대로
+
+    const edited = updateGrantSet(created.id, {
+      items: [{ pattern: 'customers', privileges: ['SELECT', 'UPDATE'] }]
+    })
+    expect(edited.items[0].pattern).toBe('customers')
+
+    deleteGrantSet(created.id)
+    expect(listGrantSets().find((s) => s.id === created.id)).toBeUndefined()
+  })
+
+  it('연결을 지워도 세트가 남는다 — 스키마에 연결 참조 자체가 없다', () => {
+    const conn = createConnection({
+      name: 'grants-conn', dbType: 'mysql', host: 'h', port: 3306, database: 'd', user: 'u',
+      encryptedPassword: '', sslEnabled: false, autoCheckDisabled: true
+    })
+    const set = createGrantSet('생존-확인', [{ pattern: 'pokemon_*', privileges: ['SELECT', 'INSERT'] }])
+
+    deleteConnection(conn.id)
+
+    const survived = listGrantSets().find((s) => s.id === set.id)
+    expect(survived).toBeDefined()
+    expect(survived?.items).toEqual([{ pattern: 'pokemon_*', privileges: ['SELECT', 'INSERT'] }])
+    deleteGrantSet(set.id)
+  })
+
+  it('없는 세트 수정은 명시적 오류 — 조용히 새로 만들지 않는다', () => {
+    expect(() => updateGrantSet('no-such-id', { name: 'x' })).toThrow()
   })
 })
 

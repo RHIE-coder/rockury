@@ -132,3 +132,27 @@
 - **CASE-remote-05E** **손으로 정한 상자 크기**: 크기가 있으면 소속을 멀리 옮겨도 그 자리·크기를 지키고, 최소 크기 아래로는 안 내려가며, **접힘이 손 크기보다 우선**한다. (diagram.group AC-6a)
 - **CASE-remote-05G** **동반 삭제 확인 문구**: `{N}개 테이블도 함께 삭제합니다` 를 개수에 맞게 만들고, 그대로 입력해야 통과한다(앞뒤 공백만 허용). 개수가 다르거나 글자가 어긋나면 막는다. (diagram.group-panel AC-2c)
 - **CASE-remote-05F** **그룹 기준 자동 배치**: 묶음을 안 주면 예전 배치와 **완전히 같고**, 주면 같은 묶음 노드가 서로 더 붙는다. 묶음에 없는 노드가 섞이거나 없는 노드를 가리켜도 안 터지고 좌표는 실제 노드에만 나온다. (diagram.layout AC-4a) → `console/diagram/layout.test.ts`
+
+## Scenario S8 — 권한(Grant) 읽기·층 판정 (순수 로직)
+- **CASE-remote-070** MySQL 원시 → 권한 IR 정규화: `SHOW GRANTS` 문자열·계정 카탈로그 행을 중립 IR(계정×객체×권한×층)로 편다. `*.*` 는 전역 층, `` `db`.* `` 는 DB 층, `` `db`.`t` `` 는 테이블 층. `ALL PRIVILEGES` 는 낱권한으로 전개, 이름 안의 백틱 이스케이프를 되돌리고, 계정은 `user@host` 짝으로 정규화. `USAGE` 만 있는 계정은 권한이 비되 **계정 자체는 사라지지 않는다.** (grants.vendor AC-1/AC-3) → `main/services/grants/mysql.test.ts`
+- **CASE-remote-071** PostgreSQL ACL → 권한 IR 정규화: `pg_roles`·aclitem(`grantee=arwd/grantor`)을 IR 로. 문자 코드 매핑(r=SELECT·a=INSERT·w=UPDATE·d=DELETE), `PUBLIC`(빈 grantee) 경유 권한, **ACL 이 NULL 인 표는 "권한 없음"이 아니라 소유자 기본권한**, 스키마 한정 이름 보존, role 소속은 이름 나열까지(전개 없음). (grants.vendor AC-1/AC-3/AC-3a) → `main/services/grants/pg.test.ts`
+- **CASE-remote-072** 층 합성(유효 권한): 전역/DB/테이블 층에서 온 권한이 한 객체의 유효 권한으로 합쳐지고 **권한마다 출처 층이 남는다.** 같은 권한이 여러 층에서 오면 출처를 **전부** 보존한다 — 한 층만 회수하고 "왜 아직 되지" 하는 미궁 방지가 이 표시의 존재 이유. 아무 층에도 없으면 유효 권한에도 없다. (grants.privileges AC-2) → `remote/grants/effective.test.ts`
+- **CASE-remote-073** 못 보는 계정(가짜 연결 라우터 — `introspection/mysql.test.ts` 패턴): 계정 카탈로그(mysql.user 계열·pg_roles)가 안 보이는 일반 계정에서 오류로 죽지 않고 **자기 권한만** 담아 성공으로 돌아오며, warnings 에 사유가 남는다. 실패의 두 형태(**빈 결과 · 권한 오류**) 모두 같은 답이어야 한다(introspection 에서 둘 다 겪었다). 관리자 계정이면 전 계정 + warnings 빈 배열. (grants.accounts AC-1/AC-2 · grants.vendor AC-2) → `main/services/grants/mysql.test.ts` · `main/services/grants/pg.test.ts`
+
+## Scenario S8b — 권한 세트·대조·문장 생성 (순수 로직 + 저장소)
+- **CASE-remote-074** 세트 저장소 왕복: 세트(이름 + 테이블 이름/패턴 × 권한들)의 저장→목록→이름 수정→삭제. 스키마에 **연결 참조 자체가 없고**, **연결을 지워도 세트가 남는다(회귀 — 재활용 동기의 핵심)**. (grants.sets AC-1/AC-2/AC-3) → `main/store/stores.test.ts`
+- **CASE-remote-075** 패턴 전개: `pokemon_*` 가 실제 테이블 목록에서 접두 일치로 전개된다. `*` 없는 항목은 정확 일치, `스키마.` 한정 허용. **매칭 0개 패턴은 빈 전개로 남되 조용히 사라지지 않는다**(대조가 "매칭 없음"을 보일 재료). 정규식 특수문자가 든 테이블 이름에 오작동하지 않는다. (grants.sets AC-5) → `remote/grants/pattern.test.ts`
+- **CASE-remote-076** 세트↔계정 대조(diff): 모자람(세트에 있는데 계정에 없음)과 넘침(계정에 있는데 세트에 없음)을 가른다. **양쪽 개수를 항상 함께 돌려준다** — 기대 0 · 실측 0 은 "일치"가 아니라 **"아무것도 대조되지 않음"**(FK 사건 교훈: 0=0 거짓 통과 금지). 패턴 전개를 거친 뒤 대조하고, 판정 기준은 **유효 권한**이다(테이블에 직접 없어도 전역·DB 층에서 오면 모자람이 아니다). 넘침의 출처가 위층이면 REVOKE 후보로 만들지 않는다. (grants.diff AC-2/AC-3/AC-5/AC-6) → `remote/grants/diff.test.ts`
+- **CASE-remote-077** GRANT/REVOKE 문장 생성: diff → 벤더별 문장. MySQL 은 백틱 + `'u'@'h'`, PG 는 큰따옴표 식별자 + 역할 이름 — 식별자·계정 인용이 벤더 규칙을 지킨다. 모자람 → GRANT, 넘침 → REVOKE 인데 **REVOKE 는 기본 제외**(옵션을 켠 때만 나온다). 미리보기와 실행이 **같은 함수의 출력**을 쓴다(미리보기≠실행 어긋남 방지). diff 가 비면 문장도 없다. (grants.apply AC-1/AC-2/AC-4) → `main/services/grants/statements.test.ts`
+- **CASE-remote-078** 접속 계정 자기 회수 차단(코드 레벨): 지금 접속 중인 계정을 겨눈 REVOKE 는 REVOKE 옵션을 켜도 생성·실행 목록에서 빠지고 **차단 사유가 결과에 남는다**(조용히 빠지면 사용자가 "왜 안 됐지"를 못 푼다). 자기 자신에게 GRANT 는 허용. 동일성 판정은 MySQL 은 `user@host` 짝, PG 는 역할 이름. (grants.apply AC-3/AC-3a) → `main/services/grants/statements.test.ts`
+
+## Scenario S8c — 권한 실 DB (통합)
+- **CASE-remote-079** 실 DB 왕복: docker test-db 의 MySQL·PostgreSQL 에서 관리자 계정으로 계정×객체×권한×층 IR 이 나오고, 제한 계정으로는 자기 권한만 + "못 본다" 경고. GRANT 적용 → 재조회에 반영, REVOKE(옵션 켬)도 반영 — **미리보기 문장과 실행 결과가 일치**. 끝나면 원복. (grants.vendor AC-1 · grants.apply AC-4) → `main/services/grants/grants.integration.test.ts` (`GRANTS_IT=1` — `INTROSPECT_IT` 패턴, docker 전제)
+
+## Scenario S9 — 권한 탭 앱 흐름 (e2e/suites/53-db-grants.mjs, CSS/text 로케이터만 · 실행은 사용자 지시 시)
+- **CASE-remote-07A** 탭 진입·현황: Remote 에 Grant 탭이 있고, 관리자 연결에서 좌측에 계정 목록이 뜬다. 계정을 고르면 우측에 DB 그룹별 객체×권한 표와 **층 배지**(전역/DB/테이블). SQLite 연결에서는 본문이 `SQLite — 권한 개념 없음` 한 줄. (grants.accounts AC-1 · grants.privileges AC-1/AC-2 · grants.vendor AC-4)
+- **CASE-remote-07B** 못 보는 계정 표시: 제한 권한 계정 연결로 진입하면 계정 목록 자리가 **오류가 아니라 경고 줄**("계정 목록을 읽을 권한이 없습니다 …")로 보이고, 자기 계정의 권한 표는 그대로 뜬다. `계정 없음` 표기는 나오면 안 된다. (grants.accounts AC-2)
+- **CASE-remote-07C** 세트 저장: 현황에서 계정의 권한을 떠 이름 붙여 저장 → 세트 목록에 뜨고, 골라 열면 내용(패턴×권한)이 보인다. (grants.sets AC-3/AC-4)
+- **CASE-remote-07D** 대조 표시: 세트를 골라 계정과 대조 → 모자람·넘침이 **갈라** 보이고 **양쪽 개수**가 함께 적힌다. 일부러 권한 하나를 빼 둔 픽스처 계정으로 모자람이 실제로 잡히는지 보고, "일치"와 "아무것도 대조되지 않음"이 다른 표기로 보인다. 새로고침하면 다시 계산된다. (grants.diff AC-2/AC-3)
+- **CASE-remote-07E** 적용 안전장치(미리보기까지): 대조에서 적용 바를 열면 **문장 미리보기가 먼저** 뜨고, REVOKE 토글은 기본 꺼짐이며, 승인 전에는 실행이 일어나지 않는다 — 취소로 닫고 재조회해 무변화 확인. (grants.apply AC-1/AC-2)
+  > **미검증(의도적)**: 승인→실제 실행의 앱 흐름은 e2e 로 안 덮는다. e2e 스모크 DB 의 권한을 바꾸면 뒤 스위트가 기대하는 픽스처 권한이 오염된다. 실행의 정확성은 CASE-remote-077(문장)·078(차단)·079(실 DB 왕복, 원복 포함)가 고정한다. 전제: e2e 픽스처가 계정 권한을 불변 전제로 쓰는 동안 유효.

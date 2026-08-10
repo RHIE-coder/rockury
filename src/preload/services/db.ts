@@ -5,6 +5,10 @@ import type { SampleResult, SampleStatus } from '../../shared/db/samplePlan'
 import type { ConnectionFormData, TestConnectionResult } from '../../main/services/connectionService'
 import type { EnvironmentRecord } from '../../main/store/environments'
 import type { IntrospectedSchema } from '../../main/services/introspection/types'
+import type { GrantsIR } from '../../main/services/grants/types'
+import type { GrantChange, StatementPlan } from '../../main/services/grants/statements'
+import type { ApplyResult } from '../../main/services/grantsService'
+import type { GrantSetItem, GrantSetRecord } from '../../main/store/grantSets'
 import type { QueryResult, TxBeginResult, ExplainResult } from '../../main/services/queryService'
 import type { AppendHistoryInput, QueryHistoryRecord } from '../../main/store/queryHistory'
 import type { FolderRecord, SavedQueryRecord } from '../../main/store/savedQueries'
@@ -219,6 +223,31 @@ export const dbApi = {
     /** 이 서버의 카탈로그(database) 목록 — PostgreSQL 만 채워져 온다. */
     catalogs: (connectionId: string): Promise<string[]> =>
       unwrap(ipcRenderer.invoke('introspection:catalogs', connectionId))
+  },
+  // 운영부 — 권한(Grant) 현황·세트·적용(§db-remote.grants).
+  grants: {
+    /** 활성 연결의 계정×객체×권한×층 IR. 못 읽은 것은 warnings 로 온다. */
+    run: (connectionId: string): Promise<GrantsIR> =>
+      unwrap(ipcRenderer.invoke('grants:run', connectionId)),
+    /** 문장 미리보기 — 실행(apply)과 같은 생성기라 보인 문장이 곧 실행 문장이다. */
+    plan: (
+      connectionId: string,
+      changes: GrantChange[],
+      opts: { includeRevoke: boolean; currentAccount: string }
+    ): Promise<StatementPlan> => unwrap(ipcRenderer.invoke('grants:plan', connectionId, changes, opts)),
+    apply: (
+      connectionId: string,
+      changes: GrantChange[],
+      opts: { includeRevoke: boolean }
+    ): Promise<ApplyResult> => unwrap(ipcRenderer.invoke('grants:apply', connectionId, changes, opts))
+  },
+  grantSets: {
+    list: (): Promise<GrantSetRecord[]> => unwrap(ipcRenderer.invoke('grantSets:list')),
+    create: (name: string, items: GrantSetItem[]): Promise<GrantSetRecord> =>
+      unwrap(ipcRenderer.invoke('grantSets:create', name, items)),
+    update: (id: string, patch: { name?: string; items?: GrantSetItem[] }): Promise<GrantSetRecord> =>
+      unwrap(ipcRenderer.invoke('grantSets:update', id, patch)),
+    delete: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('grantSets:delete', id))
   },
   // 운영부 — 쿼리 실행 + 트랜잭션 파괴 게이트(활성 Connection 대상).
   query: {

@@ -126,5 +126,12 @@ export const dbCoverage: ServiceCoverage = {
     'dataFilters:save': 'Data 화면 조회 편의 설정(UI 상태) — 노출 실익 없음',
     'dataFilters:delete': '파괴적 쓰기 — 파괴적 조작은 사람이 앱에서만, 노출 금지',
     'dataFilters:deleteMany': '파괴적 쓰기 — 파괴적 조작은 사람이 앱에서만, 노출 금지',
+    'grants:run': '실 DB 접속 실행 — 연결 도구 설계 시 함께 검토(읽기지만 접속 부하 유발)',
+    'grants:plan': '권한 문장 미리보기 — 사람의 승인 흐름(미리보기→승인→실행)의 한 도막, 단독 노출 실익 없음',
+    'grants:apply': '파괴적 쓰기(GRANT/REVOKE 실행) — 파괴적 조작은 사람이 앱에서만, 노출 금지',
+    'grantSets:list': '권한 세트(앱 로컬 설정) — 노출 실익 없음',
+    'grantSets:create': '권한 세트(앱 로컬 설정) — 노출 실익 없음',
+    'grantSets:update': '권한 세트(앱 로컬 설정) — 노출 실익 없음',
+    'grantSets:delete': '파괴적 쓰기 — 파괴적 조작은 사람이 앱에서만, 노출 금지',
   }
 }
