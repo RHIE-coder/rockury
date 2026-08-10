@@ -1,11 +1,21 @@
 import { ipcRenderer } from 'electron'
 import { unwrap } from '../envelope'
-import type { FeedbackPayloadInput } from '../../shared/devFeedback'
+import type {
+  FeedbackPayloadInput,
+  FeedbackStepInput,
+  FeedbackStepResult,
+  SaveFeedbackResult
+} from '../../shared/devFeedback'
 import type { ScopedItem, ScopedKind } from '../../main/store/scopedItems'
 import { decodeWindowBoot, type SessionTab, type WindowBoot, type WindowSession } from '../../shared/windowSession'
 import type { DownloadDone } from '../../shared/downloads'
 
-export type { FeedbackPayload, FeedbackPayloadInput } from '../../shared/devFeedback'
+export type {
+  FeedbackPayload,
+  FeedbackPayloadInput,
+  FeedbackStepInput,
+  FeedbackStepResult
+} from '../../shared/devFeedback'
 export type { ScopedItem, ScopedKind } from '../../main/store/scopedItems'
 export type { SessionTab, WindowBoot, WindowSession } from '../../shared/windowSession'
 export type { DownloadDone } from '../../shared/downloads'
@@ -27,12 +37,8 @@ export interface TabStripRect {
   height: number
 }
 
-/** 저장 결과 — 어느 폴더에 떨어졌는지와 그림이 함께 저장됐는지. */
-export interface SaveDevFeedbackResult {
-  folder: string
-  saved: string
-  hasImage: boolean
-}
+/** 저장 결과 — 어느 폴더에 떨어졌는지와 그림이 빠진 화면이 있었는지. */
+export type SaveDevFeedbackResult = SaveFeedbackResult
 
 /** 프로젝트 — 다섯 서비스가 함께 쓰는 범위. 어느 서비스도 소유하지 않아 여기 산다. */
 export interface Project {
@@ -142,9 +148,19 @@ export const shellApi = {
     setItemProject: (kind: ScopedKind, id: string, projectId: string | null): Promise<void> =>
       ipcRenderer.invoke('shell:setItemProject', kind, id, projectId)
   },
-  /** 개발용 화면 피드백 — 배포본에서는 메인이 거절한다. */
+  /**
+   * 개발용 화면 피드백 — 배포본에서는 메인이 거절한다.
+   *
+   * 셋으로 갈린 이유: 피드백 하나가 **화면 여럿**(흐름)을 걸칠 수 있어서다. 화면을 떠나기
+   * 전에 `step` 으로 그 화면을 굳혀 두고(메인이 창을 찍어 초안 폴더에 쓴다), 마지막에
+   * `save` 로 초안을 최종 폴더로 만든다. 중간에 그만두면 `discard`.
+   */
   devFeedback: {
+    step: (input: FeedbackStepInput): Promise<FeedbackStepResult> =>
+      unwrap(ipcRenderer.invoke('shell:devFeedbackStep', input)),
     save: (payload: FeedbackPayloadInput): Promise<SaveDevFeedbackResult> =>
-      unwrap(ipcRenderer.invoke('shell:saveDevFeedback', payload))
+      unwrap(ipcRenderer.invoke('shell:saveDevFeedback', payload)),
+    discard: (draft: string): Promise<void> =>
+      unwrap(ipcRenderer.invoke('shell:devFeedbackDiscard', draft))
   }
 }

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { boundsOfPoints, boundsOfShape, eraserHit, polylinesOf, shapeContains, svgPath } from './draw'
+import {
+  boundsOfPoints,
+  boundsOfShape,
+  partHit,
+  polylinesOf,
+  shapeContains,
+  shapeHit,
+  svgPath
+} from './draw'
 import type { Shape } from './types'
 
 /**
@@ -150,7 +158,7 @@ describe('svgPath', () => {
   })
 })
 
-describe('shapeContains · eraserHit — 지우개가 무엇을 집는가', () => {
+describe('shapeContains · partHit — 지우개가 무엇을 집는가', () => {
   const line = shape({
     tool: 'line',
     points: [
@@ -158,6 +166,9 @@ describe('shapeContains · eraserHit — 지우개가 무엇을 집는가', () =
       { x: 100, y: 0 }
     ]
   })
+
+  /** 배지가 판정에 끼어들지 않게 자국에서 멀리 떨어뜨린 자리. */
+  const FAR = { x: 900, y: 900, width: 0, height: 0 }
 
   it('선 위를 짚으면 잡힌다', () => {
     expect(shapeContains(line, 50, 0)).not.toBeNull()
@@ -177,36 +188,96 @@ describe('shapeContains · eraserHit — 지우개가 무엇을 집는가', () =
     const marks = [
       {
         id: 1,
-        shape: shape({
-          tool: 'line',
-          points: [
-            { x: 0, y: 0 },
-            { x: 100, y: 0 }
-          ],
-          width: 2
-        })
+        parts: [
+          {
+            bounds: FAR,
+            shape: shape({
+              tool: 'line',
+              points: [
+                { x: 0, y: 0 },
+                { x: 100, y: 0 }
+              ],
+              width: 2
+            })
+          }
+        ]
       },
+      {
+        id: 2,
+        parts: [
+          {
+            bounds: FAR,
+            shape: shape({
+              tool: 'line',
+              points: [
+                { x: 0, y: 20 },
+                { x: 100, y: 20 }
+              ],
+              width: 6
+            })
+          }
+        ]
+      }
+    ]
+    expect(partHit(marks, 50, 1)?.id).toBe(1)
+    expect(partHit(marks, 50, 19)?.id).toBe(2)
+  })
+
+  it('묶음 안에서는 자국 하나가 집힌다 — 묶음째 지우면 애써 적은 메모까지 날아간다', () => {
+    const marks = [
+      {
+        id: 1,
+        parts: [
+          { bounds: FAR, shape: line },
+          {
+            bounds: FAR,
+            shape: shape({
+              tool: 'line',
+              points: [
+                { x: 0, y: 40 },
+                { x: 100, y: 40 }
+              ]
+            })
+          }
+        ]
+      }
+    ]
+    expect(partHit(marks, 50, 40)).toEqual({ id: 1, part: 1 })
+  })
+
+  // 핀은 자국이 없어 배지가 유일한 손잡이다. 배지와 자국을 한 자로 재는 이유가 이것.
+  it('자국 없는 핀은 배지 원으로 잡힌다', () => {
+    const pin = [{ id: 9, parts: [{ bounds: { x: 0, y: 0, width: 22, height: 22 }, shape: null }] }]
+    expect(partHit(pin, 11, 11)).toEqual({ id: 9, part: 0 })
+    expect(partHit(pin, 300, 300)).toBeNull()
+  })
+
+  it('지난 화면의 자국은 안 집는다 — 눈에 안 보이는데 지워지면 유령을 지우는 셈이다', () => {
+    const marks = [{ id: 1, parts: [{ bounds: FAR, shape: line, screen: 1 }] }]
+    expect(partHit(marks, 50, 0, 1)).toEqual({ id: 1, part: 0 })
+    expect(partHit(marks, 50, 0, 2)).toBeNull()
+  })
+
+  it('아무것도 안 걸리면 null 이다', () => {
+    expect(partHit([{ id: 1, parts: [{ bounds: FAR, shape: line }] }], 500, 500)).toBeNull()
+  })
+
+  // 스케치판에는 배지가 없다 — 자국이 곧 전부라 판정도 자국 하나만 본다.
+  it('스케치판은 자국만 본다 (shapeHit)', () => {
+    const placed = [
+      { id: 1, shape: line },
       {
         id: 2,
         shape: shape({
           tool: 'line',
           points: [
-            { x: 0, y: 20 },
-            { x: 100, y: 20 }
-          ],
-          width: 6
+            { x: 0, y: 40 },
+            { x: 100, y: 40 }
+          ]
         })
       }
     ]
-    expect(eraserHit(marks, 50, 1)).toBe(1)
-    expect(eraserHit(marks, 50, 19)).toBe(2)
-  })
-
-  it('자국 없는 핀은 지우개 판정에서 빠진다 — 배지로만 잡힌다', () => {
-    expect(eraserHit([{ id: 9, shape: null }], 0, 0)).toBeNull()
-  })
-
-  it('아무것도 안 걸리면 null 이다', () => {
-    expect(eraserHit([{ id: 1, shape: line }], 500, 500)).toBeNull()
+    expect(shapeHit(placed, 50, 40)).toBe(2)
+    expect(shapeHit(placed, 500, 500)).toBeNull()
   })
 })

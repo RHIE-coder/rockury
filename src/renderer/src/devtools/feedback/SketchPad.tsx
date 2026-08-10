@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { eraserHit, polylinesOf, strokeShapes, svgPath } from './draw'
+import { polylinesOf, shapeHit, strokeShapes, svgPath } from './draw'
 import { ToolStrip } from './ToolStrip'
 import { BTN, PANEL } from './styles'
 import {
@@ -66,7 +66,7 @@ export function SketchPad({
   const onDown = (e: React.PointerEvent): void => {
     const p = local(e)
     if (tool === 'eraser') {
-      const hit = eraserHit(placed, p.x, p.y)
+      const hit = shapeHit(placed, p.x, p.y)
       if (hit !== null) setPlaced((prev) => prev.filter((s) => s.id !== hit))
       return
     }

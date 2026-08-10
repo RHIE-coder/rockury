@@ -1,3 +1,4 @@
+import { badgeContains, type FeedbackRect } from '@shared/devFeedback'
 import { MARK_HALO, type Point, type Shape } from './types'
 
 /**
@@ -135,24 +136,63 @@ export function shapeContains(shape: Shape, x: number, y: number, slack = 8): nu
 }
 
 /**
- * 지우개가 집을 표시의 id. 겹치면 **더 가까운 것**이 이긴다 — 나중에 그린 것이 이기게 하면
- * 굵은 자국 하나가 그 아래 얇은 자국을 영영 못 지우게 만든다.
- * 자국이 없는 핀은 배지 원으로 판정한다(`badgeHit` 이 그 몫이라 여기서는 다루지 않는다).
+ * 지우개가 집을 자국의 id — 배지도 묶음도 없는 평평한 목록에서(스케치판). 겹치면 **더
+ * 가까운 것**이 이긴다.
+ *
+ * 화면 위 그리기와 갈라 둔 이유: 스케치판에는 배지가 없다. 자국이 곧 전부라 잴 것이 하나뿐이고,
+ * 거기에 `partHit` 의 배지 판정을 끌어오면 없는 것을 재는 셈이 된다.
  */
-export function eraserHit<T extends { id: number; shape: Shape | null }>(
-  marks: readonly T[],
+export function shapeHit<T extends { id: number; shape: Shape }>(
+  shapes: readonly T[],
   x: number,
   y: number
 ): number | null {
   let hitId: number | null = null
   let hitDist = Number.POSITIVE_INFINITY
-  for (const m of marks) {
-    if (!m.shape) continue
-    const d = shapeContains(m.shape, x, y)
+  for (const s of shapes) {
+    const d = shapeContains(s.shape, x, y)
     if (d !== null && d < hitDist) {
       hitDist = d
-      hitId = m.id
+      hitId = s.id
     }
   }
   return hitId
+}
+
+/**
+ * 지우개가 집을 표시 — 어느 묶음의 몇 번째 자국인가. 겹치면 **더 가까운 것**이 이긴다
+ * (나중에 그린 것이 이기게 하면 굵은 자국 하나가 그 아래 얇은 자국을 영영 못 지운다).
+ *
+ * 자국이 없는 핀은 배지 원으로 판정한다 — 그래서 배지와 자국을 **한 자로** 같이 잰다.
+ * 지우는 단위가 묶음이 아니라 **자국 하나**인 이유: 삐뚤어진 상자 하나 때문에 애써 적은
+ * 메모까지 날아가면 안 된다.
+ */
+export function partHit<
+  T extends {
+    id: number
+    parts: readonly { shape: Shape | null; bounds: FeedbackRect; screen?: number }[]
+  }
+>(
+  marks: readonly T[],
+  x: number,
+  y: number,
+  onScreen?: number
+): { id: number; part: number } | null {
+  let hit: { id: number; part: number } | null = null
+  let hitDist = Number.POSITIVE_INFINITY
+  for (const m of marks) {
+    for (let i = 0; i < m.parts.length; i += 1) {
+      const part = m.parts[i]
+      // 지금 화면의 자국만 집는다. 지난 화면 것은 눈에 안 보이는데 지워지면 유령을 지우는 셈이다.
+      if (onScreen !== undefined && part.screen !== onScreen) continue
+      const byBadge = badgeContains(part.bounds, x, y)
+      const byShape = part.shape ? shapeContains(part.shape, x, y) : null
+      const d = Math.min(byBadge ?? Number.POSITIVE_INFINITY, byShape ?? Number.POSITIVE_INFINITY)
+      if (d < hitDist) {
+        hitDist = d
+        hit = { id: m.id, part: i }
+      }
+    }
+  }
+  return hit
 }

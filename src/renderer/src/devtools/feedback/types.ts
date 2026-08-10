@@ -1,4 +1,4 @@
-import type { FeedbackRect, FeedbackTarget } from '@shared/devFeedback'
+import type { FeedbackLocation, FeedbackRect, FeedbackTarget } from '@shared/devFeedback'
 
 /**
  * 개발용 화면 피드백 도구의 그리기 값 — 화면 위 오버레이와 스케치판이 같이 쓴다.
@@ -29,18 +29,56 @@ export interface Shape {
   width: number
 }
 
-/** 아직 저장되지 않은, 화면 위에서 편집 중인 표시 하나. */
-export interface DraftMark {
-  id: number
+/** 묶음 안의 표시 하나 — 자국(또는 자리) 한 벌과 그 자리에 있던 요소. */
+export interface MarkPart {
   /** 콕 집은 자리(pin)인지, 그려서 두른 자국(shape)인지. 몸짓이 가른다 — 콕 누르면 핀. */
   kind: 'pin' | 'shape'
   /** 핀이면 없다 — 자리만 있고 그린 것이 없다. */
   shape: Shape | null
   /** 창(뷰포트) 좌표. 그리는 동안 화면을 얼려두므로 캡처 이미지와 그대로 맞물린다. */
   bounds: FeedbackRect
-  memo: string
   target: FeedbackTarget | null
-  /** "이렇게 생겼으면 좋겠다" 그림 — 스케치판에서 그린 PNG 데이터 URL. 없으면 null. */
+  /**
+   * 어느 **화면**에서 그린 것인가 — `DraftStep.seq` 를 가리킨다.
+   *
+   * 흐름 차례(1단계·2단계)가 아니라 화면의 신원이다. 순서를 바꿀 때 표시를 하나하나
+   * 고쳐 주지 않아도 되도록 갈라 뒀다 — 차례는 화면 목록에서 세면 나온다.
+   * 좌표가 **그 화면의 창 기준**이라, 이게 없으면 A화면에서 그린 것이 B화면의
+   * 엉뚱한 자리를 가리킨다.
+   */
+  screen: number
+}
+
+/**
+ * 흐름의 한 차례 = 화면 하나. "다음 화면"으로 굳힐 때 하나씩 는다.
+ *
+ * `seq` 는 **뜬 순서**(초안 폴더의 `screen-N.png`)이고 절대 안 바뀐다. 배열에서의
+ * 자리가 **흐름 차례**다. 둘을 가른 덕에 순서 바꾸기가 배열만 흔들고 끝난다 —
+ * 이미 메인이 쓴 그림 파일을 다시 옮기지 않는다.
+ */
+export interface DraftStep {
+  seq: number
+  location: FeedbackLocation
+  viewport: { width: number; height: number }
+  /** 캡처가 실패했으면 false. 그래도 좌표와 요소는 살아 있어 피드백은 무산되지 않는다. */
+  hasImage: boolean
+}
+
+/**
+ * 아직 저장되지 않은, 화면 위에서 편집 중인 **묶음** 하나.
+ *
+ * 표시 하나가 아니라 묶음인 이유: 화살표 긋고 상자 치고 핀 꽂은 것이 결국 한 요청일
+ * 때가 있다. 그때 메모를 셋으로 나눠 받으면 같은 말을 세 번 적게 된다.
+ * 요소(`target`)는 묶음이 아니라 표시마다 잡는다 — 묶음 전체를 감싼 사각형으로 재면
+ * 표시들 사이의 거대한 상위 감싸개가 잡힌다.
+ */
+export interface DraftMark {
+  id: number
+  /** 이 묶음에 든 표시들. 최소 하나 — 비면 묶음 자체가 사라진다. */
+  parts: MarkPart[]
+  memo: string
+  /** "이렇게 생겼으면 좋겠다" 그림 — 스케치판에서 그린 PNG 데이터 URL. 없으면 null.
+   *  묶음 하나가 한 요청이므로 그림도 묶음당 한 장이다. */
   sketch: string | null
 }
 

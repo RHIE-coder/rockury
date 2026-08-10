@@ -38,6 +38,11 @@ export const shellCoverage: ServiceCoverage = {
     'shell:saveDevFeedback':
       '개발 전용 도구 — 사람이 화면에 표시를 그려 남기는 입력이라 원격 호출 대상이 아니다. ' +
       '에이전트는 결과물(.harness/feedback/<시각>-<화면>/)을 파일로 읽는다.',
+    'shell:devFeedbackStep':
+      '개발 전용 도구 — 피드백이 화면 여럿을 걸칠 때 지금 화면을 그림으로 굳히는 도막이다. ' +
+      '사람 손동작의 한 조각이라 단독으로 부를 것이 없다.',
+    'shell:devFeedbackDiscard':
+      '개발 전용 도구 — 쌓다 만 초안을 버리는 도막. 위와 같은 이유로 닫는다.',
     // ── 프로젝트: 읽기·만들기는 UI/UX 채널이 이미 열고, 고치기·지우기는 원래 사람만 한다 ──
     // 프로젝트는 UI/UX 위계의 맨 위층이기도 해서 같은 저장소를 두 통로가 본다.
     'shell:listProjects': '중복 노출 회피 — MCP 는 list_ui_projects 로 같은 목록을 이미 연다.',
