@@ -3,7 +3,8 @@ import type { Column, Constraint, TableDef } from '../workspaces/definition/type
 import type { VersionSnapshot } from '../versions/store'
 import { generateDdl, isMyDialect, mapType, qualifiedTable, quoteId } from '../workspaces/definition/ddl'
 import { resolveColumns } from '../workspaces/definition/derive'
-import { hasMultipleSchemas, qualifiedName } from '../schemaRef'
+import { qualifiedName } from '../schemaRef'
+import { shouldQualify } from '@shared/db/schemaCatalog'
 
 /**
  * 반영 계획 생성(§ops-plan Phase 3c) — 두 스냅샷 델타를 **ALTER/CREATE/DROP SQL** 로 접는다.
@@ -225,7 +226,12 @@ export function generateMigration(
 
   // 스키마가 둘 이상 걸려 있을 때만 한정 이름을 쓴다 — 하나뿐이면 예전 계획과 글자가 같아야 한다
   // (§db-design.definition.sql AC-1 과 같은 규칙).
-  const qualify = hasMultipleSchemas([...base.tables, ...target.tables])
+  /**
+   * 이름을 다 알면 **하나뿐이어도 한정 이름을 붙인다**(2026-08-11 사용자 결정) — 나가는 문에
+   * 목적지가 적혀야 그때 `USE` 된 DB 에 안 기댄다. 양쪽을 함께 보는 이유는 한쪽만 이름을
+   * 알면 반쯤 한정된 SQL 이 나가기 때문이다(일부는 명시된 DB, 나머지는 세션의 DB 로 흩어진다).
+   */
+  const qualify = shouldQualify(d, [...base.tables, ...target.tables])
   /** SQL 에 쓸 이름. */
   const sqlName = (t: TableDef): string => qualifiedTable(d, t, qualify)
   /** 화면·기록에 쓸 이름 — 스키마가 섞였으면 어느 스키마 것인지 말해야 한다. */

@@ -301,8 +301,8 @@ export const useImportStore = create<ImportState>()((set, get) => ({
 
       // 6) 가져온 설계를 활성으로 → Versions/Design 에서 바로 보인다.
       useNav.getState().setContextValue('design', designId)
-      // 7) 드리프트 뷰 갱신(기준선 == 실제 → 드리프트 0 으로 정합).
-      void useMigrationStore.getState().loadDrift(connection.id, designId)
+      // 7) 진단 갱신(기준선 == 실제 → 드리프트 0 으로 정합).
+      void useMigrationStore.getState().runDiagnosis(connection.id, designId)
 
       set({ open: false, phase: 'idle' })
     } catch (e) {

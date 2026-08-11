@@ -66,10 +66,14 @@ export function CompareView(): ReactElement {
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
         <div className="flex flex-col">
+          {/*
+            부제를 뒀었다: "환경(DEV·STG·PROD) 사이에…". 없는 제약처럼 읽혀서 뺐다
+            (2026-08-10 사용자 지적 — 상대 목록은 등록된 연결 전부지 환경 이름을 가리지 않는다).
+            방향도 바로 아래 `기준 → 상대` 가 화살표까지 달고 이미 말한다.
+          */}
           <h2 className="text-[14px] font-bold text-fg">
             Compare <span className="font-normal text-muted">· 실 DB 간 스키마 비교</span>
           </h2>
-          <p className="text-[12px] text-muted">환경(DEV·STG·PROD) 사이에 무엇이 다른지 — 기준에서 상대로 가는 변화로 표시</p>
         </div>
       </div>
 
@@ -112,7 +116,8 @@ export function CompareView(): ReactElement {
           {others.length === 0 ? (
             <p className="text-[13px] text-muted">비교할 다른 연결이 없습니다 — Connections 에서 연결을 더 등록하세요.</p>
           ) : !diff ? (
-            <p className="text-[13px] text-muted">상대 연결을 고르고 비교를 누르면 두 실 DB 를 역설계해 차이를 보여줍니다.</p>
+            // "비교를 누르면 비교해줍니다" 였다 — 버튼 이름이 이미 말하는 것을 되풀이하지 않는다.
+            <p className="text-[13px] text-muted">비교 결과 없음</p>
           ) : comparedWith !== otherId ? (
             <p className="text-[13px] text-muted">상대가 바뀌었어요 — 비교를 다시 실행하세요.</p>
           ) : (

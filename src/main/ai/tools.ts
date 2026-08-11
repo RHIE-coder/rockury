@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { createDesign, listDesigns, updateDesign } from '../store/designs'
+import { createDesign, listDesigns, updateDesign, type DesignRecord } from '../store/designs'
 import { listTables, replaceTablesForDesign, type TableRecord } from '../store/tables'
 import { createVersion, listVersions } from '../store/versions'
 import { DIALECT_IDS, DIALECT_META } from '../../shared/dialects'
+import { checkSchemaName, suggestSchemaName, supportsSchemas } from '../../shared/db/schemaCatalog'
 import { formatVersion, nextVersion, parseVersion } from '../../shared/versionNumber'
 import type { StoreChangedEvent } from '../../shared/storeChanged'
 import { applyOperations, assertTablesConsistent, patchOpSchema } from './patch'
@@ -46,7 +47,7 @@ export function setStoreChangeNotifier(fn: (e: StoreChangedEvent) => void): void
   notifyStoreChanged = fn
 }
 
-function requireDesign(designId: unknown): { id: string; name: string; description: string; dialect: string } {
+function requireDesign(designId: unknown): DesignRecord {
   const id = String(designId ?? '')
   const d = listDesigns().find((x) => x.id === id)
   if (!d) throw new Error(`설계 "${id}" 가 없습니다 — list_designs 로 사용 가능한 id 를 확인하세요.`)
@@ -76,6 +77,8 @@ const constraintSchema = z.looseObject({
   name: z.string().optional(),
   columns: z.array(z.looseObject({ columnId: z.string(), direction: z.enum(['ASC', 'DESC']).optional() })).optional(),
   refTable: z.string().optional(),
+  /** 교차 스키마 FK. 생략하면 그 제약이 걸린 표와 같은 스키마(`db/schemaRef` 규칙). */
+  refSchema: z.string().optional(),
   refColumns: z.array(z.string()).optional(),
   onDelete: z.enum(FK_ACTIONS).optional(),
   onUpdate: z.enum(FK_ACTIONS).optional(),
@@ -84,6 +87,12 @@ const constraintSchema = z.looseObject({
 
 const tableSchema = z.looseObject({
   id: z.string().optional(),
+  /**
+   * 소속 스키마. `looseObject` 라 예전에도 우연히 통과해 저장되긴 했지만 **문서에 없었다** —
+   * 에이전트는 쓸 수 있다는 걸 알 길이 없고, 적히지 않은 왕복은 언제 깨져도 아무도 모른다
+   * (2026-08-11). 이제 정식 필드다.
+   */
+  schema: z.string().optional(),
   name: z.string().min(1, '테이블 name 은 비울 수 없습니다'),
   comment: z.string().optional(),
   columns: z.array(columnSchema),
@@ -249,14 +258,22 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'create_design',
     description:
-      '새 설계(Design)를 만든다 — 이름·방언(dialect: postgresql|mysql|mariadb|sqlite)·설명. id 는 이름 슬러그로 자동 생성되어 반환된다. 방언은 생성 후 변경 불가이므로, 사용자가 DB 벤더를 말하지 않았으면 임의로 고르지 말고 물어본 뒤 호출할 것(안 넣고 부르면 선택지를 돌려준다).',
+      '새 설계(Design)를 만든다 — 이름·방언(dialect: postgresql|mysql|mariadb|sqlite)·설명·첫 스키마 이름. id 는 이름 슬러그로 자동 생성되어 반환된다. 방언은 생성 후 변경 불가이므로, 사용자가 DB 벤더를 말하지 않았으면 임의로 고르지 말고 물어본 뒤 호출할 것(안 넣고 부르면 선택지를 돌려준다). 표는 이 설계의 첫 스키마 아래 만들어진다 — 반환된 declaredSchemas 를 확인할 것.',
     inputSchema: {
       name: z.string().optional().describe('설계 이름 (필수)'),
       dialect: z
         .string()
         .optional()
         .describe('DB 방언: postgresql | mysql | mariadb | sqlite (필수 — 사용자가 안 정했으면 물어볼 것)'),
-      description: z.string().optional().describe('한 줄 설명 (선택)')
+      description: z.string().optional().describe('한 줄 설명 (선택)'),
+      schemaName: z
+        .string()
+        .optional()
+        .describe(
+          '첫 스키마 이름 — PostgreSQL 의 schema, MySQL/MariaDB 의 database 를 가리킨다(같은 자리다). ' +
+            '생략하면 방언별 기본값: postgresql → public, mysql/mariadb → 설계 이름을 식별자로 다듬은 것, sqlite → main. ' +
+            '사용자가 실제 DB 이름을 말했으면 반드시 넣을 것 — 이름이 틀리면 Migration 이 실 DB 와 짝을 못 찾는다.'
+        )
     },
     handler: (args) => {
       // 방언 판정을 zod 앞에 세운다 — 평범한 구조 오류로 섞이면 에이전트가 값을 지어내 재시도한다.
@@ -269,12 +286,25 @@ export const TOOL_DEFS: ToolDef[] = [
         .object({
           name: z.string().min(1, '설계 이름은 비울 수 없습니다'),
           dialect: z.enum(DIALECT_IDS),
-          description: z.string().optional()
+          description: z.string().optional(),
+          schemaName: z.string().optional()
         })
         .safeParse({ ...args, dialect })
       if (!parsed.success) invalid('create_design 입력이 올바르지 않습니다', parsed.error)
       assertCleanText(parsed.data, 'create_design')
-      const rec = createDesign(parsed.data)
+      /**
+       * 이름을 안 주면 **방언별 기본값**으로 채운다 — 비워 두면 표가 스키마 없이 태어나고,
+       * 그러면 나가는 SQL 이 한정 이름을 잃어 어느 DB 에 떨어질지가 세션 상태에 달린다.
+       * (화면의 새 설계 모달도 같은 값을 미리 채운다 — 규칙이 한 곳이다.)
+       */
+      const schemaName = supportsSchemas(parsed.data.dialect)
+        ? parsed.data.schemaName?.trim() || suggestSchemaName(parsed.data.dialect, parsed.data.name)
+        : ''
+      if (schemaName) {
+        const check = checkSchemaName(schemaName, [])
+        if (!check.ok) throw new Error(`스키마 이름 "${schemaName}" 을 쓸 수 없습니다 — ${check.reason}.`)
+      }
+      const rec = createDesign({ ...parsed.data, schemaName })
       notifyStoreChanged({ domain: 'designs', designId: rec.id })
       return rec
     }
@@ -282,26 +312,53 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'update_design',
     description:
-      '설계의 이름·설명을 수정한다(방언은 고정 속성이라 못 바꾼다). 바꾸지 않을 필드는 생략하면 기존 값이 유지된다.',
+      '설계의 이름·설명·선언 스키마 목록을 수정한다(방언은 고정 속성이라 못 바꾼다). 바꾸지 않을 필드는 생략하면 기존 값이 유지된다. **스키마 이름을 바꾸려면 이 도구가 아니라 patch_schema 의 rename_schema 를 쓸 것** — 그쪽만 그 스키마의 표까지 함께 옮긴다.',
     inputSchema: {
       designId: z.string().optional().describe('설계 id (list_designs 로 확인, 필수)'),
-      name: z.string().optional().describe('새 이름 (선택)'),
-      description: z.string().optional().describe('새 설명 (선택)')
+      name: z.string().optional().describe('새 이름 (선택) — 스키마 이름은 따라 바뀌지 않는다'),
+      description: z.string().optional().describe('새 설명 (선택)'),
+      declaredSchemas: z
+        .array(z.string())
+        .optional()
+        .describe(
+          '이 설계가 선언한 스키마 목록으로 **통째 교체**한다(선택). 순서가 뜻을 갖는다 — 첫째가 새 표가 태어날 자리. ' +
+            '스키마를 더하려면 기존 목록에 덧붙여 보낼 것(get_schema 의 design.declaredSchemas 로 읽는다). ' +
+            '표가 앉아 있는 스키마를 목록에서 빼면 거부된다 — 그 표가 갈 곳이 없어진다.'
+        )
     },
     handler: (args) => {
       const parsed = z
         .object({
           designId: z.string().min(1, 'designId 는 필수입니다'),
           name: z.string().min(1, '이름은 비울 수 없습니다').optional(),
-          description: z.string().optional()
+          description: z.string().optional(),
+          declaredSchemas: z.array(z.string()).optional()
         })
         .safeParse(args)
       if (!parsed.success) invalid('update_design 입력이 올바르지 않습니다', parsed.error)
       assertCleanText(parsed.data, 'update_design')
       const d = requireDesign(parsed.data.designId)
+      const next = parsed.data.declaredSchemas
+      if (next) {
+        for (let i = 0; i < next.length; i++) {
+          const check = checkSchemaName(next[i], next.slice(0, i))
+          if (!check.ok) throw new Error(`declaredSchemas[${i}] "${next[i]}" 를 쓸 수 없습니다 — ${check.reason}.`)
+        }
+        // 표가 앉은 스키마를 빼면 그 표가 목록·다이어그램에서 사라진다 — 조용히 잃지 않게 막는다.
+        const used = new Set(
+          listTables().filter((t) => t.designId === d.id && t.schema).map((t) => t.schema as string)
+        )
+        const dropped = [...used].filter((s) => !next.some((n) => n.toLowerCase() === s.toLowerCase()))
+        if (dropped.length > 0)
+          throw new Error(
+            `표가 앉아 있는 스키마를 목록에서 뺄 수 없습니다: ${dropped.join(', ')} — ` +
+              `이름을 바꾸려면 patch_schema 의 rename_schema 를, 표를 옮기려면 set_schema 의 tables[].schema 를 쓰세요.`
+          )
+      }
       const rec = updateDesign(d.id, {
         name: parsed.data.name ?? d.name,
-        description: parsed.data.description ?? d.description
+        description: parsed.data.description ?? d.description,
+        ...(next ? { declaredSchemas: next } : {})
       })
       notifyStoreChanged({ domain: 'designs', designId: d.id })
       return rec
@@ -317,7 +374,7 @@ export const TOOL_DEFS: ToolDef[] = [
         .array(z.record(z.string(), z.unknown()))
         .optional()
         .describe(
-          '테이블 전체 배열 (필수). 각 테이블: { name(필수), comment?, columns: [{ id?, name(필수), type(필수), nullable?, defaultValue?, comment? }], constraints?: [{ kind: pk|uk|fk|check|idx, columns?: [{ columnId }], refTable?, refColumns?, onDelete?, onUpdate?, expression? }] }. id 를 생략하면 자동 생성 — 기존 항목을 유지하려면 get_schema 가 준 id 를 그대로 보낼 것. 제약(PK 등)이 참조할 새 컬럼은 columns[].id 를 직접 정하고 constraints[].columns[].columnId 로 그 id 를 가리킬 것(없는 컬럼 참조는 거부됨). 테이블·컬럼 이름은 중복 불가.'
+          '테이블 전체 배열 (필수). 각 테이블: { name(필수), schema?, comment?, columns: [{ id?, name(필수), type(필수), nullable?, defaultValue?, comment? }], constraints?: [{ kind: pk|uk|fk|check|idx, columns?: [{ columnId }], refTable?, refSchema?, refColumns?, onDelete?, onUpdate?, expression? }] }. schema 는 소속 스키마(PostgreSQL 의 schema · MySQL/MariaDB 의 database) — 생략하면 그 표는 이름 없는 표가 되고, 하나라도 그러면 설계 전체의 SQL 이 한정 이름을 잃는다. get_schema 가 준 값을 그대로 되보내면 유지된다. refSchema 는 다른 스키마를 가리키는 FK 에만. id 를 생략하면 자동 생성 — 기존 항목을 유지하려면 get_schema 가 준 id 를 그대로 보낼 것. 제약(PK 등)이 참조할 새 컬럼은 columns[].id 를 직접 정하고 constraints[].columns[].columnId 로 그 id 를 가리킬 것(없는 컬럼 참조는 거부됨). 테이블·컬럼 이름은 중복 불가.'
         )
     },
     handler: (args) => {
@@ -342,10 +399,12 @@ export const TOOL_DEFS: ToolDef[] = [
         .optional()
         .describe(
           '연산 목록 (필수, 순서대로 적용). 각 연산의 op 와 인자: ' +
-            'add_table{table,comment?,columns:[{name,type,nullable?,defaultValue?,comment?}],constraints?:[{kind,name?,columns:[컬럼이름],refTable?,refColumns?,onDelete?,onUpdate?,expression?}]} · ' +
+            'add_table{table,schema?,comment?,columns:[{name,type,nullable?,defaultValue?,comment?}],constraints?:[{kind,name?,columns:[컬럼이름],refTable?,refSchema?,refColumns?,onDelete?,onUpdate?,expression?}]} · ' +
             'drop_table{table} · rename_table{table,newName} · set_table_comment{table,comment} · ' +
             'add_column{table,column:{name,type,...},after?} · update_column{table,column,set:{name?,type?,nullable?,defaultValue?,comment?}} · drop_column{table,column} · ' +
-            'add_constraint{table,constraint:{kind,name?,columns:[컬럼이름],...}} · drop_constraint{table,name}'
+            'add_constraint{table,constraint:{kind,name?,columns:[컬럼이름],...}} · drop_constraint{table,name} · ' +
+            'rename_schema{from,to} — 스키마 이름을 바꾸고 **그 안의 표 전부와 그것을 가리키던 FK 까지** 함께 옮긴다(from 을 빈 문자열로 주면 스키마 없는 표들을 거둔다). ' +
+            'add_table 의 schema 를 생략하면 설계의 첫 선언 스키마로 채워진다 — 비워 두면 그 표만 이름이 없어져 설계 전체의 SQL 이 한정 이름을 잃는다.'
         )
     },
     handler: (args) => {
@@ -357,11 +416,21 @@ export const TOOL_DEFS: ToolDef[] = [
       assertCleanText(parsed.data, 'patch_schema', 'operations')
 
       const current = listTables().filter((t) => t.designId === d.id)
-      const { tables, changes, warnings } = applyOperations(d.id, current, parsed.data, newId)
+      const out = applyOperations(d.id, current, parsed.data, newId, d.declaredSchemas)
+      const { tables, changes, warnings } = out
       assertTablesConsistent(tables) // 연산 조합이 만든 어긋남까지 저장 전에 잡는다
       replaceTablesForDesign(d.id, tables)
+      // 스키마 이름이 바뀌었으면 표와 **함께** 선언도 옮긴다 — 한쪽만 바꾸면 유령 스키마가 남는다.
+      if (out.declaredSchemas) updateDesign(d.id, { declaredSchemas: out.declaredSchemas })
       notifyStoreChanged({ domain: 'tables', designId: d.id })
-      return { ...summarize(d, tables), applied: parsed.data.length, changes, warnings }
+      if (out.declaredSchemas) notifyStoreChanged({ domain: 'designs', designId: d.id })
+      return {
+        ...summarize(d, tables),
+        applied: parsed.data.length,
+        changes,
+        warnings,
+        ...(out.declaredSchemas ? { declaredSchemas: out.declaredSchemas } : {})
+      }
     }
   },
   {

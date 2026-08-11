@@ -3,6 +3,7 @@ import {
   appendLog,
   latestSnapshot,
   listLogs,
+  listSnapshots,
   saveSnapshot,
   type CreateLogInput,
   type CreateSnapshotInput
@@ -20,6 +21,9 @@ export function registerMigrationIpc(): void {
   )
   ipcMain.handle('migration:latestSnapshot', (_e, envId: string) =>
     envelope(() => latestSnapshot(envId))
+  )
+  ipcMain.handle('migration:listSnapshots', (_e, envId: string) =>
+    envelope(() => listSnapshots(envId))
   )
   ipcMain.handle('migration:appendLog', (e, input: CreateLogInput) =>
     writing(e, { domain: 'migrationLogs' }, () => appendLog(input))

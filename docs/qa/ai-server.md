@@ -95,6 +95,11 @@
 - **CASE-ai-093** 설계 격리: `patch_schema` 후 다른 설계 스키마 불변. (tools.write AC-4/AC-8)
 - **CASE-ai-095** 참조 보호: 제약이 쓰는 컬럼·남의 FK 가 가리키는 컬럼/테이블 삭제는 거부하고 무엇을 먼저 뗄지 알린다. 제약을 먼저 떼면 삭제된다. (tools.write AC-8)
 - **CASE-ai-096** 조준 실패 안내: 없는 테이블·컬럼은 그 설계/테이블의 실제 이름 목록을 함께 준다. (tools.write AC-6/AC-8)
+- **CASE-ai-097** `create_design` 의 첫 스키마: `schemaName` 을 주면 그대로, 생략하면 방언별 기본값(pg `public` · mysql/mariadb 설계 이름 식별자 · sqlite `main`)이 `declaredSchemas[0]` 에 담긴다. **mysql 에 `public` 이 들어가지 않는다** — 그런 데이터베이스는 없다. 못 쓸 이름은 isError. (tools.write AC-1) → `shared/db/schemaCatalog.test.ts`
+- **CASE-ai-098** `patch_schema add_table` 의 소속: `schema` 생략 시 설계의 첫 선언 스키마 → 없으면 쓰는 스키마가 하나일 때 그것 → 근거가 없으면 안 담는다. `changes` 에 한정 이름(`testdb.logs`)이 적힌다. **회귀**: 예전엔 스키마를 통째로 버려 그 표 하나 때문에 설계 전체의 SQL 이 한정 이름을 잃었다. (tools.write AC-8a) → `ai/patch.test.ts`
+- **CASE-ai-099** `patch_schema rename_schema`: 표 전부 이동 + 옛 이름을 가리킨 `refSchema` 갱신 + 선언 목록 자리 유지. `from: ''` 은 스키마 없는 표를 거둔다. 없는 스키마·중복 이름·못 쓸 글자는 거부. rename 이 없는 호출은 선언을 되쓰지 않는다. (tools.write AC-8b) → `ai/patch.test.ts`
+- **CASE-ai-100** `update_design declaredSchemas`: 통째 교체 + 순서 유지. **표가 앉은 스키마를 빼면 거부**하고 `rename_schema`/`set_schema` 로 안내한다 — 그 표가 목록에서 조용히 사라지지 않게. (tools.write AC-2)
+- **CASE-ai-101** 교차 스키마 FK: `set_schema` 의 `tables[].schema`·`constraints[].refSchema` 와 `patch_schema` 의 같은 필드가 입력 표면에 **문서화되어** 있고 `get_schema` 왕복에서 보존된다. 예전엔 `looseObject` 덕에 우연히만 통과했다. (tools.write AC-3/AC-8)
 
 ## 알려진 커버리지 구멍 (의도적 — 근거 포함)
 - **http.lifecycle AC-1(시작 실패 30초 재시도)**: Electron 생명주기 타이머 — 단위 seam 없음, e2e 로 포트 선점 시나리오 구성 비용 과대. 자동화 보류(수동 확인 항목).

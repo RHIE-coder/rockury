@@ -28,7 +28,6 @@ import { dialectInfo } from '../../dialects'
 import { defaultSuggestions, isKnownType, typeSuggestions } from '../../typeCatalog'
 import { useActiveTable, useDefinitionStore, useDesignTables, useDesignReadOnly } from './store'
 import { checkColumnIds, keyBadgesOf, type KeyBadge } from './derive'
-import { DEFAULT_SCHEMA } from '../../schemaRef'
 import { EditableText } from './EditableText'
 import { ConstraintsSection } from './ConstraintsSection'
 import { ViewBodySection } from './ViewBodySection'
@@ -349,17 +348,21 @@ export function TableForm() {
                 <Eye className="size-3" />뷰
               </span>
             )}
-            {/* 스키마 — 이름 앞 칸. 기본 스키마 하나만 쓰는 설계에서는 흐리게 두어 눈에 안 걸리고,
-                여러 스키마를 쓰기 시작하면 그 자리에서 바로 옮길 수 있다(§db-design.definition.schema). */}
+            {/* 스키마 — 이름 앞 칸. 여러 스키마를 쓰기 시작하면 그 자리에서 바로 옮길 수 있다
+                (§db-design.definition.schema). 비면 `이름 없음` 으로 보인다: 예전엔 여기에
+                `public` 을 넣어 보였는데, MySQL 설계에서 그건 있지도 않은 이름이었다(2026-08-11).
+                이름을 정하는 자리는 설계 손잡이의 "스키마 관리"다. */}
             <EditableText
               editKey="table:schema"
-              value={table.schema ?? DEFAULT_SCHEMA}
+              value={table.schema ?? ''}
+              placeholder="이름 없음"
               readOnly={readOnly}
-              onCommit={(v) => updateTable({ schema: v.trim() || DEFAULT_SCHEMA })}
+              onCommit={(v) => updateTable({ schema: v.trim() || undefined })}
               className="w-auto text-[15px] font-semibold text-muted"
               inputClassName="h-8 w-40 text-[15px] font-semibold"
             />
-            <span className="text-[15px] font-semibold text-muted">.</span>
+            {/* 스키마를 모르는 표는 `.` 도 안 찍는다 — 앞이 빈 점만 남으면 고장으로 읽힌다. */}
+            {table.schema && <span className="text-[15px] font-semibold text-muted">.</span>}
             <EditableText
               editKey="table:name"
               value={table.name}

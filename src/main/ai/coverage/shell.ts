@@ -41,6 +41,9 @@ export const shellCoverage: ServiceCoverage = {
     'shell:devFeedbackStep':
       '개발 전용 도구 — 피드백이 화면 여럿을 걸칠 때 지금 화면을 그림으로 굳히는 도막이다. ' +
       '사람 손동작의 한 조각이라 단독으로 부를 것이 없다.',
+    'shell:devFeedbackShot':
+      '개발 전용 도구 — 쌓아 둔 화면 그림을 줄여 훑어보기 목록에 깔아 주는 도막. ' +
+      '에이전트는 최종 폴더의 shot-N.png 를 파일로 읽으므로 이 통로가 필요 없다.',
     'shell:devFeedbackDiscard':
       '개발 전용 도구 — 쌓다 만 초안을 버리는 도막. 위와 같은 이유로 닫는다.',
     // ── 프로젝트: 읽기·만들기는 UI/UX 채널이 이미 열고, 고치기·지우기는 원래 사람만 한다 ──

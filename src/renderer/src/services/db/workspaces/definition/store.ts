@@ -67,6 +67,11 @@ interface DefinitionState {
   /** 뷰 신설 — 본문 SELECT 는 비운 채 만들고 사람이 채운다(컬럼도 사람이 적는다). */
   addView: (designId: string) => void
   updateTable: (patch: Partial<Pick<TableDef, 'name' | 'schema' | 'comment' | 'viewSql'>>) => void
+  /**
+   * 한 스키마의 **표 전부**를 다른 스키마 이름으로 옮긴다 — 스키마 이름 바꾸기의 실체.
+   * `from` 이 빈 문자열이면 "이름 없는 표들"을 옮긴다(선언 기능 이전 데이터를 거둘 때 쓴다).
+   */
+  moveSchema: (designId: string, from: string, to: string) => void
   /** 활성 대상의 테이블 ↔ 뷰 전환. 뷰로 바꾸면 제약은 뜻이 없어 비운다. */
   toggleView: () => void
   deleteTable: (id: string) => void
@@ -88,7 +93,13 @@ function pruneEmpty(cons: Constraint[]): Constraint[] {
 function schemaForNew(tables: TableDef[], designId: string): string {
   const design = useDesignsStore.getState().designs.find((d) => d.id === designId)
   const mine = tables.filter((t) => t.designId === designId)
-  return newTableSchema(design?.schemas ?? [], designSchemas(mine))
+  return newTableSchema({
+    scope: design?.schemas ?? [],
+    declared: design?.declaredSchemas ?? [],
+    used: designSchemas(mine),
+    dialect: design?.dialect ?? 'postgresql',
+    designName: design?.name ?? ''
+  })
 }
 
 export const useDefinitionStore = create<DefinitionState>()((set) => ({
@@ -376,6 +387,20 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
       return { tables: [...s.tables, view], activeTableId: id, editing: null, openConstraintId: null }
     }),
   updateTable: (patch) => set((s) => patchActive(s, (t) => ({ ...t, ...patch }))),
+  moveSchema: (designId, from, to) =>
+    set((s) => ({
+      /**
+       * `schema` 만 고친다 — id(`t:public.users`)는 그대로 둔다.
+       *
+       * id 를 다시 매기면 제약이 컬럼을 가리키는 참조(`columnId`)까지 줄줄이 갈아야 하고, 한
+       * 군데만 놓치면 제약이 조용히 끊긴다. 설계 안에서 id 는 유일하기만 하면 되는 손잡이이고,
+       * 실 DB 와 견줄 때는 `align.ts` 가 (스키마, 이름)으로 id 를 **다시 계산**하므로 낡은 id 가
+       * 비교를 틀리게 하지 않는다.
+       */
+      tables: s.tables.map((t) =>
+        t.designId === designId && (t.schema ?? '') === from ? { ...t, schema: to || undefined } : t
+      )
+    })),
   toggleView: () =>
     set((s) =>
       patchActive(s, (t) =>

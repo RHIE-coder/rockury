@@ -14,11 +14,12 @@ import type { Constraint, TableDef } from './workspaces/definition/types'
  */
 
 /**
- * 설계부의 기본 스키마 — 스키마를 안 적은 테이블이 올라갈 자리(2026-07-30 사용자 결정).
- * PostgreSQL 의 기본 스키마 이름을 그대로 쓴다. 설계에 스키마가 이것 하나뿐이면 DDL 은
- * 한정 이름을 안 쓰므로, 단일 스키마 설계의 출력은 이 값이 무엇이든 안 바뀐다.
+ * 기본 스키마 이름은 **여기 없다.** 예전에는 `DEFAULT_SCHEMA = 'public'` 하나를 방언과 무관하게
+ * 썼는데, MySQL 에는 `public` 이라는 데이터베이스가 없어서 MySQL 설계가 존재하지 않는 이름을
+ * 들고 있었다(2026-08-11 사용자 지적). 이름을 정하는 일은 방언을 봐야 하므로
+ * `schemaCatalog.suggestSchemaName(dialect, …)` 이 맡고, 설계가 실제로 든 이름은
+ * `design.declaredSchemas` 에 남는다. 이 파일은 **이름을 지어내지 않고 비교만 한다.**
  */
-export const DEFAULT_SCHEMA = 'public'
 
 /** 테이블을 가리키는 최소 정보. TableDef 도 이 모양을 만족한다. */
 export interface TableRef {

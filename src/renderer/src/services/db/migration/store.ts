@@ -4,18 +4,33 @@ import { alignSnapshotToActual } from '../versions/align'
 import { diffSnapshots, type SchemaDiff } from '../versions/diff'
 import { useVersionsStore, type VersionSnapshot } from '../versions/store'
 import { normalizeSchema } from '../remote/introspection'
+import { diagnose, hasDrift, type Diagnosis } from './diagnose'
+import { detailDrift, summarizeDrift } from './driftSummary'
+import { identifyVersion, type IdentifyResult } from './identify'
+import { generateRevert, type RevertPlan } from './revert'
 import { generateMigration, type MigrationPlan } from './ddlDiff'
 
 /** migration_logs 레코드(구조적 — main/store/migration 과 동일). */
 export interface MigrationLog {
   id: string
   envId: string
-  kind: 'baseline' | 'drift' | 'apply'
+  kind: 'baseline' | 'drift' | 'apply' | 'map'
   fromVersion: string
   toVersion: string
   summary: string
   status: 'success' | 'error'
   detail: string
+  createdAt: string
+}
+
+/** 기준선 이력 한 줄(구조적 — main/store/migration 의 SnapshotSummary 와 동일). */
+export interface SnapshotSummary {
+  id: string
+  envId: string
+  version: string
+  tableCount: number
+  checksum: string
+  scope: string[]
   createdAt: string
 }
 
@@ -26,56 +41,131 @@ interface Binding {
 }
 
 /**
- * Migration 오케스트레이터(§ops-plan Phase 3 · IA 결정 B) — Connection + Design 을 엮는 가교.
- * (connection × design) 바인딩(Environment)을 확보해 그 id 로 스냅샷/로그/appliedVersion 을 관리.
- *  - Drift[diff②]  : introspect(connection) vs 마지막 스냅샷 → diffSnapshots 재사용
- *  - Plan[diff③]   : 타깃 버전 vs 실제 → ddlDiff.generateMigration
- *  - Run           : 생성 SQL 을 2c query.tx* 게이트로 실행 → 커밋 시 스냅샷/appliedVersion/로그
+ * Migration 오케스트레이터 — Connection 과 Design 을 하나의 흐름으로 엮는다.
+ *
+ * 화면이 읽는 상태는 결국 **한 줄**이다: `Design vX ── Remote vY`.
+ * 나머지는 그 줄에서 갈라지는 것들이다.
+ *
+ *   맵핑 : 이 연결은 어느 설계의 몇 버전인가        → identify → confirmMapping
+ *   진단 : 둘 사이에 무엇이 있나(두 갈래)           → runDiagnosis
+ *   계획 : 그 차이를 메울 SQL 과 되돌릴 SQL          → loadPlan
+ *   실행 : 트랜잭션으로 밀고 커밋/되돌리기           → run → confirm
+ *
+ * **Remote 버전의 지상 진실은 우리 로컬 기록**(`environments.applied_version`)이다.
+ * 실 DB 에는 버전이라는 것이 없으므로 DB 에서 읽지 않는다 — 대신 "그때 찍어 둔 모습"(기준선)과
+ * 지금을 견주어 그 기록이 아직 유효한지 검사한다. 그것이 드리프트다.
  */
 interface MigrationState {
   binding: Binding | null
   actual: VersionSnapshot | null
-  driftDiff: SchemaDiff | null
-  hasBaseline: boolean
-  baselineVersion: string
+  /** 방금 역설계가 **실제로 읽은** 스키마 범위(응답이 알려 준다). 스냅샷에 적히는 값. */
+  actualScope: string[]
+
+  // ── 맵핑 ─────────────────────────────────────────────
+  /** Remote 가 지금 어느 설계 버전인가. 빈 문자열이면 아직 맵핑 안 됨. */
+  remoteVersion: string
+  /** 맵핑 화면이 쓰는 자동 판정 결과. 맵핑된 짝에서는 null. */
+  identified: IdentifyResult | null
+
+  // ── 진단 ─────────────────────────────────────────────
+  diagnosis: Diagnosis | null
   targetVersion: string | null
+  hasBaseline: boolean
+  baselineAt: string
+  /** 기준선을 찍을 때 읽었던 스키마 범위. 빈 배열이면 안 남긴 것(예전 스냅샷). */
+  baselineScope: string[]
+  /** 그 범위가 방금 읽은 범위와 다른가 — 다르면 아래 차이는 DB 변경이 아닐 수 있다. */
+  scopeChanged: boolean
+  snapshots: SnapshotSummary[]
+
+  // ── 계획·실행 ────────────────────────────────────────
   planDiff: SchemaDiff | null
   plan: MigrationPlan | null
+  /** 반영 뒤가 될 모습(경계 정렬을 마친 타깃) — 대조표가 "지금 → 반영 뒤"를 그리는 데 쓴다. */
+  planTarget: VersionSnapshot | null
+  revert: RevertPlan | null
   destructiveAck: boolean
+  /** 드리프트를 알고도 반영하겠다는 승인. 계획을 다시 만들 때마다 풀린다. */
+  driftAck: boolean
   tx: { txId: string; affected: number; statements: number } | null
+  /** 남이 먼저 바꿔서 멈춘 자리. `at` 은 실행한 문 수(0 이면 아무것도 안 나갔다). */
+  interrupted: { at: number; total: number; detail: string } | null
+
   logs: MigrationLog[]
   loading: boolean
   error: string | null
 
   resolveBinding: (connectionId: string, designId: string, targetVersion?: string) => Promise<Binding>
   introspectActual: (connectionId: string, designId: string) => Promise<VersionSnapshot>
-  loadDrift: (connectionId: string, designId: string) => Promise<void>
+  identify: (connectionId: string, designId: string) => Promise<void>
+  confirmMapping: (connectionId: string, designId: string, version: string) => Promise<void>
+  runDiagnosis: (connectionId: string, designId: string, target?: string) => Promise<void>
   captureBaseline: (connectionId: string, designId: string, version: string) => Promise<void>
   setDestructiveAck: (v: boolean) => void
+  setDriftAck: (v: boolean) => void
   loadPlan: (connectionId: string, designId: string, dialect: DialectId, version: string) => Promise<void>
-  run: (connectionId: string) => Promise<void>
+  run: (connectionId: string, designId: string) => Promise<void>
   confirm: (connectionId: string, designId: string) => Promise<void>
   rollback: () => Promise<void>
   loadLogs: (connectionId: string, designId: string) => Promise<void>
   dismissError: () => void
 }
 
-function targetSnapshot(designId: string, version: string): VersionSnapshot | null {
+function versionsOf(designId: string): { number: string; snapshot: VersionSnapshot }[] {
+  return (useVersionsStore.getState().byDesign[designId] ?? []).map((v) => ({
+    number: v.number,
+    snapshot: v.snapshot
+  }))
+}
+
+function snapshotAt(designId: string, version: string): VersionSnapshot | null {
+  return versionsOf(designId).find((v) => v.number === version)?.snapshot ?? null
+}
+
+/** 설계의 최신 버전 — 타깃을 안 고르면 여기로 간다("Design 의 지금"이 곧 밀고 싶은 것이다). */
+function latestVersion(designId: string): string {
   const list = useVersionsStore.getState().byDesign[designId] ?? []
-  return list.find((v) => v.number === version)?.snapshot ?? null
+  return list[list.length - 1]?.number ?? ''
+}
+
+const sameScope = (a: string[], b: string[]): boolean =>
+  a.length === b.length && [...a].sort().join(' ') === [...b].sort().join(' ')
+
+/** 실 DB 의 모양을 한 문자열로 — 실행 도중 남이 바꿨는지 견주는 데 쓴다. */
+function fingerprint(s: VersionSnapshot): string {
+  return JSON.stringify(
+    [...s.tables]
+      .map((t) => [
+        t.schema ?? '',
+        t.name,
+        [...t.columns].map((c) => `${c.name}:${c.type}:${c.nullable}`).sort(),
+        [...t.constraints].map((k) => `${k.kind}:${k.name}`).sort()
+      ])
+      .sort((a, b) => String(a[1]).localeCompare(String(b[1])))
+  )
 }
 
 export const useMigrationStore = create<MigrationState>()((set, get) => ({
   binding: null,
   actual: null,
-  driftDiff: null,
-  hasBaseline: false,
-  baselineVersion: '',
+  actualScope: [],
+  remoteVersion: '',
+  identified: null,
+  diagnosis: null,
   targetVersion: null,
+  hasBaseline: false,
+  baselineAt: '',
+  baselineScope: [],
+  scopeChanged: false,
+  snapshots: [],
   planDiff: null,
   plan: null,
+  planTarget: null,
+  revert: null,
   destructiveAck: false,
+  driftAck: false,
   tx: null,
+  interrupted: null,
   logs: [],
   loading: false,
   error: null,
@@ -87,30 +177,100 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
       targetVersion: rec.targetVersion,
       appliedVersion: rec.appliedVersion
     }
-    set({ binding })
+    set({ binding, remoteVersion: rec.appliedVersion ?? '' })
     return binding
   },
 
   introspectActual: async (connectionId, designId) => {
     const ir = await window.rockury.introspection.run(connectionId)
     const actual: VersionSnapshot = { tables: normalizeSchema(ir, designId) }
-    set({ actual })
+    // 연결 설정이 아니라 **실제로 읽은 범위**를 든다 — 설정은 그 사이 바뀌었을 수 있고,
+    // 스냅샷에 적어야 할 사실은 "이 스냅샷이 어디를 본 것인가"다.
+    set({ actual, actualScope: ir.schemas ?? [] })
     return actual
   },
 
-  loadDrift: async (connectionId, designId) => {
+  /**
+   * 맵핑 판정 — 실 DB 를 떠서 설계의 모든 버전과 대조한다. **아무것도 만들지 않는다.**
+   * 만드는 것은 confirmMapping(못박기)과 가져오기(새 버전)의 몫이다.
+   */
+  identify: async (connectionId, designId) => {
+    set({ loading: true, error: null })
+    try {
+      await useVersionsStore.getState().ensureLoaded(designId)
+      await get().resolveBinding(connectionId, designId)
+      const actual = await get().introspectActual(connectionId, designId)
+      set({ identified: identifyVersion(actual, versionsOf(designId)), loading: false })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e), loading: false })
+    }
+  },
+
+  /**
+   * 판정을 확정한다 — "이 실 DB 는 v0.1.0 이다"를 못박고 그 순간을 기준선으로 남긴다.
+   *
+   * 기준선을 여기서 찍는 이유: 이 시점의 실제가 곧 "우리가 아는 마지막 모습"이다.
+   * 이걸 안 남기면 맵핑 직후 첫 진단에서 견줄 대상이 없어 드리프트를 말할 수 없다.
+   */
+  confirmMapping: async (connectionId, designId, version) => {
     set({ loading: true, error: null })
     try {
       const binding = await get().resolveBinding(connectionId, designId)
+      const actual = get().actual ?? (await get().introspectActual(connectionId, designId))
+      await window.rockury.environments.setApplied(binding.id, version)
+      await window.rockury.migration.saveSnapshot({
+        envId: binding.id,
+        version,
+        snapshot: actual,
+        scope: get().actualScope
+      })
+      await window.rockury.migration.appendLog({
+        envId: binding.id,
+        kind: 'map',
+        toVersion: version,
+        summary: `맵핑 확정 — 이 연결은 ${version} 입니다 (${actual.tables.length}개 테이블)`
+      })
+      set({ identified: null })
+      await get().runDiagnosis(connectionId, designId)
+      await get().loadLogs(connectionId, designId)
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e), loading: false })
+    }
+  },
+
+  /**
+   * 진단 — 상태 줄(`Design vX ── Remote vY`)과 그 사이의 두 갈래 차이를 채운다.
+   * 계획을 만들지는 않는다(그건 실 DB 에 나갈 SQL 이라 따로 뽑는다).
+   */
+  runDiagnosis: async (connectionId, designId, target) => {
+    set({ loading: true, error: null })
+    try {
+      await useVersionsStore.getState().ensureLoaded(designId)
+      const binding = await get().resolveBinding(connectionId, designId)
       const actual = await get().introspectActual(connectionId, designId)
-      const base = await window.rockury.migration.latestSnapshot(binding.id)
+      const [base, snapshots] = await Promise.all([
+        window.rockury.migration.latestSnapshot(binding.id),
+        window.rockury.migration.listSnapshots(binding.id)
+      ])
+
+      const remoteVersion = binding.appliedVersion ?? ''
+      const targetVersion = target ?? get().targetVersion ?? latestVersion(designId) ?? null
+
       set({
+        remoteVersion,
+        targetVersion,
+        snapshots,
         hasBaseline: !!base,
-        baselineVersion: base?.version ?? '',
-        // 기준선이 설계 저작 스냅샷(순번 id)일 수 있어 이름 정렬 후 비교(§경계 정렬).
-        driftDiff: base
-          ? diffSnapshots(alignSnapshotToActual(base.snapshot as VersionSnapshot, actual), actual)
-          : null,
+        baselineAt: base?.createdAt ?? '',
+        baselineScope: base?.scope ?? [],
+        // 범위를 안 남긴 예전 스냅샷은 "다르다"고 단정하지 않는다 — 모르는 것을 사실로 만들지 않는다.
+        scopeChanged: !!base && base.scope.length > 0 && !sameScope(base.scope, get().actualScope),
+        diagnosis: diagnose({
+          atRemote: remoteVersion ? snapshotAt(designId, remoteVersion) : null,
+          atTarget: targetVersion ? snapshotAt(designId, targetVersion) : null,
+          baseline: (base?.snapshot as VersionSnapshot | undefined) ?? null,
+          actual
+        }),
         loading: false
       })
     } catch (e) {
@@ -123,14 +283,38 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     try {
       const binding = await get().resolveBinding(connectionId, designId)
       const actual = get().actual ?? (await get().introspectActual(connectionId, designId))
-      await window.rockury.migration.saveSnapshot({ envId: binding.id, version, snapshot: actual })
+
+      /**
+       * 덮기 **전에** 무엇이 달랐는지를 글로 남긴다.
+       *
+       * 갱신하고 나면 비교 대상이 사라져 "지난주에 누가 컬럼을 넣었었다"를 되짚을 길이 없다.
+       * 기록 없이 덮는 것은 사실을 지우는 일이라, 이 한 줄이 드리프트 기능의 값을 만든다.
+       */
+      const prev = get().diagnosis?.drift
+      if (prev && hasDrift({ ahead: null, drift: prev })) {
+        await window.rockury.migration.appendLog({
+          envId: binding.id,
+          kind: 'drift',
+          fromVersion: get().remoteVersion,
+          toVersion: version,
+          summary: summarizeDrift(prev),
+          detail: detailDrift(prev)
+        })
+      }
+
+      await window.rockury.migration.saveSnapshot({
+        envId: binding.id,
+        version,
+        snapshot: actual,
+        scope: get().actualScope
+      })
       await window.rockury.migration.appendLog({
         envId: binding.id,
         kind: 'baseline',
         toVersion: version,
         summary: `기준선 캡처 (${actual.tables.length}개 테이블)`
       })
-      await get().loadDrift(connectionId, designId)
+      await get().runDiagnosis(connectionId, designId)
       await get().loadLogs(connectionId, designId)
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), loading: false })
@@ -138,21 +322,31 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
   },
 
   setDestructiveAck: (v) => set({ destructiveAck: v }),
+  setDriftAck: (v) => set({ driftAck: v }),
 
   loadPlan: async (connectionId, designId, dialect, version) => {
     set({ loading: true, error: null, targetVersion: version })
     try {
       await useVersionsStore.getState().ensureLoaded(designId)
-      const target = targetSnapshot(designId, version)
+      const target = snapshotAt(designId, version)
       if (!target) throw new Error(`버전 스냅샷을 찾을 수 없습니다: ${version}`)
       await get().resolveBinding(connectionId, designId, version)
-      const actual = await get().introspectActual(connectionId, designId)
+      // 진단을 먼저 새로 돌린다 — 계획을 여는 사람이 진단을 거쳤으리라 기대할 수 없다.
+      await get().runDiagnosis(connectionId, designId, version)
+      const actual = get().actual
+      if (!actual) throw new Error('실제 스키마를 읽지 못했습니다')
+
       // 설계 저작 버전(순번 id)↔실DB(이름 id) 비교 — 이름 정렬 없이는 "전부 DROP+CREATE"로 오판(§경계 정렬).
       const alignedTarget = alignSnapshotToActual(target, actual)
       set({
         planDiff: diffSnapshots(actual, alignedTarget),
+        planTarget: alignedTarget,
         plan: generateMigration(actual, alignedTarget, dialect),
+        // 되돌리기는 "지금 실제로" 돌아가는 것 — 반영 뒤 물릴 때 도착지가 여기다.
+        revert: generateRevert(actual, alignedTarget, dialect),
         destructiveAck: false,
+        driftAck: false, // 계획이 바뀌면 앞선 승인은 무효 — 다른 계획에 대한 동의였다.
+        interrupted: null,
         loading: false
       })
     } catch (e) {
@@ -160,11 +354,49 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     }
   },
 
-  run: async (connectionId) => {
-    const plan = get().plan
+  /**
+   * 반영 — 밀기 직전에 실 DB 를 **다시 읽어** 계획을 세운 뒤로 남이 바꿨는지 본다.
+   *
+   * 왜 하필 여기서 보나: 계획을 만든 순간과 실행 버튼을 누르는 순간 사이가 제일 긴 틈이다
+   * (사람이 SQL 을 읽어 보는 시간). 그 사이에 누가 DB 를 고치면 계획은 이미 낡은 것이 되고,
+   * 낡은 계획은 남의 변경을 DROP 으로 지운다.
+   *
+   * **한계를 정직하게:** 문과 문 **사이**는 보지 않는다. 볼 수는 있지만 확인 한 번이 실 DB 를
+   * 통째로 다시 읽는 일이라, 문 스무 개짜리 계획에 수십 초가 붙는다. 그 틈은 밀리초 단위라
+   * 위험이 훨씬 작아 값을 치를 만하지 않다고 봤다 — 이건 기술 제약이 아니라 **선택**이다.
+   * 실행 중 문이 실패하면 그 자리에서 멈추고, 화면이 되돌리기 SQL 을 내민다.
+   */
+  run: async (connectionId, designId) => {
+    const { plan, diagnosis, hasBaseline, driftAck, actual } = get()
     if (!plan || plan.statements.length === 0) return
-    set({ loading: true, error: null })
+    /**
+     * 드리프트를 모른 채로는 못 민다. 화면이 버튼을 막고 있지만 여기서도 막는다 —
+     * 못 막았을 때의 손해가 "남이 실 DB 에 넣은 것을 계획이 DROP 으로 지운다"라서,
+     * 손잡이가 하나 늘 때마다 새는 길이 생기는 종류의 위험이다.
+     */
+    if (hasBaseline && diagnosis && hasDrift(diagnosis) && !driftAck) {
+      set({ error: '실제가 기준선과 다릅니다 — 확인하고 승인해야 반영할 수 있습니다.' })
+      return
+    }
+    set({ loading: true, error: null, interrupted: null })
     try {
+      const fresh = await get().introspectActual(connectionId, designId)
+      if (actual && fingerprint(actual) !== fingerprint(fresh)) {
+        set({
+          loading: false,
+          plan: null,
+          revert: null,
+          planDiff: null,
+          planTarget: null,
+          interrupted: {
+            at: 0,
+            total: plan.statements.length,
+            detail: '계획을 세운 뒤 실 DB 가 바뀌었습니다 — 아무것도 실행하지 않았습니다.'
+          }
+        })
+        return
+      }
+
       const { txId } = await window.rockury.query.txBegin(connectionId)
       let affected = 0
       for (const st of plan.statements) {
@@ -178,23 +410,29 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
   },
 
   confirm: async (connectionId, designId) => {
-    const { tx, targetVersion, baselineVersion, binding } = get()
+    const { tx, targetVersion, remoteVersion, binding } = get()
     if (!tx || !targetVersion || !binding) return
     try {
       await window.rockury.query.txCommit(tx.txId)
-      const target = targetSnapshot(designId, targetVersion)
-      if (target) await window.rockury.migration.saveSnapshot({ envId: binding.id, version: targetVersion, snapshot: target })
+      const target = snapshotAt(designId, targetVersion)
+      if (target)
+        await window.rockury.migration.saveSnapshot({
+          envId: binding.id,
+          version: targetVersion,
+          snapshot: target,
+          scope: get().actualScope
+        })
       await window.rockury.environments.setApplied(binding.id, targetVersion)
       await window.rockury.migration.appendLog({
         envId: binding.id,
         kind: 'apply',
-        fromVersion: baselineVersion,
+        fromVersion: remoteVersion,
         toVersion: targetVersion,
         summary: `${tx.statements}개 문 반영 · 영향 ${tx.affected}행`
       })
-      set({ tx: null, plan: null, planDiff: null })
+      set({ tx: null, plan: null, planDiff: null, planTarget: null, revert: null, interrupted: null })
       await get().loadLogs(connectionId, designId)
-      await get().loadDrift(connectionId, designId)
+      await get().runDiagnosis(connectionId, designId)
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), tx: null })
     }
@@ -208,7 +446,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     } catch {
       // 이미 정리됐을 수 있음
     }
-    set({ tx: null })
+    set({ tx: null, interrupted: null })
   },
 
   loadLogs: async (connectionId, designId) => {

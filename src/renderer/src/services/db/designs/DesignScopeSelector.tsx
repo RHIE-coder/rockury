@@ -1,8 +1,9 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, Layers } from 'lucide-react'
+import { ChevronDown, Layers, Settings2 } from 'lucide-react'
 import { cx } from '@renderer/lib/cx'
 import { ScopeMenu } from '../connections/ScopeMenu'
-import { designSchemas, designScopeSummary, scopeModel, toggleDesignSchema } from '../scope'
+import { designScopeSummary, scopeModel, toggleDesignSchema } from '../scope'
+import { resolveSchemas } from '@shared/db/schemaCatalog'
 import { useDesignTables } from '../workspaces/definition/store'
 import { useActiveDesign, useDesignsStore } from './store'
 
@@ -26,8 +27,14 @@ import { useActiveDesign, useDesignsStore } from './store'
 export function DesignScopeSelector() {
   const design = useActiveDesign()
   const setSchemas = useDesignsStore((s) => s.setSchemas)
-  // 고를 목록은 **설계 안에 실제로 든 스키마**다 — 실 DB 에 물어볼 것이 없다(연결이 없어도 뜬다).
-  const available = designSchemas(useDesignTables())
+  const openSchemas = useDesignsStore((s) => s.openSchemas)
+  const tables = useDesignTables()
+  /**
+   * 고를 목록 = **선언한 것 + 표에서 발견된 것**. 실 DB 에 물어볼 것이 없다(연결이 없어도 뜬다).
+   * 예전엔 표에서 발견된 것만 봤는데, 그러면 **방금 만든 빈 스키마가 목록에 안 나타난다** —
+   * 스키마를 만들 길이 없던 시절의 잔재다(2026-08-11).
+   */
+  const available = resolveSchemas(design?.declaredSchemas ?? [], tables)
 
   if (!design) return null
 
@@ -68,6 +75,16 @@ export function DesignScopeSelector() {
         selected={selected.length > 0 ? selected : available}
         lockLastOne={false}
         onToggle={(s) => void setSchemas(design.id, toggleDesignSchema(selected, s, available))}
+        footer={
+          <DropdownMenu.Item
+            data-design-schemas-manage
+            onSelect={() => openSchemas()}
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none data-[highlighted]:bg-panel-strong"
+          >
+            <Settings2 size={13} className="shrink-0 text-muted" />
+            {model.schemaLabel} 관리
+          </DropdownMenu.Item>
+        }
       />
     </DropdownMenu.Root>
   )

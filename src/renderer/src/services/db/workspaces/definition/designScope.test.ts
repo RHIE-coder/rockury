@@ -148,37 +148,59 @@ describe('draftTablesFromSnapshot — 버전 스냅샷을 Draft 로 앉힌다', 
 })
 
 describe('newTableSchema', () => {
+  const at = (over: Partial<Parameters<typeof newTableSchema>[0]> = {}) =>
+    newTableSchema({
+      scope: [],
+      declared: [],
+      used: [],
+      dialect: 'postgresql',
+      designName: '쇼핑몰 코어',
+      ...over
+    })
+
   // 회귀 — 새 표·뷰가 스키마 없이 태어나면 범위를 켠 설계에서 화면에 안 뜬다(2026-08-04 제보).
   it('범위를 골랐으면 그 첫 스키마 — 지금 보고 있는 자리에 생긴다', () => {
-    expect(newTableSchema(['entity'], ['entity', 'public'])).toBe('entity')
+    expect(at({ scope: ['entity'], used: ['entity', 'public'] })).toBe('entity')
   })
 
-  it('범위를 안 골랐고 쓰는 스키마가 하나면 그것 — 엉뚱한 묶음을 새로 안 만든다', () => {
-    expect(newTableSchema([], ['auth'])).toBe('auth')
+  it('범위가 없으면 설계가 선언한 첫 스키마 — 사람이 정해 둔 자리다', () => {
+    expect(at({ declared: ['testdb', 'auth'], used: ['testdb'] })).toBe('testdb')
   })
 
-  it('범위도 없고 스키마가 여럿이면 기본 스키마', () => {
-    expect(newTableSchema([], ['auth', 'public'])).toBe('public')
+  it('선언이 범위보다 약하다 — 지금 보고 있는 자리가 이긴다', () => {
+    expect(at({ scope: ['auth'], declared: ['testdb'] })).toBe('auth')
   })
 
-  it('빈 설계(첫 표)도 기본 스키마', () => {
-    expect(newTableSchema([], [])).toBe('public')
+  it('선언이 없고 쓰는 스키마가 하나면 그것 — 엉뚱한 묶음을 새로 안 만든다', () => {
+    expect(at({ used: ['auth'] })).toBe('auth')
   })
 
-  it('무엇을 고르든 빈 값은 안 준다 — 빈 값이면 목록·다이어그램에서 걸러진다', () => {
+  it('아무것도 없으면 방언의 기본값 — postgresql 은 public', () => {
+    expect(at()).toBe('public')
+  })
+
+  // 회귀 — 예전엔 방언을 안 보고 `public` 을 채워 MySQL 설계가 없는 스키마를 들었다(2026-08-11).
+  it('mysql 은 public 을 지어내지 않고 설계 이름에서 딴다', () => {
+    expect(at({ dialect: 'mysql' })).toBe('쇼핑몰_코어')
+  })
+
+  it('sqlite 는 스키마 층이 없어 빈 이름 — 없는 층을 지어내지 않는다', () => {
+    expect(at({ dialect: 'sqlite' })).toBe('')
+  })
+
+  it('스키마 층이 있는 방언에선 빈 값을 안 준다 — 빈 값이면 목록·다이어그램에서 걸러진다', () => {
     for (const [scope, used] of [
       [['entity'], []],
       [[], ['public']],
       [[], []]
     ] as [string[], string[]][]) {
-      const schema = newTableSchema(scope, used)
+      const schema = at({ scope, used })
       expect(schema, `scope=${scope} used=${used}`).toBeTruthy()
       // 실제 걸름 규칙에 그대로 먹여 본다 — "빈 값이 아니다"보다 이쪽이 증상에 가깝다.
       expect(scopedTables([{ schema }], scope)).toHaveLength(1)
     }
   })
 })
-
 describe('nextNewName', () => {
   const t = (id: string, name: string, designId = 'd1'): TableDef =>
     ({ id, designId, schema: 'public', name, comment: '', columns: [], constraints: [] }) as TableDef

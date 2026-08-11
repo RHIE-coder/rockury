@@ -37,7 +37,14 @@ const api = vi.hoisted(() => {
       ensure: vi.fn(async () => ({ id: 'env1' })),
       setApplied: vi.fn(async () => ({}))
     },
-    migration: { saveSnapshot: vi.fn(async () => ({})), appendLog: vi.fn(async () => ({})) },
+    migration: {
+      saveSnapshot: vi.fn(async () => ({})),
+      appendLog: vi.fn(async () => ({})),
+      // 가져오기 끝에 드리프트 뷰를 갱신한다 — 아래 둘이 없으면 그 호출이 조용히 깨진다.
+      // 폴백 Proxy 에 맡길 수 없다: 기준선 "없음"은 빈 목록이 아니라 null 이어야 한다.
+      latestSnapshot: vi.fn(async () => null),
+      listSnapshots: vi.fn(async () => [])
+    },
     connectionGroups: { list: vi.fn(async () => []) },
     designs: { list: vi.fn(async () => []) },
     seedSets: { list: vi.fn(async () => []) },
@@ -189,6 +196,7 @@ describe('설계 편집본(Draft) 반영', () => {
     description: '',
     dialect: 'postgresql' as const,
     schemas: [] as string[],
+    declaredSchemas: [] as string[],
     projectId: null
   }
 

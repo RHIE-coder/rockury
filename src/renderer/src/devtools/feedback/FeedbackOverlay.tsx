@@ -20,16 +20,20 @@ import {
   mergeMarks,
   moveStep,
   partsOnScreen,
+  removeMark,
   removePart,
+  removePartsOnScreen,
   removeStep,
   screenSpan,
+  setMemo,
   splitMark
 } from './group'
 import { feedbackHint } from './hint'
-import { FlowModal } from './FlowModal'
+import { reviewScreens } from './review'
+import { ReviewModal } from './ReviewModal'
 import { SketchPad } from './SketchPad'
 import { ToolStrip } from './ToolStrip'
-import { BTN, PANEL } from './styles'
+import { BTN, PANEL, SCROLL_ATTR } from './styles'
 import {
   MARK_COLOR,
   MARK_HALO,
@@ -201,8 +205,7 @@ export function FeedbackOverlay(): React.JSX.Element {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [draft, setDraft] = useState<Shape | null>(null)
   const [hover, setHover] = useState<{ id: number; part: number } | null>(null)
-  const [listOpen, setListOpen] = useState(false)
-  /** 나중에 묶기 — 목록에서 고르는 중인 묶음들. null 이면 고르는 중이 아니다. */
+  /** 나중에 묶기 — 훑어보기에서 고르는 중인 묶음들. null 이면 고르는 중이 아니다. */
   const [mergeIds, setMergeIds] = useState<number[] | null>(null)
   /** 묶기처럼 조용히 잃는 것이 있는 동작을 알리는 한 줄(도구막대 아래 안내 자리). */
   const [notice, setNotice] = useState<string | null>(null)
@@ -220,9 +223,16 @@ export function FeedbackOverlay(): React.JSX.Element {
   const [steps, setSteps] = useState<DraftStep[]>([])
   /** 메인에 쌓는 중인 초안 폴더 이름. 화면을 처음 굳힐 때 메인이 지어 준다. */
   const [draftFolder, setDraftFolder] = useState<string | null>(null)
-  const [flowOpen, setFlowOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  /**
+   * 굳힌 화면의 썸네일 — 화면 신원(`seq`) → 데이터 URL(못 읽었으면 null).
+   * 그림 자체는 초안 폴더에 있고 여기엔 **볼 때 읽어 온 것만** 든다(이어받기에 안 실린다).
+   */
+  const [shots, setShots] = useState<Record<number, string | null>>({})
 
   const nextId = useRef(1)
+  /** 지금 읽어 오는 중인 화면들. 훑어보기를 여닫을 때 같은 그림을 두 번 읽지 않게 한다. */
+  const loadingShots = useRef(new Set<number>())
   const inputRef = useRef<HTMLInputElement>(null)
   const location = useFeedbackLocation()
 
@@ -272,10 +282,9 @@ export function FeedbackOverlay(): React.JSX.Element {
     setDraft(null)
     setEditingId(null)
     setHover(null)
-    setListOpen(false)
     setMergeIds(null)
     setSketchFor(null)
-    setFlowOpen(false)
+    setReviewOpen(false)
   }, [])
 
   /** 다 버린다. 메인에 쌓아 둔 초안도 같이 지운다. */
@@ -284,6 +293,9 @@ export function FeedbackOverlay(): React.JSX.Element {
     setMarks([])
     setSteps([])
     setNotice(null)
+    // 썸네일도 같이 버린다 — 다음 제보는 화면 번호가 1부터 다시 시작하므로, 남겨 두면
+    // 남의 이야기 그림이 새 목록에 깔린다.
+    setShots({})
     if (draftFolder) void window.rockury?.devFeedback?.discard?.(draftFolder).catch(() => {})
     setDraftFolder(null)
   }, [collapse, draftFolder])
@@ -299,7 +311,12 @@ export function FeedbackOverlay(): React.JSX.Element {
       '[data-rockury-frozen] *, [data-rockury-frozen] *::before, [data-rockury-frozen] *::after' +
       '{animation-play-state:paused!important;transition-property:none!important;}'
     document.head.appendChild(style)
-    const stopWheel = (e: WheelEvent): void => e.preventDefault()
+    // 우리 목록 안에서 난 휠은 그 목록이 쓴다(SCROLL_ATTR). 나머지는 삼킨다 — 뒤 화면이
+    // 움직이면 표시가 엉뚱한 요소를 가리키고 캡처 이미지와도 어긋난다.
+    const stopWheel = (e: WheelEvent): void => {
+      if (e.target instanceof Element && e.target.closest(`[${SCROLL_ATTR}]`)) return
+      e.preventDefault()
+    }
     window.addEventListener('wheel', stopWheel, { passive: false })
     return () => {
       root.removeAttribute('data-rockury-frozen')
@@ -339,12 +356,13 @@ export function FeedbackOverlay(): React.JSX.Element {
         return
       }
       if (action === 'close') {
-        // 한 겹씩 닫는다: 스케치판 → 흐름 → 메모창 → 고르기 → 목록 → 오버레이.
+        // 한 겹씩 닫는다: 스케치판 → 고르기 → 훑어보기 → 메모창 → 오버레이.
+        // 고르기가 훑어보기보다 앞인 이유: 고르는 중에 Esc 를 누르면 뜻은 "고르기를
+        // 그만두겠다"이지, 애써 열어 둔 목록까지 닫으라는 것이 아니다.
         if (sketchFor !== null) setSketchFor(null)
-        else if (flowOpen) setFlowOpen(false)
-        else if (editingId !== null) setEditingId(null)
         else if (mergeIds !== null) setMergeIds(null)
-        else if (listOpen) setListOpen(false)
+        else if (reviewOpen) setReviewOpen(false)
+        else if (editingId !== null) setEditingId(null)
         // 맨 바깥의 Escape 는 **접기**다(버리기가 아니다). 화면 여럿을 돌며 쌓은 것을 키
         // 한 번에 잃으면 안 된다. 지금 화면에 그린 것이 있으면 굳히고 접는다 — 안 굳히면
         // 그 표시가 어느 화면 것인지 잃고, 다음에 열었을 때 남의 화면 위에 떠 있게 된다.
@@ -359,12 +377,33 @@ export function FeedbackOverlay(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [open, editingId, listOpen, mergeIds, sketchFor, flowOpen, collapse])
+  }, [open, editingId, mergeIds, sketchFor, reviewOpen, collapse])
 
   useEffect(() => {
     // 스케치판이 떠 있으면 그쪽이 주인공이다 — 뒤에 숨은 입력창으로 포커스를 끌어오지 않는다.
     if (editingId !== null && sketchFor === null) inputRef.current?.focus()
   }, [editingId, sketchFor])
+
+  /**
+   * 훑어보기를 열 때 굳힌 화면의 그림을 읽어 온다 — 볼 때만 읽는다.
+   * 미리 들고 있지 않는 이유: 개발 중엔 화면이 수시로 다시 그려져 메모리에 든 것은 어차피
+   * 날아가고, 이어받기(sessionStorage)에 실으면 화면 몇 장에 용량이 찬다.
+   */
+  useEffect(() => {
+    if (!reviewOpen || !draftFolder) return
+    const read = window.rockury?.devFeedback?.shot
+    if (typeof read !== 'function') return
+    for (const step of steps) {
+      if (!step.hasImage || step.seq in shots || loadingShots.current.has(step.seq)) continue
+      const seq = step.seq
+      loadingShots.current.add(seq)
+      void read({ draft: draftFolder, seq })
+        .then((url) => setShots((prev) => ({ ...prev, [seq]: url })))
+        // 그림을 못 읽어도 목록은 그대로 선다 — 목록의 본체는 메모와 요소다.
+        .catch(() => setShots((prev) => ({ ...prev, [seq]: null })))
+        .finally(() => loadingShots.current.delete(seq))
+    }
+  }, [reviewOpen, draftFolder, steps, shots])
 
   // --- 손잡이: 누르면 열고, 끌면 위치를 옮겨 기억한다 ---
   const dragState = useRef<{ startY: number; startTop: number; moved: boolean } | null>(null)
@@ -592,10 +631,9 @@ export function FeedbackOverlay(): React.JSX.Element {
     }
     setBusy(true)
     setEditingId(null)
-    setListOpen(false)
     setMergeIds(null)
     setSketchFor(null)
-    setFlowOpen(false)
+    setReviewOpen(false)
     const frozen = await freezeScreen()
     setBusy(false)
     if (frozen) collapse()
@@ -605,11 +643,10 @@ export function FeedbackOverlay(): React.JSX.Element {
     if (marks.length === 0 || busy || !channelReady()) return
     setBusy(true)
     setEditingId(null)
-    setListOpen(false)
     setMergeIds(null)
     setHover(null)
     setSketchFor(null)
-    setFlowOpen(false)
+    setReviewOpen(false)
 
     // 보내기도 먼저 지금 화면을 굳힌다 — 마지막 화면만 다른 길로 저장하면 그 화면에서만
     // 어긋나는 버그가 생긴다. 길은 하나여야 한다.
@@ -669,6 +706,8 @@ export function FeedbackOverlay(): React.JSX.Element {
       setMarks([])
       setSteps([])
       setNotice(null)
+      // 다음 제보는 화면 번호가 1부터 다시 시작한다 — 남기면 남의 그림이 새 목록에 깔린다.
+      setShots({})
       collapse()
     } catch (err) {
       console.error('[dev-feedback]', err)
@@ -695,9 +734,9 @@ export function FeedbackOverlay(): React.JSX.Element {
    * 안내 한 줄. 갈래는 전부 **상태에서** 뽑는다(`hint.ts` 가 순서까지 안다).
    *
    * 특히 "고른 묶음은 있는데 이 화면엔 그 자국이 없다"가 그렇다 — 메모창이 붙을 데가 없어
-   * 화면에서 사라지는 자리이고, 그 상태로 들어오는 길이 둘이다: 목록에서 지난 화면의 묶음을
-   * 고르기, 그리고 걸친 묶음의 이 화면 자국만 지우개로 지우기. 어느 한쪽 손잡이에 매달면
-   * 나머지 길이 조용히 빠진다.
+   * 화면에서 사라지는 자리이고, 그 상태로 들어오는 길이 둘이다: 훑어보기에서 지난 화면의
+   * 항목에 "이어 그리기", 그리고 걸친 묶음의 이 화면 자국만 지우개로 지우기. 어느 한쪽
+   * 손잡이에 매달면 나머지 길이 조용히 빠진다.
    */
   const hint = feedbackHint({
     notice,
@@ -740,10 +779,27 @@ export function FeedbackOverlay(): React.JSX.Element {
   const hoveredMark = editingId === null && hover ? (marks.find((m) => m.id === hover.id) ?? null) : null
   const hoveredBounds = hoveredMark?.parts[hover?.part ?? 0]?.bounds ?? null
 
-  /** 목록·메모창 한 줄에 보일 "어디를 가리켰나" — 묶음의 첫 표시를 대표로 쓴다. */
-  const whereOf = (mark: DraftMark): string => {
-    const t = mark.parts[0]?.target
-    return t?.components[0] ?? t?.tag ?? '빈 자리'
+  /** 훑어보기 목록 — 화면(단계)이 뼈대고 그 아래 그 화면의 항목이 달린다. */
+  const screens = reviewScreens(steps, marks, { seq: screen, label: location.label })
+  /** 훑어볼 것이 없는 동안은 손잡이를 잠근다 — 빈 목록을 여는 길은 뜻이 없다. */
+  const nothingYet = marks.length === 0 && steps.length === 0
+
+  /** 항목 하나를 지운다. 화면 여럿에 걸쳐 있어도 딸린 표시가 다 같이 간다. */
+  const dropMark = (id: number): void => {
+    setMarks((prev) => removeMark(prev, id))
+    // 열려 있던 메모창·고르기가 없는 것을 가리키지 않게 같이 정리한다.
+    if (editingId === id) setEditingId(null)
+    setMergeIds((prev) => (prev ? prev.filter((picked) => picked !== id) : prev))
+    setHover(null)
+  }
+
+  /** 걸친 항목에서 **한 화면 몫만** 뺀다. 다른 화면의 표시와 메모는 그대로 남는다. */
+  const dropPartsOnScreen = (id: number, seq: number): void => {
+    const mark = marks.find((m) => m.id === id)
+    setMarks((prev) => removePartsOnScreen(prev, id, seq))
+    // 이 화면 몫이 그 항목의 전부였으면 항목째 사라진다.
+    if (editingId === id && mark?.parts.every((p) => p.screen === seq)) setEditingId(null)
+    setHover(null)
   }
 
   if (!open) {
@@ -965,7 +1021,7 @@ export function FeedbackOverlay(): React.JSX.Element {
           스케치판·흐름이 떠 있을 때도 걷는다: 뒤에 가려 안 보이는데 DOM 에 남아 있으면 탭
           이동이 보이지도 않는 버튼으로 새고, 도구 버튼이 두 벌이 되어 어느 쪽이 지금 쓰는
           것인지 알 수 없다. */}
-      {capturing || sketching || flowOpen ? null : (
+      {capturing || sketching || reviewOpen ? null : (
         <>
           {/* 배지 위 미리보기. 눌러서 열지 않고도 무엇을 적었는지 확인만 하고 지나갈 수 있다. */}
           {hoveredMark && hoveredBounds ? (
@@ -1033,17 +1089,20 @@ export function FeedbackOverlay(): React.JSX.Element {
               >
                 {dock === 'top' ? '아래로' : '위로'}
               </button>
+              {/* 쌓은 것을 보고 고치는 한 자리. 예전엔 목록(보기)과 흐름(화면 다루기)으로
+                  갈려 있었고, 어느 쪽에서도 지난 화면의 항목을 못 만졌다. */}
               <button
                 type="button"
-                style={{ ...BTN, opacity: marks.length === 0 ? 0.4 : 1 }}
-                disabled={marks.length === 0}
+                style={{ ...BTN, opacity: nothingYet ? 0.4 : 1 }}
+                disabled={nothingYet}
                 onClick={() => {
-                  setListOpen((v) => !v)
+                  setReviewOpen(true)
                   setEditingId(null)
                   setMergeIds(null)
+                  setHover(null)
                 }}
               >
-                목록
+                훑어보기
               </button>
               <button
                 type="button"
@@ -1053,21 +1112,6 @@ export function FeedbackOverlay(): React.JSX.Element {
               >
                 되돌리기
               </button>
-              {/* 흐름 고치기. 화면을 굳힌 뒤에야 고칠 것이 생기므로 그전에는 안 보인다. */}
-              {steps.length > 0 ? (
-                <button
-                  type="button"
-                  style={BTN}
-                  onClick={() => {
-                    setFlowOpen(true)
-                    setEditingId(null)
-                    setListOpen(false)
-                    setMergeIds(null)
-                  }}
-                >
-                  흐름 {steps.length}
-                </button>
-              ) : null}
               {/*
                 "다음 화면" — 지금 화면을 그림으로 굳히고 오버레이를 접는다. 접힌 동안 앱을
                 자유롭게 쓰고, 손잡이를 다시 열면 그 화면이 다음 단계가 된다. 이 버튼이 곧
@@ -1111,158 +1155,6 @@ export function FeedbackOverlay(): React.JSX.Element {
               width={width}
               onWidth={setWidth}
             />
-
-            {/* 표시가 여럿이면 배지를 하나씩 확인하는 것보다 목록이 빠르다.
-                목록은 "묶기"의 자리이기도 하다 — 이미 따로 남긴 것들을 여기서 골라 합친다. */}
-            {listOpen && marks.length > 0 ? (
-              <div
-                style={{
-                  ...PANEL,
-                  width: 'min(20rem, calc(100vw - 2rem))',
-                  borderRadius: 12,
-                  padding: 4,
-                  pointerEvents: 'auto'
-                }}
-              >
-                {mergeIds ? (
-                  <p
-                    style={{
-                      margin: 0,
-                      padding: '4px 8px 2px',
-                      color: '#64748b',
-                      font: '400 11px/1.5 system-ui, sans-serif'
-                    }}
-                  >
-                    한 이야기인 것을 둘 이상 고르세요 (메모 하나를 같이 씁니다)
-                  </p>
-                ) : null}
-                <div style={{ maxHeight: 208, overflowY: 'auto' }}>
-                  {marks.map((m, i) => {
-                    const picked = mergeIds?.includes(m.id) ?? false
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => {
-                          if (mergeIds) {
-                            setMergeIds(
-                              picked ? mergeIds.filter((id) => id !== m.id) : [...mergeIds, m.id]
-                            )
-                            return
-                          }
-                          setListOpen(false)
-                          setHover(null)
-                          setEditingId(m.id)
-                        }}
-                        style={{
-                          display: 'flex',
-                          width: '100%',
-                          alignItems: 'flex-start',
-                          gap: 8,
-                          background: 'transparent',
-                          border: 0,
-                          borderRadius: 8,
-                          padding: '6px 8px',
-                          textAlign: 'left',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {mergeIds ? (
-                          <span
-                            aria-hidden
-                            style={{
-                              color: picked ? MARK_COLOR : '#94a3b8',
-                              font: '400 12px/1.4 system-ui, sans-serif'
-                            }}
-                          >
-                            {picked ? '◉' : '○'}
-                          </span>
-                        ) : null}
-                        <span style={{ color: MARK_COLOR, font: '600 12px/1.4 system-ui, sans-serif' }}>
-                          {markLabel(i)}
-                        </span>
-                        <span
-                          style={{ flex: 1, minWidth: 0, font: '400 12px/1.4 system-ui, sans-serif' }}
-                        >
-                          {m.memo.trim() || '(메모 없음)'}
-                          {m.parts.length > 1 ? (
-                            <span
-                              style={{ marginLeft: 4, color: '#94a3b8', font: '400 10px/1.6 system-ui, sans-serif' }}
-                            >
-                              표시 {m.parts.length}개
-                            </span>
-                          ) : null}
-                          {/* 화면을 걸친 묶음은 그 사실이 목록에서 보여야 한다 — 지금 화면에
-                              배지가 하나뿐인데 "표시 2개"라고만 적히면 나머지를 못 찾는다. */}
-                          {screenSpan(m) > 1 ? (
-                            <span
-                              style={{ marginLeft: 4, color: MARK_COLOR, font: '400 10px/1.6 system-ui, sans-serif' }}
-                            >
-                              화면 {screenSpan(m)}개
-                            </span>
-                          ) : null}
-                          {m.sketch ? (
-                            <span
-                              style={{
-                                marginLeft: 4,
-                                color: SKETCH_BADGE_COLOR,
-                                font: '400 10px/1.6 system-ui, sans-serif'
-                              }}
-                            >
-                              그림 있음
-                            </span>
-                          ) : null}
-                        </span>
-                        <span style={{ color: '#94a3b8', font: '400 10px/1.6 system-ui, sans-serif' }}>
-                          {whereOf(m)}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-                {marks.length > 1 ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      borderTop: '1px solid rgba(15,23,42,0.12)',
-                      padding: '4px 2px 0'
-                    }}
-                  >
-                    {mergeIds ? (
-                      <>
-                        <button type="button" style={BTN} onClick={() => setMergeIds(null)}>
-                          취소
-                        </button>
-                        <span style={{ flex: 1 }} />
-                        <button
-                          type="button"
-                          disabled={mergeIds.length < 2}
-                          onClick={applyMerge}
-                          style={
-                            mergeIds.length >= 2 ? { ...BTN, color: MARK_COLOR } : { ...BTN, opacity: 0.4 }
-                          }
-                        >
-                          {mergeIds.length >= 2 ? `${mergeIds.length}개 묶기` : '묶기'}
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        style={BTN}
-                        onClick={() => {
-                          setMergeIds([])
-                          setEditingId(null)
-                        }}
-                      >
-                        따로 남긴 것 묶기
-                      </button>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
 
             {/* 안내 한 줄 — 무엇을 띄울지는 `hint.ts` 가 정한다(자리를 넷이 나눠 쓴다). */}
             {hint ? (
@@ -1311,7 +1203,7 @@ export function FeedbackOverlay(): React.JSX.Element {
                     font: '400 11px/1.4 system-ui, sans-serif'
                   }}
                 >
-                  {/* 목록과 달리 여기서는 사슬을 통째로 보인다 — 자리가 있고, 어느 파일로
+                  {/* 훑어보기와 달리 여기서는 사슬을 통째로 보인다 — 자리가 있고, 어느 파일로
                       가야 하는지가 첫 이름 하나보다 사슬 전체에서 훨씬 빨리 나온다. */}
                   {editing.parts[0]?.target?.components.join(' ‹ ') ||
                     editing.parts[0]?.target?.tag ||
@@ -1420,25 +1312,52 @@ export function FeedbackOverlay(): React.JSX.Element {
         />
       ) : null}
 
-      {/* 흐름 고치기 — 스케치판과 같은 자리를 쓴다(둘 다 화면 위 그리기를 덮는다). */}
-      {flowOpen && !sketching && !capturing ? (
-        <FlowModal
-          steps={steps}
-          marks={marks}
-          current={{ label: location.label, screen }}
+      {/* 훑어보기 — 스케치판과 같은 자리를 쓴다(둘 다 화면 위 그리기를 덮는다). */}
+      {reviewOpen && !sketching && !capturing ? (
+        <ReviewModal
+          screens={screens}
+          shots={shots}
           topInset={TITLEBAR_H}
+          notice={notice}
+          mergeIds={mergeIds}
+          markCount={marks.length}
           onMove={(index, delta) => setSteps((prev) => moveStep(prev, index, delta))}
-          onRemove={(index) => {
+          onRemoveScreen={(index) => {
             const next = removeStep(steps, marks, index)
             setSteps(next.steps)
             setMarks(next.marks)
-            // 표시가 통째로 사라지는 동작이라 조용히 넘기지 않는다.
+            // 남의 항목까지 사라질 수 있는 동작이라 조용히 넘기지 않는다.
             const lost = marks.length - next.marks.length
             say(
-              lost > 0 ? `화면을 뺐습니다 · 딸린 표시 ${lost}개도 같이 사라졌습니다` : '화면을 뺐습니다'
+              lost > 0 ? `화면을 뺐습니다 · 딸린 항목 ${lost}개도 같이 사라졌습니다` : '화면을 뺐습니다'
             )
           }}
-          onClose={() => setFlowOpen(false)}
+          onMemo={(id, memo) => setMarks((prev) => setMemo(prev, id, memo))}
+          onSketch={setSketchFor}
+          onRemoveMark={dropMark}
+          onRemovePartsOnScreen={dropPartsOnScreen}
+          onResume={(id) => {
+            // 이어 그리려면 화면이 보여야 한다 — 고르고 이 패널을 접는다. 그다음은 안내
+            // 한 줄이 받는다("여기서 그리면 ① 에 이어 붙습니다").
+            setEditingId(id)
+            setReviewOpen(false)
+          }}
+          onStartMerge={() => setMergeIds([])}
+          onCancelMerge={() => setMergeIds(null)}
+          onToggleMerge={(id) =>
+            setMergeIds((prev) =>
+              prev === null
+                ? [id]
+                : prev.includes(id)
+                  ? prev.filter((picked) => picked !== id)
+                  : [...prev, id]
+            )
+          }
+          onApplyMerge={applyMerge}
+          onClose={() => {
+            setReviewOpen(false)
+            setMergeIds(null)
+          }}
         />
       ) : null}
     </div>

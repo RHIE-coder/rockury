@@ -13,12 +13,19 @@ import {
 import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { DIALECTS, type DialectId } from '../dialects'
+import { checkSchemaName, suggestSchemaName, supportsSchemas } from '@shared/db/schemaCatalog'
+import { scopeModel } from '../scope'
 import { useDesignsStore } from './store'
 
 /**
- * 새 설계 모달 — 이름 · 설명 · 벤더(방언) 선택.
+ * 새 설계 모달 — 이름 · 설명 · 벤더(방언) · **첫 스키마 이름**.
  * 벤더는 Design 의 고정 속성(생성 시 1회 결정) — 이후 변경은 포팅으로 새 설계를 만든다.
  * 생성 즉시 컨텍스트 바의 active Design 으로 선택된다.
+ *
+ * 스키마 이름을 여기서 받는 이유: 이것이 없던 동안 설계는 자기 스키마 이름을 몰랐고, 읽을 때
+ * `public` 으로 채워졌다 — MySQL 에는 없는 이름이다(2026-08-11 사용자 지적). 미리 채워 주되
+ * **고칠 수 있는 칸**으로 둔다: 설계 이름은 사람이 읽는 라벨이라 식별자로 못 쓸 글자가 흔하고,
+ * 설계 이름을 나중에 바꿨을 때 스키마 이름이 따라 바뀌면 안 된다(그건 데이터가 딸린 DDL 이다).
  */
 export function CreateDesignDialog() {
   const open = useDesignsStore((s) => s.createOpen)
@@ -29,19 +36,34 @@ export function CreateDesignDialog() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [dialect, setDialect] = useState<DialectId | null>(null)
+  /** 사람이 손댄 적이 있나 — 손댄 뒤에는 이름·벤더를 고쳐도 덮어쓰지 않는다. */
+  const [schemaTouched, setSchemaTouched] = useState(false)
+  const [schemaName, setSchemaName] = useState('')
 
-  const canSubmit = name.trim().length > 0 && dialect != null
+  const suggested = dialect ? suggestSchemaName(dialect, name) : ''
+  const effectiveSchema = schemaTouched ? schemaName : suggested
+  const schemaCheck = checkSchemaName(effectiveSchema, [])
+  const needsSchema = dialect != null && supportsSchemas(dialect)
+
+  const canSubmit = name.trim().length > 0 && dialect != null && (!needsSchema || schemaCheck.ok)
 
   const dismiss = () => {
     setName('')
     setDescription('')
     setDialect(null)
+    setSchemaTouched(false)
+    setSchemaName('')
     closeCreate()
   }
 
   const submit = async () => {
     if (!canSubmit || !dialect) return
-    const id = await addDesign({ name, description: description.trim(), dialect })
+    const id = await addDesign({
+      name,
+      description: description.trim(),
+      dialect,
+      schemaName: effectiveSchema
+    })
     setContextValue('design', id)
     dismiss()
   }
@@ -120,6 +142,33 @@ export function CreateDesignDialog() {
               </span>
             </p>
           </div>
+
+          {/*
+            벤더를 고른 뒤에 뜬다 — 낱말이 벤더마다 다르고(스키마 / 데이터베이스), sqlite 는
+            층 자체가 없어 물을 것이 없다.
+          */}
+          {needsSchema && dialect && (
+            <label className="flex flex-col gap-1.5 text-[12px] font-semibold text-fg">
+              {scopeModel(dialect).schemaLabel} 이름
+              <Input
+                value={effectiveSchema}
+                onChange={(e) => {
+                  setSchemaTouched(true)
+                  setSchemaName(e.target.value)
+                }}
+                className="h-8 font-mono text-[13px] font-normal"
+              />
+              {schemaCheck.ok ? (
+                <span className="font-normal text-[11.5px] text-muted">
+                  {dialect === 'postgresql'
+                    ? '새 데이터베이스에 언제나 있는 이름입니다. 표가 이 아래 만들어집니다.'
+                    : '설계 이름에서 따왔어요. 표가 이 이름 아래 만들어집니다.'}
+                </span>
+              ) : (
+                <span className="font-normal text-[11.5px] text-destructive">{schemaCheck.reason}</span>
+              )}
+            </label>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="ghost" size="sm" onClick={dismiss}>

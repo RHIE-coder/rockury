@@ -32,6 +32,42 @@ export function isLastPart(marks: readonly DraftMark[], id: number): boolean {
   return mark !== undefined && mark.parts.length <= 1
 }
 
+/**
+ * 메모를 고친다. 화면을 걸친 묶음도 메모는 한 벌이라 고칠 자리도 한 곳이다 —
+ * 훑어보기에서 지난 화면의 메모를 고칠 수 있는 근거가 이것이다(좌표와 달리 메모는
+ * 어느 화면에 매여 있지 않다).
+ */
+export function setMemo(marks: readonly DraftMark[], id: number, memo: string): DraftMark[] {
+  return marks.map((m) => (m.id === id ? { ...m, memo } : m))
+}
+
+/** 묶음을 통째로 지운다 — 딸린 표시가 화면 여럿에 걸쳐 있어도 다 같이 간다. */
+export function removeMark(marks: readonly DraftMark[], id: number): DraftMark[] {
+  return marks.filter((m) => m.id !== id)
+}
+
+/**
+ * 묶음에서 **한 화면 몫만** 뗀다. 다른 화면의 표시는 그대로 남는다.
+ *
+ * 왜 필요한가: 지난 화면의 자국은 그 화면에서만 만질 수 있어서(좌표가 그 화면 기준),
+ * 걸친 묶음에서 한 화면 몫이 잘못됐을 때 예전에는 화면을 통째로 빼는 수밖에 없었다 —
+ * 그러면 그 화면의 **남의 표시까지** 사라졌다.
+ *
+ * 남는 표시가 없으면 묶음도 사라진다(`removePart` 와 같은 규칙 — 표시 없는 메모는
+ * 어디를 가리키는지 알 수 없다).
+ */
+export function removePartsOnScreen(
+  marks: readonly DraftMark[],
+  id: number,
+  screen: number
+): DraftMark[] {
+  return marks.flatMap((m) => {
+    if (m.id !== id) return [m]
+    const parts = m.parts.filter((p) => p.screen !== screen)
+    return parts.length > 0 ? [{ ...m, parts }] : []
+  })
+}
+
 export interface MergeResult {
   marks: DraftMark[]
   /** 버려진 제안 그림 수. 묶음당 그림은 한 장이라, 둘 이상이면 맨 앞 것만 남는다. */

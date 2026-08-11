@@ -162,12 +162,27 @@ describe('orderForCreate — 여러 스키마', () => {
 // 3단계 — 스키마가 둘 이상이면 한정 이름을 쓰고 스키마부터 만든다.
 describe('generateSchemaScript — 스키마 한정', () => {
   const scoped = (schema: string, name: string): TableDef => ({ ...tbl(name), id: `${schema}.${name}`, schema })
+  /** 스키마를 모르는 표 — 선언 기능 이전 설계에 남아 있는 모양. */
+  const unscoped = (name: string): TableDef => ({ ...tbl(name), id: name, schema: undefined })
 
-  it('스키마가 하나뿐이면 한정 이름을 안 쓴다 — 예전 스크립트와 글자가 같아야 한다', () => {
+  // 2026-08-11 규칙 변경 — 예전엔 "하나뿐이면 안 붙인다"였다. 그러면 스크립트가 어느 DB 에
+  // 떨어지는지가 실행할 때의 세션 상태에 달린다.
+  it('하나뿐이어도 이름을 알면 한정 이름을 쓴다 — 목적지가 스크립트에 적혀야 한다', () => {
     const sql = generateSchemaScript([scoped('public', 'users'), scoped('public', 'posts')], 'postgresql')
-    expect(sql).toContain('CREATE TABLE "users"')
-    expect(sql).not.toContain('"public"."users"')
+    expect(sql).toContain('CREATE TABLE "public"."users"')
+    // PostgreSQL 의 public 은 새 DB 에 언제나 있으니 만들지 않는다.
     expect(sql).not.toContain('CREATE SCHEMA')
+  })
+
+  it('MySQL 은 선언한 DB 를 모두 만든다 — "언제나 있는 이름"이 없다', () => {
+    const sql = generateSchemaScript([scoped('testdb', 'users')], 'mysql')
+    expect(sql).toContain('CREATE DATABASE IF NOT EXISTS `testdb`;')
+    expect(sql).toContain('CREATE TABLE `testdb`.`users`')
+  })
+
+  it('이름 모르는 표가 섞이면 안 붙인다 — 반쯤 한정된 스크립트가 가장 나쁘다', () => {
+    const sql = generateSchemaScript([scoped('public', 'users'), unscoped('logs')], 'postgresql')
+    expect(sql).not.toContain('"public".')
   })
 
   it('스키마가 섞이면 한정 이름 + CREATE SCHEMA 를 앞세운다', () => {

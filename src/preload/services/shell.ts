@@ -158,6 +158,12 @@ export const shellApi = {
   devFeedback: {
     step: (input: FeedbackStepInput): Promise<FeedbackStepResult> =>
       unwrap(ipcRenderer.invoke('shell:devFeedbackStep', input)),
+    /**
+     * 훑어보기 목록에 깔 화면 그림 썸네일(PNG 데이터 URL). 없거나 못 읽으면 null.
+     * 그림은 초안 폴더에 이미 있으므로 렌더러가 들고 다니지 않고 **볼 때 읽는다.**
+     */
+    shot: (input: { draft: string; seq: number }): Promise<string | null> =>
+      unwrap(ipcRenderer.invoke('shell:devFeedbackShot', input)),
     save: (payload: FeedbackPayloadInput): Promise<SaveDevFeedbackResult> =>
       unwrap(ipcRenderer.invoke('shell:saveDevFeedback', payload)),
     discard: (draft: string): Promise<void> =>

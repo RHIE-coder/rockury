@@ -5,9 +5,12 @@ import {
   mergeMarks,
   moveStep,
   partsOnScreen,
+  removeMark,
   removePart,
+  removePartsOnScreen,
   removeStep,
   screenSpan,
+  setMemo,
   splitMark
 } from './group'
 import type { DraftMark, DraftStep, MarkPart } from './types'
@@ -63,6 +66,39 @@ describe('묶음에 자국 붙이고 떼기', () => {
   it('마지막 하나인지 미리 알 수 있다 — 메모창을 같이 닫아야 하는 자리', () => {
     expect(isLastPart([mark()], 1)).toBe(true)
     expect(isLastPart([mark({ parts: [part(), part()] })], 1)).toBe(false)
+  })
+})
+
+describe('훑어보기에서 고치기', () => {
+  it('메모는 어느 화면에서도 고칠 수 있다 — 좌표와 달리 메모는 화면에 매여 있지 않다', () => {
+    const marks = [mark({ id: 1, parts: [part({ screen: 1 })] }), mark({ id: 2, memo: '그대로' })]
+    const after = setMemo(marks, 1, '정렬이 깨짐')
+    expect(after[0].memo).toBe('정렬이 깨짐')
+    expect(after[1].memo).toBe('그대로')
+  })
+
+  it('항목을 지우면 걸친 화면의 표시까지 다 같이 간다', () => {
+    const marks = [
+      mark({ id: 1, parts: [part({ screen: 1 }), part({ screen: 2 })] }),
+      mark({ id: 2 })
+    ]
+    expect(removeMark(marks, 1).map((m) => m.id)).toEqual([2])
+  })
+
+  it('한 화면 몫만 떼면 다른 화면의 표시는 살아남는다 — 화면을 통째로 빼지 않아도 되는 길', () => {
+    const marks = [mark({ id: 1, parts: [part({ screen: 1 }), part({ screen: 2 })], memo: '옮겨라' })]
+    const after = removePartsOnScreen(marks, 1, 1)
+    expect(after[0].parts.map((p) => p.screen)).toEqual([2])
+    expect(after[0].memo).toBe('옮겨라')
+  })
+
+  it('한 화면 몫을 떼고 남는 표시가 없으면 묶음도 사라진다', () => {
+    expect(removePartsOnScreen([mark({ parts: [part({ screen: 1 })] })], 1, 1)).toEqual([])
+  })
+
+  it('남의 묶음은 건드리지 않는다 — 같은 화면을 쓰고 있어도', () => {
+    const marks = [mark({ id: 1 }), mark({ id: 2 })]
+    expect(removePartsOnScreen(marks, 1, 1).map((m) => m.id)).toEqual([2])
   })
 })
 

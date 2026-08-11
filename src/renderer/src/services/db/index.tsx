@@ -52,7 +52,7 @@ import { QueryView } from './remote/QueryView'
 import { DataView } from './remote/DataView'
 import { CollectionView } from './remote/CollectionView'
 import { HistoryView } from './remote/HistoryView'
-import { DriftView, ImportView, PlanView, RunView, LogsView } from './migration/views'
+import { DiagnoseView, ImportView, PlanView, RunView, LogsView } from './migration/views'
 import { CompareView } from './migration/CompareView'
 import { SeedOpsView } from './migration/SeedOpsView'
 import './rehydration' // 에이전트(MCP) 쓰기 → store:changed → 스코프 재조회 구독(부수효과 모듈)
@@ -221,24 +221,28 @@ export const dbService: Service = {
       // 그래서 여기서만 좌우로 갈라 두 단 카드로 접는다(2026-08-04 사용자 요청).
       // 다른 화면은 이 값을 안 적어 예전 모양 그대로다 — 손잡이는 다섯 서비스가 함께 쓴다.
       handleLayout: 'sides',
-      // 뷰 줄은 **하는 일로 묶는다**(2026-08-04 사용자 요청). 일곱 뷰가 섞여 서 있어서, 줄만
-      // 봐서는 어느 것이 반영이고 어느 것이 되먹임인지 안 읽혔다. 순서가 곧 흐름이다:
-      // 진단(무엇이 다른가) → 반영(설계 → 실제) → 되먹임(실제 → 설계) → 기록.
-      //
-      // **Compare 는 진단이다**(2026-08-05). 예전엔 Logs 와 한 묶음으로 줄 끝에 있었는데, 그 둘은
-      // 한 갈래가 아니다 — Compare 는 *견주기*, Logs 는 *기록*이라 무슨 이름을 붙여도 한쪽이
-      // 안 맞았다("감사"를 후보로 봤다가 접었다: 감사는 규정 준수를 따지는 일이다).
-      // Drift 는 설계↔실제, Compare 는 실제↔실제 — 둘 다 "무엇과 무엇이 다른가"라 같은 묶음이다.
+      /**
+       * 뷰 줄은 **흐름 순서**다: 진단 → 계획 → 실행 → (되먹임) → 기록.
+       *
+       * 2026-08-10 재편: 예전엔 Drift 와 Plan 이 갈라져 각자 **다른 짝**을 견줬다
+       * (Drift 는 기준선↔실제, Plan 은 설계↔실제). 그래서 어느 탭에 있느냐에 따라 "무엇과
+       * 무엇"이 달라져, 사용자가 매번 다시 읽어야 했다("화면이 꼬였다").
+       *
+       * 이제 모든 탭 위에 상태 줄 하나(`Design vX ── Remote vY`)가 서고, **진단**이 그 사이의
+       * 차이를 두 갈래(설계가 앞선 것 / DB 가 샌 것)로 갈라 보여 준다. Drift 탭은 진단에
+       * 흡수됐고, 맵핑(이 연결이 몇 버전인가)은 진단의 첫 상태가 됐다.
+       *
+       * Compare 만 진단 묶음에 남는다 — 실제↔실제라 축이 다르고, 설계가 없어도 되는 유일한 뷰다.
+       */
       views: [
-        { id: 'drift', label: 'Drift', icon: Radar, workspace: DriftView, group: '진단' },
-        // 실DB↔실DB 비교(DEV·STG·PROD) — 설계 무관, 연결 2개만 필요.
+        { id: 'diagnose', label: '진단', icon: Radar, workspace: DiagnoseView, group: '진단' },
+        // 실DB↔실DB 비교(예: 개발기↔운영기) — 설계 무관, 연결 2개만 필요.
         { id: 'compare', label: 'Compare', icon: GitCompare, workspace: CompareView, group: '진단' },
-        { id: 'plan', label: 'Plan', icon: FileDiff, workspace: PlanView, group: '설계 → 실제', groupTone: 'design' },
-        { id: 'run', label: 'Run', icon: Play, workspace: RunView, group: '설계 → 실제', groupTone: 'design' },
-        // 시드 반영·되먹임 — 스키마(Plan/Run)와 갈라 둔다: 대상이 데이터고 게이트도 따로다.
-        // 안에서 방향을 다시 고르지만(apply/import) 여기 서는 자리는 반영 쪽이다.
+        { id: 'plan', label: '계획', icon: FileDiff, workspace: PlanView, group: '설계 → 실제', groupTone: 'design' },
+        { id: 'run', label: '실행', icon: Play, workspace: RunView, group: '설계 → 실제', groupTone: 'design' },
+        // 시드 반영 — 스키마(계획/실행)와 갈라 둔다: 대상이 데이터고 게이트도 따로다.
         { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView, group: '설계 → 실제', groupTone: 'design' },
-        // 되먹임의 문 — 예전엔 Drift 머리글의 버튼이었다(같은 요청으로 뷰가 됐다).
+        // 되먹임의 문 — 진단·맵핑이 "만들어야 한다"고 판정했을 때 부르는 조치이기도 하다.
         { id: 'import', label: '가져오기', icon: DownloadCloud, workspace: ImportView, group: '실제 → 설계', groupTone: 'ops' },
         { id: 'logs', label: 'Logs', icon: ScrollText, workspace: LogsView, group: '기록' }
       ]

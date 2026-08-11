@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Database, Loader2 } from 'lucide-react'
 import { cx } from '@renderer/lib/cx'
@@ -34,6 +35,11 @@ export interface ScopeMenuProps {
   /** 카탈로그 라벨 옆 한 마디 — 고르면 무슨 일이 나는지가 자리마다 다르다. */
   catalogHint?: string
   onPickCatalog?: (target: ConnectionDef) => void
+  /**
+   * 목록 맨 아래에 덧붙일 항목 — 자리마다 있는 것이 달라서 밖에서 넣는다.
+   * 설계부는 여기에 "스키마 관리"를 넣고, 운영부는 넣지 않는다(실 DB 를 설계 창에서 만들지 않는다).
+   */
+  footer?: ReactNode
 }
 
 export function ScopeMenu({
@@ -48,7 +54,8 @@ export function ScopeMenu({
   lockLastOne = true,
   catalogHint = '',
   onToggle,
-  onPickCatalog
+  onPickCatalog,
+  footer
 }: ScopeMenuProps) {
   return (
     <DropdownMenu.Portal>
@@ -135,6 +142,13 @@ export function ScopeMenu({
                 </DropdownMenu.Item>
               )
             })}
+          </>
+        )}
+
+        {footer && (
+          <>
+            <DropdownMenu.Separator className="my-1 h-px bg-line" />
+            {footer}
           </>
         )}
       </DropdownMenu.Content>

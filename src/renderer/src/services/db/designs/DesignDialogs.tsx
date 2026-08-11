@@ -1,5 +1,6 @@
 import { CreateDesignDialog } from './CreateDesignDialog'
 import { ManageDesignsDialog } from './ManageDesignsDialog'
+import { SchemasDialog } from './SchemasDialog'
 import { VersionSync } from '../versions/VersionSync'
 import { RestoreDraftDialog } from '../versions/RestoreDraftDialog'
 import { ConnectionDialog } from '../connections/ConnectionDialog'
@@ -14,6 +15,7 @@ export function DesignDialogs() {
     <>
       <CreateDesignDialog />
       <ManageDesignsDialog />
+      <SchemasDialog />
       <VersionSync />
       <ConnectionDialog />
       <ImportDialog />

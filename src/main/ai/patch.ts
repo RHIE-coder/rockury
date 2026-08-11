@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import type { TableRecord } from '../store/tables'
+// 이름 규칙은 화면과 **한 벌**이다 — 두 벌이면 한쪽만 고쳐져 조용히 어긋난다.
+import { addSchema, checkSchemaName, renameSchema, resolveSchemas } from '../../shared/db/schemaCatalog'
 
 /**
  * 스키마 부분 수정 엔진 — 연산 목록을 현재 스키마에 차례로 적용하는 **순수 함수**.
@@ -63,6 +65,8 @@ const constraintInput = z.looseObject({
   name: z.string().optional(),
   columns: z.array(z.string()).optional().describe('대상 컬럼 이름 배열(id 아님)'),
   refTable: z.string().optional(),
+  // 교차 스키마 FK — 생략하면 그 제약이 걸린 표와 같은 스키마를 가리킨다(`db/schemaRef` 규칙).
+  refSchema: z.string().optional().describe('대상 표의 스키마(다른 스키마를 가리킬 때만)'),
   refColumns: z.array(z.string()).optional(),
   onDelete: z.enum(FK_ACTIONS).optional(),
   onUpdate: z.enum(FK_ACTIONS).optional(),
@@ -73,6 +77,11 @@ export const patchOpSchema = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('add_table'),
     table: z.string().min(1),
+    /**
+     * 소속 스키마. 생략하면 설계의 **첫 선언 스키마**(그것도 없으면 지금 쓰는 스키마가 하나일 때
+     * 그것)로 채운다 — 비워 두면 그 표만 이름이 없어져 설계 전체의 SQL 이 한정 이름을 잃는다.
+     */
+    schema: z.string().optional(),
     comment: z.string().optional(),
     columns: z.array(columnInput).min(1, '새 테이블에는 컬럼이 최소 1개 필요합니다'),
     constraints: z.array(constraintInput).optional()
@@ -102,7 +111,17 @@ export const patchOpSchema = z.discriminatedUnion('op', [
   }),
   z.object({ op: z.literal('drop_column'), table: z.string().min(1), column: z.string().min(1) }),
   z.object({ op: z.literal('add_constraint'), table: z.string().min(1), constraint: constraintInput }),
-  z.object({ op: z.literal('drop_constraint'), table: z.string().min(1), name: z.string().min(1) })
+  z.object({ op: z.literal('drop_constraint'), table: z.string().min(1), name: z.string().min(1) }),
+  /**
+   * 스키마 이름 바꾸기 — **그 스키마의 표 전부를 함께 옮긴다.** 이것이 `update_design` 으로
+   * 선언만 고치는 것과 다른 점이다(선언만 고치면 표가 옛 이름에 남아 목록에서 갈라진다).
+   * `from` 을 빈 문자열로 주면 **이름 없는 표들**을 거둔다(선언 기능 이전 데이터).
+   */
+  z.object({
+    op: z.literal('rename_schema'),
+    from: z.string(),
+    to: z.string().min(1, '새 스키마 이름은 비울 수 없습니다')
+  })
 ])
 
 export type PatchOp = z.infer<typeof patchOpSchema>
@@ -113,6 +132,11 @@ export interface PatchResult {
   changes: string[]
   /** 막을 정도는 아니지만 알려야 하는 것(예: CHECK 식 안의 옛 컬럼 이름). */
   warnings: string[]
+  /**
+   * 바뀐 선언 스키마 목록. `rename_schema` 가 있었을 때만 채워지고, 부르는 쪽이 설계에 저장한다.
+   * 표와 선언이 **한 번에** 바뀌어야 목록에 유령 스키마가 남지 않는다.
+   */
+  declaredSchemas?: string[]
 }
 
 // ── 조회 도우미 ──────────────────────────────────────────────────────────────
@@ -210,7 +234,9 @@ export function applyOperations(
   designId: string,
   current: TableRecord[],
   ops: PatchOp[],
-  newId: () => string
+  newId: () => string,
+  /** 설계가 선언한 스키마들 — 새 표의 기본 소속과 `rename_schema` 의 대상이 여기서 나온다. */
+  declared: readonly string[] = []
 ): PatchResult {
   // 깊은 복제 — 원본(리하이드레이션 전 메모리 사본)을 부분 수정한 채로 남기지 않는다.
   let tables: TableRecord[] = current.map((t) => ({
@@ -220,6 +246,9 @@ export function applyOperations(
   }))
   const changes: string[] = []
   const warnings: string[] = []
+  let schemas = [...declared]
+  /** `rename_schema` 가 있었나 — 없었으면 선언을 되쓰지 않는다(건드리지 않은 값을 덮지 않게). */
+  let renamed = false
 
   ops.forEach((op, i) => {
     const at = `연산 #${i + 1}(${op.op})`
@@ -235,9 +264,17 @@ export function applyOperations(
             defaultValue: c.defaultValue ?? null,
             comment: c.comment ?? ''
           }))
+          /**
+           * 소속 스키마를 **꼭 채운다.** 예전엔 여기서 스키마를 아예 안 담아, `patch_schema` 로
+           * 더한 표만 이름이 없었다 — 그 하나 때문에 설계 전체의 SQL 이 한정 이름을 잃는다
+           * (`shouldQualify` 는 하나라도 모르면 안 붙인다). 2026-08-11 사용자 지적으로 고쳤다.
+           */
+          const usedSchemas = [...new Set(tables.filter((t) => t.schema).map((t) => t.schema as string))]
+          const schema = op.schema?.trim() || schemas[0] || (usedSchemas.length === 1 ? usedSchemas[0] : '')
           const table: TableRecord = {
             id: newId(),
             designId,
+            ...(schema ? { schema } : {}),
             name: op.table,
             comment: op.comment ?? '',
             columns,
@@ -245,7 +282,10 @@ export function applyOperations(
           }
           table.constraints = (op.constraints ?? []).map((k) => toConstraintRecord(table, k, newId))
           tables.push(table)
-          changes.push(`테이블 "${op.table}" 추가 (컬럼 ${columns.length}개, 제약 ${table.constraints.length}개)`)
+          changes.push(
+            `테이블 "${schema ? `${schema}.${op.table}` : op.table}" 추가 ` +
+              `(컬럼 ${columns.length}개, 제약 ${table.constraints.length}개)`
+          )
           break
         }
 
@@ -382,6 +422,45 @@ export function applyOperations(
           changes.push(`테이블 "${op.table}" 의 제약 "${op.name}" 삭제`)
           break
         }
+
+        case 'rename_schema': {
+          const to = op.to.trim()
+          const others = schemas.filter((x) => x !== op.from)
+          const check = checkSchemaName(to, others)
+          if (!check.ok) throw new Error(`스키마 이름 "${to}" 을 쓸 수 없습니다 — ${check.reason}.`)
+
+          const moving = tables.filter((t) => (t.schema ?? '') === op.from)
+          // 선언에도 없고 표도 없으면 오타다 — 조용히 아무 일도 안 하는 것보다 알려 주는 편이 낫다.
+          if (moving.length === 0 && !schemas.includes(op.from))
+            throw new Error(
+              `스키마 "${op.from || '(이름 없음)'}" 이 이 설계에 없습니다 — ` +
+                `있는 스키마: ${resolveSchemas(schemas, tables).join(', ') || '(없음)'}`
+            )
+
+          for (const t of moving) t.schema = to
+          /**
+           * 다른 스키마의 표가 옛 이름을 가리키던 FK 도 따라 고친다 — 안 고치면 그 참조가
+           * 범위 밖으로 떨어져 ERD 선과 반영 계획에서 조용히 사라진다(`db/schemaRef.resolveRef`).
+           */
+          let fixedRefs = 0
+          for (const t of tables) {
+            for (const k of kaysOf(t)) {
+              if (k.kind === 'fk' && k.refSchema === op.from && op.from !== '') {
+                k.refSchema = to
+                fixedRefs += 1
+              }
+            }
+          }
+
+          // 선언에 없던 이름(가져오기로 들어온 스키마)을 바꿀 때도 목록에 새 이름이 서야 한다.
+          schemas = schemas.includes(op.from) ? renameSchema(schemas, op.from, to) : addSchema(schemas, to)
+          renamed = true
+          changes.push(
+            `스키마 "${op.from || '(이름 없음)'}" → "${to}" (표 ${moving.length}개 이동` +
+              `${fixedRefs > 0 ? `, FK 참조 ${fixedRefs}개 갱신` : ''})`
+          )
+          break
+        }
       }
     } catch (e) {
       // 몇 번째 연산에서 멈췄는지 알려야 에이전트가 목록을 고칠 수 있다.
@@ -389,5 +468,5 @@ export function applyOperations(
     }
   })
 
-  return { tables, changes, warnings }
+  return { tables, changes, warnings, ...(renamed ? { declaredSchemas: schemas } : {}) }
 }

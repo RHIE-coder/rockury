@@ -1,5 +1,6 @@
 import { scopeTableIds } from '../../migration/importSchema'
-import { DEFAULT_SCHEMA } from '../../schemaRef'
+import { suggestSchemaName, supportsSchemas } from '@shared/db/schemaCatalog'
+import type { DialectId } from '../../dialects'
 import type { Column, Constraint, TableDef } from './types'
 
 /** 저장소 레코드(preload TableRecord)에서 필요한 필드만 — 매퍼가 preload 를 import 하지 않게. */
@@ -23,10 +24,17 @@ export function toTableDef(r: TableRecordLike): TableDef {
   return {
     id: r.id,
     designId: r.designId,
-    // 스키마를 안 적은 행은 **기본 스키마**로 올린다(2026-07-30 사용자 결정: `public` 고정).
-    // 여기서 채워 두면 설계 전체가 한 스키마로 통일돼, 단일 스키마 설계의 DDL 은 예전과
-    // 글자 하나까지 같다(스키마가 하나뿐이면 한정 이름을 안 쓴다 — `db-design.definition.sql`).
-    schema: r.schema || DEFAULT_SCHEMA,
+    /**
+     * 스키마는 **저장된 그대로** 둔다. 비면 비운다.
+     *
+     * 예전에는 여기서 빈 스키마를 `public` 으로 채웠다(2026-07-30). 그 값이 방언을 안 봐서
+     * MySQL 설계가 있지도 않은 `public` 을 들고 있었고, Migration 이 `(스키마, 이름)` 으로 짝을
+     * 찾다 하나도 못 맞춰 "실 DB 전부 삭제"를 계획할 수 있었다(2026-08-11 사용자 지적).
+     * 모르는 것은 모르는 채로 두는 편이 낫다 — `schemaRef` 가 빈 스키마를 "같은 스키마"로
+     * 다루고, `align.ts` 는 이름만으로 짝을 찾아 실 DB 쪽 스키마를 물려받는다. 이름을 정하는
+     * 일은 **선언**(`design.declaredSchemas`)과 `newTableSchema` 의 몫이다.
+     */
+    schema: r.schema || undefined,
     name: r.name,
     comment: r.comment,
     columns: r.columns as Column[],
@@ -131,20 +139,29 @@ export function mergeDesignTables(current: TableDef[], designId: string, incomin
  *
  * 만드는 쪽에 이 기본값이 없던 동안 새 표·뷰는 스키마 없이 태어났고, 화면 목록·다이어그램은
  * 스키마 범위로 거르면서 `스키마가 있고 && 고른 범위에 든다` 를 요구했다 — 그래서 범위를 켠
- * 설계에서는 `테이블 추가`·`뷰 추가` 를 눌러도 **저장만 되고 아무것도 안 떴다**. 앱을 다시 열면
- * 불러오는 쪽(`toTableDef`)이 빈 스키마를 기본값으로 채워 그제서야 나타났다
+ * 설계에서는 `테이블 추가`·`뷰 추가` 를 눌러도 **저장만 되고 아무것도 안 떴다**
  * (2026-08-04 사용자 제보 · 실측 재현).
  *
  * 정하는 순서:
  *  1. **고른 범위의 첫 스키마** — 지금 보고 있는 자리에 생겨야 누른 사람 눈에 보인다.
- *  2. 범위를 안 골랐고 **설계가 실제로 쓰는 스키마가 하나뿐**이면 그것 — 단일 스키마 설계에
- *     엉뚱한 묶음을 새로 만들지 않는다.
- *  3. 그래도 못 정하면 기본 스키마(`toTableDef` 의 폴백과 같은 값이라 만들기·불러오기가 안 어긋난다).
+ *  2. **설계가 선언한 첫 스키마** — 사람이 "이 설계는 여기다"라고 정해 둔 자리다.
+ *  3. 선언이 없고 **실제로 쓰는 스키마가 하나뿐**이면 그것 — 엉뚱한 묶음을 새로 만들지 않는다.
+ *  4. 그래도 못 정하면 방언의 기본값. 방언에 스키마 층이 없으면(sqlite) 빈 이름이다 —
+ *     예전처럼 `public` 을 지어내지 않는다(2026-08-11).
  */
-export function newTableSchema(scope: readonly string[], used: readonly string[]): string {
+export function newTableSchema(input: {
+  scope: readonly string[]
+  declared: readonly string[]
+  used: readonly string[]
+  dialect: DialectId
+  designName: string
+}): string {
+  const { scope, declared, used, dialect, designName } = input
   if (scope.length > 0) return scope[0]
+  if (declared.length > 0) return declared[0]
   if (used.length === 1) return used[0]
-  return DEFAULT_SCHEMA
+  if (!supportsSchemas(dialect)) return ''
+  return suggestSchemaName(dialect, designName)
 }
 
 /**

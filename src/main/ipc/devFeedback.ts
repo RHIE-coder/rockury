@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron'
 import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { envelope } from './envelope'
@@ -42,6 +42,11 @@ declare const __SOURCE_ROOT__: string
 const FEEDBACK_ROOT = join(__SOURCE_ROOT__, '.harness', 'feedback')
 /** 이보다 오래 방치된 초안은 버려진 것으로 본다(앱을 그냥 끈 경우). */
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
+/**
+ * 훑어보기 썸네일의 가로 픽셀. 화면에는 절반 크기로 깔린다 — 고해상도 화면에서 뭉개지지
+ * 않을 만큼만 크게 잡았다. 원본(창 전체)을 그대로 넘기면 화면 열둘이 수십 MB가 된다.
+ */
+const THUMB_WIDTH = 320
 
 /** 데이터 URL 의 base64 부분만 잘라 파일로 쓸 바이트를 만든다. */
 function pngBytes(dataUrl: string): Buffer {
@@ -193,6 +198,31 @@ export function registerDevFeedbackIpc(): void {
         saved,
         missingImages: parsed.value.steps.filter((s) => s.imageFile === null).length
       }
+    })
+  )
+
+  /**
+   * 초안에 쌓아 둔 화면 그림을 **작게 줄여** 돌려준다 — 훑어보기 목록에 깔 썸네일.
+   *
+   * 왜 렌더러가 들고 다니지 않나: 그림은 굳힐 때 이미 파일로 나갔고(초안 폴더), 개발 중엔
+   * 화면이 수시로 다시 그려져 메모리에 든 것은 어차피 날아간다. 볼 때 다시 읽는 편이
+   * 이어받기(sessionStorage)에 수십 MB 를 얹지 않는 유일한 길이다.
+   */
+  ipcMain.handle('shell:devFeedbackShot', async (_event, raw: unknown) =>
+    envelope(async (): Promise<string | null> => {
+      devOnly()
+
+      const input = raw as { draft?: unknown; seq?: unknown } | null
+      if (!isDraftFolderName(input?.draft)) throw new Error('초안 이름이 잘못됐습니다')
+      const seq = input.seq
+      if (typeof seq !== 'number' || !Number.isInteger(seq) || seq < 1 || seq > MAX_STEPS) {
+        throw new Error('화면 번호가 잘못됐습니다')
+      }
+
+      // 그림 한 장을 못 읽는다고 훑어보기가 죽지는 않는다 — 목록의 본체는 메모와 요소다.
+      const image = nativeImage.createFromPath(join(draftDir(input.draft), draftShotFileName(seq)))
+      if (image.isEmpty()) return null
+      return image.resize({ width: THUMB_WIDTH, quality: 'good' }).toDataURL()
     })
   )
 

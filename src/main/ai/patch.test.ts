@@ -56,7 +56,8 @@ const fixture = (): TableRecord[] => [
 
 let seq = 0
 const newId = (): string => `new${++seq}`
-const apply = (ops: PatchOp[], tables = fixture()) => applyOperations('d1', tables, ops, newId)
+const apply = (ops: PatchOp[], tables = fixture(), declared: string[] = []) =>
+  applyOperations('d1', tables, ops, newId, declared)
 
 const tableOf = (tables: TableRecord[], name: string): TableRecord => tables.find((t) => t.name === name)!
 const colsOf = (t: TableRecord): ColumnRecord[] => t.columns as ColumnRecord[]
@@ -291,5 +292,124 @@ describe('assertTablesConsistent — 저장 직전 관문', () => {
     const dupId = fixture()
     colsOf(dupId[1])[0].id = 'u1'
     expect(() => assertTablesConsistent(dupId)).toThrowError(/중복 id "u1"/)
+  })
+})
+
+// ── 스키마 저작 (2026-08-11) — 화면으로만 되던 것을 MCP 에도 열면서 함께 들어온 규칙.
+describe('add_table 의 소속 스키마', () => {
+  it('선언된 첫 스키마로 채운다 — 비워 두면 그 표만 이름이 없어져 설계 전체가 한정 이름을 잃는다', () => {
+    const out = apply(
+      [{ op: 'add_table', table: 'logs', columns: [{ name: 'id', type: 'INT' }] }],
+      fixture(),
+      ['testdb', 'auth']
+    )
+    expect(out.tables.find((t) => t.name === 'logs')?.schema).toBe('testdb')
+  })
+
+  it('준 이름이 선언보다 이긴다', () => {
+    const out = apply(
+      [{ op: 'add_table', table: 'logs', schema: 'auth', columns: [{ name: 'id', type: 'INT' }] }],
+      fixture(),
+      ['testdb', 'auth']
+    )
+    expect(out.tables.find((t) => t.name === 'logs')?.schema).toBe('auth')
+  })
+
+  it('선언이 없고 쓰는 스키마가 하나면 그것 — 엉뚱한 묶음을 새로 안 만든다', () => {
+    const tables = fixture().map((t) => ({ ...t, schema: 'shop' }))
+    const out = apply([{ op: 'add_table', table: 'logs', columns: [{ name: 'id', type: 'INT' }] }], tables)
+    expect(out.tables.find((t) => t.name === 'logs')?.schema).toBe('shop')
+  })
+
+  it('정할 근거가 없으면 안 담는다 — 이름을 지어내지 않는다', () => {
+    const out = apply([{ op: 'add_table', table: 'logs', columns: [{ name: 'id', type: 'INT' }] }])
+    expect(out.tables.find((t) => t.name === 'logs')?.schema).toBeUndefined()
+  })
+
+  it('바뀜 기록에 한정 이름을 적는다', () => {
+    const out = apply(
+      [{ op: 'add_table', table: 'logs', columns: [{ name: 'id', type: 'INT' }] }],
+      fixture(),
+      ['testdb']
+    )
+    expect(out.changes[0]).toContain('"testdb.logs"')
+  })
+})
+
+describe('rename_schema', () => {
+  const scoped = (schema: string): TableRecord[] => fixture().map((t) => ({ ...t, schema }))
+
+  it('표 전부를 옮기고 선언도 함께 바꾼다 — 한쪽만 바꾸면 유령 스키마가 남는다', () => {
+    const out = apply([{ op: 'rename_schema', from: 'public', to: 'testdb' }], scoped('public'), ['public'])
+    expect(out.tables.every((t) => t.schema === 'testdb')).toBe(true)
+    expect(out.declaredSchemas).toEqual(['testdb'])
+  })
+
+  it('선언 목록에서 자리를 지킨다 — 기본 스키마가 갑자기 딴 것이 되면 안 된다', () => {
+    const out = apply([{ op: 'rename_schema', from: 'public', to: 'testdb' }], scoped('public'), [
+      'public',
+      'auth'
+    ])
+    expect(out.declaredSchemas).toEqual(['testdb', 'auth'])
+  })
+
+  it('옛 이름을 가리키던 교차 스키마 FK 도 따라 고친다 — 안 고치면 참조가 범위 밖으로 떨어진다', () => {
+    const tables = scoped('public')
+    const orders = tables.find((t) => t.name === 'orders')!
+    orders.schema = 'auth'
+    ;(orders.constraints as ConstraintRecord[]).push({
+      id: 'fk_x',
+      kind: 'fk',
+      name: 'fk_orders_users',
+      columns: [{ columnId: 'o2' }],
+      refTable: 'users',
+      refSchema: 'public'
+    })
+    const out = apply([{ op: 'rename_schema', from: 'public', to: 'testdb' }], tables, ['public', 'auth'])
+    const fk = (out.tables.find((t) => t.name === 'orders')!.constraints as ConstraintRecord[]).find(
+      (k) => k.id === 'fk_x'
+    )
+    expect(fk?.refSchema).toBe('testdb')
+    expect(out.changes[0]).toContain('FK 참조 1개 갱신')
+  })
+
+  it('빈 from 은 이름 없는 표를 거둔다 — 선언 기능 이전 데이터를 옮기는 길', () => {
+    const out = apply([{ op: 'rename_schema', from: '', to: 'testdb' }], fixture(), [])
+    expect(out.tables.every((t) => t.schema === 'testdb')).toBe(true)
+    expect(out.declaredSchemas).toEqual(['testdb'])
+  })
+
+  it('없는 스키마를 바꾸라면 거부한다 — 조용히 아무 일도 안 하면 오타를 못 잡는다', () => {
+    expect(() => apply([{ op: 'rename_schema', from: 'nope', to: 'x' }], scoped('public'), ['public'])).toThrow(
+      /없습니다/
+    )
+  })
+
+  it('이미 있는 이름으로는 못 바꾼다', () => {
+    expect(() =>
+      apply([{ op: 'rename_schema', from: 'public', to: 'auth' }], scoped('public'), ['public', 'auth'])
+    ).toThrow(/이미 있는 이름/)
+  })
+
+  it('엔진이 거부하는 글자를 막는다', () => {
+    expect(() =>
+      apply([{ op: 'rename_schema', from: 'public', to: 'a b' }], scoped('public'), ['public'])
+    ).toThrow(/쓸 수 없습니다/)
+  })
+
+  it('이름을 안 바꾼 연산만 있으면 선언을 되쓰지 않는다 — 건드리지 않은 값을 덮지 않게', () => {
+    const out = apply([{ op: 'drop_column', table: 'users', column: 'email' }], scoped('public'), ['public'])
+    expect(out.declaredSchemas).toBeUndefined()
+  })
+})
+
+describe('교차 스키마 FK 어휘', () => {
+  it('add_constraint 가 refSchema 를 정식으로 받는다', () => {
+    const parsed = patchOpSchema.safeParse({
+      op: 'add_constraint',
+      table: 'orders',
+      constraint: { kind: 'fk', columns: ['user_id'], refTable: 'users', refSchema: 'auth' }
+    })
+    expect(parsed.success).toBe(true)
   })
 })

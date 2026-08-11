@@ -132,6 +132,9 @@ export const dbMigration: ServiceMigration = {
       version    TEXT NOT NULL DEFAULT '',
       snapshot   TEXT NOT NULL,
       checksum   TEXT NOT NULL DEFAULT '',
+      -- 찍을 때 읽은 스키마 범위(JSON 배열). 이게 없으면 범위를 바꿨을 때 생긴 차이를
+      -- "누가 DB 를 건드렸다"로 오독한다 — 실제로는 보는 창이 넓어졌을 뿐이다.
+      scope      TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_env_snapshots_env ON env_snapshots(env_id);
@@ -354,11 +357,23 @@ export const dbMigration: ServiceMigration = {
     // 설계엔 읽어 올 비용이 없어서다. 다 보여 주는 것이 손해가 아니다).
     addColumnIfMissing(d, 'designs', 'schemas', `TEXT NOT NULL DEFAULT '[]'`)
 
+    // designs.declared_schemas — 그 설계가 **선언한** 스키마 목록(순서 있음, 첫째가 기본).
+    // 위 `schemas`(보는 범위)와 자리가 다르다: 범위는 줄였다 늘렸다 하는 값이고 이쪽은
+    // "이 설계에 어떤 스키마가 있다"는 선언이다. 겸용하면 범위를 하나로 좁히는 순간 다른
+    // 스키마가 설계에서 사라진다. 선언이 따로 있어야 **표가 없는 빈 스키마**를 만들 수 있고,
+    // 그게 없어서 실 DB 를 물리지 않으면 설계를 시작할 수 없었다(2026-08-11 사용자 지적).
+    addColumnIfMissing(d, 'designs', 'declared_schemas', `TEXT NOT NULL DEFAULT '[]'`)
+    backfillDeclaredSchemas(d)
+
     // 잃어버린 스키마 되살리기 — 설계부의 저장 매핑이 `schema` 를 흘려(2026-08-03 수정) 여러
     // 스키마로 짜인 설계가 전부 한 스키마로 뭉개진 채 굳었다. id 에는 스키마가 남아 있으므로
     // 앱을 켤 때 되찾아 채운다. **사용자가 뭘 누를 필요가 없어야 한다** — 앱이 낸 손해다.
     // 몇 번을 지나가도 결과가 같아(빈 값만 채운다) 매 실행 지나가도 된다.
     recoverLostTableSchemas(d)
+
+    // env_snapshots.scope — 기준선을 찍을 때 읽은 스키마 범위. 예전 스냅샷은 빈 배열이라
+    // "모르는 범위"로 남는다 — 그때는 범위 비교를 건너뛴다(없는 사실을 지어내지 않는다).
+    addColumnIfMissing(d, 'env_snapshots', 'scope', `TEXT NOT NULL DEFAULT '[]'`)
 
     // diagram_layouts.groups — 다이어그램 그룹(레이어): 이름·색·소속 테이블·접힘.
     // 배치와 같은 행에 둔다 — 스코프(연결/설계)가 같고 언제나 함께 읽고 쓰기 때문.
@@ -401,5 +416,31 @@ function moveLibraryToBoundDesign(d: DatabaseSync): void {
       `UPDATE ${t} SET design_id = ?, connection_id = '' WHERE design_id = '' AND connection_id = ?`
     )
     for (const p of pairs) stmt.run(p.design_id, p.connection_id)
+  }
+}
+
+/**
+ * `declared_schemas` 채우기 — 예전 설계는 선언이 없으니 **표에 실제로 붙어 있는 이름**에서 딴다.
+ *
+ * 지어내지 않는다: 표에 이름이 하나도 없으면 빈 채로 둔다. 그러면 화면이 "스키마 이름을
+ * 정하세요"라고 물을 수 있는데, 아무 이름이나 넣어 두면 그 물음이 사라지고 틀린 이름이 굳는다.
+ * 순서는 이름순 — 예전 데이터에는 사람이 정한 순서라는 것이 없다.
+ *
+ * 이미 채워진 설계는 건드리지 않아 몇 번을 지나가도 결과가 같다.
+ */
+function backfillDeclaredSchemas(d: DatabaseSync): void {
+  const targets = d
+    .prepare(`SELECT id FROM designs WHERE declared_schemas IS NULL OR declared_schemas IN ('', '[]')`)
+    .all() as unknown as { id: string }[]
+  if (targets.length === 0) return
+
+  const pick = d.prepare(
+    `SELECT DISTINCT schema_name FROM tables
+     WHERE design_id = ? AND schema_name <> '' ORDER BY schema_name`
+  )
+  const save = d.prepare('UPDATE designs SET declared_schemas = ? WHERE id = ?')
+  for (const t of targets) {
+    const names = (pick.all(t.id) as unknown as { schema_name: string }[]).map((r) => r.schema_name)
+    if (names.length > 0) save.run(JSON.stringify(names), t.id)
   }
 }

@@ -34,7 +34,13 @@ export function registerStoreIpc(): void {
     (
       event,
       id: string,
-      patch: { name?: string; description?: string; schemas?: string[]; projectId?: string | null }
+      patch: {
+        name?: string
+        description?: string
+        schemas?: string[]
+        declaredSchemas?: string[]
+        projectId?: string | null
+      }
     ) => writingRaw(event, { domain: 'designs', designId: id }, () => updateDesign(id, patch))
   )
   ipcMain.handle('designs:delete', (event, id: string) =>

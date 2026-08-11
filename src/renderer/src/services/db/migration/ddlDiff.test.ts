@@ -160,13 +160,27 @@ describe('generateMigration — 스키마 한정', () => {
     columns: [{ id: `c:${schema}.${name}.id`, name: 'id', type: 'BIGINT', nullable: false, defaultValue: null, comment: '' }],
     constraints: []
   })
+  /** 스키마를 모르는 표 — 선언 기능 이전 설계에 남아 있는 모양. */
+  const unscoped = (name: string): TableDef => ({ ...scoped('x', name), schema: undefined, id: `t:${name}` })
   const snap = (tables: TableDef[]) => ({ tables }) as never
 
-  it('스키마가 하나뿐이면 한정 이름을 안 쓴다 — 예전 계획과 글자가 같아야 한다', () => {
+  // 2026-08-11 규칙 변경 — 예전엔 "하나뿐이면 안 붙인다"였다. 그러면 나간 문이 어느 DB 에
+  // 떨어지는지가 그때 USE 된 DB 에 달려, 엉뚱한 데이터베이스에 반영될 수 있었다.
+  it('하나뿐이어도 이름을 알면 한정 이름을 쓴다 — 목적지가 SQL 에 적혀야 한다', () => {
     const plan = generateMigration(snap([]), snap([scoped('public', 'users')]), 'postgresql')
+    expect(plan.statements[0].sql).toContain('CREATE TABLE "public"."users"')
+    expect(plan.statements[0].table).toBe('public.users')
+  })
+
+  it('이름 모르는 표가 섞이면 안 붙인다 — 반쯤 한정된 SQL 이 가장 나쁘다', () => {
+    const plan = generateMigration(snap([]), snap([scoped('public', 'users'), unscoped('logs')]), 'postgresql')
+    for (const st of plan.statements) expect(st.sql).not.toContain('"public".')
+  })
+
+  it('sqlite 는 붙일 층이 없어 언제나 이름만', () => {
+    const plan = generateMigration(snap([]), snap([scoped('main', 'users')]), 'sqlite')
     expect(plan.statements[0].sql).toContain('CREATE TABLE "users"')
-    expect(plan.statements[0].sql).not.toContain('"public"."users"')
-    expect(plan.statements[0].table).toBe('users')
+    expect(plan.statements[0].sql).not.toContain('"main"')
   })
 
   it('스키마가 섞이면 DDL·표시 이름 둘 다 한정 이름', () => {

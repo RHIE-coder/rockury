@@ -1,6 +1,7 @@
 import type { DialectId } from '../../dialects'
 import type { Constraint, TableDef } from './types'
-import { DEFAULT_SCHEMA, groupBySchema, hasMultipleSchemas, resolveRef } from '../../schemaRef'
+import { groupBySchema, resolveRef } from '../../schemaRef'
+import { shouldQualify } from '@shared/db/schemaCatalog'
 import { generateDdl, qualifiedTable, quoteId } from './ddl'
 import { resolveColumns } from './derive'
 
@@ -108,18 +109,25 @@ function alterAddFk(d: DialectId, t: TableDef, k: Constraint, qualify: boolean):
  * 테이블 사이는 빈 줄로만 가른다(`-- 테이블명` 머리 주석은 바로 아래 CREATE 문이 이미 말한다).
  */
 export function generateSchemaScript(tables: TableDef[], dialect: DialectId): string {
-  // 스키마가 둘 이상일 때만 한정 이름을 쓴다 — 하나뿐이면 예전 스크립트와 글자가 같아야 한다.
-  const qualify = hasMultipleSchemas(tables)
+  /**
+   * 이름을 다 알면 **하나뿐이어도 한정 이름을 쓴다**(2026-08-11 사용자 결정).
+   * 예전 규칙("둘 이상일 때만")은 나간 문이 `ALTER TABLE \`users\`` 라 어느 데이터베이스에
+   * 떨어지는지가 그때 `USE` 된 DB 에 달렸다 — 엉뚱한 DB 에 반영되는 길이다.
+   */
+  const qualify = shouldQualify(dialect, tables)
   const { tables: ordered, deferred } = orderForCreate(tables, dialect)
   const blocks: string[] = []
 
   // 테이블보다 스키마가 먼저 서야 한다. SQLite 는 스키마 개념이 없어 아무것도 안 붙인다.
   if (qualify && dialect !== 'sqlite') {
-    const head = dialect === 'postgresql' ? 'CREATE SCHEMA IF NOT EXISTS' : 'CREATE DATABASE IF NOT EXISTS'
+    const isPg = dialect === 'postgresql'
+    const head = isPg ? 'CREATE SCHEMA IF NOT EXISTS' : 'CREATE DATABASE IF NOT EXISTS'
     const created = groupBySchema(tables)
       .map((g) => g.schema)
-      // 기본 스키마는 만들지 않는다 — PostgreSQL `public` 은 언제나 있고, MySQL 에선 연결이 이미 붙어 있다.
-      .filter((name) => name && name !== DEFAULT_SCHEMA)
+      // PostgreSQL 의 `public` 만 건너뛴다 — 새 데이터베이스에 언제나 있는 것이라 만들 필요가
+      // 없다. MySQL 계열엔 "언제나 있는 이름"이 없으므로 선언한 DB 는 모두 만들어 준다
+      // (예전엔 `public` 을 그 자리로 착각해 MySQL 에서도 건너뛰었다).
+      .filter((name) => !!name && !(isPg && name === 'public'))
       .map((name) => `${head} ${quoteId(dialect, name)};`)
     if (created.length > 0) blocks.push(created.join('\n'))
   }

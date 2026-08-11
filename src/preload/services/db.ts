@@ -20,7 +20,8 @@ import type {
   CreateLogInput,
   CreateSnapshotInput,
   MigrationLogRecord,
-  SnapshotRecord
+  SnapshotRecord,
+  SnapshotSummary
 } from '../../main/store/migration'
 import type { StoreChangedEvent } from '../../shared/storeChanged'
 
@@ -41,6 +42,10 @@ export interface DesignRecord {
   name: string
   description: string
   dialect: string
+  /** 범위(scope) — 지금 보고 있는 스키마 목록. 빈 배열이면 전부 본다. */
+  schemas: string[]
+  /** 이 설계가 **선언한** 스키마들(순서 있음, 첫째가 새 표가 태어날 자리). 범위와 다른 자리다. */
+  declaredSchemas: string[]
   created_at: string
   /** 속한 프로젝트. null 이면 무소속. */
   project_id: string | null
@@ -51,6 +56,8 @@ export interface CreateDesignInput {
   dialect: string
   /** 만들 때 보고 있던 프로젝트. 안 주면 무소속. */
   projectId?: string | null
+  /** 처음 선언할 스키마 이름. 안 주면 선언 없이 시작한다. */
+  schemaName?: string
 }
 
 /** 테이블 정의 레코드 (main/store/tables 와 동일 형태). */
@@ -119,7 +126,13 @@ export const dbApi = {
       ipcRenderer.invoke('designs:create', input),
     update: (
       id: string,
-      patch: { name?: string; description?: string; schemas?: string[]; projectId?: string | null }
+      patch: {
+        name?: string
+        description?: string
+        schemas?: string[]
+        declaredSchemas?: string[]
+        projectId?: string | null
+      }
     ): Promise<DesignRecord> => ipcRenderer.invoke('designs:update', id, patch),
     delete: (id: string): Promise<void> => ipcRenderer.invoke('designs:delete', id)
   },
@@ -317,6 +330,8 @@ export const dbApi = {
       unwrap(ipcRenderer.invoke('migration:saveSnapshot', input)),
     latestSnapshot: (envId: string): Promise<SnapshotRecord | null> =>
       unwrap(ipcRenderer.invoke('migration:latestSnapshot', envId)),
+    listSnapshots: (envId: string): Promise<SnapshotSummary[]> =>
+      unwrap(ipcRenderer.invoke('migration:listSnapshots', envId)),
     appendLog: (input: CreateLogInput): Promise<MigrationLogRecord> =>
       unwrap(ipcRenderer.invoke('migration:appendLog', input)),
     listLogs: (envId: string): Promise<MigrationLogRecord[]> =>

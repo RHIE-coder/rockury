@@ -38,7 +38,7 @@ import {
   listDataFiltersByConnection,
   saveDataFilter
 } from './dataFilters'
-import { appendLog, latestSnapshot, listLogs, saveSnapshot } from './migration'
+import { appendLog, latestSnapshot, listLogs, listSnapshots, saveSnapshot } from './migration'
 import { createVersion, deleteVersion, listVersions, updateVersionNote } from './versions'
 import {
   createConnection,
@@ -249,6 +249,40 @@ describe('migration (스냅샷 + 로그)', () => {
     const logs = listLogs(env)
     expect(logs).toHaveLength(1)
     expect(logs[0].kind).toBe('apply')
+  })
+
+  it('기준선 이력은 최신 순 + 본문 없이 테이블 수만', () => {
+    const env = 'env_hist'
+    saveSnapshot({ envId: env, version: 'v1', snapshot: { tables: [{ id: 't:a' }] } })
+    saveSnapshot({ envId: env, version: 'v2', snapshot: { tables: [{ id: 't:a' }, { id: 't:b' }] } })
+    saveSnapshot({ envId: 'env_other', version: 'v9', snapshot: { tables: [] } })
+
+    const list = listSnapshots(env)
+    expect(list.map((s) => s.version)).toEqual(['v2', 'v1']) // 다른 환경 것은 안 섞인다
+    expect(list[0].tableCount).toBe(2)
+    expect(list[1].tableCount).toBe(1)
+    expect(list[0].checksum).toMatch(/^[0-9a-f]{64}$/)
+    expect(list[0]).not.toHaveProperty('snapshot') // 목록엔 본문을 안 싣는다
+  })
+
+  it('tables 없는 예전 스냅샷도 0 으로 읽는다', () => {
+    const env = 'env_legacy'
+    saveSnapshot({ envId: env, version: '', snapshot: { schemas: ['s'] } })
+    expect(listSnapshots(env)[0].tableCount).toBe(0)
+  })
+
+  it('이력 없는 환경은 빈 배열', () => {
+    expect(listSnapshots('env_none')).toEqual([])
+  })
+
+  it('스키마 범위를 함께 저장하고 되읽는다 — 안 적으면 빈 배열(모르는 범위)', () => {
+    const env = 'env_scope'
+    saveSnapshot({ envId: env, version: 'v1', snapshot: { tables: [] }, scope: ['service1'] })
+    expect(latestSnapshot(env)?.scope).toEqual(['service1'])
+    expect(listSnapshots(env)[0].scope).toEqual(['service1'])
+
+    saveSnapshot({ envId: 'env_noscope', version: 'v1', snapshot: { tables: [] } })
+    expect(latestSnapshot('env_noscope')?.scope).toEqual([])
   })
 })
 
