@@ -27,6 +27,11 @@ import {
  * 보면 테이블을 더할 때마다 이 공용 테스트가 깨져 병렬 개발 규칙("테이블은 자기 서비스 파일에만
  * 더한다")과 충돌한다. 유령·누락 검사는 아래 CASE-pdev-022(선언 ↔ 실제 대조)가 따로 맡는다.
  */
+/**
+ * 분할 전 표 목록 — "조용히 사라진 표 0" 을 지킨다.
+ * `env_snapshots`(드리프트 기준선)는 2026-08-12 에 **의도적으로** 폐기했다(§migrations/db 의
+ * DROP 단계). 의도한 삭제는 이 목록에서도 빼야 가드가 다음 사고를 잡을 수 있다.
+ */
 const TABLES_BEFORE_SPLIT = [
   'collection_folders',
   'collection_items',
@@ -35,7 +40,6 @@ const TABLES_BEFORE_SPLIT = [
   'connections',
   'designs',
   'diagram_layouts',
-  'env_snapshots',
   'env_variables',
   'environments',
   'migration_logs',

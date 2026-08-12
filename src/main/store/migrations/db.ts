@@ -17,7 +17,6 @@ export const dbMigration: ServiceMigration = {
     'connection_groups',
     'connections',
     'environments',
-    'env_snapshots',
     'migration_logs',
     'query_history',
     'query_folders',
@@ -125,19 +124,6 @@ export const dbMigration: ServiceMigration = {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS uq_env_conn_design ON environments(connection_id, design_id);
     CREATE INDEX IF NOT EXISTS idx_environments_design ON environments(design_id);
-
-    CREATE TABLE IF NOT EXISTS env_snapshots (
-      id         TEXT PRIMARY KEY,
-      env_id     TEXT NOT NULL,
-      version    TEXT NOT NULL DEFAULT '',
-      snapshot   TEXT NOT NULL,
-      checksum   TEXT NOT NULL DEFAULT '',
-      -- 찍을 때 읽은 스키마 범위(JSON 배열). 이게 없으면 범위를 바꿨을 때 생긴 차이를
-      -- "누가 DB 를 건드렸다"로 오독한다 — 실제로는 보는 창이 넓어졌을 뿐이다.
-      scope      TEXT NOT NULL DEFAULT '[]',
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_env_snapshots_env ON env_snapshots(env_id);
 
     CREATE TABLE IF NOT EXISTS migration_logs (
       id           TEXT PRIMARY KEY,
@@ -371,9 +357,10 @@ export const dbMigration: ServiceMigration = {
     // 몇 번을 지나가도 결과가 같아(빈 값만 채운다) 매 실행 지나가도 된다.
     recoverLostTableSchemas(d)
 
-    // env_snapshots.scope — 기준선을 찍을 때 읽은 스키마 범위. 예전 스냅샷은 빈 배열이라
-    // "모르는 범위"로 남는다 — 그때는 범위 비교를 건너뛴다(없는 사실을 지어내지 않는다).
-    addColumnIfMissing(d, 'env_snapshots', 'scope', `TEXT NOT NULL DEFAULT '[]'`)
+    // 기준선(env_snapshots) 폐기 — 2026-08-12. "마지막으로 확인한 실 DB 모습"을 남겨 두고
+    // 지금과 견줘 남이 손댔는지 가리던 표다. 그 판정을 "설계에 없는데 DB 에 있는 것"으로
+    // 갈음하면서 쓸 데가 없어졌다. 남겨 두면 쓰는 곳 없는 데이터가 계속 쌓인다.
+    d.exec('DROP TABLE IF EXISTS env_snapshots;')
 
     // diagram_layouts.groups — 다이어그램 그룹(레이어): 이름·색·소속 테이블·접힘.
     // 배치와 같은 행에 둔다 — 스코프(연결/설계)가 같고 언제나 함께 읽고 쓰기 때문.

@@ -11,10 +11,11 @@ export const meta = {
 export async function run(ctx) {
   const { check, click, body } = ctx
   let page = ctx.page
-  // Migration › Logs — 기준선 로그 기록(Phase 3e)
-  await click('button:has-text("Logs")')
+  // Migration › 실행 로그 — 기준선 로그 기록(Phase 3e)
+  // 탭 이름이 아니라 뷰 id 로 누른다 — 이름은 바뀐다(2026-08-12 Logs → 실행 로그).
+  await click('[data-nav-view="logs"]')
   await page.waitForSelector('text=기준선', { timeout: 8_000 })
-  check('Migration › Logs: 기준선 로그 체인', (await body()).includes('기준선'))
+  check('Migration › 실행 로그: 기준선 로그 체인', (await body()).includes('기준선'))
 
   // ⭐ Environment 관리 UI — 연결 카드에서 설계 바인딩 열람(운영↔설계 결속이 화면에 드러남).
   await click('[data-nav-module="remote"]') // Connections 는 Remote 의 첫 뷰(2026-07-30)
@@ -38,13 +39,14 @@ export async function run(ctx) {
   await page.reload()
   await page.waitForSelector('text=Design', { timeout: 15_000 })
   await click('button:has-text("Migration")')
-  await click('button:has-text("Compare")')
-  await page.waitForSelector('text=실 DB 간 스키마 비교', { timeout: 8_000 })
+  await click('[data-nav-view="compare"]')
+  await page.waitForSelector('text=실 DB ↔ 실 DB', { timeout: 8_000 })
   await page.locator('[data-slot="select-trigger"]').last().click() // 상대 연결 셀렉터
   await page.locator('[data-slot="select-item"]:has-text("E2E-mysql2")').first().click()
-  await click('button:has-text("비교")')
+  // `main` 안으로 좁힌다 — 탭 이름도 "비교"가 되어(2026-08-12) 그냥 누르면 탭이 잡힌다.
+  await page.locator('main button:has-text("비교")').first().click()
   await page.waitForSelector('text=두 DB 의 스키마가 동일해요', { timeout: 15_000 })
-  check('Migration › Compare: 같은 DB 두 연결 → 스키마 동일', (await body()).includes('두 DB 의 스키마가 동일해요'))
+  check('Migration › 비교: 같은 DB 두 연결 → 스키마 동일', (await body()).includes('두 DB 의 스키마가 동일해요'))
 
   // ⭐ 버전 삭제(잘못 들어간 버전 회수) — 타임라인에서 삭제 → 목록에서 사라짐.
   // Versions 는 Design 안 뷰라(2026-08-03) 설계부로 먼저 건너간다 — Migration 줄에는 없다.

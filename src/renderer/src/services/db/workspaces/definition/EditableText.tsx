@@ -39,7 +39,8 @@ export function EditableText({
   suggest,
   suggestFooter,
   warnTitle,
-  readOnly
+  readOnly,
+  full
 }: {
   editKey: string
   value: string
@@ -56,6 +57,8 @@ export function EditableText({
   warnTitle?: string
   /** 읽기 전용(과거 버전 열람 등) — 클릭 편집 비활성, 정적 텍스트로 표시. */
   readOnly?: boolean
+  /** 표의 "전문 보기" — 자르지 않고 줄을 바꿔 전부 보인다. */
+  full?: boolean
 }) {
   const editing = useDefinitionStore((s) => s.editing)
   const setEditing = useDefinitionStore((s) => s.setEditing)
@@ -82,13 +85,23 @@ export function EditableText({
     if (isEditing && inputRef.current) setRect(inputRef.current.getBoundingClientRect())
   }, [isEditing, draft])
 
+  /**
+   * "전문 보기"가 켜지면 자르지 않고 줄을 바꾼다 — 높이도 고정을 푼다.
+   * 호버 툴팁(`title`)은 그대로 두되, 그것만으로는 부족했다: 마우스를 올려야 나오는 것은
+   * 사용자에게 **없는 것과 같다**(2026-08-12: "전체 내용을 볼 수 있는 방법이 없어").
+   */
+  const box = full
+    ? 'min-h-7 w-full items-center whitespace-pre-wrap break-words rounded px-1 py-1 text-left'
+    : 'h-7 w-full items-center truncate rounded px-1 text-left'
+
   // 읽기 전용: 정적 텍스트. (훅은 모두 위에서 호출된 뒤라 훅 순서 불변)
   if (readOnly) {
     return (
       <div
         title={warnTitle ?? (value || undefined)}
         className={cn(
-          'flex h-7 w-full items-center truncate rounded px-1 text-left',
+          'flex',
+          box,
           mono ? 'font-mono text-[12px] text-fg' : 'text-[13px] text-fg',
           className
         )}
@@ -191,9 +204,10 @@ export function EditableText({
     <button
       type="button"
       onClick={() => setEditing(editKey)}
-      title={warnTitle ?? (value || undefined)} // 잘린 텍스트는 호버로 전문 확인
+      title={warnTitle ?? (value || undefined)} // 잘린 텍스트는 호버로도 전문 확인
       className={cn(
-        'flex h-7 w-full items-center truncate rounded px-1 text-left transition-colors hover:bg-panel-strong/60',
+        'flex transition-colors hover:bg-panel-strong/60',
+        box,
         mono ? 'font-mono text-[12px] text-fg' : 'text-[13px] text-fg',
         className
       )}

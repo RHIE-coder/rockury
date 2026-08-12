@@ -1,12 +1,8 @@
 import { ipcMain } from 'electron'
 import {
   appendLog,
-  latestSnapshot,
   listLogs,
-  listSnapshots,
-  saveSnapshot,
   type CreateLogInput,
-  type CreateSnapshotInput
 } from '../../store/migration'
 import { envelope } from '../envelope'
 import { writing } from '../peers'
@@ -16,15 +12,6 @@ import { writing } from '../peers'
  * Drift/Plan/Run 오케스트레이션은 렌더러(introspection+diff+ddlDiff+query 재사용)가 담당.
  */
 export function registerMigrationIpc(): void {
-  ipcMain.handle('migration:saveSnapshot', (e, input: CreateSnapshotInput) =>
-    writing(e, { domain: 'migrationLogs' }, () => saveSnapshot(input))
-  )
-  ipcMain.handle('migration:latestSnapshot', (_e, envId: string) =>
-    envelope(() => latestSnapshot(envId))
-  )
-  ipcMain.handle('migration:listSnapshots', (_e, envId: string) =>
-    envelope(() => listSnapshots(envId))
-  )
   ipcMain.handle('migration:appendLog', (e, input: CreateLogInput) =>
     writing(e, { domain: 'migrationLogs' }, () => appendLog(input))
   )

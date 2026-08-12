@@ -8,7 +8,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowDown, ChevronDown, GripVertical, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
+import { ChevronDown, GripVertical, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
 import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import {
@@ -30,8 +30,8 @@ import { cn } from '@renderer/lib/utils'
 import { useActiveTable, useDefinitionStore, useDesignTables } from './store'
 import { RefTableCard } from './FkRef'
 import { checkColumns, resolveColumns } from './derive'
-import { fkTargetLabel, IMPLIED_FK_ACTION } from './fkPolicy'
-import { FkPolicyChips } from './FkPolicyChips'
+import { IMPLIED_FK_ACTION } from './fkPolicy'
+import { ConstraintShape } from './ConstraintShape'
 import type { Constraint, ConstraintKind, FkAction, TableDef } from './types'
 
 const CONSTRAINT_KINDS: ConstraintKind[] = ['pk', 'uk', 'fk', 'check', 'idx']
@@ -51,33 +51,15 @@ const reorder = <T,>(arr: T[], from: number, to: number): T[] => {
   return a
 }
 
-/** 접힌 행의 요약 — 순서 서수·방향·FK 참조·정책을 구조에서 그대로 그린다. */
+/** 접힌 행의 요약 — 그림은 대조표와 공유한다(`ConstraintShape`). 여기선 컬럼만 풀어 넘긴다. */
 function ConstraintSummary({ table, con }: { table: TableDef; con: Constraint }) {
-  if (con.kind === 'check') {
-    return <span className="truncate font-mono text-[12px] text-muted">{con.expression || '—'}</span>
-  }
-  const cols = resolveColumns(table, con)
   return (
-    <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-      {cols.length === 0 && <span className="text-[12px] text-muted/60">컬럼 없음 — 클릭해서 편집</span>}
-      {cols.map((c, i) => (
-        <span
-          key={c.columnId}
-          className="flex shrink-0 items-center gap-1 rounded bg-panel-strong px-1.5 py-0.5 font-mono text-[11px] text-fg"
-        >
-          {cols.length > 1 && <span className="font-semibold text-muted">{i + 1}</span>}
-          {c.name}
-          {c.direction === 'DESC' && <ArrowDown className="size-3 text-muted" />}
-        </span>
-      ))}
-      {con.kind === 'fk' && (
-        <>
-          <span className="shrink-0 text-[12px] text-accent-2">→</span>
-          <span className="shrink-0 font-mono text-[11px] text-accent">{fkTargetLabel(con)}</span>
-          <FkPolicyChips con={con} />
-        </>
-      )}
-    </span>
+    <ConstraintShape
+      con={con}
+      cols={resolveColumns(table, con)}
+      emptyText="컬럼 없음 — 클릭해서 편집"
+      className="overflow-hidden"
+    />
   )
 }
 

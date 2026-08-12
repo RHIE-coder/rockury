@@ -1,25 +1,204 @@
-// 스모크 스위트 — Migration › Drift/Seed — 기준선·운영→설계 가져오기·시드 반영/되먹임
+// 스모크 스위트 — Migration › 진단/계획/Seed — 대조표·관문(없앨 것)·운영→설계 가져오기·시드 반영/되먹임
 // 실행: `npm run e2e`(e2e/smoke.mjs 러너가 순서대로 부른다). 단독 실행용 진입점은 없다.
 // ⚠ 접근성 쿼리(getByRole 등)는 창을 크래시시킨다 → CSS/text 로케이터만.
 
 export const meta = {
   name: '10-migration',
   needsDb: true,
-  desc: 'Migration › Drift/Seed — 기준선·운영→설계 가져오기·시드 반영/되먹임'
+  desc: 'Migration › 진단/계획/Seed — 대조표·관문(없앨 것)·가져오기·시드 반영/되먹임'
 }
 
 export async function run(ctx) {
   const { check, click, body } = ctx
   let page = ctx.page
-  // Migration › Drift — 기준선 캡처 → 드리프트 없음(Phase 3a/3b · diff② 재사용)
-  await click('button:has-text("Migration")')
-  await click('button:has-text("Drift")')
-  await page.waitForSelector('text=기준선이 없습니다', { timeout: 15_000 })
-  await click('button:has-text("기준선으로 캡처")')
-  await page.waitForSelector('text=드리프트 없음', { timeout: 15_000 })
-  check('Migration › Drift: 기준선 캡처 후 드리프트 없음', (await body()).includes('드리프트 없음'))
 
-  // ⭐ 운영→설계: 실 DB 를 설계 새 버전으로 가져오기(version-up) — 드리프트 뷰 진입점(운영→설계 관문).
+  /*
+   * ⭐ 진단·계획 — 대조표 · 스키마 토글 · 타깃 버전 셀렉터 · 관문(2026-08-12).
+   *
+   * 여기 있던 것은 `Drift` 탭에서 기준선을 찍는 검사였는데, 그 탭은 진단에 흡수됐고 문구도
+   * 사라져 **한동안 죽은 채로 남아 있었다**(없는 버튼을 누르고 있었다). 지금 화면에 맞춰 다시 쓴다.
+   *
+   * 이 블록은 **자기 설계를 만들어** 논다 — 앞 스위트가 쌓은 설계의 draft 를 실 DB 로 갈아치우면
+   * 04 가 심은 시드가 칸째 사라지고 그 여파를 99 가 뒤집어쓴다(2026-08-07 실측).
+   */
+  {
+    const connId = await page.evaluate(
+      async () => (await window.rockury.connections.list()).find((c) => c.name === 'E2E-mysql')?.id
+    )
+
+    /*
+     * 먼저 **활성 설계 그대로** 진단을 한 번 연다. 두 가지를 겸한다:
+     *   ① 아직 맵핑 안 된 짝에는 진단이 맵핑 관문을 먼저 내민다는 확인
+     *   ② 그 과정에서 (연결 × 설계) 결속이 세워진다 — 11 이 연결 카드에서 이 결속을 읽는다.
+     * ②를 빠뜨리면 11 이 "설계 바인딩" 다이얼로그에서 commerce-core 를 못 찾아 통째로 죽는다
+     * (2026-08-12 실측 — 이 블록이 곧바로 자기 설계로 갈아타면서 결속이 안 생겼다).
+     */
+    await page.evaluate(async () => {
+      const d = (await window.rockury.designs.list()).find((x) => x.name === 'commerce-core')
+      if (d) window.__rockuryNav.setContextValue('design', d.id)
+    })
+    await click('button:has-text("Migration")')
+    await page.waitForTimeout(400)
+    await click('[data-nav-view="diagnose"]')
+    await page.waitForSelector('text=맵핑되지 않았습니다', { timeout: 30_000 })
+    check('진단: 아직 맵핑 안 된 짝에는 맵핑 관문이 먼저 선다', (await body()).includes('맵핑되지 않았습니다'))
+
+    /*
+     * 스키마 토글은 스키마가 둘 이상일 때만 뜻이 있다(하나뿐이면 끌 것이 없어 안 그린다).
+     * 이 연결의 기본 범위는 `testdb` 하나라, 이 블록 동안만 전 범위로 넓혔다가 끝에서 되돌린다 —
+     * 뒤 스위트(11·51)가 같은 연결을 그대로 쓴다.
+     */
+    const allSchemas = await page.evaluate((c) => window.rockury.introspection.schemas(c), connId)
+    await page.evaluate(([c, s]) => window.rockury.connections.update(c, { schemas: s }), [connId, allSchemas])
+
+    const designId = await page.evaluate(async (cid) => {
+      const d = await window.rockury.designs.create({ name: 'e2e-diag', dialect: 'mysql' })
+      window.__rockuryNav.setContextValue('design', d.id)
+      window.__rockuryNav.setContextValue('conn', cid)
+      return d.id
+    }, connId)
+    // 화면 밖(IPC)에서 만든 설계라 이 창의 목록엔 아직 없다 — 한 번 새로 그려 저장소에서 다시 읽힌다.
+    await page.reload()
+    await page.waitForSelector('text=Design', { timeout: 15_000 })
+
+    // 실 DB 를 v0.1.0 으로 들인다 — 이러면 설계와 실제가 같아진다.
+    await click('button:has-text("Migration")')
+    await page.waitForTimeout(400)
+    await click('[data-nav-view="import"]')
+    await page.waitForTimeout(400)
+    await click('button:has-text("설계로 가져오기")')
+    await page.waitForSelector('text=실 DB 에서', { timeout: 20_000 })
+    await click('button:has-text("새 버전으로 가져오기")')
+    await page.waitForTimeout(2_000)
+
+    // 설계를 한 칸 앞세운다(테이블 하나 추가) → 계획이 만들어질 거리가 생긴다.
+    await page.evaluate(async (d) => {
+      const mine = (await window.rockury.tables.list()).filter((t) => t.designId === d)
+      const seed = mine[0]
+      const fresh = {
+        ...seed,
+        id: `${seed.id}__e2e_diag`,
+        name: 'e2e_diag_table',
+        constraints: [],
+        columns: [seed.columns[0]]
+      }
+      const tables = [...mine, fresh]
+      await window.rockury.tables.replaceForDesign(d, tables)
+      await window.rockury.versions.create({ designId: d, number: 'v0.2.0', snapshot: { tables } })
+    }, designId)
+    await page.reload()
+    await page.waitForSelector('text=Design', { timeout: 15_000 })
+
+    // ── 진단: 본문이 대조표다 ──
+    await click('button:has-text("Migration")')
+    await page.waitForTimeout(400)
+    await click('[data-nav-view="diagnose"]')
+    await page.waitForSelector('[data-diff-scroll]', { timeout: 30_000 })
+    check('진단: 본문이 대조표(Definition 과 같은 표)', (await page.locator('[data-diff-scroll]').count()) === 1)
+    check('진단: 제목 옆에 설계 기준 눈금', (await body()).includes('설계와 다름'))
+    // 상태 줄은 **설계와의 관계** 하나로 말한다(예전엔 `실제가 다름`·`설계가 앞섬` 으로 갈렸다).
+    check('상태 줄: 설계 기준 낱말', (await body()).includes('설계와 다름') && !(await body()).includes('실제가 다름'))
+    // 범위를 세 문장으로 설명하던 알림은 없앴다 — 같은 사실을 스키마 토글이 칩으로 보인다.
+    check('진단: 범위 알림 글은 없앴다', !(await body()).includes('어느 스키마를 봤는지'))
+    // 잘린 칸(긴 enum·설명)을 펴는 손잡이 — 호버 툴팁만으로는 "볼 방법이 없다"고 했다.
+    check('진단: 잘린 칸을 펴는 손잡이(전문 보기)', (await page.locator('label:has-text("전문 보기")').count()) === 1)
+    check(
+      'Migration 탭: 도구(진단·비교·기록) + 방향별 묶음',
+      (await page.evaluate(() => [...document.querySelectorAll('[data-nav-view]')].map((e) => e.innerText.trim()))).join(
+        ','
+      ) === '진단,비교,기록,계획,실행,Seed,가져오기'
+    )
+    check('진단: 두 방향을 나란히 내민다', (await page.locator('button:has-text("설계로 가져오기")').count()) >= 1 && (await page.locator('button:has-text("계획 만들기")').count()) === 1)
+
+    // ── 스키마 토글: 켠 것만 표에 든다 ──
+    const sidebarCount = async () => Number((await body()).match(/테이블 (\d+)개 · 바뀜/)?.[1] ?? -1)
+    check(
+      '진단: 스키마마다 토글이 선다(연결이 읽은 범위 그대로)',
+      (await page.locator('[data-schema-toggle]').count()) === allSchemas.length && allSchemas.length > 1
+    )
+    const before = await sidebarCount()
+    await click('[data-schema-toggle="testdb"]')
+    await page.waitForTimeout(500)
+    const after = await sidebarCount()
+    check('진단: 스키마를 끄면 그 테이블이 목록에서 빠진다', after > 0 && after < before)
+    check('진단: 끈 스키마는 표시가 남는다(되돌릴 수 있다)', (await page.locator('[data-schema-toggle="testdb"][data-schema-on="0"]').count()) === 1)
+    await click('[data-schema-toggle="testdb"]')
+    await page.waitForTimeout(400)
+    check('진단: 다시 켜면 원래 수로 돌아온다', (await sidebarCount()) === before)
+
+    // ── 진단 → 계획: 두 방향 중 "설계가 정답" 쪽 ──
+    await click('button:has-text("계획 만들기")')
+    await page.waitForSelector('[data-diff-scroll]', { timeout: 30_000 })
+    check('계획: 진단에서 넘어오면 계획이 그려진다', (await body()).includes('실행으로'))
+
+    // ── 타깃 버전은 상태 줄에서 고른다(머리 셀렉터는 없어졌다) ──
+    await click('button:has-text("v0.2.0")')
+    await page.waitForTimeout(400)
+    await click('[data-slot="select-item"]:has-text("v0.1.0")')
+    await page.waitForTimeout(3_000)
+    check('계획: 상태 줄에서 타깃 버전을 바꾼다 → 반영할 변경 없음', (await body()).includes('반영할 변경 없음'))
+    await click('button:has-text("v0.1.0")')
+    await page.waitForTimeout(400)
+    await click('[data-slot="select-item"]:has-text("v0.2.0")')
+    await page.waitForTimeout(3_000)
+
+    /*
+     * ── 관문: 계획이 **없앨 것**이 있으면 그리기 전에 진단으로 돌려보낸다 ──
+     * 실 DB 는 안 건드린다 — 설계 쪽에서 테이블 하나를 뺀 버전을 컷하면 "설계에 없는데 DB 에
+     * 있는 것"이 생긴다(= 밀면 사라질 것). 기준선은 2026-08-12 에 폐기했다.
+     */
+    await page.evaluate(async (d) => {
+      const mine = (await window.rockury.tables.list()).filter((t) => t.designId === d)
+      // 방금 만든 e2e_diag_table 과 실 DB 에서 온 표 하나를 뺀다 → 그 하나가 "없앨 것"이 된다.
+      const dropped = mine.filter((t) => t.name !== 'e2e_diag_table')[0]
+      const tables = mine.filter((t) => t.name !== 'e2e_diag_table' && t.id !== dropped.id)
+      await window.rockury.versions.create({ designId: d, number: 'v0.3.0', snapshot: { tables } })
+    }, designId)
+    await page.reload()
+    await page.waitForSelector('text=Design', { timeout: 15_000 })
+    await click('button:has-text("Migration")')
+    await page.waitForTimeout(400)
+    await click('[data-nav-view="plan"]')
+    await page.waitForTimeout(4_000)
+    // 새 버전을 **직접 고른다** — 결속은 마지막에 고른 타깃(v0.2.0)을 기억한다.
+    await click('button:has-text("v0.2.0")')
+    await page.waitForTimeout(400)
+    await click('[data-slot="select-item"]:has-text("v0.3.0")')
+    await page.waitForSelector('text=없앱니다', { timeout: 30_000 })
+    check('계획: 없앨 것이 있으면 계획을 안 그린다', (await page.locator('[data-diff-scroll]').count()) === 0)
+    check('계획: 막힌 자리가 무엇이 사라지는지 이름으로 보인다', (await body()).includes('설계에 없는 것들입니다'))
+    check('계획: 막힌 자리가 다음 걸음을 내민다(진단에서 확인)', (await page.locator('button:has-text("진단에서 확인")').count()) === 1)
+
+    // 관문이 내민 길을 따라가면 계획이 열린다 — 막다른 길이 아니다.
+    await click('button:has-text("진단에서 확인")')
+    await page.waitForSelector('[data-diff-scroll]', { timeout: 30_000 })
+    await click('button:has-text("계획 만들기")')
+    await page.waitForSelector('text=이 계획이 지웁니다', { timeout: 30_000 })
+    check('계획: 진단을 거치면 관문을 통과한다', (await page.locator('[data-diff-scroll]').count()) === 1)
+
+    // 승인은 **그때 본 그 목록**에 묶인다 — 없앨 것이 달라지면 다시 막힌다.
+    await page.evaluate(async (d) => {
+      const mine = (await window.rockury.tables.list()).filter((t) => t.designId === d)
+      const tables = mine.slice(0, Math.max(1, mine.length - 3))
+      await window.rockury.versions.create({ designId: d, number: 'v0.4.0', snapshot: { tables } })
+    }, designId)
+    await page.reload()
+    await page.waitForSelector('text=Design', { timeout: 15_000 })
+    await click('button:has-text("Migration")')
+    await page.waitForTimeout(400)
+    await click('[data-nav-view="plan"]')
+    await page.waitForTimeout(4_000)
+    await click('button:has-text("v0.3.0")')
+    await page.waitForTimeout(400)
+    await click('[data-slot="select-item"]:has-text("v0.4.0")')
+    await page.waitForSelector('text=없앱니다', { timeout: 30_000 })
+    check('계획: 승인 뒤 없앨 것이 달라지면 관문이 다시 닫힌다', (await page.locator('[data-diff-scroll]').count()) === 0)
+
+    // 범위 원복 — 뒤 스위트가 이 연결을 기본 범위(testdb 하나)로 기대한다.
+    await page.evaluate((c) => window.rockury.connections.update(c, { schemas: [] }), connId)
+  }
+
+  // ⭐ 운영→설계: 실 DB 를 설계 새 버전으로 가져오기(version-up) — 되먹임의 문.
   const countVersions = () => page.evaluate(async () => {
     const ds = await window.rockury.designs.list()
     let n = 0

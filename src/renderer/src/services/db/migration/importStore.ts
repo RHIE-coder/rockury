@@ -289,11 +289,10 @@ export const useImportStore = create<ImportState>()((set, get) => ({
         const env = await window.rockury.environments.ensure(connection.id, designId, num)
         await window.rockury.environments.setApplied(env.id, num)
 
-        // 5) 드리프트 기준선 스냅샷 + 로그(이후 드리프트 비교의 기준).
-        await window.rockury.migration.saveSnapshot({ envId: env.id, version: num, snapshot })
+        // 5) 이력에 남긴다 — 이 버전이 어디서 왔는지(실 DB 역설계)는 나중에 되짚을 값이다.
         await window.rockury.migration.appendLog({
           envId: env.id,
-          kind: 'baseline',
+          kind: 'map',
           toVersion: num,
           summary: `운영 DB 가져오기 → ${num} (${snapshot.tables.length}개 테이블)`
         })
@@ -301,7 +300,7 @@ export const useImportStore = create<ImportState>()((set, get) => ({
 
       // 6) 가져온 설계를 활성으로 → Versions/Design 에서 바로 보인다.
       useNav.getState().setContextValue('design', designId)
-      // 7) 진단 갱신(기준선 == 실제 → 드리프트 0 으로 정합).
+      // 7) 진단 갱신 — 방금 들인 버전이 곧 실 DB 라 "설계와 일치"가 된다.
       void useMigrationStore.getState().runDiagnosis(connection.id, designId)
 
       set({ open: false, phase: 'idle' })

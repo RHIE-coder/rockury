@@ -56,12 +56,11 @@ export function listBindingsByConnection(connectionId: string): EnvironmentRecor
   return rows.map(toRecord)
 }
 
-/** 바인딩 해제 — 딸린 스냅샷·로그도 함께 정리(원자적). */
+/** 바인딩 해제 — 딸린 로그도 함께 정리(원자적). */
 export function deleteBinding(id: string): void {
   const d = getDb()
   d.exec('BEGIN')
   try {
-    d.prepare('DELETE FROM env_snapshots WHERE env_id = ?').run(id)
     d.prepare('DELETE FROM migration_logs WHERE env_id = ?').run(id)
     d.prepare('DELETE FROM environments WHERE id = ?').run(id)
     d.exec('COMMIT')

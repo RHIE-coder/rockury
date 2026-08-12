@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildDiffView, columnShape, constraintShape, isEmptyView } from './diffView'
+import {
+  buildDiffView,
+  columnShape,
+  constraintShape,
+  filterView,
+  isEmptyView,
+  resolveConstraintColumns,
+  schemasOf
+} from './diffView'
 import { columnId, constraintId, tableId } from '../ids'
 import type { Column, Constraint, TableDef } from '../workspaces/definition/types'
 import type { VersionSnapshot } from '../versions/store'
@@ -54,6 +62,35 @@ describe('constraintShape', () => {
     expect(constraintShape(fk, cols)).toBe('(user_id) → app.users(id)')
   })
 
+  it('FK 는 정책까지 적는다 — 안 적으면 정책만 바뀐 FK 가 "안 바뀜"이 된다', () => {
+    const fk: Constraint = {
+      id: constraintId(undefined, 't', 'fk', 'fk_u'),
+      name: 'fk_u',
+      kind: 'fk',
+      columns: [{ columnId: cols[0].id }],
+      refTable: 'users',
+      refColumns: ['id'],
+      onDelete: 'CASCADE',
+      onUpdate: 'RESTRICT'
+    }
+
+    expect(constraintShape(fk, cols)).toBe('(user_id) → users(id) ON DELETE CASCADE ON UPDATE RESTRICT')
+  })
+
+  it('안 정한 정책은 빼둔다 — "안 씀"과 "NO ACTION 이라 씀"은 다른 상태다', () => {
+    const fk: Constraint = {
+      id: constraintId(undefined, 't', 'fk', 'fk_u'),
+      name: 'fk_u',
+      kind: 'fk',
+      columns: [{ columnId: cols[0].id }],
+      refTable: 'users',
+      refColumns: ['id'],
+      onDelete: 'CASCADE'
+    }
+
+    expect(constraintShape(fk, cols)).toBe('(user_id) → users(id) ON DELETE CASCADE')
+  })
+
   it('CHECK 은 조건식이 본체다', () => {
     const ck: Constraint = {
       id: constraintId(undefined, 't', 'check', 'ck'),
@@ -64,6 +101,35 @@ describe('constraintShape', () => {
     }
 
     expect(constraintShape(ck, cols)).toBe("code <> ''")
+  })
+})
+
+describe('resolveConstraintColumns', () => {
+  const cols = [col('user_id'), col('code')]
+
+  it('제약이 적어 둔 순서를 그대로 지킨다 — 그 순서가 곧 복합 키 순번이다', () => {
+    const idx: Constraint = {
+      id: constraintId(undefined, 't', 'idx', 'ix'),
+      name: 'ix',
+      kind: 'idx',
+      columns: [{ columnId: cols[1].id }, { columnId: cols[0].id, direction: 'DESC' }]
+    }
+
+    expect(resolveConstraintColumns(idx, cols)).toEqual([
+      { name: 'code', direction: undefined },
+      { name: 'user_id', direction: 'DESC' }
+    ])
+  })
+
+  it('테이블에 없는 컬럼은 물음표로 남긴다 — 조용히 빼면 순번이 밀린다', () => {
+    const idx: Constraint = {
+      id: constraintId(undefined, 't', 'idx', 'ix'),
+      name: 'ix',
+      kind: 'idx',
+      columns: [{ columnId: 'c:t.gone' }, { columnId: cols[0].id }]
+    }
+
+    expect(resolveConstraintColumns(idx, cols).map((c) => c.name)).toEqual(['?', 'user_id'])
   })
 })
 
@@ -178,5 +244,81 @@ describe('buildDiffView — 안 바뀐 줄도 남긴다', () => {
     const v = buildDiffView(before, after)
     expect(v.tables[0].changed).toBe(true)
     expect(v.tables[0].constraints.map((k) => k.status).sort()).toEqual(['added', 'removed'])
+  })
+
+  it('FK 정책만 바뀌어도 "바뀜"이다 — SQL 은 나가는데 대조표만 조용하면 안 된다', () => {
+    const fk = (over: Partial<Constraint>): Constraint => ({
+      id: constraintId(undefined, 't', 'fk', 'fk_u'),
+      name: 'fk_u',
+      kind: 'fk',
+      columns: [{ columnId: columnId(undefined, 't', 'user_id') }],
+      refTable: 'users',
+      refColumns: ['id'],
+      ...over
+    })
+
+    const before = snap([table('t', [col('user_id')], [fk({ onDelete: 'RESTRICT' })])])
+    const after = snap([table('t', [col('user_id')], [fk({ onDelete: 'CASCADE' })])])
+
+    const v = buildDiffView(before, after)
+    expect(v.tables[0].changed).toBe(true)
+    expect(v.tables[0].constraints[0].status).toBe('modified')
+  })
+
+  it('사라지는 제약의 컬럼은 before 쪽으로 푼다 — after 에는 그 컬럼이 없다', () => {
+    const idx: Constraint = {
+      id: constraintId(undefined, 't', 'idx', 'ix_gone'),
+      name: 'ix_gone',
+      kind: 'idx',
+      columns: [{ columnId: columnId(undefined, 't', 'gone') }]
+    }
+
+    const before = snap([table('t', [col('id'), col('gone')], [idx])])
+    const after = snap([table('t', [col('id')])])
+
+    const row = buildDiffView(before, after).tables[0].constraints[0]
+    expect(row.status).toBe('removed')
+    expect(row.cols.map((c) => c.name)).toEqual(['gone'])
+  })
+})
+
+describe('schemasOf · filterView', () => {
+  const at = (schema: string | undefined, name: string, columns: Column[]): TableDef => ({
+    ...table(name, columns),
+    id: tableId(schema, name),
+    schema
+  })
+
+  /** service1 은 안 바뀌고, service2 는 컬럼이 하나 늘고, service3 은 테이블째 생긴다. */
+  const before = snap([at('service1', 'a', [col('id')]), at('service2', 'b', [col('id')])])
+  const after = snap([
+    at('service1', 'a', [col('id')]),
+    at('service2', 'b', [col('id'), col('memo')]),
+    at('service3', 'c', [col('id')])
+  ])
+
+  it('스키마마다 전체 수와 바뀌는 수를 센다', () => {
+    expect(schemasOf(buildDiffView(before, after))).toEqual([
+      { name: 'service1', total: 1, changed: 0 },
+      { name: 'service2', total: 1, changed: 1 },
+      { name: 'service3', total: 1, changed: 1 }
+    ])
+  })
+
+  it('스키마가 없는 테이블은 빈 이름 한 칸으로 모인다', () => {
+    const v = buildDiffView(snap([]), snap([at(undefined, 'solo', [col('id')])]))
+    expect(schemasOf(v)).toEqual([{ name: '', total: 1, changed: 1 }])
+  })
+
+  it('켠 스키마만 남기고, 바뀜 수도 그 안에서 다시 센다', () => {
+    const v = filterView(buildDiffView(before, after), new Set(['service1']))
+    expect(v.tables.map((t) => t.name)).toEqual(['a'])
+    expect(v.changedCount).toBe(0)
+  })
+
+  it('전부 끄면 빈 대조표다 — 화면이 토글을 계속 그려야 되돌릴 수 있다', () => {
+    const v = filterView(buildDiffView(before, after), new Set())
+    expect(v.tables).toEqual([])
+    expect(v.changedCount).toBe(0)
   })
 })

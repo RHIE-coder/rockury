@@ -232,19 +232,24 @@ export const dbService: Service = {
        * 차이를 두 갈래(설계가 앞선 것 / DB 가 샌 것)로 갈라 보여 준다. Drift 탭은 진단에
        * 흡수됐고, 맵핑(이 연결이 몇 버전인가)은 진단의 첫 상태가 됐다.
        *
-       * Compare 만 진단 묶음에 남는다 — 실제↔실제라 축이 다르고, 설계가 없어도 되는 유일한 뷰다.
+       * 비교만 진단 묶음에 남는다 — 실제↔실제라 축이 다르고, 설계가 없어도 되는 유일한 뷰다.
        */
       views: [
-        { id: 'diagnose', label: '진단', icon: Radar, workspace: DiagnoseView, group: '진단' },
+        /*
+         * 묶음이 셋이다: **도구**(보는 것) · 설계 → 실제 · 실제 → 설계(하는 것, 방향별).
+         * 기록만 있던 묶음은 없앴다 — 항목 하나짜리 묶음은 이름이 항목 이름과 겹쳐
+         * 줄 하나를 그냥 먹는다(2026-08-12 사용자).
+         */
+        { id: 'diagnose', label: '진단', icon: Radar, workspace: DiagnoseView, group: '도구' },
         // 실DB↔실DB 비교(예: 개발기↔운영기) — 설계 무관, 연결 2개만 필요.
-        { id: 'compare', label: 'Compare', icon: GitCompare, workspace: CompareView, group: '진단' },
+        { id: 'compare', label: '비교', icon: GitCompare, workspace: CompareView, group: '도구' },
+        { id: 'logs', label: '기록', icon: ScrollText, workspace: LogsView, group: '도구' },
         { id: 'plan', label: '계획', icon: FileDiff, workspace: PlanView, group: '설계 → 실제', groupTone: 'design' },
         { id: 'run', label: '실행', icon: Play, workspace: RunView, group: '설계 → 실제', groupTone: 'design' },
         // 시드 반영 — 스키마(계획/실행)와 갈라 둔다: 대상이 데이터고 게이트도 따로다.
         { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView, group: '설계 → 실제', groupTone: 'design' },
         // 되먹임의 문 — 진단·맵핑이 "만들어야 한다"고 판정했을 때 부르는 조치이기도 하다.
-        { id: 'import', label: '가져오기', icon: DownloadCloud, workspace: ImportView, group: '실제 → 설계', groupTone: 'ops' },
-        { id: 'logs', label: 'Logs', icon: ScrollText, workspace: LogsView, group: '기록' }
+        { id: 'import', label: '가져오기', icon: DownloadCloud, workspace: ImportView, group: '실제 → 설계', groupTone: 'ops' }
       ]
     },
 

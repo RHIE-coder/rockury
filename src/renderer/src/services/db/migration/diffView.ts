@@ -1,4 +1,10 @@
-import type { Column, Constraint, ConstraintKind, TableDef } from '../workspaces/definition/types'
+import type {
+  Column,
+  Constraint,
+  ConstraintKind,
+  ResolvedConstraintColumn,
+  TableDef
+} from '../workspaces/definition/types'
 import type { SchemaDiff } from '../versions/diff'
 import type { VersionSnapshot } from '../versions/store'
 
@@ -37,6 +43,11 @@ export interface ConstraintRow extends FieldRow {
   kind: ConstraintKind
   con?: Constraint
   prevCon?: Constraint
+  /**
+   * `con.columns` 를 이름으로 푼 것 — **화면이 직접 못 푼다.** 사라지는 제약은 before 쪽 컬럼을
+   * 가리키는데 표가 들고 있는 테이블은 after 쪽이라, 거기서 찾으면 전부 `?` 가 된다.
+   */
+  cols: ResolvedConstraintColumn[]
 }
 
 export interface TableView {
@@ -71,17 +82,33 @@ export function columnShape(c: Column): string {
   return parts.join(' ')
 }
 
-/** 제약 한 줄의 모습 — 종류마다 무엇이 중요한지가 달라 갈라 적는다. */
+/** 제약이 거는 컬럼을 이름으로 푼다 — 순서가 곧 복합 키 순번이라 배열 순서를 지킨다. */
+export function resolveConstraintColumns(k: Constraint, cols: Column[]): ResolvedConstraintColumn[] {
+  return k.columns.map((r) => ({
+    name: cols.find((c) => c.id === r.columnId)?.name ?? '?',
+    direction: r.direction
+  }))
+}
+
+/**
+ * 제약 한 줄의 모습 — 종류마다 무엇이 중요한지가 달라 갈라 적는다.
+ *
+ * **FK 는 정책까지 적는다.** 안 적으면 ON DELETE 만 바뀐 FK 가 앞뒤 문자열이 같아져 `same` 으로
+ * 판정된다 — SQL 은 나가는데 대조표는 조용한 어긋남이었다(2026-08-11 사용자 지적).
+ * 값이 없는 쪽은 빼는데, SQL 차이 판정(`versions/diff`)이 "안 씀 ≠ NO ACTION" 으로 세는 것과
+ * 같은 셈법을 쓰기 위해서다.
+ */
 export function constraintShape(k: Constraint, cols: Column[]): string {
-  const names = k.columns
-    .map((r) => {
-      const name = cols.find((c) => c.id === r.columnId)?.name ?? '?'
-      return r.direction === 'DESC' ? `${name} DESC` : name
-    })
+  const names = resolveConstraintColumns(k, cols)
+    .map((c) => (c.direction === 'DESC' ? `${c.name} DESC` : c.name))
     .join(', ')
   if (k.kind === 'fk') {
     const ref = [k.refSchema, k.refTable].filter(Boolean).join('.')
-    return `(${names}) → ${ref}(${(k.refColumns ?? []).join(', ')})`
+    const policies = [
+      k.onDelete && `ON DELETE ${k.onDelete}`,
+      k.onUpdate && `ON UPDATE ${k.onUpdate}`
+    ].filter(Boolean)
+    return [`(${names}) → ${ref}(${(k.refColumns ?? []).join(', ')})`, ...policies].join(' ')
   }
   if (k.kind === 'check') return k.expression ?? ''
   return `(${names})`
@@ -135,7 +162,15 @@ function pairConstraints(
     const b = beforeByKey.get(key(a))
     const as = constraintShape(a, afterCols)
     if (!b) {
-      out.push({ name: a.name, kind: a.kind, status: 'added', before: null, after: as, con: a })
+      out.push({
+        name: a.name,
+        kind: a.kind,
+        status: 'added',
+        before: null,
+        after: as,
+        con: a,
+        cols: resolveConstraintColumns(a, afterCols)
+      })
       continue
     }
     const bs = constraintShape(b, beforeCols)
@@ -146,7 +181,8 @@ function pairConstraints(
       before: bs,
       after: as,
       con: a,
-      prevCon: b
+      prevCon: b,
+      cols: resolveConstraintColumns(a, afterCols)
     })
   }
   for (const b of before) {
@@ -157,7 +193,8 @@ function pairConstraints(
         status: 'removed',
         before: constraintShape(b, beforeCols),
         after: null,
-        con: b
+        con: b,
+        cols: resolveConstraintColumns(b, beforeCols)
       })
   }
   return out
@@ -189,7 +226,8 @@ export function buildDiffView(before: VersionSnapshot, after: VersionSnapshot): 
         status: 'added',
         columns: a.columns.map((c) => ({ name: c.name, status: 'added' as const, before: null, after: columnShape(c), col: c })),
         constraints: a.constraints.map((k) => ({
-          name: k.name, kind: k.kind, status: 'added' as const, before: null, after: constraintShape(k, a.columns), con: k
+          name: k.name, kind: k.kind, status: 'added' as const, before: null, after: constraintShape(k, a.columns),
+          con: k, cols: resolveConstraintColumns(k, a.columns)
         })),
         changed: true,
         def: a
@@ -223,7 +261,8 @@ export function buildDiffView(before: VersionSnapshot, after: VersionSnapshot): 
       status: 'removed',
       columns: b.columns.map((c) => ({ name: c.name, status: 'removed' as const, before: columnShape(c), after: null, col: c })),
       constraints: b.constraints.map((k) => ({
-        name: k.name, kind: k.kind, status: 'removed' as const, before: constraintShape(k, b.columns), after: null, con: k
+        name: k.name, kind: k.kind, status: 'removed' as const, before: constraintShape(k, b.columns), after: null,
+        con: k, cols: resolveConstraintColumns(k, b.columns)
       })),
       changed: true,
       def: b
@@ -234,6 +273,41 @@ export function buildDiffView(before: VersionSnapshot, after: VersionSnapshot): 
   const order: Record<RowStatus, number> = { added: 0, modified: 1, removed: 2, same: 3 }
   tables.sort((x, y) => order[x.status] - order[y.status] || qualified(x).localeCompare(qualified(y)))
 
+  return { tables, changedCount: tables.filter((t) => t.changed).length }
+}
+
+/** 대조표에 든 스키마 한 칸 — 토글이 이 단위로 켜고 꺼진다. */
+export interface SchemaSlice {
+  /** 스키마 이름. 스키마 개념이 없는 DB 는 빈 문자열 한 칸으로 모인다. */
+  name: string
+  /** 이 스키마의 테이블 수. */
+  total: number
+  /** 그중 바뀌는 것. */
+  changed: number
+}
+
+/**
+ * 대조표에 실제로 **든** 스키마만 센다 — 연결이 읽은 범위가 아니라.
+ * 테이블이 하나도 안 걸린 스키마에 토글을 주면 켜도 꺼도 화면이 안 변한다.
+ */
+export function schemasOf(view: DiffView): SchemaSlice[] {
+  const by = new Map<string, SchemaSlice>()
+  for (const t of view.tables) {
+    const name = t.schema ?? ''
+    const s = by.get(name) ?? { name, total: 0, changed: 0 }
+    s.total += 1
+    if (t.changed) s.changed += 1
+    by.set(name, s)
+  }
+  return [...by.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * 스키마로 거른 대조표 — **보기만 거른다.** 실행에 나갈 SQL 은 이것과 무관하게 계획 전체다
+ * (여기서 거른 것이 실행에서도 빠지면, 화면에서 숨긴 테이블이 조용히 안 나가는 사고가 된다).
+ */
+export function filterView(view: DiffView, enabled: ReadonlySet<string>): DiffView {
+  const tables = view.tables.filter((t) => enabled.has(t.schema ?? ''))
   return { tables, changedCount: tables.filter((t) => t.changed).length }
 }
 

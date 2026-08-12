@@ -23,6 +23,16 @@ export interface ConstraintColumnRef {
 }
 
 /**
+ * 제약이 거는 컬럼을 **이름으로 푼 것** — 표시 전용. 배열 순서가 곧 복합 키 순번이다.
+ * 화면은 id 를 못 읽으므로 어딘가에서 한 번은 풀어야 하는데, 푸는 쪽(설계부는 활성 테이블,
+ * 대조표는 before/after 중 맞는 쪽)이 달라서 **푼 결과**를 주고받는 모양으로 맞춘다.
+ */
+export interface ResolvedConstraintColumn {
+  name: string
+  direction?: 'ASC' | 'DESC'
+}
+
+/**
  * 구조화된 제약 — DDL 은 이 구조에서 생성된다(생 SQL 문자열 편집 없음).
  *  - pk/uk/idx : columns (순서 중요)
  *  - fk        : columns[i] ↔ refColumns[i] 1:1 매핑 + on delete/update 정책

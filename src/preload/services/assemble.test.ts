@@ -108,7 +108,8 @@ const METHODS_BEFORE_SPLIT: Record<string, string[]> = {
     'deleteItem',
     'reorderItems'
   ],
-  migration: ['saveSnapshot', 'latestSnapshot', 'appendLog', 'listLogs'],
+  // 스냅샷 3종(saveSnapshot·latestSnapshot·listSnapshots)은 기준선 폐기와 함께 지웠다(2026-08-12).
+  migration: ['appendLog', 'listLogs'],
   ai: ['status', 'rotateToken'],
   diagram: ['getLayout', 'saveLayout', 'clearLayout']
 }

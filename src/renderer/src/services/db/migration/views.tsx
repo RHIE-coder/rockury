@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
-  Camera,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -40,7 +39,8 @@ import { isEmptyDiff } from '../versions/diff'
 import { isEmptySeedDiff, type SeedDiff } from '../versions/seedDiff'
 import { useMigrationStore } from './store'
 import { SchemaDiffExplorer } from './SchemaDiffExplorer'
-import { diagnosisState, hasDrift as diffHasDrift } from './diagnose'
+import { diagnosisState } from './diagnose'
+import { planGate, removals } from './planGate'
 import { groupDrift } from './driftSummary'
 import type { MigrationStatement } from './ddlDiff'
 import { groupStatements } from './planGroups'
@@ -81,6 +81,10 @@ const STATUS_COLOR: Record<string, string> = {
   modified: 'text-warning'
 }
 
+/**
+ * 숫자 눈금 + 테이블 이름 칩 — **대조표를 세울 자리가 아닌 곳**(맵핑 후보, 가져오기 미리보기)에서
+ * "얼마나·어느 테이블이" 다른지를 한 덩어리로 보인다. 진단·계획은 대조표가 대신한다.
+ */
 function DiffSummary({ diff }: { diff: SchemaDiff }): ReactElement {
   return (
     <div className="flex flex-col gap-2">
@@ -125,8 +129,8 @@ function DriftScale({ diff }: { diff: SchemaDiff }): ReactElement | null {
   )
 }
 
-function SeedSummary({ diff }: { diff: SeedDiff }): ReactElement | null {
-  if (isEmptySeedDiff(diff)) return null
+function SeedSummary({ diff }: { diff?: SeedDiff | null }): ReactElement | null {
+  if (!diff || isEmptySeedDiff(diff)) return null
   const s = diff.summary
   return (
     <div className="flex flex-wrap gap-3 text-[12px] text-muted">
@@ -158,22 +162,24 @@ function ErrorBar(): ReactElement | null {
  * (2026-08-10 사용자 지적: "화면이 좀 많이 꼬인 것 같다"). 이제 이 한 줄이 모든 탭 위에 서고,
  * 탭은 그 줄에서 갈라지는 일만 한다.
  */
-function StatusLine({ ctx }: { ctx: Ctx }): ReactElement {
+function StatusLine({ ctx, targetPicker }: { ctx: Ctx; targetPicker?: ReactNode }): ReactElement {
   const remote = useMigrationStore((s) => s.remoteVersion)
   const target = useMigrationStore((s) => s.targetVersion)
-  const diagnosis = useMigrationStore((s) => s.diagnosis)
-  const state = diagnosis ? diagnosisState(diagnosis, !!remote) : remote ? 'synced' : 'unmapped'
+  const diagDiff = useMigrationStore((s) => s.diagDiff)
+  const state = diagnosisState(!!remote, diagDiff)
 
   /**
-   * "샘"은 쓰지 않는다 — drift 를 직역한 말인데 한국어로는 수도꼭지 소리로 읽힌다
-   * (2026-08-10 사용자: "DB가 새다니.. 무슨 수도꼭지여?"). 옆의 "설계가 앞섬"과 짝이 맞게
-   * **무엇이 어떤 상태인가**로 적는다.
+   * 이 줄은 **설계와 실 DB 의 관계** 하나만 말한다 — 그래서 낱말도 하나로 맞춘다
+   * (2026-08-12 사용자: "실제가 다름 ㅋㅋ … '설계와 일치', '설계와 다름' 이런식으로").
+   *
+   * 예전엔 `실제가 다름`(남이 고침)과 `설계가 앞섬`(안 밀었음)을 갈라 적었다. 사람이 이 줄에서
+   * 얻는 답은 "같나 다른가"뿐이고, **왜** 다른지는 진단 화면이 한 줄로 따로 말한다.
+   * "샘"은 여전히 안 쓴다 — drift 직역이라 한국어로는 수도꼭지 소리로 읽힌다(2026-08-10).
    */
   const relation: Record<string, { label: string; tone: string }> = {
     unmapped: { label: '아직 모름', tone: 'text-muted' },
-    drifted: { label: '실제가 다름', tone: 'text-destructive' },
-    ahead: { label: '설계가 앞섬', tone: 'text-accent-2' },
-    synced: { label: '일치', tone: 'text-success' }
+    different: { label: '설계와 다름', tone: 'text-accent-2' },
+    synced: { label: '설계와 일치', tone: 'text-success' }
   }
   const r = relation[state]
 
@@ -182,7 +188,13 @@ function StatusLine({ ctx }: { ctx: Ctx }): ReactElement {
       <span className="flex items-center gap-1.5">
         <Layers className="size-3.5 shrink-0 text-muted" />
         <span className="truncate text-muted">{ctx.design.name}</span>
-        <b className="font-mono text-fg">{target || '—'}</b>
+        {/*
+          타깃 버전을 **고르는 자리도 여기**다 — 예전엔 계획 화면 머리에 셀렉터가 따로 있어
+          같은 `v0.1.0` 이 한 화면에 두 번 떴고, 위 툴바의 `Draft` 까지 더해 어느 버전을
+          말하는지 알 수 없었다(2026-08-12 사용자: "왜 이렇게 헷갈리게 구현해놓았어?").
+          값을 보이는 자리와 고르는 자리가 하나면 그 물음이 생기지 않는다.
+        */}
+        {targetPicker ?? <b className="font-mono text-fg">{target || '—'}</b>}
       </span>
       <span className="flex items-center gap-1.5 text-muted" aria-hidden>
         ──<span className={cn('font-semibold', r.tone)}>{r.label}</span>──
@@ -196,10 +208,22 @@ function StatusLine({ ctx }: { ctx: Ctx }): ReactElement {
   )
 }
 
-function Header({ title, children }: { title: string; children?: ReactNode }): ReactElement {
+/** `meta` 는 제목 옆에 붙는 것 — "이 화면이 지금 무엇을 놓고 있나"를 제목과 한 줄에 둔다. */
+function Header({
+  title,
+  meta,
+  children
+}: {
+  title: string
+  meta?: ReactNode
+  children?: ReactNode
+}): ReactElement {
   return (
-    <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
-      <h2 className="text-[14px] font-bold text-fg">{title}</h2>
+    <div className="flex shrink-0 items-center justify-between gap-4 border-b border-line px-5 py-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+        <h2 className="shrink-0 text-[14px] font-bold text-fg">{title}</h2>
+        {meta}
+      </div>
       <div className="flex items-center gap-1.5">{children}</div>
     </div>
   )
@@ -215,20 +239,26 @@ function Header({ title, children }: { title: string; children?: ReactNode }): R
 function Shell({
   title,
   ctx,
+  meta,
   actions,
+  targetPicker,
   footer,
   children
 }: {
   title: string
   ctx: Ctx
+  meta?: ReactNode
   actions?: ReactNode
+  targetPicker?: ReactNode
   footer?: ReactNode
   children: ReactNode
 }): ReactElement {
   return (
     <div className="flex h-full flex-col">
-      <StatusLine ctx={ctx} />
-      <Header title={title}>{actions}</Header>
+      <StatusLine ctx={ctx} targetPicker={targetPicker} />
+      <Header title={title} meta={meta}>
+        {actions}
+      </Header>
       <ErrorBar />
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-5">{children}</div>
       {footer && (
@@ -240,61 +270,33 @@ function Shell({
   )
 }
 
-/**
- * 범위 알림 — 기준선을 찍을 때와 지금 읽은 스키마 범위가 다르면 아래 차이는 DB 변경이 아니다.
- * 경우가 둘인 이유는 "달라졌다"와 "모른다"가 다른 사실이기 때문이다(뒤엣것은 단정하지 않는다).
+/*
+ * 범위 알림(ScopeNotice)은 없앴다 — 세 문장으로 "지금 본 스키마는 …"을 설명하던 자리다.
+ * 그 사실은 **대조표 위 스키마 토글**이 칩으로 이미 보인다(`service1 2/2 · testdb 18/32`).
+ * 같은 것을 글로 또 적으니 시끄럽기만 했다(2026-08-12 사용자). 범위가 바뀐 사실 자체는
+ * 스토어(`scopeChanged`)에 남아 있어, 필요하면 조용한 표시로 다시 꺼내 쓸 수 있다.
  */
-function ScopeNotice(): ReactElement | null {
-  const changed = useMigrationStore((s) => s.scopeChanged)
-  const base = useMigrationStore((s) => s.baselineScope)
-  const now = useMigrationStore((s) => s.actualScope)
-  const hasBaseline = useMigrationStore((s) => s.hasBaseline)
-  const diagnosis = useMigrationStore((s) => s.diagnosis)
-  const drifted = !!diagnosis && diffHasDrift(diagnosis)
-  const label = (v: string[]): string => (v.length ? v.join(', ') : '기본 스키마')
-
-  if (changed)
-    return (
-      <div className="flex items-start gap-2 rounded-md bg-accent-soft/60 px-3 py-2 text-[12px] text-fg ring-1 ring-accent/30">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-accent-2" />
-        <span>
-          읽은 스키마가 달라졌습니다. 기준선은 <b className="font-mono">{label(base)}</b> 를 봤고,
-          지금은 <b className="font-mono">{label(now)}</b> 를 봤습니다. 아래 차이 중 일부는 DB 가
-          바뀐 것이 아니라 보는 범위가 달라진 것입니다.
-        </span>
-      </div>
-    )
-
-  if (hasBaseline && drifted && base.length === 0)
-    return (
-      <div className="flex items-start gap-2 rounded-md bg-panel px-3 py-2 text-[12px] text-muted">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-        <span>
-          이 기준선은 어느 스키마를 봤는지 안 남겼습니다. 지금 본 것은{' '}
-          <b className="font-mono text-fg">{label(now)}</b> 입니다. 그때 본 것이 이와 달랐다면 아래
-          차이 중 일부는 DB 가 바뀐 것이 아닙니다.
-        </span>
-      </div>
-    )
-
-  return null
-}
 
 // ═══════════════════════════ 진단 ═══════════════════════════
 /**
- * 진단 — 이 모듈의 입구.
+ * 진단 — 이 모듈의 입구이자 **갈림길**.
  *
- * 상태가 넷뿐이고, 각 상태가 **다음에 할 일 하나**를 내민다:
- *   unmapped → 맵핑(이 연결이 몇 버전인지 못박기)
- *   drifted  → 흡수 / 원복 / 인정
- *   ahead    → 계획 보기
- *   synced   → 할 일 없음
+ * 화면의 본체는 `지금 DB → 설계` 대조표 하나다. 예전엔 같은 사실을 두 묶음("실제가 설계와
+ * 다른 것" / "설계가 앞선 것")으로 갈라 칩 요약만 내밀었는데, 무엇이 어떻게 다른지를 보려면
+ * 계획까지 가야 했다(2026-08-12 사용자: "진단 페이지도 Definition 화면으로 대체해줘").
+ *
+ * **표가 하나로 충분한 이유:** 남이 DB 에 몰래 만든 것은 설계에 없으므로 이 표에 `−`(지워짐)로
+ * 이미 나온다. 즉 `−` 줄이 곧 "이대로 밀면 사라지는 것"이라, 그 줄을 보고 방향을 고르면 된다.
+ *
+ * 방향은 둘이고 둘 다 열어 둔다 — 지금 DB 가 정답이라는 보장이 없기 때문이다
+ * (2026-08-12 사용자: "남이 실수로 넣은 스키마일 수도 있잖아"):
+ *   설계로 가져오기 — DB 모습을 설계 새 버전으로 (실제 → 설계)
+ *   계획 만들기     — 설계 모습대로 DB 를 고친다 (설계 → 실제)
+ *   이대로 두기     — 아무것도 안 바꾸고 지금을 정상으로 기록
  */
 export function DiagnoseView(): ReactElement {
   const { ctx, fallback } = useCtx()
   const st = useMigrationStore()
-  const selectView = useNav((s) => s.selectView)
-  const openImport = useImportStore((s) => s.openImport)
   const cid = ctx?.connection.id
   const did = ctx?.design.id
 
@@ -304,12 +306,13 @@ export function DiagnoseView(): ReactElement {
   }, [cid, did])
 
   if (!ctx) return fallback!
-  const state = st.diagnosis ? diagnosisState(st.diagnosis, !!st.remoteVersion) : 'unmapped'
+  const mapped = !!st.remoteVersion
 
   return (
     <Shell
       title="진단"
       ctx={ctx}
+      meta={mapped ? <DesignScale design={ctx.design.name} diff={st.diagDiff} /> : null}
       actions={
         <Button size="sm" variant="outline" disabled={st.loading} onClick={() => void st.runDiagnosis(ctx.connection.id, ctx.design.id)}>
           {st.loading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 다시 검사
@@ -318,65 +321,75 @@ export function DiagnoseView(): ReactElement {
     >
       {st.loading && !st.diagnosis ? (
         <div className="flex items-center gap-2 text-[13px] text-muted"><Loader2 className="size-4 animate-spin" /> 실제 DB 를 읽는 중…</div>
-      ) : state === 'unmapped' ? (
+      ) : !mapped ? (
         <MappingPanel ctx={ctx} />
       ) : (
         <>
-          <ScopeNotice />
-
-          {/* ── 실제가 설계와 다른 것. 먼저 처리해야 하는 쪽이라 위에 둔다 ── */}
-          {state === 'drifted' && st.diagnosis?.drift && (
-            <section className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-              <div className="flex items-center gap-2 text-[13px] font-semibold text-destructive">
-                <AlertTriangle className="size-4" /> 실 DB 가 설계와 다릅니다
-              </div>
-              <p className="text-[12px] text-fg">
-                누군가 실 DB 를 직접 고쳤습니다. 이대로 반영하면 그 변경이 지워집니다.
-              </p>
-              <DiffSummary diff={st.diagnosis.drift} />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" onClick={() => openImport(ctx.connection, ctx.design)}>
-                  <DownloadCloud /> 설계로 흡수
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => selectView('plan')}>
-                  <FileDiff /> 설계대로 되돌리기
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => void st.captureBaseline(ctx.connection.id, ctx.design.id, st.remoteVersion)}>
-                  <Camera /> 이대로 두기
-                </Button>
-              </div>
-              <p className="text-[11.5px] text-muted">이대로 두면 이 차이는 기록에만 남습니다(Logs).</p>
-            </section>
-          )}
-
-          {/* ── 설계가 앞선 것 ── */}
-          <section className="flex flex-col gap-3">
-            <div className="text-[13px] font-semibold text-fg">설계가 앞선 것</div>
-            {!st.diagnosis?.ahead ? (
-              <p className="text-[12px] text-muted">
-                {st.remoteVersion ? '비교할 타깃 버전 없음' : 'Remote 버전 모름'}
-              </p>
-            ) : isEmptyDiff(st.diagnosis.ahead.schema) && isEmptySeedDiff(st.diagnosis.ahead.seed) ? (
-              <div className="flex items-center gap-2 text-[13px] text-success">
-                <CheckCircle2 className="size-4" /> 밀 것 없음. 설계와 실제가 같은 버전입니다
-              </div>
-            ) : (
-              <>
-                <DiffSummary diff={st.diagnosis.ahead.schema} />
-                <SeedSummary diff={st.diagnosis.ahead.seed} />
-                <div>
-                  <Button size="sm" onClick={() => selectView('plan')}>
-                    <FileDiff /> 계획 보기
-                  </Button>
-                </div>
-              </>
-            )}
-          </section>
-
-          <BaselineHistory />
+          <DiagnoseActions ctx={ctx} />
+          <SeedSummary diff={st.diagnosis?.ahead?.seed} />
+          <DiagnoseTables ctx={ctx} />
         </>
       )}
     </Shell>
+  )
+}
+
+/** 두 방향 — 버튼마다 무엇을 정답으로 놓는 선택인지 한 줄로 적는다. */
+function DiagnoseActions({ ctx }: { ctx: Ctx }): ReactElement {
+  const st = useMigrationStore()
+  const selectView = useNav((s) => s.selectView)
+  const openImport = useImportStore((s) => s.openImport)
+  const same = !st.diagDiff || isEmptyDiff(st.diagDiff)
+
+  if (same)
+    return (
+      <div className="flex items-center gap-2 text-[13px] text-success">
+        <CheckCircle2 className="size-4" /> 설계와 실제가 같습니다
+      </div>
+    )
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" onClick={() => openImport(ctx.connection, ctx.design)}>
+        <DownloadCloud /> 설계로 가져오기
+      </Button>
+      {/*
+        계획 화면은 없앨 것이 있으면 스스로 막는다(§planGate). 그 관문을 여기서 열어 주지
+        않으면 이 버튼이 막다른 길로 보낸다 — "지울 것을 알고 간다"를 이 클릭이 뜻한다.
+      */}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          st.passRemovals()
+          selectView('plan')
+        }}
+      >
+        <FileDiff /> 계획 만들기
+      </Button>
+      {/*
+        방향이 정반대인 버튼 둘이라, 무엇을 정답으로 놓는 선택인지는 남긴다 — 잘못 고르면
+        한쪽은 남의 변경을 설계에 들이고 다른 쪽은 DROP 으로 지운다. 대신 한 줄로 끊는다.
+      */}
+      <span className="text-[11.5px] text-muted">가져오기 = 지금 DB 가 정답 · 계획 = 설계가 정답</span>
+    </div>
+  )
+}
+
+/** 진단의 본체 — 계획과 **같은 대조표**다(같은 것을 두 화면에서 다르게 그리면 눈이 다시 배운다). */
+function DiagnoseTables({ ctx }: { ctx: Ctx }): ReactElement | null {
+  const actual = useMigrationStore((s) => s.actual)
+  const target = useMigrationStore((s) => s.diagTarget)
+  if (!actual) return null
+  if (!target)
+    return <div className="text-[13px] text-muted">{ctx.design.name} 에 견줄 버전 없음</div>
+  return (
+    <SchemaDiffExplorer
+      before={actual}
+      after={target}
+      designId={ctx.design.id}
+      emptyText="설계와 같습니다"
+    />
   )
 }
 
@@ -456,33 +469,6 @@ function MappingPanel({ ctx }: { ctx: Ctx }): ReactElement {
   )
 }
 
-/** 목록·머리글이 같은 모양으로 시각을 적게 — 초 단위는 이 화면에서 쓸 데가 없다. */
-function stamp(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-}
-
-/** 기준선 이력 — 이 짝에 쌓인 스냅샷. */
-function BaselineHistory(): ReactElement | null {
-  const snapshots = useMigrationStore((s) => s.snapshots)
-  if (snapshots.length === 0) return null
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="text-[12px] font-semibold text-fg">기준선 이력</div>
-      <div className="flex flex-col gap-1.5">
-        {snapshots.map((s, i) => (
-          <div key={s.id} className="flex items-center gap-3 rounded-md border border-line bg-canvas px-3 py-2 text-[12px]">
-            <Camera className="size-3.5 shrink-0 text-muted" />
-            <span className="shrink-0 text-fg">{stamp(s.createdAt)}</span>
-            {/* 버전 없이 찍힌 기준선(반영을 거치지 않은 캡처)이 흔하다 — 빈 자리에 `—` 를 두면 소음만 는다. */}
-            {s.version && <span className="shrink-0 font-mono text-muted">{s.version}</span>}
-            <span className="min-w-0 flex-1 truncate text-muted">테이블 {s.tableCount}개</span>
-            {i === 0 && <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px]">현재 기준</Badge>}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 // ═══════════════════════════ 가져오기 ═══════════════════════════
 /**
@@ -493,7 +479,7 @@ export function ImportView(): ReactElement {
   const design = useActiveDesign()
   const connection = useActiveConnection()
   const openImport = useImportStore((s) => s.openImport)
-  const diagnosis = useMigrationStore((s) => s.diagnosis)
+  const diagDiff = useMigrationStore((s) => s.diagDiff)
 
   if (!connection)
     return <Guard title="연결을 선택하세요" sub="설계로 들일 실 DB 를 고르세요." />
@@ -510,11 +496,11 @@ export function ImportView(): ReactElement {
       <div className="min-h-0 flex-1 overflow-auto p-5">
         {!design ? (
           <div className="text-[13px] text-muted">물린 설계 없음. 가져오면 첫 버전과 결속이 함께 세워집니다</div>
-        ) : diagnosis?.drift && !isEmptyDiff(diagnosis.drift) ? (
+        ) : diagDiff && !isEmptyDiff(diagDiff) ? (
           // 진단이 이미 읽은 결과가 곧 "들일 것"이다 — 여기서 또 읽지 않는다(같은 검사다).
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2 text-[13px] font-semibold text-accent-2"><AlertTriangle className="size-4" /> 들일 변경</div>
-            <DiffSummary diff={diagnosis.drift} />
+            <DiffSummary diff={diagDiff} />
           </div>
         ) : (
           <div className="text-[13px] text-muted">들일 변경 없음</div>
@@ -651,23 +637,40 @@ export function PlanView(): ReactElement {
 
   if (!ctx) return fallback!
   const dialect = ctx.design.dialect
-  const ready = !st.loading && !!st.plan && st.plan.statements.length > 0
+  const gate = planGate(st.diagDiff, st.removalsPassed)
+  const ready = gate === 'ok' && !st.loading && !!st.plan && st.plan.statements.length > 0
 
   return (
     <Shell
       title="계획"
       ctx={ctx}
-      actions={
-        <Select value={st.targetVersion ?? undefined} onValueChange={(v) => void st.loadPlan(ctx.connection.id, ctx.design.id, dialect, v)}>
-          <SelectTrigger size="sm" className="w-36 font-mono">
-            <SelectValue placeholder={versions.length ? '타깃 버전' : '버전 없음'} />
-          </SelectTrigger>
-          <SelectContent>
-            {versions.map((v) => (
-              <SelectItem key={v.number} value={v.number}>{v.number}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      meta={gate === 'ok' && st.plan ? <DesignScale design={ctx.design.name} diff={st.planDiff} /> : null}
+      targetPicker={
+        /*
+         * 값이 정해지기 전에는 셀렉터를 안 세운다 — `value` 가 undefined 로 시작하면 Radix 가
+         * "uncontrolled → controlled" 경고를 뱉는다(2026-08-12 콘솔). 고를 것이 없는 상태를
+         * 셀렉터로 그려 봐야 누를 것도 없다.
+         */
+        st.targetVersion ? (
+          <Select
+            value={st.targetVersion}
+            onValueChange={(v) => void st.loadPlan(ctx.connection.id, ctx.design.id, dialect, v)}
+          >
+            <SelectTrigger
+              size="sm"
+              className="h-6 gap-1 border-0 bg-transparent px-1 py-0 font-mono text-[13px] font-bold text-fg shadow-none hover:bg-panel-strong"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {versions.map((v) => (
+                <SelectItem key={v.number} value={v.number}>{v.number}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <b className="font-mono text-fg">—</b>
+        )
       }
       footer={
         ready && (
@@ -687,13 +690,15 @@ export function PlanView(): ReactElement {
     >
       {st.loading ? (
         <div className="flex items-center gap-2 text-[13px] text-muted"><Loader2 className="size-4 animate-spin" /> 실제 DB 를 읽는 중…</div>
+      ) : gate === 'removes' ? (
+        <RemovalBlock diff={st.diagDiff!} />
       ) : !st.plan ? (
         <div className="text-[13px] text-muted">{versions.length ? '타깃 버전 없음' : '설계 버전 없음'}</div>
       ) : st.plan.statements.length === 0 ? (
         <div className="flex items-center gap-2 text-[13px] text-success"><CheckCircle2 className="size-4" /> 반영할 변경 없음</div>
       ) : (
         <>
-          <PlanDriftWarning />
+          <RemovalNote />
           {/*
             표가 먼저, SQL 이 나중이다 — 사람이 판단하는 근거는 "테이블이 어떤 모양이 되나"이고
             SQL 은 그 결과로 나가는 문이다. 순서가 뒤였을 때 SQL 서른 몇 줄이 판단을 가로막았다.
@@ -738,28 +743,69 @@ export function PlanView(): ReactElement {
 }
 
 /**
- * 계획 위에 뜨는 드리프트 경고 — 이 계획은 **설계를 정답으로 놓고** 실제를 거기 맞춘다.
- * 그래서 남이 실 DB 에 넣은 것이 설계에 없으면 DROP 이 된다.
+ * 머리 눈금 — **무엇을 기준으로, 얼마나 다른가**를 제목과 한 줄에 둔다(진단·계획 공용).
+ *
+ * 숫자는 지금 DB ↔ 타깃 설계 버전의 차이다. 예전 계획 화면은 이 자리에 기준선↔실제 숫자를
+ * "실 DB 가 설계와 다릅니다"라는 말과 함께 뒀는데, **그 숫자는 설계와 견준 값이 아니라**
+ * 마지막으로 찍어 둔 DB 모습과 견준 값이었다 — 말과 숫자가 서로 다른 것을 가리켰다.
  */
-function PlanDriftWarning(): ReactElement | null {
-  const diagnosis = useMigrationStore((s) => s.diagnosis)
-  const selectView = useNav((s) => s.selectView)
-  if (!diagnosis || !diffHasDrift(diagnosis) || !diagnosis.drift) return null
+function DesignScale({ design, diff }: { design: string; diff: SchemaDiff | null }): ReactElement | null {
+  const target = useMigrationStore((s) => s.targetVersion)
+  if (!diff || isEmptyDiff(diff)) return null
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-2 rounded-md bg-destructive/10 px-3 py-2.5 text-[12px] text-destructive">
-        <div className="flex items-center gap-2 font-semibold">
-          <AlertTriangle className="size-4" /> 실 DB 가 설계와 다릅니다
-        </div>
-        <DriftScale diff={diagnosis.drift} />
-        <span className="text-fg">
-          이 계획은 설계를 정답으로 놓고 실제를 맞춥니다. 위 변경이 설계에 없으면 지워집니다.
-        </span>
-        <button type="button" className="self-start underline underline-offset-2" onClick={() => selectView('diagnose')}>
-          진단에서 확인
-        </button>
+    <>
+      <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11.5px] font-medium text-warning">
+        설계와 다름
+      </span>
+      <DriftScale diff={diff} />
+      <span className="text-[11.5px] text-muted">
+        <span className="font-mono text-fg">{design} {target}</span> 기준
+      </span>
+    </>
+  )
+}
+
+/**
+ * 관문 — 계획이 실 DB 에서 **없앨 것이 있으면** 그리기 전에 진단으로 돌려보낸다.
+ *
+ * 없앨 것은 곧 "설계에 없는데 실 DB 에 있는 것"이다. 남이 만든 것일 수도, 우리가 설계에서
+ * 지우기로 한 것일 수도 있는데 — 밀면 사라진다는 사실은 같으므로 사람이 목록을 보고 정해야 한다.
+ * 예전엔 실행 버튼만 막았고, 그러면 위험한 계획을 다 읽은 뒤에야 막히는 순서가 됐다
+ * (2026-08-12 사용자: "Plan 단계를 수행하는게 아니라 진단 페이지를 먼저하라고 하자. 위험하잖아").
+ */
+function RemovalBlock({ diff }: { diff: SchemaDiff }): ReactElement {
+  const selectView = useNav((s) => s.selectView)
+  const gone = removals(diff)
+  return (
+    <section className="flex flex-col items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-destructive">
+        <AlertTriangle className="size-4" /> 이 계획은 실 DB 에서 {gone.length}개를 없앱니다
       </div>
-      <ScopeNotice />
+      <p className="text-[12px] text-fg">설계에 없는 것들입니다 — 살릴 것이 있으면 먼저 설계로 가져오세요.</p>
+      <div className="flex max-h-40 flex-wrap gap-1.5 overflow-auto">
+        {gone.map((n) => (
+          <span key={n} className="rounded-md bg-danger/10 px-2 py-0.5 font-mono text-[11px] text-danger">
+            {n}
+          </span>
+        ))}
+      </div>
+      <Button size="sm" onClick={() => selectView('diagnose')}>
+        <Radar /> 진단에서 확인
+      </Button>
+    </section>
+  )
+}
+
+/**
+ * 진단을 거쳐 들어온 경우의 한 줄 — 관문은 열렸지만 **없앨 것이 있다는 사실은 그대로**다.
+ * 숫자는 안 적는다: 머리 눈금이 이미 설계와의 차이를 세고 있어, 여기 또 세면 두 눈금이 된다.
+ */
+function RemovalNote(): ReactElement | null {
+  const diff = useMigrationStore((s) => s.diagDiff)
+  if (!diff || removals(diff).length === 0) return null
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+      <AlertTriangle className="size-4 shrink-0" /> 설계에 없는 것들을 이 계획이 지웁니다.
     </div>
   )
 }
@@ -771,16 +817,13 @@ export function RunView(): ReactElement {
   const selectView = useNav((s) => s.selectView)
   if (!ctx) return fallback!
   const plan = st.plan
-  const drifted = !!st.diagnosis && diffHasDrift(st.diagnosis)
   const needsAck = !!plan && plan.destructiveCount > 0
-  // 게이트가 둘이다: 파괴적 문(내가 만든 위험)과 드리프트(남이 만든 위험). 성격이 달라 따로 묻는다.
+  /*
+   * 마지막 관문은 하나다 — **데이터가 지워지는 문**. 무엇이 없어지는지는 계획 화면의 관문이
+   * 이미 목록으로 보여 줬고(§planGate), 여기서는 "그래도 민다"는 손도장만 받는다.
+   */
   const canRun =
-    !!plan &&
-    plan.statements.length > 0 &&
-    !st.tx &&
-    !st.loading &&
-    (!needsAck || st.destructiveAck) &&
-    (!drifted || st.driftAck)
+    !!plan && plan.statements.length > 0 && !st.tx && !st.loading && (!needsAck || st.destructiveAck)
 
   return (
     <Shell title="실행" ctx={ctx}>
@@ -806,23 +849,6 @@ export function RunView(): ReactElement {
               <span className="text-destructive"> · 데이터가 지워지는 문 {plan.destructiveCount}개</span>
             )}
           </div>
-
-          {drifted && !st.tx && (
-            <div className="flex flex-col gap-2 rounded-md bg-destructive/10 px-3 py-2.5 text-[12px] text-destructive">
-              <div className="flex items-center gap-2 font-semibold">
-                <AlertTriangle className="size-4" /> 실 DB 가 설계와 다릅니다
-              </div>
-              {st.diagnosis?.drift && <DriftScale diff={st.diagnosis.drift} />}
-              <span className="text-fg">이대로 반영하면 그 변경이 덮일 수 있습니다.</span>
-              <button type="button" className="self-start underline underline-offset-2" onClick={() => selectView('diagnose')}>
-                진단에서 확인
-              </button>
-              <label className="flex cursor-pointer items-center gap-2 pt-0.5">
-                <Checkbox checked={st.driftAck} onCheckedChange={(c) => st.setDriftAck(c === true)} />
-                확인했고 이대로 반영합니다
-              </label>
-            </div>
-          )}
 
           {needsAck && !st.tx && (
             <label className="flex cursor-pointer items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
@@ -891,7 +917,7 @@ export function LogsView(): ReactElement {
 
   return (
     <Shell
-      title="Logs"
+      title="기록"
       ctx={ctx}
       actions={
         <Button size="sm" variant="outline" onClick={() => void st.loadLogs(ctx.connection.id, ctx.design.id)}><RefreshCw /> 새로고침</Button>

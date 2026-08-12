@@ -16,13 +16,7 @@ import type { LibraryScope } from '../../main/store/libraryScope'
 import type { CollectionRecord, CollectionItemRecord, CollectionFolderRecord } from '../../main/store/collections'
 import type { DiagramLayoutRecord, SaveLayoutInput } from '../../main/store/diagramLayouts'
 import type { SaveFilterInput, SavedFilterRecord } from '../../shared/db/savedFilter'
-import type {
-  CreateLogInput,
-  CreateSnapshotInput,
-  MigrationLogRecord,
-  SnapshotRecord,
-  SnapshotSummary
-} from '../../main/store/migration'
+import type { CreateLogInput, MigrationLogRecord } from '../../main/store/migration'
 import type { StoreChangedEvent } from '../../shared/storeChanged'
 
 // 메인 프로세스 타입을 렌더러 쪽으로 그대로 통과시킨다 — 화면이 main 을 직접 import 하지 않게.
@@ -326,12 +320,6 @@ export const dbApi = {
   },
   // 운영부 — Migration 스냅샷 기준선 + 로그 체인(환경 바인딩 id 로 키).
   migration: {
-    saveSnapshot: (input: CreateSnapshotInput): Promise<SnapshotRecord> =>
-      unwrap(ipcRenderer.invoke('migration:saveSnapshot', input)),
-    latestSnapshot: (envId: string): Promise<SnapshotRecord | null> =>
-      unwrap(ipcRenderer.invoke('migration:latestSnapshot', envId)),
-    listSnapshots: (envId: string): Promise<SnapshotSummary[]> =>
-      unwrap(ipcRenderer.invoke('migration:listSnapshots', envId)),
     appendLog: (input: CreateLogInput): Promise<MigrationLogRecord> =>
       unwrap(ipcRenderer.invoke('migration:appendLog', input)),
     listLogs: (envId: string): Promise<MigrationLogRecord[]> =>

@@ -71,8 +71,9 @@ export function CompareView(): ReactElement {
             (2026-08-10 사용자 지적 — 상대 목록은 등록된 연결 전부지 환경 이름을 가리지 않는다).
             방향도 바로 아래 `기준 → 상대` 가 화살표까지 달고 이미 말한다.
           */}
+          {/* 탭 이름이 한글이 됐으니 머리도 같은 말이다 — 부제는 "비교"를 되풀이하지 않게 축을 적는다. */}
           <h2 className="text-[14px] font-bold text-fg">
-            Compare <span className="font-normal text-muted">· 실 DB 간 스키마 비교</span>
+            비교 <span className="font-normal text-muted">· 실 DB ↔ 실 DB</span>
           </h2>
         </div>
       </div>
