@@ -240,7 +240,7 @@ export function GrantView() {
               REVOKE 토글·실패 메시지가 다른 계정으로 이월되면 안 된다(리뷰 지적). */}
           {!editing && diff && diff.counts.matchedTables > 0 && account && connId && (
             <ApplyBar
-              key={`${account} ${selectedSetId}`}
+              key={`${account}\u0000${selectedSetId}`}
               connId={connId}
               account={account}
               ir={ir}
@@ -453,7 +453,7 @@ function GridGroup({ db, rows }: { db: string; rows: GridRow[] }) {
         </td>
       </tr>
       {rows.map((r) => (
-        <tr key={`${r.db} ${r.table}`} data-grant-row={r.table} className="border-b border-line/50 hover:bg-panel/50">
+        <tr key={`${r.db}\u0000${r.table}`} data-grant-row={r.table} className="border-b border-line/50 hover:bg-panel/50">
           <td className="px-3 py-1.5 font-mono text-fg">{r.table === '*' ? '(모든 표)' : r.table}</td>
           {CORE.map((p) => {
             const sources = r.privs[p]

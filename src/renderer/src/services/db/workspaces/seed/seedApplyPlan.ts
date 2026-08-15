@@ -350,7 +350,7 @@ export function planSeedApply(input: SeedApplyInput): SeedApplyPlan {
       // 시드 행끼리의 방어선 — 앞선 시드 행이 이미 이 PK 를 주장했으면 중단.
       let conflicted = false
       for (const [pk, v] of Object.entries(pkValues)) {
-        const claimKey = `${pk} ${v}`
+        const claimKey = `${pk}\u0000${v}`
         const owner = pkClaims.get(claimKey)
         if (owner != null) {
           blockers.push({
