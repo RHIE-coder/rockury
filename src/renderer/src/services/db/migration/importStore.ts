@@ -21,7 +21,7 @@ import { useMigrationStore } from './store'
  *   new-design : 연결에 물린 설계 없음 → 새 Design 생성 + 첫 버전 컷
  *   version-up : 기존 설계에 다음 버전 컷(최신 버전과 diff 미리보기, 무변경이면 차단)
  *
- * 컷한 버전은 실 DB 를 그대로 떠온 것이므로 그 환경의 적용 버전 + 드리프트 기준선으로 함께 세운다.
+ * 컷한 버전은 실 DB 를 그대로 떠온 것이므로 그 환경의 적용 버전으로 함께 세운다.
  */
 interface ImportState {
   open: boolean
@@ -60,7 +60,8 @@ interface ImportState {
   number: string
   note: string
 
-  openImport: (connection: ConnectionDef, design: DesignDef | null) => void
+  /** @param prefer 창이 어느 갈래로 서서 열릴지. 안 주면 설계가 있으면 버전 추가, 없으면 새 설계. */
+  openImport: (connection: ConnectionDef, design: DesignDef | null, prefer?: ImportMode) => void
   close: () => void
   prepare: () => Promise<void>
   chooseMode: (mode: ImportMode) => void
@@ -99,7 +100,14 @@ export const useImportStore = create<ImportState>()((set, get) => ({
   number: '',
   note: '',
 
-  openImport: (connection, design) => {
+  openImport: (connection, design, prefer) => {
+    /*
+     * 부른 버튼이 방향을 안다 — "새 설계로 저장하기"로 열었는데 창이 "기존 설계에 버전 추가"에
+     * 서 있으면 버튼과 창이 서로 다른 말을 한다(2026-08-14 사용자: "모달 내용들이 뭔가 버튼
+     * 의도와 아다리가 맞지 않은데?"). 부르는 쪽이 정하고, 안 정하면 예전대로 설계 유무로 간다.
+     * 어느 쪽으로 열리든 위 토글은 살아 있어 사람이 뒤집을 수 있다.
+     */
+    const mode = prefer ?? (design ? 'version-up' : 'new-design')
     set({
       open: true,
       connection,
@@ -116,8 +124,9 @@ export const useImportStore = create<ImportState>()((set, get) => ({
       scopeError: null,
       applyToDraft: true,
       canVersionUp: !!design,
-      mode: design ? 'version-up' : 'new-design',
-      designName: design ? '' : defaultImportDesignName(connection.name),
+      mode,
+      // 이름 칸은 새 설계일 때만 쓴다 — 설계가 있어도 새로 만들기로 열렸으면 기본 이름을 채운다.
+      designName: mode === 'new-design' ? defaultImportDesignName(connection.name) : '',
       number: '',
       note: ''
     })

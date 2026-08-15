@@ -17,6 +17,86 @@ export async function run(ctx) {
   await page.waitForSelector('text=orders', { timeout: 5_000 })
   check('Definition: 시드 테이블(orders) 표시', (await body()).includes('orders'))
 
+  /*
+   * ── 컬럼 표의 두 규율 (2026-08-12 화면 피드백) ──
+   *  ⑴ PK 컬럼의 NULL 칸은 잠긴다 — PK 는 곧 NOT NULL 이라 켤 수 있으면 실 DB 에 없는 모습이 된다
+   *     ("PK인데 null이 가능해?").
+   *  ⑵ 잘린 칸을 펴는 손잡이는 **칸 자신**이 든다 — 표 머리의 "전문 보기" 체크박스는 걷어냈다
+   *     ("체크박스말고 좀 더 우아한 방법 없어?"). 손잡이는 넘치는 칸에만 붙는다.
+   */
+  {
+    const nullBoxes = await page.evaluate(() => {
+      const all = [...document.querySelectorAll('button[aria-label="nullable"]')]
+      return { total: all.length, locked: all.filter((b) => b.disabled).length }
+    })
+    check(
+      `Design › Definition: PK 컬럼의 NULL 칸이 잠긴다 (잠김 ${nullBoxes.locked}/${nullBoxes.total})`,
+      nullBoxes.total > 0 && nullBoxes.locked > 0
+    )
+    check('Design › Definition: 표 머리에 "전문 보기" 체크박스가 없다', !(await body()).includes('전문 보기'))
+
+    // 손잡이가 **가려지지 않는가** — 가려진 손잡이는 없는 손잡이다(행 ⋯ 메뉴에 깔린 적이 있다).
+    const reach = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-clip-toggle]')].map((b) => {
+        const r = b.getBoundingClientRect()
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+        return hit === b || b.contains(hit)
+      })
+    )
+    check(
+      `Design › Definition: 잘린 칸의 펼침 손잡이가 안 가려진다 (${reach.length}개)`,
+      reach.length === 0 || reach.every(Boolean)
+    )
+
+    // 눌러서 실제로 펴지는가 — 그 줄만 높아진다(표 전체가 아니라).
+    if (reach.length > 0) {
+      const rowH = () =>
+        page.evaluate(() => {
+          const b = document.querySelector('[data-clip-toggle]')
+          return b ? Math.round(b.closest('[style*="grid-template-columns"]').getBoundingClientRect().height) : 0
+        })
+      const before = await rowH()
+      await page.locator('[data-clip-toggle]').first().click()
+      await page.waitForTimeout(300)
+      const after = await rowH()
+      check(`Design › Definition: ⌄ 를 누르면 그 줄이 펴진다 (${before}→${after})`, after > before)
+      await page.locator('[data-clip-toggle]').first().click()
+      await page.waitForTimeout(200)
+
+      /*
+       * 회귀 — 2026-08-13 사용자: "편집 이후에 다시 나오면 또 이러는데?"
+       *
+       * 손잡이가 붙은 칸을 눌러 편집을 열면 그 칸이 입력 상자로 바뀌며 DOM 에서 빠진다.
+       * 빠지는 순간 ResizeObserver 가 "크기 0" 으로 울리는데, 그 0 을 "안 넘침"으로 받아 적어
+       * 손잡이가 사라졌고 편집을 닫아도 다시 잴 계기가 없어 **영영 안 돌아왔다**.
+       */
+      const cellWithToggle = () =>
+        page.evaluate(() => {
+          const b = document.querySelector('[data-clip-toggle]')
+          return b?.parentElement?.querySelector('button:not([data-clip-toggle])') ? 1 : 0
+        })
+      const toggleCount = () => page.locator('[data-clip-toggle]').count()
+      const wasCount = await toggleCount()
+      if (wasCount > 0 && (await cellWithToggle())) {
+        // 그 칸을 눌러 편집을 열고(입력 상자로 바뀐다) → Esc 로 값 그대로 닫는다.
+        await page.evaluate(() =>
+          document
+            .querySelector('[data-clip-toggle]')
+            ?.parentElement?.querySelector('button:not([data-clip-toggle])')
+            ?.click()
+        )
+        await page.waitForTimeout(300)
+        await page.keyboard.press('Escape')
+        await page.waitForTimeout(400)
+        const nowCount = await toggleCount()
+        check(
+          `Design › Definition: 편집을 여닫아도 펼침 손잡이가 남는다 (${wasCount}→${nowCount})`,
+          nowCount === wasCount
+        )
+      }
+    }
+  }
+
   // ── Design › Definition — 사이드 패널 제약 탭(Remote 와 같은 구성) ──
   {
     await click('[data-side-tab="constraints"]')

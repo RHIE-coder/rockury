@@ -4,7 +4,7 @@ import { alignSnapshotToActual } from '../versions/align'
 import { diffSnapshots, type SchemaDiff } from '../versions/diff'
 import { useVersionsStore, type VersionSnapshot } from '../versions/store'
 import { normalizeSchema } from '../remote/introspection'
-import { diagnose, type Diagnosis } from './diagnose'
+import { diagnose, pickTargetVersion, type Diagnosis } from './diagnose'
 import { identifyVersion, type IdentifyResult } from './identify'
 import { removalSignature } from './planGate'
 import { generateRevert, type RevertPlan } from './revert'
@@ -116,15 +116,14 @@ function snapshotAt(designId: string, version: string): VersionSnapshot | null {
 }
 
 /**
- * 설계의 최신 버전 — 타깃을 안 고르면 여기로 간다("Design 의 지금"이 곧 밀고 싶은 것이다).
+ * 이 설계의 버전 번호들 — **최신순**이다(저장소가 `created_at DESC` 로 준다). 맨 앞이 최신.
  *
- * 목록은 **최신순**이다(`versions/store` 의 `byDesign` 주석 · 저장소가 `created_at DESC` 로 준다).
- * 그래서 맨 앞이 최신이다 — 예전엔 맨 뒤를 집어, 버전이 둘 이상인 설계에서 타깃이 늘 **맨 처음
- * 컷한 버전**으로 잡혔다. 화면은 "최신으로 간다"고 적어 두고 실제로는 가장 낡은 것을 골랐다
- * (2026-08-12 e2e 로 드러남 — 진단이 "설계와 같다"고 우겼다).
+ * 예전엔 맨 뒤를 집어, 버전이 둘 이상인 설계에서 타깃이 늘 **맨 처음 컷한 버전**으로 잡혔다.
+ * 화면은 "최신으로 간다"고 적어 두고 실제로는 가장 낡은 것을 골랐다
+ * (2026-08-12 e2e 로 드러남 — 진단이 "설계와 같다"고 우겼다). 순서를 여기서 지킨다.
  */
-function latestVersion(designId: string): string {
-  return (useVersionsStore.getState().byDesign[designId] ?? [])[0]?.number ?? ''
+function versionNumbers(designId: string): string[] {
+  return (useVersionsStore.getState().byDesign[designId] ?? []).map((v) => v.number)
 }
 
 /** 실 DB 의 모양을 한 문자열로 — 실행 도중 남이 바꿨는지 견주는 데 쓴다. */
@@ -202,10 +201,10 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
   },
 
   /**
-   * 판정을 확정한다 — "이 실 DB 는 v0.1.0 이다"를 못박고 그 순간을 기준선으로 남긴다.
+   * 판정을 확정한다 — "이 실 DB 는 v0.1.0 이다"를 못박는다.
    *
-   * 기준선을 여기서 찍는 이유: 이 시점의 실제가 곧 "우리가 아는 마지막 모습"이다.
-   * 이걸 안 남기면 맵핑 직후 첫 진단에서 견줄 대상이 없어 드리프트를 말할 수 없다.
+   * 이력에 한 줄을 남기는 이유: 이 순간이 그 연결의 출발점이라, 뒤에 쌓일 반영들이
+   * 어디서부터 시작했는지 되짚을 수 있어야 한다.
    */
   confirmMapping: async (connectionId, designId, version) => {
     set({ loading: true, error: null })
@@ -238,7 +237,11 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
       const binding = await get().resolveBinding(connectionId, designId)
       const actual = await get().introspectActual(connectionId, designId)
       const remoteVersion = binding.appliedVersion ?? ''
-      const targetVersion = target ?? get().targetVersion ?? latestVersion(designId) ?? null
+      const targetVersion = pickTargetVersion({
+        explicit: target,
+        remembered: get().targetVersion,
+        versions: versionNumbers(designId)
+      })
       const atTarget = targetVersion ? snapshotAt(designId, targetVersion) : null
       // 진단 화면의 대조표가 그릴 "설계 쪽" — 계획과 **같은 정렬**을 거친다(§경계 정렬).
       // 정렬을 건너뛰면 id 스킴이 달라 전부 DROP+CREATE 로 보인다. 표 하나에 39개 테이블이
@@ -262,7 +265,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
   },
 
   setDestructiveAck: (v) => set({ destructiveAck: v }),
-  /** 지금 계획이 없앨 것을 알고 간다 — 진단 화면의 "계획 만들기"가 부른다(§planGate). */
+  /** 지금 계획이 없앨 것을 알고 간다 — 진단 화면의 "설계 → 실제"가 부른다(§planGate). */
   passRemovals: () => {
     const diff = get().diagDiff
     set({ removalsPassed: diff ? removalSignature(diff) : null })

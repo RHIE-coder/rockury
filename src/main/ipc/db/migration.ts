@@ -8,7 +8,7 @@ import { envelope } from '../envelope'
 import { writing } from '../peers'
 
 /**
- * Migration IPC(§ops-plan Phase 3) — 스냅샷 기준선 + 로그 체인(봉투 패턴).
+ * Migration IPC(§ops-plan Phase 3) — 이력(`migration_logs`) 읽고 쓰기(봉투 패턴).
  * Drift/Plan/Run 오케스트레이션은 렌더러(introspection+diff+ddlDiff+query 재사용)가 담당.
  */
 export function registerMigrationIpc(): void {

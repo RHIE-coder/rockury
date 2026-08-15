@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   DndContext,
   PointerSensor,
@@ -128,8 +127,7 @@ function SortableColumnRow({
   badges,
   inCheck,
   readOnly,
-  isView,
-  full
+  isView
 }: {
   c: Column
   index: number
@@ -138,8 +136,6 @@ function SortableColumnRow({
   inCheck: boolean
   readOnly: boolean
   isView: boolean
-  /** 표의 "전문 보기" — 잘린 칸을 펴서 전부 보인다. */
-  full: boolean
 }) {
   const updateColumn = useDefinitionStore((s) => s.updateColumn)
   const toggleNullable = useDefinitionStore((s) => s.toggleNullable)
@@ -196,7 +192,6 @@ function SortableColumnRow({
         )}
         <EditableText
           editKey={`col:${c.id}:name`}
-          full={full}
           value={c.name}
           placeholder="컬럼명"
           readOnly={readOnly}
@@ -206,7 +201,6 @@ function SortableColumnRow({
       <div className="px-1">
         <EditableText
           editKey={`col:${c.id}:type`}
-          full={full}
           value={c.type}
           placeholder="타입"
           mono
@@ -241,9 +235,15 @@ function SortableColumnRow({
         </div>
       )}
       <div className="flex justify-center">
+        {/*
+          PK 컬럼은 잠근다 — PK 는 SQL 표준에서 곧 NOT NULL 이라 켤 수 있게 두면 실 DB 에 없는
+          모습이 설계에 생긴다(2026-08-12 사용자: "PK인데 null이 가능해?"). 값 자체는 스토어가
+          이미 NOT NULL 로 잡으므로(`enforcePkNotNull`) 여기서는 손잡이만 닫는다. 왜 닫혔는지는
+          바로 옆 칸의 PK 배지가 말한다 — 툴팁을 또 달지 않는다.
+        */}
         <Checkbox
           checked={c.nullable}
-          disabled={readOnly}
+          disabled={readOnly || badges.some((b) => b.kind === 'pk')}
           onCheckedChange={() => toggleNullable(c.id)}
           aria-label="nullable"
         />
@@ -251,7 +251,6 @@ function SortableColumnRow({
       <div className="px-1">
         <EditableText
           editKey={`col:${c.id}:default`}
-          full={full}
           value={c.defaultValue ?? ''}
           placeholder="—"
           mono
@@ -268,7 +267,6 @@ function SortableColumnRow({
         )}
         <EditableText
           editKey={`col:${c.id}:comment`}
-          full={full}
           value={c.comment}
           placeholder="설명"
           readOnly={readOnly}
@@ -296,12 +294,11 @@ export function TableForm() {
   const setEditing = useDefinitionStore((s) => s.setEditing)
   const readOnly = useDesignReadOnly()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
-  /**
-   * 잘린 칸을 펴서 본다 — 타입(긴 enum)·기본값·설명이 열 폭을 넘긴다. 호버 툴팁은 진작 있었지만
-   * 마우스를 올려야만 나오는 것은 사용자에게 **없는 것과 같았다**
-   * (2026-08-12: "전체 내용을 볼 수 있는 방법이 없어"). 대조표에도 같은 손잡이를 뒀다.
+  /*
+   * 잘린 칸을 보는 손잡이는 **칸 자신**이 든다(`ui/clipped`) — 여기 있던 "전문 보기" 체크박스는
+   * 걷어냈다. 표 하나에 켜고 끄는 스위치를 두면 긴 칸 하나 보려고 표 전체 줄이 바뀌었고,
+   * 사용자는 그 체크박스 자체를 걸고 넘어졌다(2026-08-12: "체크박스말고 좀 더 우아한 방법 없어?").
    */
-  const [full, setFull] = useState(false)
 
   // 부모(DefinitionWorkspace)가 설계 선택·테이블 존재를 보장하지만 방어적으로 가드.
   if (!design || !table) return null
@@ -405,10 +402,6 @@ export function TableForm() {
             </>
           )}
         </div>
-        <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[11.5px] text-muted">
-          <Checkbox checked={full} onCheckedChange={(v) => setFull(v === true)} />
-          전문 보기
-        </label>
         {!readOnly && (
           <div className="flex gap-1.5">
             <Button size="sm" onClick={addColumn}>
@@ -485,7 +478,6 @@ export function TableForm() {
                 inCheck={checkCols.has(c.id)}
                 readOnly={readOnly}
                 isView={isView}
-                full={full}
               />
             ))}
           </SortableContext>

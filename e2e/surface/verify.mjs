@@ -80,6 +80,10 @@ function extractScript() {
     const directText = (el) => Array.from(el.childNodes).filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim();
     const isInteractive = (el) => { const t = el.tagName; if (['BUTTON','A','INPUT','SELECT','TEXTAREA'].includes(t)) return true; const r = el.getAttribute('role'); if (['button','link','menuitem','tab','checkbox','switch'].includes(r||'')) return true; return false; };
     const visible = (el, r) => { const cs = getComputedStyle(el); return cs.display!=='none' && cs.visibility!=='hidden' && cs.opacity!=='0' && r.width>0 && r.height>0; };
+    // 잘린 칸이 제 자리에서 펴지는가 — 옆에 붙은 펼침 손잡이(\`ui/clipped\` 의 ClipToggle)를 찾는다.
+    // 두 겹까지만 올려다본다: 손잡이는 언제나 글자 상자의 형제이거나(대조표·Remote) 그 상자를
+    // 감싼 버튼의 형제다(설계부의 EditableText). 더 올리면 같은 줄의 남의 손잡이를 제 것으로 센다.
+    const expandable = (el) => { let n = el; for (let up=0; up<2 && n; up++, n=n.parentElement) { if (n.parentElement && n.parentElement.querySelector(':scope > [data-clip-toggle]')) return true; } return false; };
     const els = [];
     const all = document.querySelectorAll('body *');
     for (const el of all) {
@@ -100,6 +104,7 @@ function extractScript() {
         states: [],
         interactive,
         truncated,
+        expandable: truncated ? expandable(el) : false,
         essential: !!txt,
         fontSize: parseFloat(cs.fontSize) || null,
         bold: (parseInt(cs.fontWeight,10) || 400) >= 600,

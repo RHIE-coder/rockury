@@ -1,12 +1,12 @@
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  DownloadCloud,
-  FileDiff,
+  CircleDashed,
+  Download,
   Layers,
   Link2,
   Loader2,
@@ -16,6 +16,7 @@ import {
   ScrollText,
   Server,
   Undo2,
+  Upload,
   XCircle
 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
@@ -28,10 +29,17 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/ui/dialog'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useNav } from '@renderer/nav/useNav'
-import { useActiveDesign, type DesignDef } from '../designs/store'
+import { useActiveDesign, useScopedDesigns, type DesignDef } from '../designs/store'
 import { useActiveConnection, type ConnectionDef } from '../connections/store'
 import { useDesignVersions } from '../versions/store'
 import type { SchemaDiff } from '../versions/diff'
@@ -39,7 +47,7 @@ import { isEmptyDiff } from '../versions/diff'
 import { isEmptySeedDiff, type SeedDiff } from '../versions/seedDiff'
 import { useMigrationStore } from './store'
 import { SchemaDiffExplorer } from './SchemaDiffExplorer'
-import { diagnosisState } from './diagnose'
+import { diagnosisState, shouldIdentify } from './diagnose'
 import { planGate, removals } from './planGate'
 import { groupDrift } from './driftSummary'
 import type { MigrationStatement } from './ddlDiff'
@@ -74,33 +82,11 @@ function Guard({ title, sub }: { title: string; sub?: string }): ReactElement {
   return <PlaceholderView icon={Radar} depth="depth 3 · Migration" title={title} subtitle={sub} />
 }
 
-/** 대조표(SchemaDiffExplorer)와 같은 팔레트를 쓴다 — 화면을 옮길 때 색이 뜻을 바꾸면 안 된다. */
-const STATUS_COLOR: Record<string, string> = {
-  added: 'text-success',
-  removed: 'text-danger',
-  modified: 'text-warning'
-}
-
-/**
- * 숫자 눈금 + 테이블 이름 칩 — **대조표를 세울 자리가 아닌 곳**(맵핑 후보, 가져오기 미리보기)에서
- * "얼마나·어느 테이블이" 다른지를 한 덩어리로 보인다. 진단·계획은 대조표가 대신한다.
+/*
+ * 테이블 이름 칩 묶음(`DiffSummary`)은 없앴다 — 쓰던 두 자리가 다 사라졌다: 맵핑 판은
+ * "아직 무엇과 견줄지 안 정한 자리에 차이부터 펼친다"고 걷혔고, 가져오기 탭은 통째로
+ * 없어졌다(2026-08-14 사용자). 남은 곳에서 "얼마나 다른가"는 아래 눈금이 숫자로 말한다.
  */
-function DiffSummary({ diff }: { diff: SchemaDiff }): ReactElement {
-  return (
-    <div className="flex flex-col gap-2">
-      {/* 숫자는 DriftScale 한 곳에서만 그린다 — 0 까지 늘어놓던 `+6 / ~18 / -0` 은 여기서 사라졌다. */}
-      <DriftScale diff={diff} />
-      <div className="flex flex-wrap gap-1.5">
-        {diff.tables.map((t) => (
-          <span key={t.id} className={cn('rounded-md bg-panel-strong px-2 py-0.5 font-mono text-[11px]', STATUS_COLOR[t.status])}>
-            {t.status === 'added' ? '+ ' : t.status === 'removed' ? '- ' : '~ '}
-            {t.name}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 /**
  * 드리프트 눈금 — 종류마다 한 칸, 칸 안에 `+ − ~` 숫자만.
@@ -162,6 +148,15 @@ function ErrorBar(): ReactElement | null {
  * (2026-08-10 사용자 지적: "화면이 좀 많이 꼬인 것 같다"). 이제 이 한 줄이 모든 탭 위에 서고,
  * 탭은 그 줄에서 갈라지는 일만 한다.
  */
+/**
+ * 버전을 아직 모를 때의 자리 — 글자 `—` 는 **값처럼 읽힌다**(버전 이름이 대시인가?).
+ * 빈 동그라미는 "아직 안 정해짐"을 값과 섞이지 않게 보인다
+ * (2026-08-14 사용자: "이 표시말고 다른 표시를 해줘. 문자말고 아이콘 안되나?").
+ */
+function UnknownVersion(): ReactElement {
+  return <CircleDashed className="size-3.5 shrink-0 text-muted" role="img" aria-label="버전 모름" />
+}
+
 function StatusLine({ ctx, targetPicker }: { ctx: Ctx; targetPicker?: ReactNode }): ReactElement {
   const remote = useMigrationStore((s) => s.remoteVersion)
   const target = useMigrationStore((s) => s.targetVersion)
@@ -176,16 +171,22 @@ function StatusLine({ ctx, targetPicker }: { ctx: Ctx; targetPicker?: ReactNode 
    * 얻는 답은 "같나 다른가"뿐이고, **왜** 다른지는 진단 화면이 한 줄로 따로 말한다.
    * "샘"은 여전히 안 쓴다 — drift 직역이라 한국어로는 수도꼭지 소리로 읽힌다(2026-08-10).
    */
-  const relation: Record<string, { label: string; tone: string }> = {
-    unmapped: { label: '아직 모름', tone: 'text-muted' },
-    different: { label: '설계와 다름', tone: 'text-accent-2' },
-    synced: { label: '설계와 일치', tone: 'text-success' }
+  /**
+   * 셋을 **덩어리로 가른다** — 예전엔 이 줄 전체가 같은 크기·같은 회색 글자라 `설계 · 관계 ·
+   * 실 DB` 가 한 뭉텅이로 흘렀고, 정작 답인 관계 낱말이 제일 안 보였다
+   * (2026-08-14 사용자: "UI 적으로 좀더 구분감 있게 시인성 있게").
+   * 양끝은 옅은 칩, 가운데 관계는 뜻에 맞는 색 칩 + 아이콘, 잇는 것은 글자 `──` 가 아니라 실선.
+   */
+  const relation: Record<string, { label: string; tone: string; Icon: typeof AlertTriangle }> = {
+    unmapped: { label: '아직 모름', tone: 'bg-panel-strong text-muted', Icon: CircleDashed },
+    different: { label: '설계와 다름', tone: 'bg-accent-2-soft text-accent-2', Icon: AlertTriangle },
+    synced: { label: '설계와 일치', tone: 'bg-success-soft text-success', Icon: CheckCircle2 }
   }
   const r = relation[state]
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-line bg-panel/40 px-5 py-2.5 text-[13px]">
-      <span className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-2 border-b border-line bg-panel/40 px-5 py-2 text-[13px]">
+      <span className="flex items-center gap-1.5 rounded-md bg-canvas px-2.5 py-1 ring-1 ring-line">
         <Layers className="size-3.5 shrink-0 text-muted" />
         <span className="truncate text-muted">{ctx.design.name}</span>
         {/*
@@ -194,15 +195,20 @@ function StatusLine({ ctx, targetPicker }: { ctx: Ctx; targetPicker?: ReactNode 
           말하는지 알 수 없었다(2026-08-12 사용자: "왜 이렇게 헷갈리게 구현해놓았어?").
           값을 보이는 자리와 고르는 자리가 하나면 그 물음이 생기지 않는다.
         */}
-        {targetPicker ?? <b className="font-mono text-fg">{target || '—'}</b>}
+        {targetPicker ?? (target ? <b className="font-mono text-fg">{target}</b> : <UnknownVersion />)}
       </span>
-      <span className="flex items-center gap-1.5 text-muted" aria-hidden>
-        ──<span className={cn('font-semibold', r.tone)}>{r.label}</span>──
+
+      <span className="h-px w-4 shrink-0 bg-line" aria-hidden />
+      <span className={cn('flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold', r.tone)}>
+        <r.Icon className="size-3.5 shrink-0" />
+        {r.label}
       </span>
-      <span className="flex items-center gap-1.5">
+      <span className="h-px w-4 shrink-0 bg-line" aria-hidden />
+
+      <span className="flex items-center gap-1.5 rounded-md bg-canvas px-2.5 py-1 ring-1 ring-line">
         <Server className="size-3.5 shrink-0 text-muted" />
         <span className="truncate text-muted">{ctx.connection.name}</span>
-        <b className="font-mono text-fg">{remote || '—'}</b>
+        {remote ? <b className="font-mono text-fg">{remote}</b> : <UnknownVersion />}
       </span>
     </div>
   )
@@ -290,9 +296,9 @@ function Shell({
  *
  * 방향은 둘이고 둘 다 열어 둔다 — 지금 DB 가 정답이라는 보장이 없기 때문이다
  * (2026-08-12 사용자: "남이 실수로 넣은 스키마일 수도 있잖아"):
- *   설계로 가져오기 — DB 모습을 설계 새 버전으로 (실제 → 설계)
- *   계획 만들기     — 설계 모습대로 DB 를 고친다 (설계 → 실제)
- *   이대로 두기     — 아무것도 안 바꾸고 지금을 정상으로 기록
+ *   실제 → 설계 — DB 모습을 설계 새 버전으로 (가져오기)
+ *   설계 → 실제 — 설계 모습대로 DB 를 고친다 (계획)
+ *   이대로 두기 — 아무것도 안 바꾸고 지금을 정상으로 기록
  */
 export function DiagnoseView(): ReactElement {
   const { ctx, fallback } = useCtx()
@@ -334,7 +340,15 @@ export function DiagnoseView(): ReactElement {
   )
 }
 
-/** 두 방향 — 버튼마다 무엇을 정답으로 놓는 선택인지 한 줄로 적는다. */
+/**
+ * 두 방향 — **이름이 곧 방향이다.** 예전엔 이름 옆에 "가져오기 = 지금 DB 가 정답 · 계획 =
+ * 설계가 정답"을 덧붙였는데, 이름을 방향으로 바꾸니 같은 말을 두 번 하는 꼴이라 뺐다
+ * (2026-08-12 사용자).
+ *
+ * 아이콘도 **방향을 되풀이한다** — 예전엔 `DownloadCloud`(구름)와 `FileDiff`(문서 비교)라
+ * 둘이 서로 반대라는 것이 안 보였다(2026-08-14 사용자: "아이콘이 명확하지가 않아").
+ * 내려받기/올리기는 화살표가 서로 뒤집혀 있어 글자를 안 읽어도 짝이 잡힌다.
+ */
 function DiagnoseActions({ ctx }: { ctx: Ctx }): ReactElement {
   const st = useMigrationStore()
   const selectView = useNav((s) => s.selectView)
@@ -351,7 +365,7 @@ function DiagnoseActions({ ctx }: { ctx: Ctx }): ReactElement {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button size="sm" onClick={() => openImport(ctx.connection, ctx.design)}>
-        <DownloadCloud /> 설계로 가져오기
+        <Download /> 실제 → 설계
       </Button>
       {/*
         계획 화면은 없앨 것이 있으면 스스로 막는다(§planGate). 그 관문을 여기서 열어 주지
@@ -365,13 +379,8 @@ function DiagnoseActions({ ctx }: { ctx: Ctx }): ReactElement {
           selectView('plan')
         }}
       >
-        <FileDiff /> 계획 만들기
+        <Upload /> 설계 → 실제
       </Button>
-      {/*
-        방향이 정반대인 버튼 둘이라, 무엇을 정답으로 놓는 선택인지는 남긴다 — 잘못 고르면
-        한쪽은 남의 변경을 설계에 들이고 다른 쪽은 DROP 으로 지운다. 대신 한 줄로 끊는다.
-      */}
-      <span className="text-[11.5px] text-muted">가져오기 = 지금 DB 가 정답 · 계획 = 설계가 정답</span>
     </div>
   )
 }
@@ -389,6 +398,8 @@ function DiagnoseTables({ ctx }: { ctx: Ctx }): ReactElement | null {
       after={target}
       designId={ctx.design.id}
       emptyText="설계와 같습니다"
+      /* 진단은 화면의 본체가 이 표 하나다 — 남은 높이를 다 준다(계획은 아래에 SQL 이 있어 안 켠다). */
+      fill
     />
   )
 }
@@ -404,31 +415,58 @@ function MappingPanel({ ctx }: { ctx: Ctx }): ReactElement {
   const st = useMigrationStore()
   const openImport = useImportStore((s) => s.openImport)
   const versions = useDesignVersions(ctx.design.id)
+  const [linking, setLinking] = useState(false)
 
+  /**
+   * 판정을 한 번은 **반드시** 묻는다.
+   *
+   * 예전 조건(`!identified && !loading`)에 딸린 의존성이 연결·설계 id 뿐이라, 판이 뜨는 순간
+   * 이미 `loading` 이면 물음이 통째로 날아가고 다시 묻지 않았다. 결속을 끊고 이 화면으로
+   * 돌아오면 진단이 먼저 돌고 있어 늘 그 상태였고, 후보를 못 받아 "기존 설계 연결하기" 버튼이
+   * 사라졌다(2026-08-14 사용자 제보). 이제 `loading` 이 풀리면 그때 묻는다.
+   *
+   * 한 번 물었으면 표식을 남긴다 — 판정이 실패해 후보가 빈 채로 끝나도 그 상태가 다시
+   * 이 효과를 깨워 무한히 되묻는 일이 없어야 한다.
+   */
+  const asked = useRef<string | null>(null)
+  const pair = `${ctx.connection.id}:${ctx.design.id}`
   useEffect(() => {
-    if (!st.identified && !st.loading) void st.identify(ctx.connection.id, ctx.design.id)
+    if (!shouldIdentify({ identified: !!st.identified, loading: st.loading, askedPair: asked.current, pair })) return
+    asked.current = pair
+    void st.identify(ctx.connection.id, ctx.design.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.connection.id, ctx.design.id])
+  }, [pair, st.identified, st.loading])
 
   const best = st.identified?.candidates[0] ?? null
+  /** 모달이 미리 골라 둘 버전 — 똑같은 것이 있으면 그것, 없으면 가장 가까운 것. */
+  const suggested = st.identified?.match ?? best?.number ?? ''
 
   return (
     <section className="flex flex-col gap-4 rounded-lg border border-line bg-panel/50 p-4">
-      <div className="flex items-center gap-2 text-[13px] font-semibold text-fg">
-        <Link2 className="size-4" /> 이 연결은 아직 맵핑되지 않았습니다
+      {/*
+        머리가 경고의 얼굴을 쓰고, 머리 하나가 이 판의 전부다 — 예전엔 평범한 사슬 아이콘 아래
+        "어느 버전인지 정해야 무엇과 무엇을 견줄지가 정해집니다" 같은 설명이 두 줄 더 붙었다.
+        고를 것이 아래 버튼 둘뿐이라, 무엇이 없는지만 말하면 나머지는 버튼이 말한다
+        (2026-08-14 사용자: 설명 줄들에 "삭제").
+      */}
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-accent-2">
+        <AlertTriangle className="size-4 shrink-0" />
+        Connection &quot;{ctx.connection.name}&quot; 에 연결된 설계 아직 없음
       </div>
-      <p className="max-w-2xl text-[12px] leading-relaxed text-muted">
-        실 DB 가 <b className="text-fg">{ctx.design.name}</b> 의 어느 버전인지 정해야 무엇과 무엇을
-        견줄지가 정해집니다.
-      </p>
 
       {st.loading ? (
         <div className="flex items-center gap-2 text-[13px] text-muted"><Loader2 className="size-4 animate-spin" /> 버전을 찾는 중…</div>
       ) : versions.length === 0 ? (
         <div className="flex flex-col items-start gap-3">
           <p className="text-[12px] text-muted">이 설계에는 버전이 없습니다.</p>
+          {/*
+            여기만 이름이 다르다 — 이 갈래가 하는 일이 다르기 때문이다. 아래 갈래의
+            "새 설계로 저장하기"는 **설계를 새로 만들지만**, 여기서는 지금 고른 이 설계의
+            첫 버전을 채운다. 한때 이름을 아래와 맞췄다가 하는 일까지 새 설계 만들기로
+            바꿔 버렸는데, 그러면 비어 있던 이 설계를 말없이 버리는 셈이라 되돌렸다.
+          */}
           <Button size="sm" onClick={() => openImport(ctx.connection, ctx.design)}>
-            <DownloadCloud /> 실 DB 를 첫 버전으로 들이기
+            <Download /> 실 DB 를 첫 버전으로 들이기
           </Button>
         </div>
       ) : st.identified?.match ? (
@@ -436,79 +474,134 @@ function MappingPanel({ ctx }: { ctx: Ctx }): ReactElement {
           <div className="flex items-center gap-2 text-[13px] text-success">
             <CheckCircle2 className="size-4" /> 실 DB 가 <b className="font-mono">{st.identified.match}</b> 와 똑같습니다
           </div>
-          <Button size="sm" onClick={() => void st.confirmMapping(ctx.connection.id, ctx.design.id, st.identified!.match!)}>
-            <Link2 /> {st.identified.match} 으로 못박기
+          {/* 아래 갈래와 같은 클릭이라 이름도 같다 — 무엇으로 걸리는지는 모달이 보여 준다. */}
+          <Button size="sm" onClick={() => setLinking(true)}>
+            <Link2 /> 기존 설계 연결하기
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col items-start gap-3">
-          <div className="flex items-center gap-2 text-[13px] text-accent-2">
-            <AlertTriangle className="size-4" /> 똑같은 버전이 없습니다
-          </div>
-          {best && (
-            <>
-              <p className="text-[12px] text-muted">
-                가장 가까운 것은 <b className="font-mono text-fg">{best.number}</b> 입니다.
-              </p>
-              <DiffSummary diff={best.diff} />
-            </>
-          )}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <Button size="sm" onClick={() => openImport(ctx.connection, ctx.design)}>
-              <DownloadCloud /> 새 버전으로 들이기
-            </Button>
-            {best && (
-              <Button size="sm" variant="outline" onClick={() => void st.confirmMapping(ctx.connection.id, ctx.design.id, best.number)}>
-                <Link2 /> {best.number} 으로 두고 차이는 드리프트로
-              </Button>
-            )}
-          </div>
+        /*
+         * 설명 없이 버튼 둘만 — 예전엔 "가장 가까운 것은 v0.1.0", 그 후보와의 대조표,
+         * "똑같은 버전이 없습니다" 가 차례로 깔려 있었다. 셋 다 **버튼 두 개가 이미 말하는 것**의
+         * 되풀이라 걷어냈다(2026-08-14 사용자: "삭제").
+         *
+         * 그래서 이름이 대신 다 말해야 한다 — 왼쪽은 지금 DB 모습을 새로 저장하고, 오른쪽은
+         * 이미 있는 설계에 이 연결을 건다. 이 자리에서 사람이 고르는 것은 **새것이냐 있던
+         * 것이냐** 하나뿐이라, 이름도 그 갈림만 말한다. 예전엔 여기에 방식("못박고 차이는
+         * 남겨 두기")·용어("드리프트")를 적어 두 번 되물었다(2026-08-14 사용자).
+         */
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => openImport(ctx.connection, ctx.design, 'new-design')}>
+            <Download /> 새 설계로 저장하기
+          </Button>
+          {/*
+            후보를 못 골랐어도 이 길은 연다 — 예전엔 판정이 내놓은 후보가 있을 때만 그렸더니,
+            판정이 빈손으로 끝나면 갈 수 있는 길이 통째로 사라져 보였다(2026-08-14 사용자:
+            "버튼이 사라져있어"). 무엇으로 걸지는 모달에서 사람이 고른다.
+          */}
+          <Button size="sm" variant="outline" onClick={() => setLinking(true)}>
+            <Link2 /> 기존 설계 연결하기
+          </Button>
         </div>
       )}
+
+      {linking && <LinkDesignDialog ctx={ctx} suggested={suggested} onClose={() => setLinking(false)} />}
     </section>
+  )
+}
+
+/**
+ * 기존 설계에 이 연결을 건다 — **누르자마자 걸지 않고 무엇으로 걸리는지 보여 준 뒤** 건다.
+ *
+ * 값은 이미 정해져 있다(위 셀렉터의 설계 · 판정이 고른 버전). 그래도 창을 세우는 이유는,
+ * 이 클릭이 "이 실 DB 는 그 설계의 이 버전이다"를 저장소에 못박는 되돌리기 어려운 일이라
+ * 무엇에 걸리는지 눈으로 보고 눌러야 하기 때문이다(2026-08-14 사용자).
+ */
+function LinkDesignDialog({
+  ctx,
+  suggested,
+  onClose
+}: {
+  ctx: Ctx
+  suggested: string
+  onClose: () => void
+}): ReactElement {
+  const designs = useScopedDesigns()
+  const setContextValue = useNav((s) => s.setContextValue)
+  const confirmMapping = useMigrationStore((s) => s.confirmMapping)
+  const busy = useMigrationStore((s) => s.loading)
+  const [designId, setDesignId] = useState(ctx.design.id)
+  const [version, setVersion] = useState(suggested)
+  const versions = useDesignVersions(designId)
+
+  const submit = async (): Promise<void> => {
+    if (!version) return
+    // 다른 설계를 골랐으면 화면 전체가 그 설계를 따라가야 한다 — 위 셀렉터만 옛것을 가리키면
+    // 연결해 놓고도 이 판이 "아직 없음"인 채로 남는다.
+    if (designId !== ctx.design.id) setContextValue('design', designId)
+    await confirmMapping(ctx.connection.id, designId, version)
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>기존 설계 연결 · {ctx.connection.name}</DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-3 flex items-end gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-[11px] font-semibold text-muted">설계</span>
+            <Select
+              value={designId || undefined}
+              onValueChange={(v) => {
+                setDesignId(v)
+                // 앞 설계의 번호는 새 설계에서 뜻이 없다 — 들고 가면 없는 버전을 가리킨다.
+                setVersion('')
+              }}
+            >
+              <SelectTrigger size="sm" className="w-full"><SelectValue placeholder="설계 선택" /></SelectTrigger>
+              <SelectContent>
+                {designs.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex w-36 shrink-0 flex-col gap-1">
+            <span className="text-[11px] font-semibold text-muted">버전</span>
+            <Select value={version || undefined} onValueChange={setVersion}>
+              <SelectTrigger size="sm" className="w-full font-mono" disabled={!designId || versions.length === 0}>
+                <SelectValue placeholder={versions.length ? '버전 선택' : '버전 없음'} />
+              </SelectTrigger>
+              <SelectContent>
+                {versions.map((v) => (
+                  <SelectItem key={v.number} value={v.number}>{v.number}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter className="mt-1">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={busy}>취소</Button>
+          <Button type="button" size="sm" disabled={!designId || !version || busy} onClick={() => void submit()}>
+            {busy ? <Loader2 className="animate-spin" /> : <Link2 />} 연결
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 
 // ═══════════════════════════ 가져오기 ═══════════════════════════
-/**
- * 되먹임의 문 — 실 DB 를 역설계해 설계의 새 버전으로 들인다.
- * 진단·맵핑이 "만들어야 한다"고 판정했을 때 부르는 조치라, 그쪽에서도 버튼으로 연다.
+/*
+ * `ImportView`(가져오기 탭)는 없앴다 — 창을 여는 버튼 하나를 담으려고 화면 하나가 서 있었고,
+ * 정작 그 판단(새 설계냐 기존 설계냐)은 진단이 이미 내리고 있었다. 되먹임으로 들어가는 문은
+ * 이제 진단 화면의 버튼 둘뿐이다(2026-08-14 사용자: 탭에 "지우자").
  */
-export function ImportView(): ReactElement {
-  const design = useActiveDesign()
-  const connection = useActiveConnection()
-  const openImport = useImportStore((s) => s.openImport)
-  const diagDiff = useMigrationStore((s) => s.diagDiff)
-
-  if (!connection)
-    return <Guard title="연결을 선택하세요" sub="설계로 들일 실 DB 를 고르세요." />
-
-  return (
-    <div className="flex h-full flex-col">
-      {design && <StatusLine ctx={{ design, connection }} />}
-      <Header title="가져오기">
-        <Button size="sm" onClick={() => openImport(connection, design ?? null)}>
-          <DownloadCloud /> {design ? '설계로 가져오기' : '새 설계로 가져오기'}
-        </Button>
-      </Header>
-      <ErrorBar />
-      <div className="min-h-0 flex-1 overflow-auto p-5">
-        {!design ? (
-          <div className="text-[13px] text-muted">물린 설계 없음. 가져오면 첫 버전과 결속이 함께 세워집니다</div>
-        ) : diagDiff && !isEmptyDiff(diagDiff) ? (
-          // 진단이 이미 읽은 결과가 곧 "들일 것"이다 — 여기서 또 읽지 않는다(같은 검사다).
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-[13px] font-semibold text-accent-2"><AlertTriangle className="size-4" /> 들일 변경</div>
-            <DiffSummary diff={diagDiff} />
-          </div>
-        ) : (
-          <div className="text-[13px] text-muted">들일 변경 없음</div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ═══════════════════════════ 계획 ═══════════════════════════
 /**
@@ -898,8 +991,6 @@ export function RunView(): ReactElement {
 // ═══════════════════════════ Logs ═══════════════════════════
 const KIND_LABEL: Record<string, string> = {
   map: '맵핑',
-  baseline: '기준선',
-  drift: '드리프트',
   apply: '반영',
   'seed-apply': '시드'
 }

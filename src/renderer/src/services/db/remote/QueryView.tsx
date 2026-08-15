@@ -57,6 +57,7 @@ import { applyKeywords, extractKeywords } from './query/keywords'
 import { parseExplainTree } from './query/explainTree'
 import { toCsv, toJson } from './data/exportRows'
 import { useQueryStore } from './query/store'
+import { createSqlSaver, type SqlSaver } from './query/autosave'
 import { flattenTree, getProjection, moveTargets, removeChildrenOf, type FlatNode } from './collection/tree'
 import { toLibNodes, useCollectionStore } from './collection/store'
 import { TreeContextMenu } from './collection/TreeMenu'
@@ -92,6 +93,10 @@ function cell(v: unknown): { text: string; muted?: boolean } {
  * 좌: 저장쿼리 폴더/파일 트리(검색·새폴더/쿼리·우클릭 rename/move/delete·DnD).
  * 중앙: 선택 쿼리 편집기(이름/설명 인라인 편집 + 자동저장, {{키워드}} 파라미터, Run/Format/EXPLAIN) + 결과.
  * 우: Schema 패널(토글, 테이블/뷰·컬럼). DML 은 트랜잭션 게이트.
+ *
+ * **편집기·결과·스키마는 쿼리를 골랐을 때만 있다**(2026-08-12 사용자 요청). 그래서 "어디에도
+ * 안 속한 미저장 편집분"이라는 상태가 없다 — 편집기에 있는 글은 언제나 저장쿼리 하나의 것이다.
+ * 새로 짜려면 트리에서 "새 쿼리"를 눌러 빈 것을 만들고 시작한다.
  *
  * **두 화면이 이 하나를 쓴다**(2026-08-05). 라이브러리 소속이 연결에서 설계로 옮겨지면서
  * (`@shared/db/libraryOwner`) 설계부에도 같은 화면이 필요해졌는데, 처음엔 "준비 전용이니
@@ -135,7 +140,6 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
   const sql = useQueryStore((s) => s.sql)
   const setSql = useQueryStore((s) => s.setSql)
   const activeId = useQueryStore((s) => s.activeSavedQueryId)
-  const activeConn = useQueryStore((s) => s.activeSavedConn)
   const loadSaved = useQueryStore((s) => s.loadSaved)
   const result = useQueryStore((s) => s.result)
   const error = useQueryStore((s) => s.error)
@@ -149,6 +153,32 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
   const confirm = useQueryStore((s) => s.confirm)
   const rollback = useQueryStore((s) => s.rollback)
   const dismissError = useQueryStore((s) => s.dismissError)
+  const setError = useQueryStore((s) => s.setError)
+
+  /**
+   * 저장 상태 — 머리에 실시간으로 보인다. `idle` 은 아무 말도 안 한다(열자마자 "저장됨"이라
+   * 뜨면 방금 뭔가 쓴 것처럼 읽힌다). 고치는 순간 '저장 중…', 저장소에 들어가면 '저장됨'.
+   */
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+
+  /**
+   * 자동저장기 — 화면이 사는 동안 하나만 둔다.
+   * 저장은 스토어를 **그때그때 꺼내** 쓴다(닫힌 값에 갇히면 옛 스코프에 쓴다).
+   * 실패하면 반드시 화면에 띄운다 — 조용히 삼키면 "저장이 안 된다"만 남는다.
+   */
+  const saverRef = useRef<SqlSaver | null>(null)
+  if (!saverRef.current) {
+    saverRef.current = createSqlSaver(async (id, next) => {
+      try {
+        await useCollectionStore.getState().saveQuerySql(id, next)
+        setSaveState('saved')
+      } catch (e) {
+        setSaveState('idle')
+        useQueryStore.getState().setError(`쿼리 저장 실패 — ${e instanceof Error ? e.message : String(e)}`)
+      }
+    })
+  }
+  const saver = saverRef.current
 
   const [treeFilter, setTreeFilter] = useState('')
   /** 상세 모달로 열어 둔 결과 행(0-기준). null 이면 닫혀 있다. */
@@ -186,12 +216,12 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeJson])
 
-  // 자동저장(디바운스 1s) — 라이브러리 쿼리 SQL. 소속이 다르면 건드리지 않는다.
+  // 화면을 떠나거나 소속이 바뀌면 **남은 편집분을 밀어낸다.** 예전엔 타이머만 지워, 마지막 1초
+  // 동안 친 글자가 어디에도 안 남았다.
   useEffect(() => {
-    if (!activeId || activeConn !== scopeKey) return
-    const t = setTimeout(() => void window.rockury.savedQueries.updateQuery(activeId, { sql }), 1000)
-    return () => clearTimeout(t)
-  }, [sql, activeId, activeConn, scopeKey])
+    return () => void saver.flush()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeJson])
 
   const keywords = useMemo(() => extractKeywords(sql), [sql])
   const [kw, setKw] = useState<Record<string, string>>({})
@@ -219,18 +249,58 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
   const canRun = !!conn && !loading && sql.trim().length > 0 && !tx && missing.length === 0
   const effectiveSql = (): string => applyKeywords(sql, kw)
 
-  const selectQuery = (id: string, s: string): void => loadSaved(id, s, scopeKey)
+  /**
+   * 트리에서 쿼리를 연다 — **저장소에서 새로 읽는다.**
+   *
+   * 트리에 든 사본은 낡을 수 있다(자동저장은 저장소만 고치고, 다른 창·에이전트도 고친다).
+   * 사본을 그대로 실으면 낡은 글이 편집기에 오르고, 이어서 그게 저장소를 덮었다 —
+   * 사용자가 겪은 "누르니 쿼리가 날아갔다"가 이것이다(2026-08-12).
+   * 열기 전 밀어내기도 필수다 — 안 그러면 방금 친 글자(최대 1초)가 버려진다.
+   */
+  const selectQuery = async (id: string): Promise<void> => {
+    await saver.flush()
+    try {
+      const rec = await window.rockury.savedQueries.getQuery(id)
+      if (rec) {
+        loadSaved(rec.id, rec.sql)
+        setSaveState('idle') // 방금 연 것에 "저장됨"이 남아 있으면 안 한 일을 한 것처럼 읽힌다.
+      } else {
+        setError('이 쿼리는 저장소에 없습니다 — 목록을 다시 읽었습니다.')
+        await lib.load(scope)
+      }
+    } catch (e) {
+      setError(`쿼리를 열지 못했습니다 — ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
 
+  /**
+   * 편집기 고침 — **여기서만** 저장이 예약된다. 여는 길(`selectQuery`)은 절대 안 부른다.
+   * 이 화면 트리에 없는 쿼리(= 다른 소속의 것)면 안 쓴다 — 남의 작업물을 덮지 않는다.
+   */
+  const editSql = (next: string): void => {
+    setSql(next)
+    if (activeId && active) {
+      setSaveState('saving')
+      saver.schedule(activeId, next)
+    }
+  }
+
+  /** 새 쿼리 — 빈 것을 만들고 그리로 넘어간다. */
   const newQuery = async (folderId: string | null = null): Promise<void> => {
+    await saver.flush()
     const rec = await window.rockury.savedQueries.createQuery({ scope, folderId, name: 'Untitled Query', sql: '' })
     await lib.load(scope)
-    selectQuery(rec.id, '')
+    loadSaved(rec.id, rec.sql)
+    setSaveState('idle')
   }
 
   const renameNode = (kind: 'folder' | 'query', id: string, name: string): void => void lib.rename(kind, id, name)
-  const patchActive = (patch: { name?: string; description?: string }): void => {
+  const patchActive = async (patch: { name?: string; description?: string }): Promise<void> => {
     if (!activeId) return
-    void window.rockury.savedQueries.updateQuery(activeId, patch).then(() => lib.load(scope))
+    // 이름을 고치면 트리를 다시 읽는다 — 아직 안 쓴 SQL 이 있으면 먼저 내보내야 사본이 안 낡는다.
+    await saver.flush()
+    await window.rockury.savedQueries.updateQuery(activeId, patch)
+    await lib.load(scope)
   }
 
   const onDragStart = (e: DragStartEvent): void => { setDragId(String(e.active.id)); setDropParentId(null) }
@@ -303,7 +373,7 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
                   editing={editingId === n.id}
                   collapsed={collapsed.has(n.id)}
                   dropTarget={dragId != null && n.id !== dragId && n.kind === 'folder' && n.id === dropParentId}
-                  onSelect={() => n.kind === 'query' && selectQuery(n.id, n.sql ?? '')}
+                  onSelect={() => n.kind === 'query' && void selectQuery(n.id)}
                   onToggleCollapse={() => toggleCollapse(n.id)}
                   onEditStart={() => setEditingId(n.id)}
                   onEditEnd={() => setEditingId(null)}
@@ -328,43 +398,49 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
         </div>
           </div>
         }
-        rightTitle="Schema"
+        // 스키마 패널도 편집기와 함께 뜬다 — 고른 쿼리가 없으면 이름을 눌러도 넣을 자리가 없다.
+        rightTitle={active ? 'Schema' : undefined}
         rightPanel={
-          <SchemaPanel
-            tables={tables ?? []}
-            onInsert={(name) => setSql(sql + (sql && !sql.endsWith(' ') ? ' ' : '') + name)}
-            // 표 미리보기는 실제로 SELECT 를 날린다 — 접속이 없는 설계부에선 단추 자체를 안 단다.
-            onPreview={conn ? (t) => setPreview(t) : undefined}
-          />
+          active ? (
+            <SchemaPanel
+              tables={tables ?? []}
+              onInsert={(name) => editSql(sql + (sql && !sql.endsWith(' ') ? ' ' : '') + name)}
+              // 표 미리보기는 실제로 SELECT 를 날린다 — 접속이 없는 설계부에선 단추 자체를 안 단다.
+              onPreview={conn ? (t) => setPreview(t) : undefined}
+            />
+          ) : undefined
         }
       >
-      {/* 중앙: 편집기 */}
+      {/* 중앙: 편집기 — **쿼리를 골랐을 때만** 있다(아래 `active ? … : 빈 상태`). */}
+      {active ? (
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex shrink-0 items-start justify-between gap-2 border-b border-line px-5 py-2.5">
           <div className="min-w-0 flex-1">
-            {active ? (
-              <>
-                <input
-                  key={active.id}
-                  defaultValue={active.name}
-                  onBlur={(e) => e.target.value.trim() && e.target.value !== active.name && patchActive({ name: e.target.value.trim() })}
-                  className="w-full max-w-md bg-transparent text-[15px] font-bold text-fg outline-none"
-                />
-                <input
-                  key={`${active.id}-desc`}
-                  defaultValue={active.description}
-                  onBlur={(e) => e.target.value !== active.description && patchActive({ description: e.target.value })}
-                  placeholder="Add description..."
-                  className="mt-0.5 w-full max-w-md bg-transparent text-[12px] text-muted outline-none"
-                />
-              </>
-            ) : (
-              <>
-                <h2 className="text-[15px] font-bold text-fg">Untitled Query <span className="text-[11px] font-normal text-muted">· 미저장</span></h2>
-                <button type="button" onClick={() => void newQuery()} className="mt-0.5 text-[12px] text-accent hover:underline">라이브러리에 저장하기</button>
-              </>
-            )}
+            {/* 이름이 바뀌면 열쇠도 바뀌어야 한다 — 안 그러면(id 만 열쇠면) 트리에서 이름을
+                고쳐도 이 칸엔 옛 이름이 그대로 남는다(uncontrolled 라 defaultValue 가 안 먹는다). */}
+            <input
+              key={`${active.id}:${active.name}`}
+              defaultValue={active.name}
+              onBlur={(e) => e.target.value.trim() && e.target.value !== active.name && void patchActive({ name: e.target.value.trim() })}
+              className="w-full max-w-md bg-transparent text-[15px] font-bold text-fg outline-none"
+            />
+            <input
+              key={`${active.id}:desc:${active.description}`}
+              defaultValue={active.description}
+              onBlur={(e) => e.target.value !== active.description && void patchActive({ description: e.target.value })}
+              placeholder="Add description..."
+              className="mt-0.5 w-full max-w-md bg-transparent text-[12px] text-muted outline-none"
+            />
           </div>
+          {/* 실시간 저장 상태 — 아무 일도 없을 땐(idle) 자리를 비운다. */}
+          {saveState !== 'idle' && (
+            <span
+              data-save-state={saveState}
+              className={cn('shrink-0 pt-1 text-[11px]', saveState === 'saving' ? 'text-muted' : 'text-success')}
+            >
+              {saveState === 'saving' ? '저장 중…' : '저장됨'}
+            </span>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-1.5 text-[12px]">
@@ -372,7 +448,7 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
           <div className="flex items-center gap-1.5">
             {/* 접속이 없으면 왜 못 돌리는지 이 자리에서 말한다 — 눌리지 않는 단추만 두면 고장으로 읽힌다. */}
             <span className="mr-1 text-[10px] text-muted">{conn ? '⌘+Enter to run' : '실행은 Remote 에서'}</span>
-            <Button size="sm" variant="outline" disabled={!sql.trim()} title="SQL 정형화" onClick={() => dialect && setSql(formatSql(sql, dialect))}><WandSparkles /></Button>
+            <Button size="sm" variant="outline" disabled={!sql.trim()} title="SQL 정형화" onClick={() => dialect && editSql(formatSql(sql, dialect))}><WandSparkles /></Button>
             <Button size="sm" variant="outline" disabled={!conn || !sql.trim() || explaining || loading || missing.length > 0} title={conn ? '실행 계획(EXPLAIN)' : '접속이 있어야 볼 수 있습니다'} onClick={() => conn && void runExplain(conn.id, effectiveSql())}>
               {explaining ? <Loader2 className="animate-spin" /> : <Route />}
             </Button>
@@ -385,7 +461,7 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
         <div className="h-44 shrink-0 overflow-auto border-b border-line px-2 py-1">
           <SqlEditor
             value={sql}
-            onChange={setSql}
+            onChange={editSql}
             onRun={() => canRun && conn && void run(conn.id, effectiveSql())}
             schema={buildSchemaMap(tables ?? [])}
             dialect={dialect}
@@ -427,12 +503,7 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
           />
         )}
         {explain && dialect && <ExplainPanel explain={explain} dialect={dialect} />}
-        {error && (
-          <div className="flex shrink-0 items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2.5 text-[12px] text-destructive">
-            <span className="min-w-0 flex-1 whitespace-pre-wrap font-mono">{error}</span>
-            <button type="button" onClick={dismissError} className="shrink-0 opacity-70 hover:opacity-100"><X className="size-3.5" /></button>
-          </div>
-        )}
+        <ErrorBar error={error} onDismiss={dismissError} />
 
         <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
@@ -480,6 +551,13 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
           )}
         </div>
       </div>
+      ) : (
+        // 빈 상태에도 오류 줄은 둔다 — 쿼리를 여는 데 실패했다면 그 말이 여기 떠야 한다.
+        <div className="flex h-full min-w-0 flex-col">
+          <ErrorBar error={error} onDismiss={dismissError} />
+          <PlaceholderView className="flex-1" icon={FileCode2} depth={isDesign ? 'depth 3 · Design › Query' : 'depth 3 · Remote › Query'} title="선택된 쿼리 없음" />
+        </div>
+      )}
 
       </WorkspacePanels>
 
@@ -507,6 +585,17 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
           onClose={() => setDetailRow(null)}
         />
       )}
+    </div>
+  )
+}
+
+/** 실패 한 줄 — 편집기가 있을 때도 없을 때도 같은 자리에서 말한다(조용히 삼키지 않는다). */
+function ErrorBar({ error, onDismiss }: { error: string | null; onDismiss: () => void }) {
+  if (!error) return null
+  return (
+    <div className="flex shrink-0 items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2.5 text-[12px] text-destructive">
+      <span className="min-w-0 flex-1 whitespace-pre-wrap font-mono">{error}</span>
+      <button type="button" onClick={onDismiss} className="shrink-0 opacity-70 hover:opacity-100"><X className="size-3.5" /></button>
     </div>
   )
 }

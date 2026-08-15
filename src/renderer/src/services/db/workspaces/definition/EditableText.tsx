@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { createPortal } from 'react-dom'
 import { AlertTriangle } from 'lucide-react'
 import { Input } from '@renderer/ui/input'
+import { ClipToggle, clipBox, useClipped } from '@renderer/ui/clipped'
 import { cn } from '@renderer/lib/utils'
 import type { Suggestion } from '../../typeCatalog'
 import { useDefinitionStore } from './store'
@@ -39,8 +40,7 @@ export function EditableText({
   suggest,
   suggestFooter,
   warnTitle,
-  readOnly,
-  full
+  readOnly
 }: {
   editKey: string
   value: string
@@ -57,8 +57,6 @@ export function EditableText({
   warnTitle?: string
   /** 읽기 전용(과거 버전 열람 등) — 클릭 편집 비활성, 정적 텍스트로 표시. */
   readOnly?: boolean
-  /** 표의 "전문 보기" — 자르지 않고 줄을 바꿔 전부 보인다. */
-  full?: boolean
 }) {
   const editing = useDefinitionStore((s) => s.editing)
   const setEditing = useDefinitionStore((s) => s.setEditing)
@@ -68,6 +66,8 @@ export function EditableText({
   const [dismissed, setDismissed] = useState(false)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // 잘렸을 때만 이 칸에 펼침 손잡이가 붙는다 — 표 머리의 "전문 보기" 를 대신한다.
+  const clip = useClipped<HTMLDivElement>(value)
 
   useEffect(() => {
     if (isEditing) {
@@ -86,30 +86,50 @@ export function EditableText({
   }, [isEditing, draft])
 
   /**
-   * "전문 보기"가 켜지면 자르지 않고 줄을 바꾼다 — 높이도 고정을 푼다.
-   * 호버 툴팁(`title`)은 그대로 두되, 그것만으로는 부족했다: 마우스를 올려야 나오는 것은
-   * 사용자에게 **없는 것과 같다**(2026-08-12: "전체 내용을 볼 수 있는 방법이 없어").
+   * 펼치면 자르지 않고 줄을 바꾼다 — 높이 고정도 함께 푼다.
+   * 잘린 글자를 보는 길은 이제 **칸에 붙는 ⌄** 하나다: 호버 툴팁(`title`)은 걷어냈다.
+   * 마우스를 올려야 나오는 것은 없는 것과 같고(2026-08-12: "전체 내용을 볼 수 있는 방법이 없어"),
+   * 손잡이가 보이는 지금은 같은 일을 두 번 하는 꼴이다(2026-08-12: "내장 tooltip쓰는거 싫어해").
    */
-  const box = full
-    ? 'min-h-7 w-full items-center whitespace-pre-wrap break-words rounded px-1 py-1 text-left'
-    : 'h-7 w-full items-center truncate rounded px-1 text-left'
+  /*
+   * 폭은 **바깥 상자**가 정하고 여기는 남는 자리를 받는다(`flex-1`). `w-full`(=100%)이었을 때
+   * 옆에 붙은 ⌄ 만큼이 칸 밖으로 밀려 나가, Comment 칸의 손잡이가 행 ⋯ 메뉴 밑에 깔려
+   * **눌리지 않았다**(2026-08-13 실측: `elementFromPoint` 가 "컬럼 메뉴"를 집었다).
+   */
+  const box = clip.expanded
+    ? 'min-h-7 min-w-0 flex-1 items-start rounded px-1 py-1 text-left'
+    : 'h-7 min-w-0 flex-1 items-center rounded px-1 text-left'
 
-  // 읽기 전용: 정적 텍스트. (훅은 모두 위에서 호출된 뒤라 훅 순서 불변)
+  /** 글자 본체 — 자르거나 줄을 바꾸는 상자는 **이것**이다(여기를 재서 손잡이를 낼지 정한다). */
+  const body = (
+    <>
+      {warnTitle && value && (
+        <AlertTriangle size={11} className="mr-1 mt-1 shrink-0 self-start text-warning" aria-label="advisory" />
+      )}
+      <span ref={clip.ref} className={cn('min-w-0 flex-1', clipBox(clip.expanded))}>
+        {value ? value : <span className="text-muted/50">{placeholder ?? '—'}</span>}
+      </span>
+    </>
+  )
+
+  const toggle = clip.clipped ? <ClipToggle expanded={clip.expanded} onToggle={clip.toggle} /> : null
+
+  // 읽기 전용: 정적 텍스트. 펼침 손잡이는 그대로 — 읽기 전용이라고 글자가 짧아지진 않는다.
   if (readOnly) {
     return (
-      <div
-        title={warnTitle ?? (value || undefined)}
-        className={cn(
-          'flex',
-          box,
-          mono ? 'font-mono text-[12px] text-fg' : 'text-[13px] text-fg',
-          className
-        )}
-      >
-        {warnTitle && value && (
-          <AlertTriangle size={11} className="mr-1 shrink-0 text-warning" aria-label="advisory" />
-        )}
-        {value ? value : <span className="text-muted/40">{placeholder ?? '—'}</span>}
+      <div className="flex min-w-0 items-start gap-0.5">
+        <div
+          title={warnTitle}
+          className={cn(
+            'flex',
+            box,
+            mono ? 'font-mono text-[12px] text-fg' : 'text-[13px] text-fg',
+            className
+          )}
+        >
+          {body}
+        </div>
+        {toggle}
       </div>
     )
   }
@@ -201,21 +221,21 @@ export function EditableText({
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => setEditing(editKey)}
-      title={warnTitle ?? (value || undefined)} // 잘린 텍스트는 호버로도 전문 확인
-      className={cn(
-        'flex transition-colors hover:bg-panel-strong/60',
-        box,
-        mono ? 'font-mono text-[12px] text-fg' : 'text-[13px] text-fg',
-        className
-      )}
-    >
-      {warnTitle && value && (
-        <AlertTriangle size={11} className="mr-1 shrink-0 text-warning" aria-label="advisory" />
-      )}
-      {value ? value : <span className="text-muted/50">{placeholder ?? '—'}</span>}
-    </button>
+    <div className="flex min-w-0 items-start gap-0.5">
+      <button
+        type="button"
+        onClick={() => setEditing(editKey)}
+        title={warnTitle}
+        className={cn(
+          'flex transition-colors hover:bg-panel-strong/60',
+          box,
+          mono ? 'font-mono text-[12px] text-fg' : 'text-[13px] text-fg',
+          className
+        )}
+      >
+        {body}
+      </button>
+      {toggle}
+    </div>
   )
 }

@@ -40,8 +40,8 @@ export async function run(ctx) {
     await click('button:has-text("Migration")')
     await page.waitForTimeout(400)
     await click('[data-nav-view="diagnose"]')
-    await page.waitForSelector('text=맵핑되지 않았습니다', { timeout: 30_000 })
-    check('진단: 아직 맵핑 안 된 짝에는 맵핑 관문이 먼저 선다', (await body()).includes('맵핑되지 않았습니다'))
+    await page.waitForSelector('text=연결된 설계 아직 없음', { timeout: 30_000 })
+    check('진단: 아직 맵핑 안 된 짝에는 맵핑 관문이 먼저 선다', (await body()).includes('연결된 설계 아직 없음'))
 
     /*
      * 스키마 토글은 스키마가 둘 이상일 때만 뜻이 있다(하나뿐이면 끌 것이 없어 안 그린다).
@@ -64,10 +64,12 @@ export async function run(ctx) {
     // 실 DB 를 v0.1.0 으로 들인다 — 이러면 설계와 실제가 같아진다.
     await click('button:has-text("Migration")')
     await page.waitForTimeout(400)
-    await click('[data-nav-view="import"]')
-    await page.waitForTimeout(400)
-    await click('button:has-text("설계로 가져오기")')
-    await page.waitForSelector('text=실 DB 에서', { timeout: 20_000 })
+    // 되먹임의 문은 **진단 화면의 버튼**이다 — `가져오기` 탭은 2026-08-14 에 없어졌다
+    // (창을 여는 버튼 하나만 담고 있었고, 갈래는 진단이 이미 판정해 둔다).
+    await click('[data-nav-view="diagnose"]')
+    await page.waitForSelector('button:has-text("실 DB 를 첫 버전으로 들이기")', { timeout: 30_000 })
+    await click('button:has-text("실 DB 를 첫 버전으로 들이기")')
+    await page.waitForSelector('button:has-text("새 버전으로 가져오기")', { timeout: 20_000 })
     await click('button:has-text("새 버전으로 가져오기")')
     await page.waitForTimeout(2_000)
 
@@ -100,15 +102,44 @@ export async function run(ctx) {
     check('상태 줄: 설계 기준 낱말', (await body()).includes('설계와 다름') && !(await body()).includes('실제가 다름'))
     // 범위를 세 문장으로 설명하던 알림은 없앴다 — 같은 사실을 스키마 토글이 칩으로 보인다.
     check('진단: 범위 알림 글은 없앴다', !(await body()).includes('어느 스키마를 봤는지'))
-    // 잘린 칸(긴 enum·설명)을 펴는 손잡이 — 호버 툴팁만으로는 "볼 방법이 없다"고 했다.
-    check('진단: 잘린 칸을 펴는 손잡이(전문 보기)', (await page.locator('label:has-text("전문 보기")').count()) === 1)
+    /*
+     * 잘린 칸을 펴는 손잡이는 **칸 자신**이 든다 — 표 머리의 "전문 보기" 체크박스는 걷어냈다
+     * (2026-08-12: "체크박스말고 좀 더 우아한 방법 없어?"). 손잡이는 넘치는 칸에만 붙으므로
+     * 개수는 창 폭에 따라 0 일 수 있다 — 여기서는 **머리에 체크박스가 없음**만 못박는다.
+     */
+    check('진단: 표 머리에 "전문 보기" 체크박스가 없다', !(await body()).includes('전문 보기'))
+    /*
+     * 기본은 **다 보이기**다 — 예전엔 바뀐 테이블을 열면 "바뀐 줄만"이 켜져 있어 안 바뀐 줄이
+     * 통째로 감춰졌고, 제약만 바뀐 표는 "바뀐 컬럼 없음" 한 줄로 비었다
+     * (2026-08-12: "바뀐것만 보여주지말고 다 보여주라고").
+     */
+    const changedOnlyState = await page.evaluate(
+      () => document.querySelector('[data-changed-only]')?.getAttribute('data-changed-only') ?? '없음'
+    )
+    check(`진단: "바뀐 줄만"은 꺼진 채로 시작한다 (${changedOnlyState})`, changedOnlyState === '0')
+    // 체크박스가 아니라 **켜짐/꺼짐 토글 버튼**이다(2026-08-13 사용자).
+    check(
+      '진단: "바뀐 줄만"은 토글 버튼이다',
+      (await page.locator('button[data-changed-only][aria-pressed]').count()) === 1
+    )
+    check('진단: 안 바뀐 줄이 감춰지지 않는다', !(await body()).includes('바뀐 컬럼 없음'))
+    /*
+     * 대조표는 남은 높이를 다 쓴다 — 560px 로 못 박혀 화면 아래 절반이 비어 있었다
+     * (2026-08-12: "높이 다 차지하면 안되나?"). 바닥까지의 틈으로 잰다.
+     */
+    const bottomGap = await page.evaluate(() => {
+      const r = document.querySelector('[data-diff-scroll]')?.getBoundingClientRect()
+      return r ? Math.round(window.innerHeight - r.bottom) : -1
+    })
+    check(`진단: 대조표가 남은 높이를 채운다 (바닥까지 ${bottomGap}px)`, bottomGap >= 0 && bottomGap < 120)
     check(
       'Migration 탭: 도구(진단·비교·기록) + 방향별 묶음',
       (await page.evaluate(() => [...document.querySelectorAll('[data-nav-view]')].map((e) => e.innerText.trim()))).join(
         ','
-      ) === '진단,비교,기록,계획,실행,Seed,가져오기'
+      ) === '진단,비교,기록,계획,실행,Seed'
     )
-    check('진단: 두 방향을 나란히 내민다', (await page.locator('button:has-text("설계로 가져오기")').count()) >= 1 && (await page.locator('button:has-text("계획 만들기")').count()) === 1)
+    // 버튼 이름이 곧 방향이다 — 예전 이름("설계로 가져오기"·"계획 만들기")을 집던 검사는 낡았다.
+    check('진단: 두 방향을 나란히 내민다', (await page.locator('button:has-text("실제 → 설계")').count()) >= 1 && (await page.locator('button:has-text("설계 → 실제")').count()) >= 1)
 
     // ── 스키마 토글: 켠 것만 표에 든다 ──
     const sidebarCount = async () => Number((await body()).match(/테이블 (\d+)개 · 바뀜/)?.[1] ?? -1)
@@ -127,7 +158,7 @@ export async function run(ctx) {
     check('진단: 다시 켜면 원래 수로 돌아온다', (await sidebarCount()) === before)
 
     // ── 진단 → 계획: 두 방향 중 "설계가 정답" 쪽 ──
-    await click('button:has-text("계획 만들기")')
+    await click('button:has-text("설계 → 실제")')
     await page.waitForSelector('[data-diff-scroll]', { timeout: 30_000 })
     check('계획: 진단에서 넘어오면 계획이 그려진다', (await body()).includes('실행으로'))
 
@@ -172,7 +203,7 @@ export async function run(ctx) {
     // 관문이 내민 길을 따라가면 계획이 열린다 — 막다른 길이 아니다.
     await click('button:has-text("진단에서 확인")')
     await page.waitForSelector('[data-diff-scroll]', { timeout: 30_000 })
-    await click('button:has-text("계획 만들기")')
+    await click('button:has-text("설계 → 실제")')
     await page.waitForSelector('text=이 계획이 지웁니다', { timeout: 30_000 })
     check('계획: 진단을 거치면 관문을 통과한다', (await page.locator('[data-diff-scroll]').count()) === 1)
 
@@ -225,23 +256,48 @@ export async function run(ctx) {
   await page.waitForTimeout(500)
 
   const vBefore = await countVersions()
-  // 되먹임의 문은 **뷰 하나**다 — 2026-08-06(804e7a4)에 Drift 머리글 버튼에서 옮겨졌는데
-  // 이 스위트가 안 따라와, 그 뒤로 Drift 화면에서 없는 버튼을 누르고 있었다.
-  await click('[data-nav-view="import"]')
-  await page.waitForTimeout(400)
-  await click('button:has-text("설계로 가져오기")')
-  await page.waitForSelector('text=실 DB 에서', { timeout: 15_000 })
-  check('운영→설계: 가져오기 다이얼로그 역설계 미리보기', (await body()).includes('실 DB 에서'))
+  // 되먹임의 문은 **진단 화면의 버튼**이다 — 자리 이력: Drift 머리글 버튼(~2026-08-06) →
+  // `가져오기` 탭(2026-08-06, 804e7a4) → 진단의 버튼(2026-08-14, 탭 삭제).
+  // 이 설계(e2e-versionup)에는 아직 버전이 없어 맵핑 관문이 "첫 버전으로 들이기"를 내민다.
+  await click('[data-nav-view="diagnose"]')
+  await page.waitForSelector('button:has-text("실 DB 를 첫 버전으로 들이기")', { timeout: 30_000 })
+  await click('button:has-text("실 DB 를 첫 버전으로 들이기")')
+  await page.waitForSelector('button:has-text("새 버전으로 가져오기")', { timeout: 15_000 })
+  // 견줄 이전 버전이 없으면 창은 미리보기를 안 그린다(늘어놓기만 하던 목록은 2026-08-14 에
+  // 걷혔다) — 대신 창이 **무엇을 어디로** 가져오는지 밝히는지를 본다.
+  check('운영→설계: 가져오기 창이 대상을 밝힌다', (await body()).includes('실제 DB 연결을'))
   await click('button:has-text("새 버전으로 가져오기")')
   await page.waitForTimeout(1500)
   check('운영→설계: 운영 DB 가져와 설계 새 버전 컷', (await countVersions()) === vBefore + 1)
 
-  // ⭐ 운영→설계(새 설계 부트스트랩): 대상 토글 "새 설계로" → 설계+Draft+버전 생성 + 활성 전환.
-  //    (사용자 회귀: 설계가 이미 선택돼 있으면 "새 설계로" 갈 길이 없어 늘 버전업으로 샜다.)
-  await click('button:has-text("설계로 가져오기")')
-  await page.waitForSelector('text=실 DB 에서', { timeout: 15_000 })
-  await click('button:has-text("새 설계 만들기")')
-  await page.waitForTimeout(200)
+  /*
+   * ⭐ 운영→설계(새 설계 부트스트랩): 설계+Draft+버전 생성 + 활성 전환.
+   *
+   * 창 안의 대상 토글("기존 설계에 버전 추가 / 새 설계 만들기")은 2026-08-14 에 없어졌다 —
+   * **부른 버튼이 갈래를 정한다.** 그래서 길은 맵핑 관문의 `새 설계로 저장하기` 하나뿐이고,
+   * 그 관문이 두 갈래를 다 내밀려면 ⑴ 결속이 아직 없고 ⑵ 버전은 있는데 ⑶ 실 DB 와 똑같은
+   * 버전은 없어야 한다. 그 상태를 만든다: **빈 스냅샷 버전 하나만 든 새 설계**로 갈아탄다
+   * (연결×설계 짝이 새것이라 결속도 아직 없다).
+   *
+   * (사용자 회귀: 설계가 이미 선택돼 있으면 "새 설계로" 갈 길이 없어 늘 버전업으로 샜다.)
+   */
+  await page.evaluate(async () => {
+    const d = await window.rockury.designs.create({
+      name: 'e2e-bootstrap-src',
+      dialect: 'mysql',
+      description: '새 설계 부트스트랩 관문을 세우기 위한 미끼 설계(이 스위트 전용)'
+    })
+    await window.rockury.versions.create({ designId: d.id, number: 'v0.1.0', snapshot: { tables: [] } })
+    window.__rockuryNav.setContextValue('design', d.id)
+  })
+  await page.reload()
+  await page.waitForSelector('text=Design', { timeout: 15_000 })
+  await click('button:has-text("Migration")')
+  await page.waitForTimeout(400)
+  await click('[data-nav-view="diagnose"]')
+  await page.waitForSelector('button:has-text("새 설계로 저장하기")', { timeout: 30_000 })
+  await click('button:has-text("새 설계로 저장하기")')
+  await page.waitForSelector('input[placeholder="예: commerce-core"]', { timeout: 15_000 })
   await page.locator('input[placeholder="예: commerce-core"]').fill('e2e-imported')
   await click('button:has-text("설계 만들고 가져오기")')
   await page.waitForTimeout(1800)

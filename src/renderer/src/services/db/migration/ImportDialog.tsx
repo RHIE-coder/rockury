@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, DownloadCloud, Info, Layers, Loader2 } from 'lucide-react'
+import { ChevronDown, Download, Info, Layers, Loader2 } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { Input } from '@renderer/ui/input'
 import { Checkbox } from '@renderer/ui/checkbox'
@@ -13,6 +13,7 @@ import {
 } from '@renderer/ui/dialog'
 import { cn } from '@renderer/lib/utils'
 import { dialectInfo } from '../dialects'
+import { tableLabel } from '../ids'
 import { ScopeMenu } from '../connections/ScopeMenu'
 import { useScopedConnections } from '../connections/store'
 import { reconcileScope, scopeModel, scopeSummary, shownScope, toggleSchema } from '../scope'
@@ -60,54 +61,42 @@ export function ImportDialog() {
           <DialogTitle>운영 DB 를 설계로 가져오기</DialogTitle>
           <DialogDescription>
             {isNew
-              ? `연결 "${conn.name}" 의 실 DB 를 새 설계로 역설계하고 첫 버전을 만듭니다.`
-              : `연결 "${conn.name}" 의 실 DB 를 설계 "${st.design?.name}" 의 새 버전으로 가져옵니다.`}
+              ? `"${conn.name}" 실제 DB 연결을 새 설계로 가져옵니다.`
+              : `"${conn.name}" 실제 DB 연결을 설계 "${st.design?.name}" 의 새 버전으로 가져옵니다.`}
           </DialogDescription>
         </DialogHeader>
 
+        {/*
+          갈래를 고르는 토글은 없앴다 — **부른 버튼이 이미 골랐다.**
+          "새 설계로 저장하기"로 열어 놓고 창에서 "기존 설계에 버전 추가"를 다시 내미는 것은,
+          방금 고른 것을 도로 물어보는 셈이었다(2026-08-14 사용자: "왜 기존 설계에 버전 추가가
+          있냐고", "없애"). 갈림은 진단 화면의 버튼 둘이 맡는다.
+        */}
         <div className="mt-4 flex flex-col gap-4">
-          {/* 대상 선택 — 활성 설계가 있을 때만(없으면 항상 새 설계). 통합 강조 세그먼트. */}
-          {st.canVersionUp && (
-            <div className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-panel p-1">
-              {[
-                { m: 'version-up' as const, label: '기존 설계에 버전 추가', active: !isNew },
-                { m: 'new-design' as const, label: '새 설계 만들기', active: isNew }
-              ].map(({ m, label, active }) => (
-                <button
-                  key={m}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => st.chooseMode(m)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-[12.5px] transition-colors',
-                    active
-                      ? 'bg-canvas font-semibold text-accent shadow-sm ring-1 ring-accent/25'
-                      : 'font-medium text-muted hover:text-fg'
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* 실 DB 역설계 미리보기 — 소스(운영)는 테라코타로 표식. */}
           {st.phase === 'preparing' ? (
             <div className="flex items-center gap-2 rounded-lg border border-line bg-panel/60 px-3 py-3 text-[12.5px] text-muted">
               <Loader2 className="size-4 animate-spin" /> 실제 스키마를 읽는 중…
             </div>
           ) : st.actual ? (
-            <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-panel/60 p-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-[12.5px] text-fg">
-                  <span className="size-1.5 rounded-full bg-accent-2" />
-                  실 DB 에서 <b className="text-accent-2 tabular-nums">{st.actual.tables.length}</b>개 테이블을 읽음
+            /*
+             * 새 설계로 갈 때는 미리보기를 안 그린다 — 견줄 것이 없어 **읽은 테이블을 통째로
+             * 늘어놓는 것**뿐이었고, 그 목록을 보고 사람이 정할 것이 없다
+             * (2026-08-14 사용자: 목록에 "없애자", 아래 입력 칸들을 가리키며 "이것만 있으면
+             * 될 것 같은데?"). 기존 설계에 버전을 더할 때는 남긴다 — 거기 나오는 것은 목록이
+             * 아니라 **무엇이 바뀌는가**이고, 그게 곧 누를지 말지의 근거다.
+             */
+            !st.hasPrevVersion || !st.diff ? null : (
+              <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-panel/60 p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-[12.5px] text-fg">
+                    <span className="size-1.5 rounded-full bg-accent-2" />
+                    실 DB 에서 <b className="text-accent-2 tabular-nums">{st.actual.tables.length}</b>개 테이블을 읽음
+                  </div>
+                  <span className="truncate font-mono text-[11px] text-muted">{conn.name}</span>
                 </div>
-                <span className="truncate font-mono text-[11px] text-muted">{conn.name}</span>
-              </div>
 
-              {st.hasPrevVersion && st.diff ? (
-                noChanges ? (
+                {noChanges ? (
                   <p className="text-[12px] text-muted">
                     최신 버전과 차이가 없습니다 — 새 버전은 만들지 않아요.
                   </p>
@@ -120,20 +109,14 @@ export function ImportDialog() {
                     <div className="flex max-h-28 flex-wrap gap-1 overflow-y-auto pr-1">
                       {st.diff.tables.map((t) => (
                         <span key={t.id} className={cn('rounded bg-panel-strong px-1.5 py-0.5 font-mono text-[11px]', t.status === 'added' ? 'text-success' : t.status === 'removed' ? 'text-destructive' : 'text-accent-2')}>
-                          {t.status === 'added' ? '+' : t.status === 'removed' ? '−' : '~'} {t.name}
+                          {t.status === 'added' ? '+' : t.status === 'removed' ? '−' : '~'} {tableLabel(t.schema, t.name)}
                         </span>
                       ))}
                     </div>
                   </div>
-                )
-              ) : (
-                <div className="flex max-h-28 flex-wrap gap-1 overflow-y-auto pr-1">
-                  {st.actual.tables.map((t) => (
-                    <span key={t.id} className="rounded bg-panel-strong px-1.5 py-0.5 font-mono text-[11px] text-muted">{t.name}</span>
-                  ))}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )
           ) : (
             // 못 읽었다 — 여기서 되돌릴 손잡이를 준다. 없으면 가져오기 버튼이 영원히 꺼진 채
             // 이유도 안 보이는 막힌 화면이 된다(닫고 다시 여는 것 말고 길이 없었다).
@@ -263,11 +246,17 @@ export function ImportDialog() {
             />
           </label>
 
-          {/* 버전을 안 만드는 판에 "이 버전이 기준선이 된다"고 적으면 화면이 거짓말을 한다. */}
+          {/*
+            버전을 안 만드는 판에 "이 버전을 쓰는 것으로 기록된다"고 적으면 화면이 거짓말을 한다.
+
+            문구는 **일어나는 일 그대로** 적는다 — 예전엔 "적용 버전이 되고, 연결↔설계 결속도
+            자동으로 세워집니다" 였는데, `적용 버전`·`결속`·`세워집니다` 셋 다 우리끼리 쓰는
+            말이라 읽는 사람에게는 아무 그림도 안 그려졌다(2026-08-14 사용자).
+          */}
           {!noChanges && (
             <p className="flex items-start gap-2 rounded-lg bg-accent-soft/50 px-3 py-2.5 text-[11.5px] leading-relaxed text-fg/80">
               <Info className="mt-[2px] size-3.5 shrink-0 text-accent" />
-              <span>이 버전이 <b className="text-fg">{conn.name}</b> 의 적용 버전·드리프트 기준선이 되고, 연결↔설계 결속도 자동으로 세워집니다.</span>
+              <span><b className="text-fg">{conn.name}</b> 이 이 설계에 연결되고, 지금 쓰는 버전으로 기록됩니다.</span>
             </p>
           )}
 
@@ -282,7 +271,7 @@ export function ImportDialog() {
             취소
           </Button>
           <Button type="button" size="sm" disabled={!canSubmit} onClick={() => void st.execute()}>
-            {st.phase === 'running' ? <Loader2 className="animate-spin" /> : <DownloadCloud />}
+            {st.phase === 'running' ? <Loader2 className="animate-spin" /> : <Download />}
             {isNew ? '설계 만들고 가져오기' : noChanges ? '설계에 반영' : '새 버전으로 가져오기'}
           </Button>
         </DialogFooter>

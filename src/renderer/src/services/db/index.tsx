@@ -3,7 +3,6 @@ import {
   BookOpen,
   Boxes,
   Database,
-  DownloadCloud,
   FileDiff,
   FileText,
   GitBranch,
@@ -52,7 +51,7 @@ import { QueryView } from './remote/QueryView'
 import { DataView } from './remote/DataView'
 import { CollectionView } from './remote/CollectionView'
 import { HistoryView } from './remote/HistoryView'
-import { DiagnoseView, ImportView, PlanView, RunView, LogsView } from './migration/views'
+import { DiagnoseView, PlanView, RunView, LogsView } from './migration/views'
 import { CompareView } from './migration/CompareView'
 import { SeedOpsView } from './migration/SeedOpsView'
 import './rehydration' // 에이전트(MCP) 쓰기 → store:changed → 스코프 재조회 구독(부수효과 모듈)
@@ -236,9 +235,12 @@ export const dbService: Service = {
        */
       views: [
         /*
-         * 묶음이 셋이다: **도구**(보는 것) · 설계 → 실제 · 실제 → 설계(하는 것, 방향별).
-         * 기록만 있던 묶음은 없앴다 — 항목 하나짜리 묶음은 이름이 항목 이름과 겹쳐
-         * 줄 하나를 그냥 먹는다(2026-08-12 사용자).
+         * 묶음이 둘이다: **도구**(보는 것) · 설계 → 실제(하는 것).
+         * 항목 하나짜리 묶음은 두지 않는다 — 이름이 항목 이름과 겹쳐 줄 하나를 그냥 먹는다
+         * (2026-08-12 사용자). `실제 → 설계` 묶음이 그래서 사라졌다: 그 안에 있던 `가져오기`
+         * 탭은 창을 여는 버튼 하나만 담고 있었고, 새 설계냐 기존 설계냐는 진단이 이미 판정해
+         * 둔 것이라 탭에서 다시 고를 일이 없었다(2026-08-14 사용자: "지우자").
+         * 되먹임으로 들어가는 문은 이제 **진단 화면의 버튼 둘**이다.
          */
         { id: 'diagnose', label: '진단', icon: Radar, workspace: DiagnoseView, group: '도구' },
         // 실DB↔실DB 비교(예: 개발기↔운영기) — 설계 무관, 연결 2개만 필요.
@@ -247,9 +249,7 @@ export const dbService: Service = {
         { id: 'plan', label: '계획', icon: FileDiff, workspace: PlanView, group: '설계 → 실제', groupTone: 'design' },
         { id: 'run', label: '실행', icon: Play, workspace: RunView, group: '설계 → 실제', groupTone: 'design' },
         // 시드 반영 — 스키마(계획/실행)와 갈라 둔다: 대상이 데이터고 게이트도 따로다.
-        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView, group: '설계 → 실제', groupTone: 'design' },
-        // 되먹임의 문 — 진단·맵핑이 "만들어야 한다"고 판정했을 때 부르는 조치이기도 하다.
-        { id: 'import', label: '가져오기', icon: DownloadCloud, workspace: ImportView, group: '실제 → 설계', groupTone: 'ops' }
+        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView, group: '설계 → 실제', groupTone: 'design' }
       ]
     },
 

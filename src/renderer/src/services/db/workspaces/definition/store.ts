@@ -13,6 +13,7 @@ import {
   toTableDef,
   toTableRecord
 } from './designScope'
+import { enforcePkNotNull } from './derive'
 import type { Column, Constraint, ConstraintKind, TableDef } from './types'
 // 순환 참조 주의: definition → {designs, versions} 방향만 존재(역방향 import 없음).
 
@@ -77,11 +78,19 @@ interface DefinitionState {
   deleteTable: (id: string) => void
 }
 
+/**
+ * 활성 테이블 한 장만 바꾼다 — **모든 편집이 지나는 한 곳**이라 도메인 불변식을 여기서 지킨다.
+ *
+ * `enforcePkNotNull` 을 걸어 두면 PK 를 켜는 길이 몇 갈래든(퀵 토글·제약 에디터·컬럼 삭제로
+ * PK 가 줄어드는 경우까지) NULL 이 살아남지 못한다. 갈래마다 따로 적으면 한 곳은 반드시 빠진다.
+ */
 function patchActive(
   s: Pick<DefinitionState, 'tables' | 'activeTableId'>,
   map: (t: TableDef) => TableDef
 ): Pick<DefinitionState, 'tables'> {
-  return { tables: s.tables.map((t) => (t.id === s.activeTableId ? map(t) : t)) }
+  return {
+    tables: s.tables.map((t) => (t.id === s.activeTableId ? enforcePkNotNull(map(t)) : t))
+  }
 }
 
 /** 컬럼 keys 성격 제약(pk/uk/idx/fk)이 비면 제거. check 는 컬럼 무관이라 유지. */

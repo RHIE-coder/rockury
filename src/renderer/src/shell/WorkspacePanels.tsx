@@ -99,7 +99,13 @@ export function WorkspacePanels({
       )}
 
       <PanelGroup direction="horizontal" className="min-w-0 flex-1" autoSaveId={autoSaveId}>
+        {/*
+          `id`·`order` 는 오른쪽 패널이 **있다 없다 하기 때문에** 필요하다(2026-08-12) — 이름표가
+          없으면 부품이 패널을 순서로만 알아봐서, 개수가 변한 뒤 저장해 둔 폭이 엉뚱한 패널에 붙는다.
+        */}
         <Panel
+          id="left"
+          order={1}
           ref={leftRef}
           // 접혔는지를 검사가 **실제 폭**으로 재게 하는 훅 — 접힌 패널은 폭 0 으로 눌릴 뿐
           // 안의 행은 잘려 있을 뿐이라, 행이 보이는지로는 접힘을 가릴 수 없다(실측).
@@ -138,12 +144,14 @@ export function WorkspacePanels({
 
         <Handle hidden={leftCollapsed} />
 
-        <Panel className="min-w-0 bg-canvas">{children}</Panel>
+        <Panel id="center" order={2} className="min-w-0 bg-canvas">{children}</Panel>
 
         {hasRight && (
           <>
             <Handle hidden={rightCollapsed} />
             <Panel
+              id="right"
+              order={3}
               ref={rightRef}
               data-workspace-right
               defaultSize={rightDefaultSize}

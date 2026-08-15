@@ -40,6 +40,25 @@ describe('removals — 이 계획이 실 DB 에서 없앨 것', () => {
   it('더하기만 하는 계획은 없앨 것이 없다', () => {
     expect(removals(plan([table('orders', ['id'])], [table('orders', ['id', 'memo'])]))).toEqual([])
   })
+
+  /*
+   * 회귀(2026-08-14): 이름만 적던 시절, 스키마가 여럿인 DB 에서 `service1.members` 와
+   * `service2.members` 가 둘 다 `members` 로 나왔다. 목록에서 어느 쪽인지 못 가르고,
+   * 그 이름을 React key 로 쓰던 화면은 중복 키 오류를 뱉었다.
+   */
+  it('스키마가 다르면 같은 이름도 갈라 적는다', () => {
+    const s1 = { ...table('members', ['id']), id: tableId('service1', 'members'), schema: 'service1' }
+    const s2 = { ...table('members', ['id']), id: tableId('service2', 'members'), schema: 'service2' }
+
+    const got = removals(plan([s1, s2], []))
+
+    expect(got).toEqual(['service1.members', 'service2.members'])
+    expect(new Set(got).size).toBe(got.length) // 겹치는 이름이 없다 = key 로 써도 된다
+  })
+
+  it('스키마가 없는 예전 데이터는 이름만 그대로 — 승인 표식이 안 바뀐다', () => {
+    expect(removals(plan([table('probe', ['id'])], []))).toEqual(['probe'])
+  })
 })
 
 describe('planGate — 없앨 것이 있으면 계획을 안 그린다', () => {

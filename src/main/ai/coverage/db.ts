@@ -88,6 +88,7 @@ export const dbCoverage: ServiceCoverage = {
 
     // ── 저장쿼리/컬렉션: 에이전트 수요 확인 후 노출 검토 ──
     'sq:tree': '저장쿼리 열람 — 수요 확인 후 검토',
+    'sq:query': '저장쿼리 하나 열람 — 화면이 열 때 쓰는 길, 수요 확인 후 검토',
     'sq:createFolder': '쓰기 — 수요 확인 후 검토',
     'sq:createQuery': '쓰기 — 수요 확인 후 검토',
     'sq:renameFolder': '쓰기 — 수요 확인 후 검토',

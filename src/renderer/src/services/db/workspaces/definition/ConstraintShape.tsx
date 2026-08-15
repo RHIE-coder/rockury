@@ -1,5 +1,6 @@
 import { ArrowDown } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
+import { ClipToggle, clipBox, useClipped } from '@renderer/ui/clipped'
 import { fkTargetLabel } from './fkPolicy'
 import { FkPolicyChips } from './FkPolicyChips'
 import type { Constraint, ResolvedConstraintColumn } from './types'
@@ -19,25 +20,27 @@ export function ConstraintShape({
   con,
   cols,
   emptyText,
-  className,
-  full
+  className
 }: {
   con: Constraint
   cols: ResolvedConstraintColumn[]
   /** 컬럼이 하나도 안 걸렸을 때 대신 보일 말. 없으면 아무것도 안 그린다. */
   emptyText?: string
   className?: string
-  /** 참이면 자르지 않고 줄을 바꿔 전문을 보인다(표의 "전문 보기"). */
-  full?: boolean
 }) {
   // CHECK 은 컬럼에 안 매인다 — 식이 본체다. 조건식은 길어서 제일 잘 잘리는 자리다.
+  // 훅은 조건 앞에서 부른다(아래 이른 반환보다 먼저) — 훅 순서는 렌더마다 같아야 한다.
+  const expr = useClipped<HTMLSpanElement>(con.expression ?? '')
   if (con.kind === 'check') {
     return (
-      <span
-        className={cn('font-mono text-[12px] text-muted', full ? 'break-words' : 'truncate', className)}
-        title={con.expression || undefined}
-      >
-        {con.expression || '—'}
+      <span className={cn('flex min-w-0 items-start gap-0.5', className)}>
+        <span
+          ref={expr.ref}
+          className={cn('min-w-0 flex-1 font-mono text-[12px] text-muted', clipBox(expr.expanded))}
+        >
+          {con.expression || '—'}
+        </span>
+        {expr.clipped && <ClipToggle expanded={expr.expanded} onToggle={expr.toggle} className="mt-0" />}
       </span>
     )
   }

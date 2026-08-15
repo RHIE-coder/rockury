@@ -55,6 +55,8 @@ interface CollectionState {
 
   addFolder: (name: string, parentId?: string | null) => Promise<void>
   addQuery: (name: string, sql: string, folderId?: string | null) => Promise<void>
+  /** 저장쿼리 SQL 쓰기(자동저장) — 쓴 뒤 손에 든 트리 사본도 같은 값으로 맞춘다. */
+  saveQuerySql: (id: string, sql: string) => Promise<void>
   rename: (kind: 'folder' | 'query', id: string, name: string) => Promise<void>
   remove: (kind: 'folder' | 'query', id: string) => Promise<void>
   applyReorder: (flat: { id: string; kind: 'folder' | 'query'; parentId: string | null }[]) => Promise<void>
@@ -208,6 +210,12 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
     if (!sc) return
     await window.rockury.savedQueries.createQuery({ scope: sc, folderId, name, sql })
     await get().load(sc)
+  },
+  // 자동저장은 트리를 다시 읽지 않는다(글자마다 목록 세 개를 다시 읽을 순 없다) — 대신 **쓴 값을
+  // 사본에 그대로 반영**한다. 사본이 저장소와 어긋나면 그 쿼리를 다시 열 때 낡은 글이 실린다.
+  saveQuerySql: async (id, sql) => {
+    await window.rockury.savedQueries.updateQuery(id, { sql })
+    set((s) => ({ queries: s.queries.map((q) => (q.id === id ? { ...q, sql } : q)) }))
   },
   rename: async (kind, id, name) => {
     if (kind === 'folder') await window.rockury.savedQueries.renameFolder(id, name)

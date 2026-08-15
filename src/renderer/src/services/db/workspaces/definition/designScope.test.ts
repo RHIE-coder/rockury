@@ -6,10 +6,12 @@ import {
   newTableSchema,
   nextNewName,
   reconcileActiveTable,
-  toTableRecord
+  toTableRecord,
+  toTableDef,
+  migrateConstraintIds
 } from './designScope'
 import { scopedTables } from '../../scope'
-import type { TableDef } from './types'
+import type { Constraint, TableDef } from './types'
 
 const t = (designId: string, id: string, name = id): TableDef => ({
   id,
@@ -239,5 +241,84 @@ describe('nextNewName', () => {
 
   it('다 지우면 다시 1번', () => {
     expect(nextNewName([t('tbl-1', 'orders')], 'd1', 'new_view')).toBe('new_view_1')
+  })
+})
+
+describe('migrateConstraintIds — 옛 제약 id 를 지금 규칙으로', () => {
+  const k = (id: string, kind: Constraint['kind'], name: string): Constraint => ({
+    id,
+    kind,
+    name,
+    columns: []
+  })
+  const withCons = (schema: string | undefined, name: string, cons: Constraint[]): TableDef => ({
+    ...t('test-mysql-1', `test-mysql-1:t:${name}`, name),
+    schema,
+    constraints: cons
+  })
+
+  it('MySQL 의 FK 와 짝 인덱스가 같은 옛 id 를 갖고 있어도 갈라진다 (2026-08-12 콘솔 key 중복)', () => {
+    const table = withCons(undefined, 'api_keys', [
+      k('test-mysql-1:k:api_keys.fk_api_keys_user', 'fk', 'fk_api_keys_user'),
+      k('test-mysql-1:k:api_keys.fk_api_keys_user', 'idx', 'fk_api_keys_user')
+    ])
+    const ids = migrateConstraintIds(table).constraints.map((c) => c.id)
+    expect(ids).toEqual([
+      'test-mysql-1:k:api_keys.fk.fk_api_keys_user',
+      'test-mysql-1:k:api_keys.idx.fk_api_keys_user'
+    ])
+    expect(new Set(ids).size).toBe(2)
+  })
+
+  it('설계 접두는 그대로 이어 붙인다 — 빠지면 다른 설계와 부딪힌다', () => {
+    const table = withCons('shop', 'users', [k('test-mysql-1:k:shop.users.users_pkey', 'pk', 'users_pkey')])
+    expect(migrateConstraintIds(table).constraints[0].id).toBe(
+      'test-mysql-1:k:shop.users.pk.users_pkey'
+    )
+  })
+
+  it('접두 없는 옛 id(실 DB 역설계분)도 옮긴다', () => {
+    const table = withCons('public', 'users', [k('k:public.users.users_pkey', 'pk', 'users_pkey')])
+    expect(migrateConstraintIds(table).constraints[0].id).toBe('k:public.users.pk.users_pkey')
+  })
+
+  it('설계에서 저작한 순번 id 는 안 건드린다 — 이미 안 겹친다', () => {
+    const table = withCons(undefined, 'orders', [k('test-mysql-1:con-3', 'pk', 'pk_orders')])
+    const out = migrateConstraintIds(table)
+    expect(out.constraints[0].id).toBe('test-mysql-1:con-3')
+    expect(out).toBe(table) // 바뀔 것이 없으면 같은 객체
+  })
+
+  it('이미 새 규칙이면 같은 객체 — 부팅만으로 저장이 돌지 않게', () => {
+    const table = withCons(undefined, 'users', [k('k:users.pk.pk_users', 'pk', 'pk_users')])
+    expect(migrateConstraintIds(table)).toBe(table)
+  })
+
+  it('옮긴 뒤에도 겹치면(같은 종류·같은 이름 두 벌) 번호를 붙여 가른다', () => {
+    const table = withCons(undefined, 'users', [
+      k('k:users.dup', 'idx', 'dup'),
+      k('k:users.dup', 'idx', 'dup')
+    ])
+    const ids = migrateConstraintIds(table).constraints.map((c) => c.id)
+    expect(ids).toEqual(['k:users.idx.dup', 'k:users.idx.dup#2'])
+  })
+})
+
+describe('toTableDef — 불러오는 문이 옛 데이터를 거둔다', () => {
+  it('PK 컬럼의 nullable 을 끄고 제약 id 를 옮긴다', () => {
+    const out = toTableDef({
+      id: 'test-mysql-1:t:tags',
+      designId: 'test-mysql-1',
+      name: 'tags',
+      comment: '',
+      columns: [
+        { id: 'c1', name: 'id', type: 'char(36)', nullable: true, defaultValue: 'uuid()', comment: '' }
+      ],
+      constraints: [
+        { id: 'test-mysql-1:k:tags.PRIMARY', kind: 'pk', name: 'PRIMARY', columns: [{ columnId: 'c1' }] }
+      ]
+    })
+    expect(out.columns[0].nullable).toBe(false)
+    expect(out.constraints[0].id).toBe('test-mysql-1:k:tags.pk.PRIMARY')
   })
 })

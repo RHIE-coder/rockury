@@ -4,7 +4,6 @@ import { Button } from '@renderer/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle
@@ -38,18 +37,24 @@ export function BindingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
-      <DialogContent className="max-w-xl">
+      {/*
+        `aria-describedby` 를 비운다 — 제목이 이미 이 다이얼로그의 전부라 설명문을 뺐고,
+        Radix 는 설명이 없으면 콘솔에 경고를 남긴다. 없는 설명을 가리키지 않게 끊어 둔다.
+      */}
+      <DialogContent className="max-w-xl" aria-describedby={undefined}>
         <DialogHeader>
+          {/*
+            제목 아래 있던 "이 연결이 어떤 설계에 · 어느 버전을 기준으로 묶여 있는지 관리합니다…"
+            두 줄은 뺐다 — 제목("설계 바인딩")이 이미 그 말이다
+            (2026-08-14 사용자: "'설계 바인딩' 자체가 이미 설명이 마무리 된거 아니야?").
+          */}
           <DialogTitle>설계 바인딩 · {conn.name}</DialogTitle>
-          <DialogDescription>
-            이 연결이 어떤 설계에 · 어느 버전을 기준으로 묶여 있는지 관리합니다. 마이그레이션·드리프트는 이 결속 위에서 동작합니다.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="mt-3 flex flex-col gap-3">
           {bindings.length === 0 ? (
             <div className="rounded-lg border border-dashed border-line bg-panel/40 px-4 py-6 text-center text-[12.5px] text-muted">
-              아직 이 연결에 물린 설계가 없습니다. 아래에서 설계를 연결하거나, 드리프트 뷰에서 운영 DB 를 새 설계로 가져오세요.
+              아직 연결된 설계가 없습니다
             </div>
           ) : (
             <div className="flex flex-col gap-1.5">

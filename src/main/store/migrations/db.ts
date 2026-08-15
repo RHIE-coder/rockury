@@ -362,6 +362,13 @@ export const dbMigration: ServiceMigration = {
     // 갈음하면서 쓸 데가 없어졌다. 남겨 두면 쓰는 곳 없는 데이터가 계속 쌓인다.
     d.exec('DROP TABLE IF EXISTS env_snapshots;')
 
+    // 그 시절 이력도 함께 — 2026-08-13. 표만 지우고 `migration_logs` 를 안 건드렸더니
+    // 화면이 이제 없는 낱말("기준선")을 배지로 계속 보였다. `baseline` 이 적던 사건은
+    // 실은 맵핑("이 연결은 vX 다")이라 종류만 갈아 끼우면 이력이 안 끊긴다. `drift` 는
+    // 판정 자체가 사라져 다시 이어 볼 수도, 새로 쌓일 수도 없으므로 지운다.
+    d.exec(`UPDATE migration_logs SET kind = 'map' WHERE kind = 'baseline';
+            DELETE FROM migration_logs WHERE kind = 'drift';`)
+
     // diagram_layouts.groups — 다이어그램 그룹(레이어): 이름·색·소속 테이블·접힘.
     // 배치와 같은 행에 둔다 — 스코프(연결/설계)가 같고 언제나 함께 읽고 쓰기 때문.
     addColumnIfMissing(d, 'diagram_layouts', 'groups', `TEXT NOT NULL DEFAULT '[]'`)

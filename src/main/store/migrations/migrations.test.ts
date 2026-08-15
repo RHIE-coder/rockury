@@ -145,6 +145,35 @@ describe('서비스별 마이그레이션 분할', () => {
     d.close()
   })
 
+  it('기준선을 걷어내기 전에 쌓인 이력이 지금 낱말로 정리된다', () => {
+    // 회귀: 표(`env_snapshots`)만 지우고 이력을 안 건드려, 기록 화면이 이제 없는
+    // 낱말("기준선")을 배지로 계속 보였다(2026-08-13 사용자 지적).
+    const file = tempDbFile()
+    const first = new DatabaseSync(file)
+    applyMigrations(first)
+    const insert = first.prepare(
+      `INSERT INTO migration_logs (id, env_id, kind, from_version, to_version, summary, status, detail, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`
+    )
+    const at = '2026-07-24T04:31:35.000Z'
+    insert.run('l1', 'e1', 'baseline', '', 'v0.1.0', '운영 DB 가져오기', 'success', '', at)
+    insert.run('l2', 'e1', 'drift', '', '', '설계와 다름', 'success', '+orders', at)
+    insert.run('l3', 'e1', 'apply', 'v0.1.0', 'v0.2.0', '반영', 'success', '', at)
+    first.close()
+
+    const d = new DatabaseSync(file)
+    applyMigrations(d)
+    const rows = d
+      .prepare('SELECT id, kind, summary FROM migration_logs ORDER BY id')
+      .all() as unknown as { id: string; kind: string; summary: string }[]
+    // 가져오기는 실은 맵핑이었으므로 종류만 갈아 끼워 이력을 잇고, 드리프트는 지운다.
+    expect(rows).toEqual([
+      { id: 'l1', kind: 'map', summary: '운영 DB 가져오기' },
+      { id: 'l3', kind: 'apply', summary: '반영' }
+    ])
+    d.close()
+  })
+
   it('CASE-pdev-022 두 서비스가 같은 테이블을 선언하면 적용이 실패한다', () => {
     // 분할이 새로 만드는 위험: 서비스 A 와 B 가 같은 이름을 선언하면 `IF NOT EXISTS` 탓에
     // 뒤에 온 쪽이 조용히 무시되고, 한쪽 서비스는 자기가 원한 모양이 아닌 테이블을 쓰게 된다.

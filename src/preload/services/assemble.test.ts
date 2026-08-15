@@ -82,6 +82,7 @@ const METHODS_BEFORE_SPLIT: Record<string, string[]> = {
   ],
   savedQueries: [
     'tree',
+    'getQuery',
     'createFolder',
     'createQuery',
     'renameFolder',

@@ -11,11 +11,13 @@ export const meta = {
 export async function run(ctx) {
   const { check, click, body } = ctx
   let page = ctx.page
-  // Migration › 실행 로그 — 기준선 로그 기록(Phase 3e)
+  // Migration › 기록 — 맵핑 로그가 남는가(Phase 3e)
   // 탭 이름이 아니라 뷰 id 로 누른다 — 이름은 바뀐다(2026-08-12 Logs → 실행 로그).
+  // 앞 스위트의 가져오기가 남긴 줄이다. 예전엔 그 줄이 `기준선` 딱지를 달았는데,
+  // 기준선을 걷어내면서(2026-08-12) 같은 사건이 `맵핑` 으로 남는다.
   await click('[data-nav-view="logs"]')
-  await page.waitForSelector('text=기준선', { timeout: 8_000 })
-  check('Migration › 실행 로그: 기준선 로그 체인', (await body()).includes('기준선'))
+  await page.waitForSelector('text=맵핑', { timeout: 8_000 })
+  check('Migration › 기록: 맵핑 로그가 남는다', (await body()).includes('맵핑'))
 
   // ⭐ Environment 관리 UI — 연결 카드에서 설계 바인딩 열람(운영↔설계 결속이 화면에 드러남).
   await click('[data-nav-module="remote"]') // Connections 는 Remote 의 첫 뷰(2026-07-30)

@@ -55,19 +55,25 @@ interface QueryState {
   explain: ExplainState | null
   history: HistoryRow[]
   lastConn: string | null
-  /** 라이브러리에서 로드된 저장쿼리 id — 있으면 자동저장 대상(T17). */
+  /**
+   * 라이브러리에서 열어 둔 저장쿼리 id — 자동저장이 쓸 대상.
+   *
+   * **여는 것만으로는 아무것도 안 쓴다.** 쓰기는 사용자가 편집기를 고칠 때만 예약된다
+   * (`query/autosave.ts`). 예전엔 "sql 이 바뀌면 쓴다"였고, 여는 것도 바뀜이라 낡은 사본을
+   * 열면 그 낡은 것이 저장소를 덮었다(2026-08-12 유실 사고).
+   */
   activeSavedQueryId: string | null
-  /** 그 저장쿼리가 속한 연결 id — 자동저장은 이 연결에서만(다른 연결 작업물이 덮어쓰지 않도록). */
-  activeSavedConn: string | null
 
-  /** 저장쿼리를 에디터로 로드(자동저장 연결 — 연결 id 로 스코프). */
-  loadSaved: (id: string, sql: string, connId: string) => void
+  /** 저장쿼리를 편집기로 연다. */
+  loadSaved: (id: string, sql: string) => void
   /** execSql 을 주면 그걸 실행(키워드 치환된 SQL). 없으면 state.sql. */
   run: (connectionId: string, execSql?: string) => Promise<void>
   runExplain: (connectionId: string, execSql?: string) => Promise<void>
   confirm: () => Promise<void>
   rollback: () => Promise<void>
   loadHistory: (connectionId: string) => Promise<void>
+  /** 바깥에서 난 실패를 그대로 띄운다(자동저장 실패 등) — 조용히 삼키면 "저장이 안 된다"만 남는다. */
+  setError: (message: string) => void
   dismissError: () => void
 }
 
@@ -104,9 +110,8 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
   history: [],
   lastConn: null,
   activeSavedQueryId: null,
-  activeSavedConn: null,
 
-  loadSaved: (id, sql, connId) => set({ sql, activeSavedQueryId: id, activeSavedConn: connId }),
+  loadSaved: (id, sql) => set({ sql, activeSavedQueryId: id }),
 
   run: async (connectionId, execSql) => {
     const sql = execSql ?? get().sql
@@ -196,5 +201,6 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
     }
   },
 
+  setError: (message) => set({ error: message }),
   dismissError: () => set({ error: null })
 }))

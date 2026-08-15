@@ -285,6 +285,8 @@ export const dbApi = {
   savedQueries: {
     tree: (scope: LibraryScope): Promise<{ folders: FolderRecord[]; queries: SavedQueryRecord[] }> =>
       unwrap(ipcRenderer.invoke('sq:tree', scope)),
+    /** 쿼리 하나를 저장소에서 새로 읽는다(없으면 null) — 열 때 낡은 사본을 싣지 않으려고. */
+    getQuery: (id: string): Promise<SavedQueryRecord | null> => unwrap(ipcRenderer.invoke('sq:query', id)),
     createFolder: (input: { scope: LibraryScope; parentId: string | null; name: string }): Promise<FolderRecord> =>
       unwrap(ipcRenderer.invoke('sq:createFolder', input)),
     createQuery: (input: { scope: LibraryScope; folderId: string | null; name: string; sql: string }): Promise<SavedQueryRecord> =>
@@ -318,7 +320,7 @@ export const dbApi = {
     deleteItem: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('col:deleteItem', id)),
     reorderItems: (orderedIds: string[]): Promise<void> => unwrap(ipcRenderer.invoke('col:reorderItems', orderedIds))
   },
-  // 운영부 — Migration 스냅샷 기준선 + 로그 체인(환경 바인딩 id 로 키).
+  // 운영부 — Migration 이력(환경 바인딩 id 로 키).
   migration: {
     appendLog: (input: CreateLogInput): Promise<MigrationLogRecord> =>
       unwrap(ipcRenderer.invoke('migration:appendLog', input)),

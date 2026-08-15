@@ -15,8 +15,11 @@ export async function run(ctx) {
   let page = ctx.page
   // Remote › Query — 저장쿼리 객체 트리 + 편집기(재설계). 새 쿼리 생성 → SELECT 실행.
   await click('button:has-text("Query")')
-  await page.waitForSelector('.cm-content', { timeout: 15_000 })
+  // 쿼리를 고르기 전엔 편집기가 아예 없다(2026-08-12) — 새 쿼리를 만들어야 편집기가 뜬다.
+  await page.waitForSelector('button[title="새 쿼리"]', { timeout: 15_000 })
+  check('Remote › Query: 고른 쿼리가 없으면 편집기가 없다', (await page.locator('.cm-content').count()) === 0)
   await click('button[title="새 쿼리"]')
+  await page.waitForSelector('.cm-content', { timeout: 15_000 })
   await page.waitForTimeout(400)
   // 구조 편집 통합: Query 트리 행에도 호버 편집(연필)/삭제 아이콘이 있어야 한다(Collection 과 동일).
   {
@@ -113,6 +116,23 @@ export async function run(ctx) {
   // 저장쿼리 SQL 을 깨끗한 SELECT 로 복원(자동저장) — Collection 참조 실행용
   await typeSql('SELECT id, email FROM users LIMIT 3')
   await page.waitForTimeout(1200)
+
+  // ⭐ 회귀(2026-08-12 유실 사고) — 저장한 쿼리를 트리에서 눌러 열면 써 둔 SQL 이 그대로 있어야 한다.
+  // 예전엔 트리가 든 낡은 사본(빈 SQL)이 편집기에 실렸고, 이어서 그 빈 것이 저장소를 덮어
+  // 사용자가 써 둔 쿼리가 통째로 사라졌다.
+  {
+    const editorText = async () => (await page.locator('.cm-content').first().innerText()).replace(/\s+/g, ' ')
+    const openRow = async () => {
+      await page.locator('div.group\\/row:has-text("Untitled Query")').first().locator('button').first().click()
+      await page.waitForTimeout(600)
+    }
+    await openRow()
+    check('Remote › Query: 저장쿼리를 눌러 열어도 SQL 이 그대로다', (await editorText()).includes('FROM users'))
+    // 자동저장 늦춤 시간을 넘겨 다시 열어 본다 — 여는 행위가 저장소를 덮었다면 여기서 빈다.
+    await page.waitForTimeout(1300)
+    await openRow()
+    check('Remote › Query: 다시 열어도 저장소의 SQL 이 멀쩡하다', (await editorText()).includes('FROM users'))
+  }
 
   // Remote › Data — 조회 + 편집(수정→트랜잭션 게이트→롤백)(Phase 2b)
   await click('button:has-text("Data")')

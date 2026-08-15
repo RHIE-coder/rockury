@@ -31,6 +31,11 @@ export interface ConstraintDiff {
 export interface TableDiff {
   id: string
   name: string
+  /**
+   * 이 테이블이 있는 스키마. 화면이 `service1.orders` 처럼 밝혀 적는 데 쓴다 —
+   * 이름만 늘어놓으면 스키마가 여럿인 DB 에서 같은 이름이 여러 번 나와 못 가른다.
+   */
+  schema?: string
   status: ChangeStatus
   /** 테이블 자체 속성(이름·코멘트) 변경. */
   tableChanges: FieldChange[]
@@ -165,7 +170,7 @@ function diffTable(base: TableDef, target: TableDef): TableDiff | null {
   }
 
   if (!tableChanges.length && !columns.length && !constraints.length) return null
-  return { id: target.id, name: target.name, status: 'modified', tableChanges, columns, constraints }
+  return { id: target.id, name: target.name, schema: target.schema, status: 'modified', tableChanges, columns, constraints }
 }
 
 export function diffSnapshots(base: VersionSnapshot, target: VersionSnapshot): SchemaDiff {
@@ -186,14 +191,14 @@ export function diffSnapshots(base: VersionSnapshot, target: VersionSnapshot): S
 
   for (const [id, b] of baseTables) {
     if (!targetTables.has(id)) {
-      tables.push({ id, name: b.name, status: 'removed', tableChanges: [], columns: [], constraints: [] })
+      tables.push({ id, name: b.name, schema: b.schema, status: 'removed', tableChanges: [], columns: [], constraints: [] })
       summary.tablesRemoved++
     }
   }
   for (const [id, t] of targetTables) {
     const b = baseTables.get(id)
     if (!b) {
-      tables.push({ id, name: t.name, status: 'added', tableChanges: [], columns: [], constraints: [] })
+      tables.push({ id, name: t.name, schema: t.schema, status: 'added', tableChanges: [], columns: [], constraints: [] })
       summary.tablesAdded++
     } else {
       const d = diffTable(b, t)

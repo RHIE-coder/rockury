@@ -6,7 +6,7 @@
 // CaptureResult { surface, target, formFactor:{label,w,h,unit,theme?}, status:'ok'|'cannot-verify',
 //                 capture, errors:string[], elements:Element[], meta:{...} }
 // Element { role, text, fg:[r,g,b]|null, bg:[r,g,b]|null, bounds:{x,y,w,h},
-//           states, interactive, truncated, essential, fontSize?, bold? }
+//           states, interactive, truncated, expandable?, essential, fontSize?, bold? }
 
 // WCAG AA 대비 임계값 (본문 4.5 · 큰 텍스트 3.0).
 export const CONTRAST_MIN = { normal: 4.5, large: 3.0 }
@@ -95,8 +95,15 @@ export function runChecks(captures, opts = {}) {
             detail: `대비 ${ratio.toFixed(2)} < ${min} (fg ${el.fg} / bg ${el.bg})` })
         }
       }
-      // truncation — 핵심 내용이 잘려 소실.
-      if (el.essential && el.truncated) {
+      /*
+       * truncation — 핵심 내용이 잘려 **소실**.
+       *
+       * `expandable` 은 그 자리에서 펼 수 있다는 뜻이다(잘린 칸 옆에 붙는 ⌄ 손잡이). 잘렸어도
+       * 글자가 사라진 게 아니므로 안 센다 — 이 검사가 막으려는 것은 "볼 길이 없다"이지 "칸이
+       * 좁다"가 아니다. 호버 툴팁은 이 면제를 못 받는다: 마우스를 올려야 나오는 것은 없는 것과
+       * 같다고 이미 판정했고(2026-08-12), 어댑터도 `title` 을 안 본다.
+       */
+      if (el.essential && el.truncated && !el.expandable) {
         push({ check: 'truncation', formFactor: label, role: el.role, text: el.text, bounds: el.bounds,
           detail: '핵심 텍스트가 잘림(essential && truncated)' })
       }

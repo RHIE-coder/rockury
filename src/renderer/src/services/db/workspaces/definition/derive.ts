@@ -36,6 +36,37 @@ export function keyBadgesOf(table: TableDef): Map<string, KeyBadge[]> {
   return map
 }
 
+/** PK 제약에 걸린 컬럼 id 집합 — 표시(NULL 칸 잠금)와 아래 `enforcePkNotNull` 이 함께 쓴다. */
+export function pkColumnIds(table: TableDef): Set<string> {
+  const ids = new Set<string>()
+  for (const con of table.constraints) {
+    if (con.kind !== 'pk') continue
+    for (const ref of con.columns) ids.add(ref.columnId)
+  }
+  return ids
+}
+
+/**
+ * PK 컬럼의 `nullable` 을 끈 사본 — **편집과 불러오기가 함께 지나는 문**이다.
+ *
+ * PK 는 SQL 표준에서 곧 NOT NULL 이라 실 DB 에는 언제나 NOT NULL 로 만들어진다. 설계만 NULL 을
+ * 들고 있으면 두 가지가 동시에 터진다: 화면이 "PK 인데 NULL 가능"이라는 있을 수 없는 모습을
+ * 보이고(2026-08-12 사용자: "PK인데 null이 가능해?"), 대조표에는 아무리 반영해도 안 사라지는
+ * 가짜 차이가 한 줄 남는다. 그래서 화면에서 못 누르게 막는 것으로 끝내지 않고 데이터를 바로잡는다.
+ *
+ * 바꿀 것이 없으면 **같은 객체를 돌려준다** — 스토어가 참조 비교로 "바뀐 설계"를 가리므로
+ * (`changedDesignIds`), 새 객체를 만들면 아무 편집도 없이 저장이 돈다.
+ */
+export function enforcePkNotNull(table: TableDef): TableDef {
+  const pk = pkColumnIds(table)
+  if (pk.size === 0) return table
+  if (!table.columns.some((c) => pk.has(c.id) && c.nullable)) return table
+  return {
+    ...table,
+    columns: table.columns.map((c) => (pk.has(c.id) && c.nullable ? { ...c, nullable: false } : c))
+  }
+}
+
 /** 제약 columns 를 실제 컬럼 이름으로 해석(삭제된 컬럼은 걸러짐). */
 export function resolveColumns(
   table: TableDef,

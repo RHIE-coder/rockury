@@ -11,6 +11,7 @@ import {
   createSavedQuery,
   deleteFolder,
   deleteSavedQuery,
+  getSavedQuery,
   listTree,
   reorderTree,
   updateSavedQuery
@@ -95,6 +96,14 @@ describe('savedQueries (폴더 트리)', () => {
     tree = listTree(SCOPE)
     expect(tree.folders).toEqual([])
     expect(tree.queries).toEqual([])
+  })
+
+  // 회귀(2026-08-12 유실 사고) — 화면이 쿼리를 열 때 제 사본이 아니라 저장소에서 새로 읽는 길.
+  it('getSavedQuery 는 방금 쓴 SQL 을 그대로 돌려준다 · 없는 id 는 null', () => {
+    const q = createSavedQuery({ scope: SCOPE, folderId: null, name: 'q1', sql: 'SELECT 1' })
+    updateSavedQuery(q.id, { sql: 'SELECT 2' })
+    expect(getSavedQuery(q.id)?.sql).toBe('SELECT 2')
+    expect(getSavedQuery('sq_없는것')).toBeNull()
   })
 })
 

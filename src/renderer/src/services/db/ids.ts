@@ -25,3 +25,14 @@ export const constraintId = (
   kind: string,
   name: string
 ): string => `k:${prefix(schema)}${table}.${kind}.${name}`
+
+/**
+ * 사람에게 보이는 테이블 이름 — **스키마가 있으면 붙인다.**
+ *
+ * id 와 달리 이건 눈으로 읽는 글자다. 그런데도 같은 규칙을 쓰는 이유는, 이름만 늘어놓으면
+ * `service1.orders` 와 `service2.orders` 가 화면에서 똑같은 `orders` 두 개가 되기 때문이다.
+ * 어느 쪽을 말하는지 못 가르고(2026-08-14 사용자: "어떤 DB 스키마를 이야기하는거야?"),
+ * 그 이름을 React key 로 쓰던 자리는 중복 키 오류를 뱉었다.
+ */
+export const tableLabel = (schema: string | undefined, table: string): string =>
+  `${prefix(schema)}${table}`

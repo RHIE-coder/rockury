@@ -4,6 +4,7 @@ import { cn } from '@renderer/lib/utils'
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { Badge } from '@renderer/ui/badge'
 import { Checkbox } from '@renderer/ui/checkbox'
+import { ClipToggle, clipBox, useClipped } from '@renderer/ui/clipped'
 import { TableSidePanel } from '../TableSidePanel'
 import { ConstraintShape } from '../workspaces/definition/ConstraintShape'
 import { keyBadgesOf, type KeyBadge } from '../workspaces/definition/derive'
@@ -92,26 +93,30 @@ function Was({ v, changed }: { v: string; changed: boolean }): ReactElement | nu
 }
 
 /**
- * 잘리는 칸 — 기본은 한 줄로 자르고, "전문 보기"를 켜면 줄을 바꿔 다 보인다.
+ * 잘리는 칸 — **넘칠 때만 스스로 ⌄ 를 내민다**(`ui/clipped`). 표 머리에 있던 "전문 보기"
+ * 체크박스는 걷어냈다: 긴 칸 하나를 보려고 표 전체 줄이 바뀌었고, 사용자가 그 체크박스 자체를
+ * 걸고 넘어졌다(2026-08-12: "체크박스말고 좀 더 우아한 방법 없어?"). 호버 툴팁(`title`)도 함께
+ * 걷었다 — 마우스를 올려야 나오는 것은 없는 것과 같고, 보이는 손잡이가 그 일을 이미 한다.
  *
- * 호버 툴팁(`title`)만으로는 부족했다: Definition 에는 진작 붙어 있었는데도 사용자는
- * "전체 내용을 볼 수 있는 방법이 없어"라고 했다(2026-08-12). 마우스를 올려야만 나오는 것은
- * **없는 것과 같다** — 눈에 보이는 손잡이가 있어야 한다.
+ * `text` 는 이 칸이 담은 **글자**다: 잘렸는지를 재는 기준이자, 바뀌면 접는 열쇠다.
+ * `children` 은 옛 값(취소선)까지 얹은 그림이라 렌더마다 새 객체여서 열쇠로 못 쓴다.
  */
 function Cell({
-  full,
+  text,
   className,
-  children,
-  title
+  children
 }: {
-  full: boolean
+  text: string
   className?: string
   children: ReactNode
-  title?: string
 }): ReactElement {
+  const { ref, clipped, expanded, toggle } = useClipped<HTMLDivElement>(text)
   return (
-    <div className={cn('px-1', full ? 'whitespace-pre-wrap break-words' : 'truncate', className)} title={title}>
-      {children}
+    <div className="flex min-w-0 items-start gap-0.5 px-1">
+      <div ref={ref} className={cn('min-w-0 flex-1', clipBox(expanded), className)}>
+        {children}
+      </div>
+      {clipped && <ClipToggle expanded={expanded} onToggle={toggle} className="mt-0" />}
     </div>
   )
 }
@@ -120,14 +125,12 @@ function ColumnLine({
   row,
   index,
   badges,
-  isCheck,
-  full
+  isCheck
 }: {
   row: FieldRow
   index: number
   badges: KeyBadge[]
   isCheck: boolean
-  full: boolean
 }): ReactElement {
   const c = row.col
   const p = row.prevCol
@@ -136,14 +139,15 @@ function ColumnLine({
     row.status === 'modified' && !!p && field(p) !== field(c)
 
   return (
+    // `items-center` 그대로 — 칸 하나를 펼치면 그 칸만 높아지고 이웃은 가운데에 남는다.
     <div
-      className={cn('grid border-t border-line/70 text-[12px]', full ? 'items-start py-1' : 'items-center', ROW_TONE[row.status])}
+      className={cn('grid items-center border-t border-line/70 py-0.5 text-[12px]', ROW_TONE[row.status])}
       style={{ gridTemplateColumns: GRID, minHeight: 34 }}
     >
       <Mark status={row.status} />
       <div className="px-1 text-right tabular-nums text-muted">{index + 1}</div>
-      <Cell full={full} className="font-mono text-fg" title={c.name}>{c.name}</Cell>
-      <Cell full={full} className="font-mono text-muted" title={c.type}>
+      <Cell text={c.name} className="font-mono text-fg">{c.name}</Cell>
+      <Cell text={c.type} className="font-mono text-muted">
         {c.type}
         {p && <Was v={p.type} changed={changed((x) => x.type)} />}
       </Cell>
@@ -151,11 +155,11 @@ function ColumnLine({
       <div className="flex justify-center">
         <Checkbox checked={c.nullable} disabled className={cn(changed((x) => x.nullable) && 'ring-2 ring-warning')} />
       </div>
-      <Cell full={full} className="font-mono text-muted" title={defLabel(c)}>
+      <Cell text={defLabel(c)} className="font-mono text-muted">
         {defLabel(c)}
         {p && <Was v={defLabel(p)} changed={changed((x) => x.defaultValue ?? '')} />}
       </Cell>
-      <Cell full={full} className="text-muted" title={c.comment || undefined}>{c.comment || ''}</Cell>
+      <Cell text={c.comment || ''} className="text-muted">{c.comment || ''}</Cell>
     </div>
   )
 }
@@ -168,7 +172,9 @@ function ColumnLine({
  * 열 배치도 Definition 과 맞춘다 — 종류 배지 · 이름 · 내용. 같은 자리에 같은 것이 있어야
  * 두 화면을 오갈 때 눈이 다시 자리를 안 찾는다.
  */
-function ConstraintLine({ row, full }: { row: ConstraintRow; full: boolean }): ReactElement {
+function ConstraintLine({ row }: { row: ConstraintRow }): ReactElement {
+  // 옛 모습(취소선)은 정책까지 든 한 줄이라 제일 잘 잘린다 — 그 줄도 스스로 펼친다.
+  const before = useClipped<HTMLSpanElement>(row.before ?? '')
   return (
     <div
       className={cn('grid items-center border-t border-line/70 py-1.5 text-[12px]', ROW_TONE[row.status])}
@@ -180,21 +186,24 @@ function ConstraintLine({ row, full }: { row: ConstraintRow; full: boolean }): R
           {row.kind.toUpperCase()}
         </Badge>
       </div>
-      <Cell full={full} className="px-1.5 font-mono text-fg" title={row.name}>
+      <Cell text={row.name} className="font-mono text-fg">
         {row.name}
       </Cell>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1.5">
-        {row.con && <ConstraintShape con={row.con} cols={row.cols} full={full} />}
+        {row.con && <ConstraintShape con={row.con} cols={row.cols} />}
         {/* 바뀐 줄에만 옛 모습을 덧댄다 — 정책까지 든 문자열이라 무엇이 무엇으로인지가 여기서 읽힌다. */}
         {row.status === 'modified' && row.before && (
           <span className="flex min-w-0 items-center gap-1">
             <ArrowRight className="size-3 shrink-0 rotate-180 text-muted" />
             <span
-              className={cn('font-mono text-[11px] text-danger/70 line-through', full ? 'break-words' : 'truncate')}
-              title={row.before}
+              ref={before.ref}
+              className={cn('min-w-0 font-mono text-[11px] text-danger/70 line-through', clipBox(before.expanded))}
             >
               {row.before}
             </span>
+            {before.clipped && (
+              <ClipToggle expanded={before.expanded} onToggle={before.toggle} className="mt-0" />
+            )}
           </span>
         )}
       </div>
@@ -204,16 +213,15 @@ function ConstraintLine({ row, full }: { row: ConstraintRow; full: boolean }): R
 
 function TablePanel({ t }: { t: TableView }): ReactElement {
   /**
-   * 바뀐 줄이 있으면 **기본으로 걸러 보여 준다.** 안 그러면 컬럼 일곱 줄이 전부 똑같이 늘어선
-   * 화면을 보게 되는데(제약만 바뀐 테이블이 그렇다), 그러면 "왜 이게 변경이지?"부터 찾아야 한다.
+   * **기본은 다 보이기다.** 한동안 반대였다 — 바뀐 줄이 있으면 알아서 걸러 줬는데, 그러면
+   * 제약만 바뀐 테이블에서 컬럼 칸이 "바뀐 컬럼 없음" 한 줄로 비어 테이블의 모습 자체를 알 수
+   * 없었다(2026-08-12 사용자: "바뀐것만 보여주지말고 다 보여주라고"). 대조표는 **판단하는
+   * 자리**이고, 판단은 "이 테이블이 어떤 모양이 되나"를 봐야 선다. 걸러 보는 것은 손잡이로 남긴다.
+   *
+   * 테이블을 옮길 때 되살리지도 않는다 — 껐는데 다음 테이블에서 다시 켜지면 끈 적이 없는 셈이다
+   * (예전엔 `useEffect` 로 `t.changed` 를 다시 심었다).
    */
-  const [changedOnly, setChangedOnly] = useState(t.changed)
-  useEffect(() => setChangedOnly(t.changed), [t.id, t.changed])
-  /**
-   * 잘린 칸을 펴서 본다 — 타입(긴 enum)·기본값·설명이 자주 잘린다. 표를 옮겨 다녀도 유지한다
-   * (테이블마다 다시 켜야 하면 "긴 것을 찾아 다니는" 일이 두 배가 된다).
-   */
-  const [full, setFull] = useState(false)
+  const [changedOnly, setChangedOnly] = useState(false)
 
   // 키 배지는 **반영 뒤 모습** 기준이다 — 표가 그리는 것이 결과 테이블이므로.
   const badgeMap = useMemo(() => keyBadgesOf(t.def), [t.def])
@@ -257,16 +265,35 @@ function TablePanel({ t }: { t: TableView }): ReactElement {
               .join(' · ')}
           </span>
         )}
-        <label className={cn('flex cursor-pointer items-center gap-1.5 text-[11.5px] text-muted', sameCount > 0 ? 'ml-auto' : 'ml-auto')}>
-          <Checkbox checked={full} onCheckedChange={(c) => setFull(c === true)} />
-          전문 보기
-        </label>
+        {/* 잘린 칸을 펴는 손잡이는 칸 자신이 든다 — 여기 있던 "전문 보기" 체크박스는 걷어냈다. */}
         {sameCount > 0 && (
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-muted">
-            <Checkbox checked={changedOnly} onCheckedChange={(c) => setChangedOnly(c === true)} />
+          /*
+           * **켜짐/꺼짐이 한눈에 보이는 토글 버튼**이다 — 체크박스가 아니다(2026-08-13 사용자).
+           * 모양은 바로 위 스키마 칩(`SchemaToggles`)과 같은 말투로 맞춘다: 같은 화면에서 "보기를
+           * 거르는 손잡이"가 두 벌인데 생김새가 다르면 눈이 매번 다시 배운다.
+           */
+          <button
+            type="button"
+            aria-pressed={changedOnly}
+            // 검사 손잡이 — 글자가 바뀌어도 이 이름은 안 바뀐다.
+            data-changed-only={changedOnly ? '1' : '0'}
+            onClick={() => setChangedOnly((v) => !v)}
+            className={cn(
+              'ml-auto flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] ring-1 transition-colors',
+              changedOnly
+                ? 'bg-warning/[0.18] font-semibold text-fg ring-warning/50'
+                : 'text-muted ring-line hover:bg-panel-strong'
+            )}
+          >
+            <span
+              className={cn(
+                'size-1.5 rounded-full',
+                changedOnly ? 'bg-warning' : 'bg-transparent ring-1 ring-muted'
+              )}
+            />
             바뀐 줄만
-            <span className="tabular-nums">(안 바뀐 줄 {sameCount}개)</span>
-          </label>
+            <span className="tabular-nums text-muted">안 바뀐 줄 {sameCount}</span>
+          </button>
         )}
       </div>
 
@@ -303,11 +330,13 @@ function TablePanel({ t }: { t: TableView }): ReactElement {
                 index={i}
                 badges={c.col ? (badgeMap.get(c.col.id) ?? []) : []}
                 isCheck={!!c.col && checkCols.has(c.col.id)}
-                full={full}
               />
             ))}
             {columns.length === 0 && (
-              <div className="border-t border-line/70 px-3 py-3 text-[12px] text-muted">바뀐 컬럼 없음</div>
+              <div className="border-t border-line/70 px-3 py-3 text-[12px] text-muted">
+                {/* 걸러서 빈 것과 원래 빈 것은 다른 사실이다 — 같은 말로 덮으면 고장으로 읽힌다. */}
+                {changedOnly ? '바뀐 컬럼 없음' : '컬럼 없음'}
+              </div>
             )}
           </div>
         </div>
@@ -320,7 +349,7 @@ function TablePanel({ t }: { t: TableView }): ReactElement {
             </h3>
             <div className="overflow-hidden rounded-[10px] border border-line">
               {constraints.map((k) => (
-                <ConstraintLine key={`k:${k.kind}:${k.name}`} row={k} full={full} />
+                <ConstraintLine key={`k:${k.kind}:${k.name}`} row={k} />
               ))}
             </div>
           </>
@@ -366,12 +395,19 @@ export function SchemaDiffExplorer({
   before,
   after,
   designId,
-  emptyText = '변경 없음'
+  emptyText = '변경 없음',
+  fill = false
 }: {
   before: VersionSnapshot
   after: VersionSnapshot
   designId: string
   emptyText?: string
+  /**
+   * 남은 높이를 **다 쓴다**. 화면의 본체가 이 표 하나일 때만 켠다(진단).
+   * 계획 화면에서 켜면 표 아래의 SQL 묶음이 첫 화면 밖으로 밀려난다 — 거기선 표가 판단의
+   * 근거이고 SQL 이 결론이라 둘 다 손 닿는 데 있어야 한다.
+   */
+  fill?: boolean
 }): ReactElement {
   const full = useMemo(() => buildDiffView(before, after), [before, after])
   const schemas = useMemo(() => schemasOf(full), [full])
@@ -400,7 +436,7 @@ export function SchemaDiffExplorer({
   if (full.tables.length === 0) return <div className="p-4 text-[13px] text-muted">{emptyText}</div>
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2">
+    <div className={cn('flex w-full min-w-0 flex-col gap-2', fill && 'min-h-0 flex-1')}>
       <SchemaToggles
         schemas={schemas}
         off={off}
@@ -417,7 +453,17 @@ export function SchemaDiffExplorer({
         말해 주지 않으면 **내용 폭**으로 줄어든다. 그러면 패널 크기가 %인 탓에 좌측 목록 폭까지
         테이블마다 달라져 화면 전체가 춤춘다(2026-08-10 실측: 박스 948px↔1330px, 사이드바 246↔346).
       */}
-      <div className="flex h-[560px] w-full min-h-0 min-w-0 overflow-hidden rounded-lg border border-line [&>div]:min-w-0 [&>div]:flex-1">
+      {/*
+        높이 — `fill` 이면 남은 자리를 다 쓴다. 못 박은 560px 이 화면 아래로 절반을 비워 두고
+        표는 표대로 좁아 스크롤이 길었다(2026-08-12 사용자: "높이 다 차지하면 안되나?").
+        바닥값(`min-h-[360px]`)은 남긴다 — 위쪽 내용이 길어 자리가 없을 때 0 으로 눌리면 안 된다.
+      */}
+      <div
+        className={cn(
+          'flex w-full min-h-0 min-w-0 overflow-hidden rounded-lg border border-line [&>div]:min-w-0 [&>div]:flex-1',
+          fill ? 'min-h-[360px] flex-1' : 'h-[560px]'
+        )}
+      >
         <WorkspacePanels
           sidebarTitle={`테이블 ${view.tables.length}개 · 바뀜 ${view.changedCount}개`}
           autoSaveId="migration-diff-explorer"

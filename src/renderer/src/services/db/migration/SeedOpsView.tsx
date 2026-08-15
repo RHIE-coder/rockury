@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
-import { AlertTriangle, ArrowLeftRight, CheckCircle2, DownloadCloud, Layers, Loader2, Play, Server, Sprout } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, CheckCircle2, Download, Layers, Loader2, Play, Server, Sprout } from 'lucide-react'
 import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { Checkbox } from '@renderer/ui/checkbox'
@@ -232,7 +232,7 @@ function ImportTab({ ctx }: { ctx: SeedOpsContext }): ReactElement {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={() => void loadImport(ctx)} disabled={loading}>
-          {loading ? <Loader2 className="animate-spin" /> : <DownloadCloud />}
+          {loading ? <Loader2 className="animate-spin" /> : <Download />}
           실 DB 읽기
         </Button>
         {importPlan && (

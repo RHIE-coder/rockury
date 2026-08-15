@@ -1,6 +1,8 @@
 import { scopeTableIds } from '../../migration/importSchema'
 import { suggestSchemaName, supportsSchemas } from '@shared/db/schemaCatalog'
+import { constraintId } from '../../ids'
 import type { DialectId } from '../../dialects'
+import { enforcePkNotNull } from './derive'
 import type { Column, Constraint, TableDef } from './types'
 
 /** 저장소 레코드(preload TableRecord)에서 필요한 필드만 — 매퍼가 preload 를 import 하지 않게. */
@@ -16,12 +18,51 @@ interface TableRecordLike {
   viewSql?: string
 }
 
+/** 이름 기반 제약 id 가 시작하는 자리 — 앞에 설계 접두(`<설계>:`)가 붙어 있을 수 있다. */
+function nameSchemeAt(id: string): number {
+  if (id.startsWith('k:')) return 0
+  const i = id.indexOf(':k:')
+  return i < 0 ? -1 : i + 1
+}
+
+/**
+ * 저장된 **옛 제약 id** 를 지금 규칙으로 옮긴다.
+ *
+ * 이름만으로 id 를 붙였던 시절(`k:<표>.<이름>`)에는 MySQL 의 FK 와 그 짝 인덱스가 **같은 id** 가
+ * 됐다 — MySQL 은 FK 를 만들 때 같은 이름의 인덱스를 함께 만든다. 그래서 제약 목록이 React key
+ * 중복으로 한 줄을 삼켰다(2026-08-12 콘솔: `test-mysql-1:k:api_keys.fk_api_keys_user` 가 두 번).
+ * id 규칙은 `ids.ts` 에서 종류를 넣도록 이미 고쳤지만 **그 전에 저장된 설계**가 옛 글자를 그대로
+ * 들고 있어, 불러오는 문에서 옮긴다(저장은 다음 편집 때 따라온다 — 부팅만으로 쓰기를 돌리지 않는다).
+ *
+ * 손대는 것은 이름 기반(`k:`) id 뿐이다 — 설계에서 저작한 순번 id(`con-3`)는 이미 안 겹친다.
+ * 설계 접두는 그대로 이어 붙인다: 빠지면 다른 설계의 제약과 부딪힌다.
+ */
+export function migrateConstraintIds(t: TableDef): TableDef {
+  const seen = new Set<string>()
+  let changed = false
+  const constraints = t.constraints.map((k) => {
+    const at = nameSchemeAt(k.id)
+    const moved = at < 0 ? k.id : k.id.slice(0, at) + constraintId(t.schema, t.name, k.kind, k.name)
+    // 옮긴 뒤에도 겹치면(같은 종류·같은 이름이 두 벌) 뒤엣것에 번호를 붙인다 — 삼켜지는 줄이 없어야 한다.
+    let id = moved
+    for (let n = 2; seen.has(id); n++) id = `${moved}#${n}`
+    seen.add(id)
+    if (id === k.id) return k
+    changed = true
+    return { ...k, id }
+  })
+  return changed ? { ...t, constraints } : t
+}
+
 /**
  * 저장소 레코드 → 렌더러 도메인 TableDef. init(최초 하이드레이션)과 rehydration(에이전트발 갱신)이
  * 같은 매핑을 써야 형태가 어긋나지 않는다 — 한 곳에 둔다(형제 store 의 toDef 관례와 맞춤).
+ *
+ * 여기가 **옛 데이터를 거두는 자리**다: 제약 id 규칙(위)과 "PK 는 NOT NULL"(`enforcePkNotNull`)을
+ * 통과시킨다. 편집 경로에서만 잡으면 한 번도 안 건드린 표는 영원히 옛 모습으로 남는다.
  */
 export function toTableDef(r: TableRecordLike): TableDef {
-  return {
+  return migrateConstraintIds(enforcePkNotNull({
     id: r.id,
     designId: r.designId,
     /**
@@ -41,7 +82,7 @@ export function toTableDef(r: TableRecordLike): TableDef {
     constraints: r.constraints as Constraint[],
     isView: r.isView ?? false,
     viewSql: r.viewSql ?? ''
-  }
+  }))
 }
 
 /** 저장으로 내보낼 필드만 — preload `TableRecord` 의 부분집합(preload 를 import 하지 않으려고). */

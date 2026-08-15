@@ -4,6 +4,7 @@ import {
   createSavedQuery,
   deleteFolder,
   deleteSavedQuery,
+  getSavedQuery,
   listTree,
   renameFolder,
   reorderTree,
@@ -39,6 +40,8 @@ export function registerCollectionIpc(): void {
   // 스코프는 **연결 아니면 설계**다 — 운영 화면은 연결을, 설계 화면은 설계를 준다.
   // 연결로 물어보면 저장소가 그 연결에 물린 설계까지 찾아 함께 보여 준다(`store/libraryScope`).
   ipcMain.handle('sq:tree', (_e, scope: LibraryScope) => envelope(() => listTree(scope)))
+  // 쿼리 하나를 열 때 쓴다 — 화면이 든 트리 사본은 낡았을 수 있어서 **여기서 새로 읽는다.**
+  ipcMain.handle('sq:query', (_e, id: string) => envelope(() => getSavedQuery(id)))
   ipcMain.handle('sq:createFolder', (e, input: { scope: LibraryScope; parentId: string | null; name: string }) =>
     writing(e, { domain: 'library' }, () => createFolder(input))
   )

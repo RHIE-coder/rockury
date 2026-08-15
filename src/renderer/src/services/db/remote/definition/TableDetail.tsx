@@ -1,5 +1,7 @@
 import { Table2, Eye, Plus } from 'lucide-react'
 import { Badge } from '@renderer/ui/badge'
+import { ClipToggle, clipBox, useClipped } from '@renderer/ui/clipped'
+import { cn } from '@renderer/lib/utils'
 import { dialectInfo, type DialectId } from '../../dialects'
 import type { Constraint, ConstraintKind, TableDef } from '../../workspaces/definition/types'
 import { keyBadgesOf, checkColumnIds, resolveColumns } from '../../workspaces/definition/derive'
@@ -18,6 +20,25 @@ const KIND_VARIANT: Record<ConstraintKind, 'pk' | 'uk' | 'fk' | 'idx' | 'check'>
   fk: 'fk',
   idx: 'idx',
   check: 'check'
+}
+
+/**
+ * 잘리는 칸 — 넘칠 때만 스스로 ⌄ 를 내민다(설계부·대조표와 **같은 부품**).
+ *
+ * 여기는 지금껏 전문을 볼 길이 아예 없던 자리다: `truncate` 만 걸려 있고 호버 툴팁조차 없어,
+ * 긴 기본값·설명·enum 타입은 실 DB 를 보면서도 끝을 못 봤다(2026-08-12 사용자가 설계부에서
+ * 지적하며 "영향가는 Migration, Remote에도 똑같이 적용하게 해").
+ */
+function Cell({ text, className }: { text: string; className?: string }) {
+  const { ref, clipped, expanded, toggle } = useClipped<HTMLDivElement>(text)
+  return (
+    <div className="flex min-w-0 items-start gap-0.5 px-1">
+      <div ref={ref} className={cn('min-w-0 flex-1', clipBox(expanded), className)}>
+        {text}
+      </div>
+      {clipped && <ClipToggle expanded={expanded} onToggle={toggle} className="mt-0" />}
+    </div>
+  )
 }
 
 /**
@@ -111,8 +132,8 @@ export function TableDetail({
                 style={{ gridTemplateColumns: GRID, minHeight: 34 }}
               >
                 <div className="px-1 text-right text-[11px] tabular-nums text-muted">{i + 1}</div>
-                <div className="truncate px-1 font-mono text-[12.5px] text-fg">{c.name}</div>
-                <div className="truncate px-1 font-mono text-[12px] text-muted">{c.type}</div>
+                <Cell text={c.name} className="font-mono text-[12.5px] text-fg" />
+                <Cell text={c.type} className="font-mono text-[12px] text-muted" />
                 <div className="flex flex-wrap gap-1 px-1">
                   {badges.map((b) => (
                     <Badge key={b.kind} variant={b.kind} className="px-1.5 py-0.5 text-[10px]">
@@ -127,10 +148,11 @@ export function TableDetail({
                   )}
                 </div>
                 <div className="text-center text-[11px] text-muted">{c.nullable ? 'NULL' : 'NOT NULL'}</div>
-                <div className="truncate px-1 font-mono text-[12px] text-muted">
-                  {c.defaultValue == null || c.defaultValue === '' ? '—' : c.defaultValue}
-                </div>
-                <div className="truncate px-1 text-[12px] text-muted">{c.comment || ''}</div>
+                <Cell
+                  text={c.defaultValue == null || c.defaultValue === '' ? '—' : c.defaultValue}
+                  className="font-mono text-[12px] text-muted"
+                />
+                <Cell text={c.comment || ''} className="text-[12px] text-muted" />
               </div>
             )
           })}

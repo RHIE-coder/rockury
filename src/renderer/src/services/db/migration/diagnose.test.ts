@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diagnose, diagnosisState, hasAhead } from './diagnose'
+import { diagnose, diagnosisState, hasAhead, pickTargetVersion, shouldIdentify } from './diagnose'
 import { columnId, tableId } from '../ids'
 import type { TableDef } from '../workspaces/definition/types'
 import type { SeedSet } from '../workspaces/seed/types'
@@ -98,5 +98,63 @@ describe('diagnosisState — 화면이 그릴 상태 하나로', () => {
 
   it('아직 잴 것이 없으면(타깃 없음) 없는 차이를 지어내지 않는다', () => {
     expect(diagnosisState(true, null)).toBe('synced')
+  })
+})
+
+describe('shouldIdentify — 판정을 물어야 하나', () => {
+  const base = { identified: false, loading: false, askedPair: null, pair: 'c1:d1' }
+
+  it('아무것도 없으면 묻는다', () => {
+    expect(shouldIdentify(base)).toBe(true)
+  })
+
+  it('답이 이미 있으면 안 묻는다', () => {
+    expect(shouldIdentify({ ...base, identified: true })).toBe(false)
+  })
+
+  it('이미 물어 본 짝이면 안 묻는다', () => {
+    expect(shouldIdentify({ ...base, askedPair: 'c1:d1' })).toBe(false)
+  })
+
+  it('짝이 바뀌면 다시 묻는다', () => {
+    expect(shouldIdentify({ ...base, askedPair: 'c1:d1', pair: 'c1:d2' })).toBe(true)
+  })
+
+  // 회귀(2026-08-14): 결속을 끊고 돌아오면 판이 뜨는 순간 진단이 이미 돌고 있다. 그때
+  // 물음을 버리기만 하고 다시 묻지 않아 후보가 비었고, "기존 설계 연결하기"가 사라졌다.
+  it('도는 중엔 미루지만, 끝나면 그때 묻는다', () => {
+    expect(shouldIdentify({ ...base, loading: true })).toBe(false)
+    expect(shouldIdentify({ ...base, loading: false })).toBe(true)
+  })
+})
+
+describe('pickTargetVersion — 견줄 설계 버전 고르기', () => {
+  const versions = ['v0.2.0', 'v0.1.0'] // 최신순
+
+  it('대놓고 고른 것이 있으면 그것', () => {
+    expect(pickTargetVersion({ explicit: 'v0.1.0', remembered: 'v0.2.0', versions })).toBe('v0.1.0')
+  })
+
+  it('아까 고른 것이 이 설계에 있으면 그것을 지킨다', () => {
+    expect(pickTargetVersion({ remembered: 'v0.1.0', versions })).toBe('v0.1.0')
+  })
+
+  it('아무것도 없으면 최신(목록 맨 앞)', () => {
+    expect(pickTargetVersion({ remembered: null, versions })).toBe('v0.2.0')
+  })
+
+  it('버전이 하나도 없으면 없다고 말한다', () => {
+    expect(pickTargetVersion({ remembered: null, versions: [] })).toBe(null)
+  })
+
+  // 회귀(2026-08-14): 예전 식은 `기억 ?? 최신` 이라 빈 문자열이 "고른 값"으로 통과했다.
+  // 한 번 비면 최신으로 못 돌아와 상태 줄이 영영 "버전 모름"이었다.
+  it('빈 값이 눌어붙지 않는다 — 최신으로 되돌아온다', () => {
+    expect(pickTargetVersion({ remembered: '', versions })).toBe('v0.2.0')
+  })
+
+  // 회귀: 기억은 창 하나에 하나뿐이라 설계를 갈아타면 남의 번호를 들고 간다.
+  it('다른 설계의 번호는 안 들고 간다', () => {
+    expect(pickTargetVersion({ remembered: 'v9.9.9', versions })).toBe('v0.2.0')
   })
 })

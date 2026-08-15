@@ -81,6 +81,17 @@ export function listTree(scope: LibraryScope): {
   return { folders, queries }
 }
 
+/**
+ * 저장쿼리 하나를 **저장소에서 곧장** 읽는다 — 없으면 null.
+ *
+ * 화면은 트리를 사본으로 들고 있는데, 그 사본은 자동저장·다른 창·에이전트 쓰기로 언제든
+ * 낡는다. 그래서 쿼리를 **열 때는** 사본이 아니라 여기서 읽는다(2026-08-12 유실 사고).
+ */
+export function getSavedQuery(id: string): SavedQueryRecord | null {
+  const row = getDb().prepare('SELECT * FROM saved_queries WHERE id = ?').get(id) as unknown as QueryRow | undefined
+  return row ? toQuery(row) : null
+}
+
 /** 새 것이 설 자리(sort_order) — **보이는 범위 전체**에서 잰다. 소속별로 따로 세면 순서가 겹친다. */
 function nextOrder(table: string, scope: LibraryScope): number {
   const w = ownerWhere(scope)

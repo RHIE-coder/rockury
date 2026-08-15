@@ -71,3 +71,51 @@ export function diagnosisState(mapped: boolean, designDiff: SchemaDiff | null): 
   if (!designDiff) return 'synced'
   return isEmptyDiff(designDiff) ? 'synced' : 'different'
 }
+
+/**
+ * 맵핑 판이 "이 연결은 몇 버전인가"를 물어야 하나.
+ *
+ * 셋 다 아닐 때만 묻는다: ⑴ 답이 이미 있다 ⑵ 다른 일이 도는 중이다 ⑶ 이 짝을 이미 물었다.
+ *
+ * ⑵ 가 함정이었다 — 판이 뜨는 그 순간 진단이 이미 돌고 있으면(결속을 끊고 이 화면으로
+ * 돌아온 경우가 늘 그렇다) 물음이 통째로 날아갔고, 그 뒤로 다시 묻지 않아 후보가 빈 채
+ * 남았다. "지금은 말고"와 "영영 말고"는 다르다 — 도는 일이 끝나면 그때 물어야 한다.
+ *
+ * @param askedPair 이미 물어 본 `연결:설계` 짝. 아직이면 null.
+ * @param pair 지금 판이 서 있는 `연결:설계` 짝.
+ */
+export function shouldIdentify(args: {
+  identified: boolean
+  loading: boolean
+  askedPair: string | null
+  pair: string
+}): boolean {
+  if (args.identified || args.loading) return false
+  return args.askedPair !== args.pair
+}
+
+/**
+ * 견줄 **설계 쪽 버전**을 고른다 — 상태 줄의 설계 옆에 서는 그 번호다.
+ *
+ * 기준은 셋, 이 순서다:
+ *   ⑴ 이번에 대놓고 고른 것(계획 화면의 버전 셀렉터)
+ *   ⑵ 아까 고른 것이 **이 설계에 아직 있으면** 그것
+ *   ⑶ 아니면 이 설계의 최신 버전
+ *
+ * `versions` 는 **최신순**으로 받는다(저장소가 `created_at DESC` 로 준다) — 그래서 맨 앞이 최신.
+ *
+ * ⑵ 의 "이 설계에 아직 있으면"이 두 가지를 막는다.
+ * 하나는 **설계 갈아타기** — 기억은 설계마다가 아니라 창 하나에 하나뿐이라, 안 거르면 남의
+ * 설계 번호를 그대로 들고 간다. 또 하나는 **빈 값이 눌어붙는 것** — 예전 식(`기억 ?? 최신`)은
+ * 빈 문자열을 "고른 값"으로 봐서, 한 번 비면 최신으로 되돌아가지 못하고 상태 줄이 영영
+ * "버전 모름"으로 남았다(2026-08-14 사용자: "옆에 비어있는 이유는? 기준이 뭐야?").
+ */
+export function pickTargetVersion(args: {
+  explicit?: string | null
+  remembered: string | null
+  versions: readonly string[]
+}): string | null {
+  if (args.explicit) return args.explicit
+  if (args.remembered && args.versions.includes(args.remembered)) return args.remembered
+  return args.versions[0] ?? null
+}

@@ -77,6 +77,11 @@ describe('runChecks — 검사 카탈로그', () => {
     const r = runChecks([cap([textEl([0, 0, 0], [255, 255, 255], { truncated: true })])])
     expect(r.findings.some((f) => f.check === 'truncation')).toBe(true)
   })
+  it('제 자리에서 펼 수 있으면(expandable) 잘려도 안 센다', () => {
+    // 잘린 칸 옆에 ⌄ 손잡이가 붙는다(`ui/clipped`) — 눌러 펴면 전문이 나오므로 소실이 아니다.
+    const r = runChecks([cap([textEl([0, 0, 0], [255, 255, 255], { truncated: true, expandable: true })])])
+    expect(r.findings.some((f) => f.check === 'truncation')).toBe(false)
+  })
   it('가로 넘침은 차단, 세로 넘침은 무시', () => {
     const wide = runChecks([cap([textEl([0, 0, 0], [255, 255, 255], { bounds: { x: 10, y: 10, w: 1300, h: 20 } })])])
     const tall = runChecks([cap([textEl([0, 0, 0], [255, 255, 255], { bounds: { x: 10, y: 900, w: 100, h: 20 } })])])
