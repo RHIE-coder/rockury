@@ -169,9 +169,27 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
       targetVersion: rec.targetVersion,
       appliedVersion: rec.appliedVersion
     }
-    // 연결↔설계 짝이 바뀌면 앞선 승인은 **다른 DB 에 대한 것**이라 푼다.
+    /*
+     * 연결↔설계 짝이 바뀌면 앞선 승인도 계획도 **다른 DB 에 대한 것**이라 버린다.
+     * 승인만 풀던 동안은 남은 계획이 그대로 서서, 실행 화면이 앞 연결의 문 여든네 개를
+     * 새 연결에 밀 수 있게 내밀었다(§run 은 화면이 준 연결 id 로 나간다).
+     */
     const stale = get().binding && get().binding!.id !== rec.id
-    set({ binding, remoteVersion: rec.appliedVersion ?? '', ...(stale ? { removalsPassed: null } : {}) })
+    set({
+      binding,
+      remoteVersion: rec.appliedVersion ?? '',
+      ...(stale
+        ? {
+            removalsPassed: null,
+            plan: null,
+            planDiff: null,
+            planTarget: null,
+            revert: null,
+            destructiveAck: false,
+            interrupted: null
+          }
+        : {})
+    })
     return binding
   },
 

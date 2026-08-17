@@ -12,6 +12,11 @@ import type { SchemaDiff } from '../versions/diff'
  * 그렇다고 무조건 막을 수는 없다 — 진단의 "계획 만들기"가 보내는 곳이 계획이라, 그 길까지
  * 막으면 두 화면을 왕복하는 막다른 골목이 된다. 그래서 **없앨 것의 모양에 승인을 묶는다**:
  * 진단을 거쳐 넘어온 그 목록만 통과하고, 목록이 달라지면 승인이 저절로 풀린다.
+ *
+ * 그 앞에 관문이 하나 더 있다 — **맵핑**. "이 실 DB 가 설계의 몇 버전인가"를 모르면 계획은
+ * 근거 없이 선다: 설계에 없는 것 전부가 "없앨 것"으로 서서, 사람이 아직 아무것도 정하지
+ * 않았는데 스무 개짜리 삭제 목록이 뜬다(2026-08-17 사용자 제보: "판단할 기준도 없고 준비도
+ * 돼있지 않은데 이렇게 화면이 뜨는건 아닌거같아").
  */
 
 /**
@@ -47,10 +52,27 @@ export function removalSignature(diff: SchemaDiff): string {
 export type PlanGate =
   /** 계획을 그려도 된다. */
   | 'ok'
+  /** 이 실 DB 가 몇 버전인지 모른다 — 맵핑이 먼저다. */
+  | 'unmapped'
   /** 없앨 것이 있다 — 진단이 먼저다. */
   | 'removes'
 
-export function planGate(diff: SchemaDiff | null, passed: string | null): PlanGate {
+/**
+ * @param mapped 이 실 DB 가 설계의 몇 버전인지 못박았나(`remoteVersion`).
+ * @param diff 지금 DB → 타깃 설계 버전의 차이. 못 냈으면 null.
+ * @param passed 진단에서 승인해 온 없앨 것 목록의 표식.
+ */
+export function planGate({
+  mapped,
+  diff,
+  passed
+}: {
+  mapped: boolean
+  diff: SchemaDiff | null
+  passed: string | null
+}): PlanGate {
+  // 맵핑이 먼저다 — 없앨 것을 세기 전에 "무엇을 기준으로 세는가"가 정해져 있어야 한다.
+  if (!mapped) return 'unmapped'
   if (!diff) return 'ok'
   const sig = removalSignature(diff)
   if (sig === '') return 'ok'

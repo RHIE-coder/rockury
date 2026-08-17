@@ -36,6 +36,12 @@ const AREA_TINT: Record<ModuleArea, string> = {
  * 구획 뱃지('설계'·'운영')는 안 단다 — 모듈 줄이 이미 그 이름을 붙였다. 셋째로 또 적으면
  * 한 화면에 같은 말이 셋이다.
  *
+ * **자리가 모자라면 두 단으로 접힌다**(2026-08-17 사용자 지시): 위는 이름, 아래는 나머지
+ * (시점·범위). 세 칸이 한 줄에 안 들어가 이름이 한 글자로 갈리던 것을 푼 것이다.
+ * 2026-08-04 에도 두 단 카드를 썼다가 걷어냈는데 그때 이유는 "뷰 탭 줄이 가로로 길다"였고,
+ * 손잡이를 모듈 줄로 올리자마자 사라졌다. 지금 이유는 다르다 — **좁은 창의 폭 부족**이라
+ * 자리를 옮겨도 안 없어진다.
+ *
  * **"좁으면 접기"는 자기를 담은 자리를 보고 판정한다**(`@container/handle` · 2026-08-07).
  * 그 자를 세우는 것은 손잡이가 아니라 **자리 쪽**이다(`ModuleTabs`) — 자리 폭이 안쪽 내용과
  * 무관해야(`basis-0`) 접혀서 좁아지고 좁아져서 또 접히는 되먹임이 안 생기기 때문이다.
@@ -56,6 +62,8 @@ export function AreaHandle({
 }) {
   const selectors = selectorsIn(service, area)
   if (!selectors.length) return null
+  // 첫 칸(이름)이 윗줄, 나머지가 아랫줄이다 — 두 단으로 접힐 때의 갈림선.
+  const [head, ...tail] = selectors
 
   return (
     <span
@@ -72,25 +80,66 @@ export function AreaHandle({
         // UI가 깨진다"). 자리가 모자랄 때 손잡이는 **가로로 줄어들어야지 세로로 자라면 안 된다** —
         // 두 어절짜리 라벨("편집 중")이 줄바꿈되면 이 줄 하나가 11px 높아져 화면 전체가 밀린다.
         // 여기 한 번만 걸면 된다: `white-space` 는 상속되므로 안쪽 글자가 전부 따라온다.
+        // (개행 금지는 **글자**에 대한 바닥선이다 — 아래 두 단 접기는 글자가 흐르다 갈리는 것이
+        // 아니라 칸을 줄로 못박아 세우는 것이므로 그 바닥선을 안 깬다.)
         'flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[9px] border bg-canvas px-1.5 py-1',
+        // 자리가 좁으면 두 단 — 위는 이름, 아래는 시점·범위(§두 단 접기).
+        '@max-[420px]/handle:flex-col @max-[420px]/handle:items-start @max-[420px]/handle:gap-0.5',
         tinted ? AREA_TINT[area] : 'border-line'
       )}
     >
-      {selectors.map((sel, i) => (
-        // 칸막이를 따로 세우지 않고 **칸 자신의 왼쪽 테두리**로 그린다 — 서비스가 직접 그리는 칸
-        // (`Render`)은 조건에 따라 아무것도 안 그릴 수 있어서(설계 미선택 시의 시점 렌즈),
-        // 칸막이를 별도 요소로 두면 뒤가 빈 채 선만 덩그러니 남는다. `empty:hidden` 이 그 경우
-        // 칸째로 접어 선까지 같이 사라지게 한다.
-        <span
-          key={sel.id}
-          className={cx(
-            'flex min-w-0 items-center empty:hidden',
-            i > 0 && 'ml-0.5 border-l border-line pl-2'
-          )}
-        >
-          {sel.Render ? <sel.Render /> : <HandleSelector sel={sel} />}
+      <Cell sel={head} />
+      {tail.length > 0 && (
+        // `shrink-0` — 이 묶음은 **줄어들면 안 된다.** 안쪽이 전부 `shrink-0` 이라 묶음만 좁아지고
+        // 내용은 그대로 남아 오른쪽으로 삐져나온다(§Cell 의 화살표 겹침과 같은 자리). 한 줄일 때
+        // 모자란 폭은 위/앞의 이름 칸이 말줄임으로 받고, 그것으로도 모자라면 두 단으로 접힌다.
+        <span className="flex shrink-0 items-center gap-1.5">
+          {tail.map((sel, i) => (
+            // 아랫줄의 **첫 칸**은 두 단일 때 칸막이를 지운다 — 줄이 갈라 놓은 자리에 선을 또
+            // 그으면 아래 묶음이 위 이름에 딸린 것처럼 안 읽힌다.
+            <Cell key={sel.id} sel={sel} divider={i === 0 ? 'row-only' : 'always'} />
+          ))}
         </span>
-      ))}
+      )}
+    </span>
+  )
+}
+
+/**
+ * 손잡이 안의 한 칸.
+ *
+ * 칸막이를 따로 세우지 않고 **칸 자신의 왼쪽 테두리**로 그린다 — 서비스가 직접 그리는 칸
+ * (`Render`)은 조건에 따라 아무것도 안 그릴 수 있어서(설계 미선택 시의 시점 렌즈), 칸막이를
+ * 별도 요소로 두면 뒤가 빈 채 선만 덩그러니 남는다. `empty:hidden` 이 그 경우 칸째로 접어
+ * 선까지 같이 사라지게 한다.
+ *
+ * **줄어드는 칸은 이름 칸 하나다.** 서비스가 직접 그리는 칸(시점 `Draft` · 범위 `public`)은
+ * 안쪽이 전부 `shrink-0` 이라, 이 칸까지 줄어들 수 있게 두면 **칸만 좁아지고 내용은 그대로 남아**
+ * 오른쪽으로 삐져나온다 — 시점의 화살표가 다음 칸의 칸막이 위에 겹쳐 깨진 글자처럼 보이고,
+ * 마지막 칸의 화살표는 손잡이의 `overflow-hidden` 에 잘려 아예 사라졌다(2026-08-17 사용자 제보:
+ * "아래 드롭박스 화살표가 UI가 깨졌는데"). 모자란 폭은 이름 칸이 말줄임으로 받고, 그것으로도
+ * 모자라면 손잡이가 두 단으로 접힌다.
+ */
+function Cell({
+  sel,
+  divider
+}: {
+  sel: ContextSelector
+  /** `always` — 늘 칸막이. `row-only` — 한 줄일 때만(두 단이면 줄이 대신 가른다). */
+  divider?: 'always' | 'row-only'
+}) {
+  return (
+    <span
+      className={cx(
+        'flex items-center empty:hidden',
+        sel.Render ? 'shrink-0' : 'min-w-0',
+        divider && 'ml-0.5 border-l border-line pl-2',
+        // 자를 안 세운 자리(`@container/handle` 없음)에서는 컨테이너 질의가 아예 안 걸리므로
+        // **칸막이가 기본이고 지우는 쪽이 조건**이다 — 반대로 짜면 그 자리에서 선이 사라진다.
+        divider === 'row-only' && '@max-[420px]/handle:ml-0 @max-[420px]/handle:border-l-0 @max-[420px]/handle:pl-0'
+      )}
+    >
+      {sel.Render ? <sel.Render /> : <HandleSelector sel={sel} />}
     </span>
   )
 }
@@ -128,10 +177,20 @@ function HandleSelector({ sel }: { sel: ContextSelector }) {
                 이름은 이 손잡이에서 **유일하게 줄어드는 칸**이다 — 나머지(시점·범위)는 짧고
                 `shrink-0` 이라, 모자란 폭을 이 칸 하나가 다 받는다. 나눠 받던 동안은 `Draft` 가
                 `Dra…` 로 갈려 못 읽는 글자만 남았다(2026-08-07 제보).
-                상한은 자리에 맞춰 세 단이다: 넉넉하면 260px(대부분의 이름이 통째로 들어간다),
-                보통 180px, 빠듯하면 140px.
+
+                상한은 자리에 맞춰 네 단이다 — 아래에서 위로:
+                  ~420px  260px  두 단으로 접혀 **윗줄이 통째로** 이름 자리다
+                  421~493 140px  한 줄인데 제일 빠듯한 구간
+                  494~671 180px
+                  672px~  260px  대부분의 이름이 통째로 들어간다
               */}
-              <span className="max-w-[180px] truncate font-medium text-fg @max-[493px]/handle:max-w-[140px] @min-[672px]/handle:max-w-[260px]">
+              <span
+                className={cx(
+                  'max-w-[180px] truncate font-medium text-fg @min-[672px]/handle:max-w-[260px]',
+                  '@min-[421px]/handle:@max-[493px]/handle:max-w-[140px]',
+                  '@max-[420px]/handle:max-w-[260px]'
+                )}
+              >
                 {current.label}
               </span>
               <HintChip hint={current.hint} dot={current.dot} compact />

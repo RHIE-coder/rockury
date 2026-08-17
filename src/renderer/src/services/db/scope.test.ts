@@ -3,9 +3,11 @@ import type { ConnectionDef } from './connections/store'
 import {
   catalogConnectionDraft,
   designSchemas,
+  designScopeCountLabel,
   designScopeSummary,
   findConnectionForCatalog,
   reconcileScope,
+  scopeCountLabel,
   scopeModel,
   scopeSummary,
   scopedTables,
@@ -68,6 +70,22 @@ describe('scopeSummary', () => {
     expect(scopeSummary(['public'])).toBe('public')
     expect(scopeSummary(['public', 'auth'])).toBe('public 외 1')
     expect(scopeSummary(['public', 'auth', 'billing'])).toBe('public 외 2')
+  })
+})
+
+describe('scopeCountLabel — 두 단으로 접힌 손잡이는 개수만 적는다', () => {
+  it('숫자만 — 단위는 옆 아이콘이 말한다', () => {
+    expect(scopeCountLabel(['public'])).toBe('1')
+    expect(scopeCountLabel(['service1', 'service2', 'service3', 'testdb'])).toBe('4')
+  })
+
+  it('셀 것이 없으면 자리 이름 — "0" 은 "고른 게 없다"가 아니라 "없다"로 읽힌다', () => {
+    expect(scopeCountLabel([])).toBe('범위')
+  })
+
+  it('설계 범위는 안 골랐으면 전부이므로 고를 수 있는 것의 수를 센다', () => {
+    expect(designScopeCountLabel([], ['auth', 'billing', 'public'])).toBe('3')
+    expect(designScopeCountLabel(['public'], ['auth', 'billing', 'public'])).toBe('1')
   })
 })
 

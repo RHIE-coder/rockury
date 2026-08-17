@@ -103,6 +103,41 @@ describe('맵핑 — 판정은 읽기만 한다', () => {
 
 })
 
+describe('결속 갈아타기 — 앞 연결의 계획을 새 연결로 들고 가지 않는다', () => {
+  /*
+   * 회귀(2026-08-17): 짝이 바뀔 때 승인(`removalsPassed`)만 풀고 계획은 남겼다. 실행 화면은
+   * 스토어의 계획을 그대로 그리고 밀기는 **화면이 준 연결 id** 로 나가므로, 앞 연결에서 만든
+   * 문들이 새 연결로 나갈 수 있었다.
+   */
+  it('짝이 바뀌면 계획·되돌리기·동의를 다 버린다', async () => {
+    useMigrationStore.setState({
+      binding: { id: 'env1', targetVersion: 'v1', appliedVersion: 'v1' },
+      removalsPassed: 'orders',
+      destructiveAck: true,
+      plan: { statements: [{ sql: 'DROP TABLE `t`;', kind: 'drop', destructive: true, table: 't' }], destructiveCount: 1, unsupported: [] },
+      revert: { statements: [], lossy: [], destructiveCount: 0, unsupported: [] }
+    })
+    api.environments.ensure.mockResolvedValueOnce(env({ id: 'env2', connectionId: 'c2' }))
+
+    await useMigrationStore.getState().resolveBinding('c2', 'd1')
+
+    const s = useMigrationStore.getState()
+    expect(s.plan).toBeNull()
+    expect(s.revert).toBeNull()
+    expect(s.removalsPassed).toBeNull()
+    expect(s.destructiveAck).toBe(false)
+  })
+
+  it('같은 짝을 다시 읽는 것으로는 안 버린다 — 계획을 만드는 길이 이걸 거친다', async () => {
+    const plan = { statements: [{ sql: 'ALTER TABLE `t` ADD COLUMN `x` int NULL;', kind: 'alter' as const, destructive: false, table: 't' }], destructiveCount: 0, unsupported: [] }
+    useMigrationStore.setState({ binding: { id: 'env1', targetVersion: 'v1', appliedVersion: 'v1' }, plan })
+
+    await useMigrationStore.getState().resolveBinding('c1', 'd1')
+
+    expect(useMigrationStore.getState().plan).toBe(plan)
+  })
+})
+
 describe('진단', () => {
   it('Remote 버전을 모르면 앞선 것을 못 잰다 — 맵핑이 먼저다', async () => {
     await useMigrationStore.getState().runDiagnosis('c1', 'd1')

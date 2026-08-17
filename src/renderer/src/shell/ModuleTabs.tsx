@@ -6,15 +6,11 @@ import { areaAccent } from './areaAccent'
 import { AreaHandle, selectorsIn } from './AreaHandle'
 import { cx } from '../lib/cx'
 
-/**
- * 구획 이름표. 설계=Mercury 시안, 운영=테라코타 — globals.css 팔레트로 두 부서에 색 정체성 부여.
- * 카드 안에서는 바탕 없이 **글자색만** 쓴다: 카드가 이미 그 부서 색을 깔고 있어서, 같은 색
- * 바탕을 한 겹 더 얹으면 이름표가 카드에 묻혀 안 읽힌다.
+/*
+ * 구획 이름표('설계'·'운영')는 **없앴다**(2026-08-17 사용자 지시). 카드가 이미 부서 색을 깔고
+ * 있어 소속은 색이 말하고, 그 두 낱말이 가운데 묶음을 40px 넘게 넓혀 양옆 손잡이 자리를
+ * 그만큼 빼앗고 있었다 — 설계 이름이 한 글자로 갈린 폭 부족의 한 몫이었다.
  */
-const AREA_CHIP: Partial<Record<ModuleArea, { label: string; cls: string }>> = {
-  design: { label: '설계', cls: 'text-accent' },
-  ops: { label: '운영', cls: 'text-accent-2' }
-}
 
 /**
  * 구획 카드의 바탕·테두리. 연한 부서색을 흰색과 섞어(`/60`) 깐다 — 원색 그대로면 흐린
@@ -75,7 +71,12 @@ export function ModuleTabs() {
         손잡이는 탭 목록 **바깥**에 둔다 — 안에 넣으면 radix 의 화살표 이동(roving focus)이
         드롭다운 단추까지 탭으로 셈해, 좌우 키로 모듈을 넘기다 손잡이에 걸린다.
       */}
-      <div className="flex items-center border-b border-line bg-canvas px-3 py-2.5">
+      {/*
+        `@container/modulerow` — 가운데 탭이 "좁으면 이름을 접고 아이콘만"을 판정하는 **자**다.
+        이 줄의 폭은 창에서 곧바로 오므로(안쪽 내용과 무관) 접혀서 좁아지고 좁아져서 또 접히는
+        되먹임이 없다. 손잡이의 자(`@container/handle`)와 같은 이유로 화면 폭이 아니라 자리를 잰다.
+      */}
+      <div className="@container/modulerow flex items-center border-b border-line bg-canvas px-3 py-2.5">
         {/*
           양옆 자리는 **남는 폭을 정확히 반씩** 먹는다(`flex-1 basis-0`). 손잡이 내용이 길든 짧든,
           한쪽만 있든 둘 다 있든 두 자리의 폭이 같으므로 **가운데 묶음이 늘 같은 자리에 선다**.
@@ -105,19 +106,17 @@ export function ModuleTabs() {
         <Zone
           modules={zones.start}
           split={split}
-          chipSide="trailing"
           className={crossing ? 'flex-1 justify-end' : 'shrink-0 justify-start'}
         />
         {crossing ? (
           // 문은 양옆 카드 위로 얹힌다(`-mx-2` + `z-10`) — 겹쳐야 "두 카드를 잇는 층"으로 읽힌다.
-          <Zone modules={zones.center} split={split} chipSide="leading" className="z-10 -mx-2 shrink-0" />
+          <Zone modules={zones.center} split={split} className="z-10 -mx-2 shrink-0" />
         ) : (
           <span aria-hidden className="flex-1" />
         )}
         <Zone
           modules={zones.end}
           split={split}
-          chipSide="leading"
           className={crossing ? 'flex-1 justify-start' : 'shrink-0 justify-end'}
         />
         </Tabs.List>
@@ -133,21 +132,17 @@ export function ModuleTabs() {
  * 카드는 부서를 쓰는 서비스에서만 그린다 — 안 쓰는 곳(uiux·ai)에 회색 카드를 두르면 요청한 적
  * 없는 서비스의 첫 줄이 통째로 바뀐다(`areaAccent` 가 색을 가르는 것과 같은 이유).
  *
- * **이름표는 Migration 쪽 끝에 붙는다**(2026-08-05 사용자 요청 — "Design 이랑 '설계' 문구 위치를
- * 서로 바꿔"). 왼쪽 카드는 뒤에, 오른쪽 카드는 앞에 — 그래야 두 이름표가 **가운데를 마주 보고**
- * 좌우가 대칭이 된다. 둘 다 앞머리에 두었을 때는 왼쪽 것만 바깥을 보고 서서 한쪽으로 쏠려 보였다.
+ * 카드 안에 이름표('설계'·'운영')를 달던 자리는 없앴다 — 소속은 카드 색이 말한다(§구획 이름표).
+ * 그래서 "이름표가 어느 끝에 붙나"(`chipSide`)도 함께 사라졌다.
  */
 function Zone({
   modules,
   split,
-  chipSide,
   className
 }: {
   modules: Module[]
   /** 이 서비스가 부서로 갈렸는가 — 카드 유무와 공통 모듈의 강조색이 갈린다. */
   split: boolean
-  /** 이름표가 카드의 어느 끝에 붙는가 — 가운데(Migration)를 향하는 쪽이다. */
-  chipSide: 'leading' | 'trailing'
   className?: string
 }) {
   if (!modules.length) return null
@@ -155,7 +150,6 @@ function Zone({
   return (
     <span className={cx('flex min-w-0 items-center gap-1.5', className)}>
       {areaRuns(modules).map((run, i) => {
-        const chip = AREA_CHIP[run.area]
         // 건너가는 문은 카드를 두르지 않는다 — 문 자신이 이미 떠 있는 한 장이다(`ModuleTrigger`).
         const gate = run.modules.some((m) => m.slot === 'center')
         const card = split && !gate
@@ -170,26 +164,12 @@ function Zone({
               card && ['rounded-xl border px-2 py-1', AREA_CARD[run.area]]
             )}
           >
-            {card && chip && chipSide === 'leading' && <AreaChip area={run.area} chip={chip} />}
             {run.modules.map((m) => (
               <ModuleTrigger key={m.id} module={m} split={split} />
             ))}
-            {card && chip && chipSide === 'trailing' && <AreaChip area={run.area} chip={chip} />}
           </span>
         )
       })}
-    </span>
-  )
-}
-
-function AreaChip({ area, chip }: { area: ModuleArea; chip: { label: string; cls: string } }) {
-  return (
-    <span
-      // e2e 훅 — 이름표가 자기 카드 안에 서 있는지(자리)를 검사가 잡는다.
-      data-area-chip={area}
-      className={cx('shrink-0 px-1 text-[10px] font-semibold tracking-wide', chip.cls)}
-    >
-      {chip.label}
     </span>
   )
 }
@@ -215,6 +195,9 @@ function ModuleTrigger({ module: m, split }: { module: Module; split: boolean })
       value={m.id}
       // surface-verify 자동 순회 훅(전 모듈 캡처) — 지우면 UI 게이트가 화면을 잃는다.
       data-nav-module={m.id}
+      // 좁아지면 이름이 접혀 아이콘만 남는다 — 그때 이 탭의 이름은 여기서만 나온다.
+      title={m.label}
+      aria-label={m.label}
       // 테두리 폭은 모든 탭이 함께 잡아 둔다(색은 문만 넣는다) — 문에만 주면 그 탭 하나가
       // 2px 높아져 줄의 밑선이 어긋난다.
       className={cx(
@@ -236,8 +219,18 @@ function ModuleTrigger({ module: m, split }: { module: Module; split: boolean })
             ]
       )}
     >
-      <Icon size={16} />
-      {m.label}
+      <Icon size={16} className="shrink-0" />
+      {/*
+        좁으면 **아이콘만 남긴다**(2026-08-17 사용자 지시). 이 줄에서 이름이 세 번(Design ·
+        Migration · Remote) 차지하는 폭이 양옆 손잡이 자리를 그만큼 좁힌다 — 아이콘은 자리를
+        지키니 어디를 누르는지는 그대로 보이고, 이름은 tooltip 과 아래 뷰 탭 줄이 받는다.
+
+        임계 1000px 은 **이 줄의 안쪽 폭**이다(컨테이너 질의는 padding 안쪽을 잰다) — 창 폭으로는
+        약 1088px(사이드바 64 + 이 줄의 좌우 여백 24 를 뺀 값). 창 하한이 960 이라 임계를 더
+        낮추면 하한 근처에서만 걸려 사실상 안 쓰이는 장치가 된다. 실측: 1080 창에서 접히고
+        1120 에서는 이름이 선다.
+      */}
+      <span className="@max-[1000px]/modulerow:hidden">{m.label}</span>
     </Tabs.Trigger>
   )
 }

@@ -53,6 +53,25 @@ export function scopeSummary(schemas: readonly string[]): string {
 }
 
 /**
+ * 좁은 손잡이(두 단으로 접힌 자리)에 적을 말 — **개수만**(2026-08-17 사용자 지시).
+ *
+ * 아랫줄에는 시점과 범위가 나란히 서므로 이름을 늘어놓을 자리가 없다. 단위를 글자로 안 붙이는
+ * 이유는 옆 아이콘이 이미 "스키마"를 말하고 있기 때문이다 — 붙이면 자리를 두 배로 먹는다.
+ * 아직 아무것도 못 읽어 셀 것이 없을 때만 자리 이름(`범위`)으로 둔다(`scopeSummary` 와 같은 규칙).
+ */
+export function scopeCountLabel(schemas: readonly string[]): string {
+  return schemas.length === 0 ? '범위' : String(schemas.length)
+}
+
+/** 설계 범위의 개수 표기 — 안 골랐으면 "전부"이므로 고를 수 있는 것의 수를 센다. */
+export function designScopeCountLabel(
+  selected: readonly string[],
+  available: readonly string[]
+): string {
+  return scopeCountLabel(selected.length > 0 ? selected : available)
+}
+
+/**
  * 고른 범위를 정리한다 — 목록에 없는 스키마(지워졌거나 권한이 빠진 것)를 떨어뜨리고,
  * 있는 것들의 순서는 **고를 수 있는 목록의 순서**로 맞춘다.
  * 저장된 범위를 그대로 믿으면 없어진 스키마를 계속 읽으려다 매번 실패한다.

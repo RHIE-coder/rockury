@@ -63,26 +63,44 @@ describe('removals — 이 계획이 실 DB 에서 없앨 것', () => {
 
 describe('planGate — 없앨 것이 있으면 계획을 안 그린다', () => {
   it('계획이 없으면 통과다 — 아직 잴 것이 없는 상태까지 막으면 아무것도 못 한다', () => {
-    expect(planGate(null, null)).toBe('ok')
+    expect(planGate({ mapped: true, diff: null, passed: null })).toBe('ok')
   })
 
   it('더하기만 하면 통과한다', () => {
-    expect(planGate(plan([table('orders', ['id'])], [table('orders', ['id', 'memo'])]), null)).toBe('ok')
+    const d = plan([table('orders', ['id'])], [table('orders', ['id', 'memo'])])
+    expect(planGate({ mapped: true, diff: d, passed: null })).toBe('ok')
   })
 
   it('없앨 것이 있으면 막는다', () => {
-    expect(planGate(plan([table('orders', ['id', 'memo'])], [table('orders', ['id'])]), null)).toBe('removes')
+    const d = plan([table('orders', ['id', 'memo'])], [table('orders', ['id'])])
+    expect(planGate({ mapped: true, diff: d, passed: null })).toBe('removes')
   })
 
   it('진단을 거쳐 승인한 그 목록은 통과한다', () => {
     const d = plan([table('orders', ['id', 'memo'])], [table('orders', ['id'])])
-    expect(planGate(d, removalSignature(d))).toBe('ok')
+    expect(planGate({ mapped: true, diff: d, passed: removalSignature(d) })).toBe('ok')
   })
 
   it('없앨 것이 달라지면 승인이 풀린다 — 승인은 그때 본 그 목록에 대한 것이다', () => {
     const before = plan([table('orders', ['id', 'memo'])], [table('orders', ['id'])])
     const after = plan([table('orders', ['id', 'note'])], [table('orders', ['id'])])
-    expect(planGate(after, removalSignature(before))).toBe('removes')
+    expect(planGate({ mapped: true, diff: after, passed: removalSignature(before) })).toBe('removes')
+  })
+
+  /*
+   * 회귀(2026-08-17): 맵핑 전인데도 계획이 서서 "실 DB 에서 20개를 없앱니다"가 떴다.
+   * 그 스무 개는 설계에 없는 남의 스키마였을 뿐, 사람이 무엇도 정하기 전이었다.
+   */
+  it('맵핑 전에는 아무리 통과할 계획이어도 안 그린다 — 기준이 없다', () => {
+    expect(planGate({ mapped: false, diff: null, passed: null })).toBe('unmapped')
+
+    const d = plan([table('orders', ['id'])], [table('orders', ['id', 'memo'])])
+    expect(planGate({ mapped: false, diff: d, passed: null })).toBe('unmapped')
+  })
+
+  it('맵핑 전 판정이 없앨 것보다 앞선다 — 승인을 들고 와도 맵핑이 먼저다', () => {
+    const d = plan([table('orders', ['id', 'memo'])], [table('orders', ['id'])])
+    expect(planGate({ mapped: false, diff: d, passed: removalSignature(d) })).toBe('unmapped')
   })
 
   it('개수가 같아도 이름이 다르면 다른 목록이다', () => {

@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, Layers } from 'lucide-react'
+import { ChevronDown, FolderTree } from 'lucide-react'
 import { cx } from '@renderer/lib/cx'
 import { useNav } from '@renderer/nav/useNav'
-import { reconcileScope, scopeModel, scopeSummary, shownScope, toggleSchema } from '../scope'
+import {
+  reconcileScope,
+  scopeCountLabel,
+  scopeModel,
+  scopeSummary,
+  shownScope,
+  toggleSchema
+} from '../scope'
 import { useRemoteStore } from '../remote/store'
 import { ScopeMenu } from './ScopeMenu'
 import { useActiveConnection, useConnectionsStore, useScopedConnections } from './store'
@@ -97,11 +104,15 @@ export function ScopeSelector() {
             shown.length > 0 ? 'text-fg' : 'text-muted'
           )}
         >
-          <Layers size={13} className="shrink-0 text-muted" />
+          {/* 연결 이름 칸(`Server`)과도, 설계 이름 칸(`Layers`)과도 다른 그림 — 스키마는
+              테이블을 담는 칸이다(2026-08-17 사용자 지시 · 설계부 범위 손잡이와 같은 그림). */}
+          <FolderTree size={13} className="shrink-0 text-muted" />
           {/* 자기 상한 안에서만 줄어든다(`shrink-0` + `max-w`) — 모자란 폭은 연결 이름이 받는다.
               같이 줄어들던 동안은 `piccard` 가 `picca…` 로 갈렸다(2026-08-07 제보). */}
           <span className="max-w-[120px] shrink-0 truncate font-mono text-[12px] font-semibold">
-            {scopeSummary(shown)}
+            {/* 두 단으로 접힌 손잡이에서는 개수만 적는다(§scopeCountLabel). */}
+            <span className="@max-[420px]/handle:hidden">{scopeSummary(shown)}</span>
+            <span className="hidden @max-[420px]/handle:inline">{scopeCountLabel(shown)}</span>
           </span>
           <ChevronDown size={12} className="shrink-0 text-muted" />
         </button>

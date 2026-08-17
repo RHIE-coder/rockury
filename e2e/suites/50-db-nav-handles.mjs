@@ -59,10 +59,11 @@ export async function run(ctx) {
   // ── 상단 두 줄 ────────────────────────────────────────────
   // L4 도구줄이 컨텍스트 바와 같은 h-11/bg-panel 을 쓰므로 클래스가 아니라 역할 훅으로 센다.
   check('DB: 컨텍스트 바가 없다', (await page.locator('[data-context-bar]').count()) === 0)
-  const topText = await body()
-  check('DB: 설계·운영 뱃지 라벨이 모듈 줄에 둘 다 보인다', topText.includes('설계') && topText.includes('운영'))
+  // 구획 이름표('설계'·'운영')는 2026-08-17 에 걷어냈다 — 소속은 카드 색이 말하고, 그 두 낱말이
+  // 가운데 묶음을 넓혀 양옆 손잡이 자리를 빼앗고 있었다. 그래서 여기서도 낱말이 아니라 **카드**를 센다.
+  check('DB: 구획 이름표는 없다 — 소속은 카드 색이 말한다', (await page.locator('[data-area-chip]').count()) === 0)
 
-  // ⑴ 부서마다 카드 한 장이고(2026-08-04 사용자 요청) 이름표는 자기 카드 앞에 선다.
+  // ⑴ 부서마다 카드 한 장이다(2026-08-04 사용자 요청).
   //    설계 카드 — Migration — 운영 카드 순서는 좌표로만 드러나므로 x 로 잰다.
   const midX = async (sel) => {
     const box = await page.locator(sel).first().boundingBox()
@@ -70,17 +71,12 @@ export async function run(ctx) {
   }
   check('DB: 설계 카드가 있다', (await page.locator('[data-area-card="design"]').count()) === 1)
   check('DB: 운영 카드가 있다', (await page.locator('[data-area-card="ops"]').count()) === 1)
-  const [designChip, designTab, opsChip, remoteTab, gate] = await Promise.all([
-    midX('[data-area-chip="design"]'),
-    midX('[data-nav-module="design"]'),
-    midX('[data-area-chip="ops"]'),
-    midX('[data-nav-module="remote"]'),
+  const [designCard, opsCard, gate] = await Promise.all([
+    midX('[data-area-card="design"]'),
+    midX('[data-area-card="ops"]'),
     midX('[data-nav-module="migration"]')
   ])
-  // 이름표는 카드의 **Migration 쪽 끝**에 붙는다 — 왼쪽 카드는 뒤, 오른쪽 카드는 앞(2026-08-05).
-  check('DB: 설계 이름표가 Design 탭 뒤에 선다', designChip > designTab)
-  check('DB: 운영 이름표가 Remote 탭 앞에 선다', opsChip < remoteTab)
-  check('DB: 건너가는 문이 두 카드 사이에 선다', designTab < gate && gate < opsChip)
+  check('DB: 건너가는 문이 두 카드 사이에 선다', designCard < gate && gate < opsCard)
 
   // ⑵ 착지는 설계부(Design) — 설계 손잡이만 뜨고 운영 손잡이는 안 뜬다.
   check('DB › Design: 설계 손잡이가 뷰 탭 줄에 있다', (await page.locator('[data-area-handle="design"]').count()) === 1)
@@ -207,7 +203,9 @@ export async function run(ctx) {
   )
   check(`DB › Migration: 설계 손잡이가 줄 맨 왼쪽 (${Math.round(migDesign.x)} < ${Math.round(moduleRow.x)})`, migDesign.x < moduleRow.x)
   check(`DB › Migration: 운영 손잡이가 줄 맨 오른쪽 (${Math.round(migOps.x)} > ${Math.round(moduleRow.x)})`, migOps.x > moduleRow.x)
-  check(`DB › Migration: 손잡이는 한 줄이다 (h=${Math.round(migDesign.height)})`, migDesign.height < 44)
+  // 검사 창은 1440 이라 손잡이 자리가 넉넉하다 — 그 폭에서는 **한 줄**이다.
+  // 좁아지면 두 단으로 접히는 것이 정상이고(2026-08-17), 그 판정은 자리 폭(`@container/handle`)이 한다.
+  check(`DB › Migration: 넓은 창에서는 한 줄이다 (h=${Math.round(migDesign.height)})`, migDesign.height < 44)
   check('DB › Migration: 뷰 탭 줄에는 손잡이가 없다', migDesign.y < viewRow.y && migOps.y < viewRow.y)
 
   await click('[data-nav-module="remote"]')
@@ -224,21 +222,19 @@ export async function run(ctx) {
   check(`DB › Design: 손잡이도 모듈 줄에 있다 (${Math.round(dsDesign.y)} < 뷰 탭 ${Math.round(dsTab.y)})`, dsDesign.y < dsTab.y)
   // 설계는 왼쪽, 운영은 오른쪽 — 모듈 줄의 `Design ── Migration ── Remote` 와 같은 좌우 문법이다.
   check(`DB › Design: 줄 왼쪽 끝 (${Math.round(dsDesign.x)} < 운영 ${Math.round(remOps.x)})`, dsDesign.x < remOps.x)
-  check(`DB: 손잡이는 어디서나 한 줄 (h=${Math.round(dsDesign.height)})`, dsDesign.height < 44)
+  check(`DB: 넓은 창에서는 어느 화면에서나 한 줄 (h=${Math.round(dsDesign.height)})`, dsDesign.height < 44)
 
-  // 이름표는 **Migration 쪽 끝**에 붙어 둘이 마주 본다(2026-08-05 사용자 요청).
+  // 카드 순서는 `Design ── Migration ── Remote` — 좌우 문법이 화면을 옮겨도 그대로다.
   const cx2 = async (sel) => {
     const b = await page.locator(sel).first().boundingBox()
     return b ? b.x + b.width / 2 : null
   }
-  const [designChip2, designTab2, opsChip2, remoteTab2] = await Promise.all([
-    cx2('[data-area-chip="design"]'),
-    cx2('[data-nav-module="design"]'),
-    cx2('[data-area-chip="ops"]'),
-    cx2('[data-nav-module="remote"]')
+  const [designCard2, gate2, opsCard2] = await Promise.all([
+    cx2('[data-area-card="design"]'),
+    cx2('[data-nav-module="migration"]'),
+    cx2('[data-area-card="ops"]')
   ])
-  check('DB: 설계 이름표가 Design 탭 **뒤**에 선다 — 가운데를 본다', designChip2 > designTab2)
-  check('DB: 운영 이름표가 Remote 탭 **앞**에 선다 — 가운데를 본다', opsChip2 < remoteTab2)
+  check('DB: 설계 카드 → 문 → 운영 카드 순서다', designCard2 < gate2 && gate2 < opsCard2)
 
   // ── ⑼ Design › Query·Collection 은 Remote 와 **같은 화면**이다 ──
   // 회귀(2026-08-05): 라이브러리 소속을 설계로 옮기면서 설계부용으로 **줄인 화면을 따로 만들었다.**

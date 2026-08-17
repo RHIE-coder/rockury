@@ -1,8 +1,8 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, Layers, Settings2 } from 'lucide-react'
+import { ChevronDown, FolderTree, Settings2 } from 'lucide-react'
 import { cx } from '@renderer/lib/cx'
 import { ScopeMenu } from '../connections/ScopeMenu'
-import { designScopeSummary, scopeModel, toggleDesignSchema } from '../scope'
+import { designScopeCountLabel, designScopeSummary, scopeModel, toggleDesignSchema } from '../scope'
 import { resolveSchemas } from '@shared/db/schemaCatalog'
 import { useDesignTables } from '../workspaces/definition/store'
 import { useActiveDesign, useDesignsStore } from './store'
@@ -58,10 +58,20 @@ export function DesignScopeSelector() {
             selected.length > 0 ? 'text-fg' : 'text-muted'
           )}
         >
-          <Layers size={13} className="shrink-0 text-muted" />
+          {/*
+            아이콘은 **설계 이름 칸과 달라야 한다**(2026-08-17 사용자 지시: "DB 이름 아이콘과
+            스키마 영역 아이콘이 같은데 다르게 해줘"). 둘 다 `Layers` 였던 동안은 한 손잡이 안에
+            같은 그림이 두 번 서서 어느 칸이 무엇인지 그림으로 안 갈렸다. 스키마는 테이블을
+            담는 칸이라 가지 뻗은 폴더로 적는다 — 운영부 범위 손잡이도 같은 그림을 쓴다.
+          */}
+          <FolderTree size={13} className="shrink-0 text-muted" />
           {/* 자기 상한 안에서만 줄어든다 — 모자란 폭은 설계 이름이 받는다(`ScopeSelector` 와 같은 규칙). */}
           <span className="max-w-[120px] shrink-0 truncate font-mono text-[12px] font-semibold">
-            {designScopeSummary(selected, available)}
+            {/* 두 단으로 접힌 손잡이에서는 이름을 늘어놓을 자리가 없다 — 개수만(§scopeCountLabel). */}
+            <span className="@max-[420px]/handle:hidden">{designScopeSummary(selected, available)}</span>
+            <span className="hidden @max-[420px]/handle:inline">
+              {designScopeCountLabel(selected, available)}
+            </span>
           </span>
           <ChevronDown size={12} className="shrink-0 text-muted" />
         </button>

@@ -721,6 +721,8 @@ export function PlanView(): ReactElement {
     if (!cid || !did || !designDialect) return
     void (async () => {
       const bound = await useMigrationStore.getState().resolveBinding(cid, did)
+      // 맵핑 전에는 **만들지도 않는다** — 실 DB 를 뜨는 값을 치르고도 근거 없는 목록만 나온다.
+      if (!bound.appliedVersion) return
       const store = useMigrationStore.getState()
       const v = store.targetVersion ?? bound.targetVersion
       if (v) await store.loadPlan(cid, did, designDialect, v)
@@ -730,7 +732,7 @@ export function PlanView(): ReactElement {
 
   if (!ctx) return fallback!
   const dialect = ctx.design.dialect
-  const gate = planGate(st.diagDiff, st.removalsPassed)
+  const gate = planGate({ mapped: !!st.remoteVersion, diff: st.diagDiff, passed: st.removalsPassed })
   const ready = gate === 'ok' && !st.loading && !!st.plan && st.plan.statements.length > 0
 
   return (
@@ -762,7 +764,8 @@ export function PlanView(): ReactElement {
             </SelectContent>
           </Select>
         ) : (
-          <b className="font-mono text-fg">—</b>
+          /* 글자 `—` 는 값처럼 읽힌다 — 상태 줄의 다른 자리와 같은 빈 동그라미를 쓴다(§UnknownVersion). */
+          <UnknownVersion />
         )
       }
       footer={
@@ -781,8 +784,14 @@ export function PlanView(): ReactElement {
         )
       }
     >
-      {st.loading ? (
+      {/*
+        결속(이 연결↔설계의 기록)을 아직 못 읽었으면 아무 관문도 세우지 않는다 — 한 프레임짜리라도
+        틀린 관문은 답으로 읽힌다(맵핑된 연결에 "맵핑이 먼저"가 번쩍이는 꼴).
+      */}
+      {!st.binding ? null : st.loading ? (
         <div className="flex items-center gap-2 text-[13px] text-muted"><Loader2 className="size-4 animate-spin" /> 실제 DB 를 읽는 중…</div>
+      ) : gate === 'unmapped' ? (
+        <MappingGate />
       ) : gate === 'removes' ? (
         <RemovalBlock diff={st.diagDiff!} />
       ) : !st.plan ? (
@@ -859,6 +868,28 @@ function DesignScale({ design, diff }: { design: string; diff: SchemaDiff | null
 }
 
 /**
+ * 관문 — **맵핑 전에는 계획도 실행도 그리지 않는다.**
+ *
+ * "이 실 DB 가 설계의 몇 버전인가"를 안 정했으면 계획은 근거가 없다. 그래도 만들면 설계에 없는
+ * 남의 스키마까지 전부 "없앨 것"으로 서서, 사람이 아무것도 정하기 전에 스무 개짜리 삭제 목록이
+ * 뜬다(2026-08-17 사용자 제보: "판단할 기준도 없고 준비도 돼있지 않은데 이렇게 화면이 뜨는건
+ * 아닌거같아" · 실행 화면도 같은 제보).
+ *
+ * 상태 줄이 이미 `아직 모름`을 말하고 있으니 그 사실은 되풀이하지 않는다 — 다음 걸음만 내민다.
+ */
+function MappingGate(): ReactElement {
+  const selectView = useNav((s) => s.selectView)
+  return (
+    <section className="flex flex-col items-start gap-3 rounded-lg border border-line bg-panel/50 p-4">
+      <p className="text-[13px] text-fg">이 실 DB 가 설계의 몇 버전인지 못박은 뒤에 계획을 만듭니다.</p>
+      <Button size="sm" onClick={() => selectView('diagnose')}>
+        <Radar /> 진단에서 맵핑
+      </Button>
+    </section>
+  )
+}
+
+/**
  * 관문 — 계획이 실 DB 에서 **없앨 것이 있으면** 그리기 전에 진단으로 돌려보낸다.
  *
  * 없앨 것은 곧 "설계에 없는데 실 DB 에 있는 것"이다. 남이 만든 것일 수도, 우리가 설계에서
@@ -908,6 +939,17 @@ export function RunView(): ReactElement {
   const { ctx, fallback } = useCtx()
   const st = useMigrationStore()
   const selectView = useNav((s) => s.selectView)
+  const cid = ctx?.connection.id
+  const did = ctx?.design.id
+  /*
+   * 결속만 읽는다 — 계획을 거치지 않고 이 화면을 바로 열 수 있어서, 관문을 판정할 값
+   * (이 연결이 몇 버전인가)을 스스로 챙겨야 한다. 실 DB 는 안 뜬다: 여기서 새로 잴 것이 없다.
+   */
+  useEffect(() => {
+    if (cid && did) void useMigrationStore.getState().resolveBinding(cid, did)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cid, did])
+
   if (!ctx) return fallback!
   const plan = st.plan
   const needsAck = !!plan && plan.destructiveCount > 0
@@ -932,7 +974,10 @@ export function RunView(): ReactElement {
         </div>
       )}
 
-      {!plan || plan.statements.length === 0 ? (
+      {/* 계획 화면과 같은 순서 — 결속을 읽기 전엔 침묵, 맵핑 전엔 관문, 그 뒤에 계획. */}
+      {!st.binding ? null : !st.remoteVersion ? (
+        <MappingGate />
+      ) : !plan || plan.statements.length === 0 ? (
         <div className="text-[13px] text-muted">계획 없음</div>
       ) : (
         <>
