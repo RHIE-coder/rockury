@@ -270,7 +270,7 @@ export const UIUX_TOOL_DEFS: ToolDef[] = [
   {
     name: 'list_ui_versions',
     description:
-      '설계 스냅샷(버전) 이력을 반환한다 — 번호·메모·컷한 시각(최신순, 스냅샷 본문 제외). 본문은 get_ui_version 으로.',
+      '설계 스냅샷(버전) 이력을 반환한다 — 번호·메모·확정한 시각(최신순, 스냅샷 본문 제외). 본문은 get_ui_version 으로.',
     inputSchema: { project: z.string().describe('프로젝트 주소 조각') },
     handler: ({ project }) => {
       const hit = requireAddress(project, 'project')

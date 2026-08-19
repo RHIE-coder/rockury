@@ -3,6 +3,8 @@ import { cn } from '@renderer/lib/utils'
 import { ClipToggle, clipBox, useClipped } from '@renderer/ui/clipped'
 import { fkTargetLabel } from './fkPolicy'
 import { FkPolicyChips } from './FkPolicyChips'
+import { SelfRefChip } from './SelfRefChip'
+import type { TableRef } from '@shared/db/tableRef'
 import type { Constraint, ResolvedConstraintColumn } from './types'
 
 /**
@@ -19,11 +21,18 @@ import type { Constraint, ResolvedConstraintColumn } from './types'
 export function ConstraintShape({
   con,
   cols,
+  from,
   emptyText,
   className
 }: {
   con: Constraint
   cols: ResolvedConstraintColumn[]
+  /**
+   * 이 제약이 걸린 테이블 — 자기참조인지 판정하는 데만 쓴다. 컬럼과 같은 이유로 **푼 것을 받는다**:
+   * 대조표는 사라지는 줄이면 before 쪽 테이블이 기준이라 여기서 혼자 알아낼 수 없다.
+   * 안 주면 자기참조 표시를 안 그린다.
+   */
+  from?: TableRef
   /** 컬럼이 하나도 안 걸렸을 때 대신 보일 말. 없으면 아무것도 안 그린다. */
   emptyText?: string
   className?: string
@@ -64,6 +73,7 @@ export function ConstraintShape({
           <span className="shrink-0 text-[12px] text-accent-2">→</span>
           <span className="shrink-0 font-mono text-[11px] text-accent">{fkTargetLabel(con)}</span>
           <FkPolicyChips con={con} />
+          <SelfRefChip from={from} con={con} />
         </>
       )}
     </span>

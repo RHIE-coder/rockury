@@ -75,7 +75,7 @@ export const apiCoverage: ServiceCoverage = {
       '파괴적 조작은 사람이 앱에서만 — 명세라는 그릇을 통째로 없애는 도구는 두지 않는다. ' +
       '그 안의 요청 삭제는 api_patch_spec 의 remove_request 로 이미 가능하다(spec api-mcp tools.write AC-7).',
     'api:createVersion':
-      '버전 컷은 사람 몫 — 깨지는 변경 사람 승인 게이트가 컷에 붙어 있다(spec api-service §4-⑦·⑧). ' +
+      '버전 확정은 사람 몫 — 깨지는 변경 사람 승인 게이트가 거기 붙어 있다(spec api-service §4-⑦·⑧). ' +
       'DB 서비스는 create_version 을 열었지만 API 는 여기서 갈린다(spec api-mcp tools.write AC-5).'
   }
 }

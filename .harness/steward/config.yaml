@@ -14,8 +14,12 @@ phases:
   - immunize
 values:
   glossary_path: "docs/glossary.md"   # 용어사전 (intake 가 쌓음)
-  spec_dir: "docs/spec"               # 살아있는 기획 정본 트리 (spec,gate)
-  qa_dir: "docs/qa"                   # 테스트 정의 (spec,gate)
+  # 정본 문서를 걷어냈다(2026-08-19 · 3578bbd) — `docs/spec/`·`docs/qa/` 는 없다.
+  # 값을 남겨 두면 spec 단계가 "없으면 신설한다"에 따라 **지운 폴더를 도로 만든다.**
+  # 그래서 비운다: spec·gate·handover 는 "정본 미지정"으로 서고 조용히 통과하지 않는다
+  # (e2e-runner 를 일부러 비워 둔 것과 같은 결). 정본 자리를 정하면 여기에 적는다.
+  spec_dir: ""                        # (미지정) 살아있는 기획 정본 트리 (spec,gate)
+  qa_dir: ""                          # (미지정) 테스트 정의 (spec,gate)
   tdd_mode: "routed"                  # 순수/도메인·API 계약은 테스트 먼저, UI·e2e 는 구현 후 허용 (CLAUDE.md 규칙과 일치)
   typecheck_command: "npm run typecheck"
   test_command: "npm test"

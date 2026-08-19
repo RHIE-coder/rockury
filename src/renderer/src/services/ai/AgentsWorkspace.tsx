@@ -107,7 +107,7 @@ function TokenCard() {
       <div className="flex flex-wrap items-center gap-2">
         <code
           className={cn(
-            'selectable min-w-0 flex-1 truncate rounded-md bg-panel px-2.5 py-1.5 font-mono text-[12px] text-fg',
+            'min-w-0 flex-1 truncate rounded-md bg-panel px-2.5 py-1.5 font-mono text-[12px] text-fg',
             !token && 'text-muted'
           )}
           title={st.revealed ? undefined : '가려져 있어요 — 눈 버튼으로 확인'}

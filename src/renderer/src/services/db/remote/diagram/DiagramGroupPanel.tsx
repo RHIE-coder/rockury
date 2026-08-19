@@ -134,7 +134,7 @@ export function DiagramGroupPanel({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === 'Escape') setRenaming(null)
                     }}
-                    className="selectable min-w-0 flex-1 rounded border border-accent bg-canvas px-1 py-0.5 text-[12px] text-fg outline-none"
+                    className="min-w-0 flex-1 rounded border border-accent bg-canvas px-1 py-0.5 text-[12px] text-fg outline-none"
                   />
                 ) : (
                   <button

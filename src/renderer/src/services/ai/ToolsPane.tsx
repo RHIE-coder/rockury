@@ -35,7 +35,7 @@ function ToolCard({ tool }: { tool: McpToolInfo }) {
       data-ai-tool={tool.name}
       className="flex flex-col gap-1.5 rounded-lg border border-line bg-canvas px-3.5 py-3"
     >
-      <code className="selectable font-mono text-[12.5px] font-semibold break-all text-fg">
+      <code className="font-mono text-[12.5px] font-semibold break-all text-fg">
         {toolSignature(tool)}
       </code>
       <p className="text-[12px] leading-relaxed break-keep text-muted">{tool.description}</p>
@@ -94,7 +94,7 @@ function ServiceSection({ group }: { group: McpServiceTools }) {
             <ul className="flex flex-col gap-1 rounded-lg bg-panel/60 px-3.5 py-2.5">
               {group.excluded.map((e) => (
                 <li key={e.channel} className="flex flex-col gap-0.5 text-[11.5px]">
-                  <code className="selectable font-mono text-fg">{e.channel}</code>
+                  <code className="font-mono text-fg">{e.channel}</code>
                   <span className="leading-relaxed break-keep text-muted">{e.reason}</span>
                 </li>
               ))}

@@ -166,7 +166,7 @@ function UnrecordedSeedState({ versionId }: { versionId: string }) {
           <span className="font-mono">{versionId}</span> 에 시드 기록 없음
         </div>
         <p className="mt-1 max-w-80 text-[12px] leading-relaxed text-muted">
-          시드를 담기 전에 컷된 버전이에요. Draft 로 돌아가면 지금 시드를 볼 수 있어요.
+          시드를 담기 전에 확정된 버전이에요. Draft 로 돌아가면 지금 시드를 볼 수 있어요.
         </p>
       </div>
     </div>
@@ -1040,7 +1040,7 @@ export function SeedWorkspace() {
             <span className="font-mono font-semibold">{versionId}</span>
             {/* 기록이 없는 버전에 "이 버전의 시드를 보고 있다"고 말하면 거짓이 된다 — 갈라 적는다. */}
             <span className="text-accent-2/80">
-              {source === 'unrecorded' ? '이 버전엔 시드 기록이 없어요.' : '컷된 버전의 시드를 보고 있어요.'}
+              {source === 'unrecorded' ? '이 버전엔 시드 기록이 없어요.' : '확정된 버전의 시드를 보고 있어요.'}
             </span>
           </div>
         )}

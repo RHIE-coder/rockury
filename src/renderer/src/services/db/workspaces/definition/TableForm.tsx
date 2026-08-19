@@ -22,6 +22,8 @@ import {
   DropdownMenuTrigger
 } from '@renderer/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/ui/tooltip'
+import { CopyMenu } from '@renderer/ui/copy-menu'
+import { columnCopyItems } from '../../copyText'
 import { cn } from '@renderer/lib/utils'
 import { useActiveDesign } from '../../designs/store'
 import { dialectInfo } from '../../dialects'
@@ -33,7 +35,9 @@ import { EditableText } from './EditableText'
 import { ConstraintsSection } from './ConstraintsSection'
 import { ViewBodySection } from './ViewBodySection'
 import { FkBadge } from './FkRef'
-import type { Column } from './types'
+import { ReferencedBySection } from '../../ReferencedBySection'
+import { sameTable } from '../../schemaRef'
+import type { Column, TableDef } from './types'
 
 // 그리드 열: drag · # · Name · Type · Keys · Null · Default · Comment · actions
 // 최소폭 합 ~662px — 최소 창(960)에서도 표가 통째로 들어오고, 유연 열(name/type/default/comment)은
@@ -122,6 +126,7 @@ function ColumnMenu({
 
 /** 드래그 정렬 가능한 컬럼 행. grip 핸들만 드래그 활성(셀 편집과 충돌 방지). */
 function SortableColumnRow({
+  table,
   c,
   index,
   count,
@@ -130,6 +135,8 @@ function SortableColumnRow({
   readOnly,
   isView
 }: {
+  /** 복사 글자에 `테이블.컬럼` 을 담으려면 소속 표를 알아야 한다. */
+  table: TableDef
   c: Column
   index: number
   count: number
@@ -148,6 +155,7 @@ function SortableColumnRow({
   const dialect = design?.dialect
 
   return (
+    <CopyMenu items={columnCopyItems(table, c)}>
     <div
       ref={setNodeRef}
       className={cn(
@@ -280,6 +288,7 @@ function SortableColumnRow({
         )}
       </div>
     </div>
+    </CopyMenu>
   )
 }
 
@@ -292,6 +301,7 @@ export function TableForm() {
   const updateTable = useDefinitionStore((s) => s.updateTable)
   const deleteTable = useDefinitionStore((s) => s.deleteTable)
   const toggleView = useDefinitionStore((s) => s.toggleView)
+  const setActiveTable = useDefinitionStore((s) => s.setActiveTable)
   const setEditing = useDefinitionStore((s) => s.setEditing)
   const readOnly = useDesignReadOnly()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
@@ -469,6 +479,7 @@ export function TableForm() {
             {table.columns.map((c, i) => (
               <SortableColumnRow
                 key={c.id}
+                table={table}
                 c={c}
                 index={i}
                 count={table.columns.length}
@@ -494,6 +505,19 @@ export function TableForm() {
 
       {/* 뷰에는 제약을 걸 수 없다 — 구역 자체를 감춘다(빈 구역이 "걸 수 있다"는 오해를 준다). */}
       {!isView && <ConstraintsSection readOnly={readOnly} />}
+
+      {/*
+        들어오는 참조 — 뷰에도 그린다. 뷰가 FK 를 **걸 수는** 없어도, 뷰를 가리키는 FK 가
+        데이터에 남아 있을 수 있고(역설계로 들어온 설계) 그때 감추면 화면이 거짓말을 한다.
+      */}
+      <ReferencedBySection
+        table={table}
+        tables={siblings}
+        onJump={(target) => {
+          const t = siblings.find((x) => sameTable(x, target))
+          if (t) setActiveTable(t.id)
+        }}
+      />
     </div>
   )
 }

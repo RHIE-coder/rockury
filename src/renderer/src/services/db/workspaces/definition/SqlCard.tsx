@@ -135,7 +135,7 @@ export function SqlCard({
               </div>
             ))}
           </div>
-          <pre className="selectable flex-1 overflow-x-auto px-4 py-3.5 font-mono text-[12px] leading-[1.75] text-fg">
+          <pre className="flex-1 overflow-x-auto px-4 py-3.5 font-mono text-[12px] leading-[1.75] text-fg">
             {lines.map((l, i) => (
               <div key={i}>
                 <HighlightedSqlLine line={l} />

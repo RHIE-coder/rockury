@@ -204,7 +204,7 @@ export function VersionsView() {
           </div>
           <Button size="sm" className="ml-auto" onClick={() => setCutOpen(true)}>
             <GitCommitHorizontal />
-            버전 컷
+            버전 확정
           </Button>
         </div>
 
@@ -212,7 +212,7 @@ export function VersionsView() {
           {versions.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-3 py-10 text-center">
               <Milestone className="size-6 text-muted/60" />
-              <div className="text-[13px] font-semibold text-fg">아직 컷된 버전이 없어요</div>
+              <div className="text-[13px] font-semibold text-fg">아직 확정한 버전이 없어요</div>
               <p className="max-w-72 text-[12px] text-muted">
                 지금 스키마를 첫 버전으로 고정해 계보를 시작하세요.
               </p>

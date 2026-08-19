@@ -70,7 +70,7 @@ export function CutVersionDialog({
     <Dialog open={open} onOpenChange={(o) => !o && dismiss()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>버전 컷</DialogTitle>
+          <DialogTitle>버전 확정</DialogTitle>
           <DialogDescription>
             지금 설계 상태를 불변 스냅샷으로 고정합니다. 이후 편집은 다시 draft 로 쌓여요.
           </DialogDescription>
@@ -85,7 +85,7 @@ export function CutVersionDialog({
         >
           <div className="flex items-center justify-between rounded-lg bg-panel px-3 py-2 text-[12px]">
             <span className="text-muted">
-              기준 <span className="font-mono text-fg">{latest ?? '없음(첫 컷)'}</span>
+              기준 <span className="font-mono text-fg">{latest ?? '없음(첫 버전)'}</span>
             </span>
             <span className="flex items-center gap-1.5 text-muted">
               <Layers className="size-3.5" />
@@ -141,7 +141,7 @@ export function CutVersionDialog({
             </Button>
             <Button type="submit" size="sm" disabled={saving}>
               <GitCommitHorizontal />
-              <span className="font-mono">{number}</span> 컷
+              <span className="font-mono">{number}</span> 확정
             </Button>
           </DialogFooter>
         </form>

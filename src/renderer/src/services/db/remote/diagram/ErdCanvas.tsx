@@ -512,7 +512,7 @@ export function ErdCanvas({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="테이블/컬럼 검색"
-              className="selectable h-7 w-40 rounded-md border border-line bg-canvas pl-7 pr-6 text-[12px] text-fg outline-none placeholder:text-muted focus:border-accent"
+              className="h-7 w-40 rounded-md border border-line bg-canvas pl-7 pr-6 text-[12px] text-fg outline-none placeholder:text-muted focus:border-accent"
             />
             {query && (
               <button

@@ -117,6 +117,106 @@ export async function run(ctx) {
     check('Design › Definition: 제약 클릭 → 그 테이블로 이동', (await body()).includes('orders'))
   }
 
+  /*
+   * ── "이 테이블을 참조하는 곳" — **들어오는** FK(남 → 나). 2026-08-19 사용자 요청 ──
+   * 화면은 여태 나가는 참조(나 → 남)만 보였다. users 쪽에서 "누가 나를 가리키나"를 알려면
+   * 전 테이블의 제약을 눈으로 훑는 수밖에 없었다. 시드 계보: orders→users · products→categories ·
+   * categories→categories(자기참조).
+   */
+  {
+    await click('[data-side-tab="tables"]')
+    await page.locator('[data-table-row="users"]').first().click()
+    await page.waitForTimeout(250)
+    check('참조하는 곳: users 에 칸이 선다', (await page.locator('[data-referenced-by="1"]').count()) === 1)
+    check('참조하는 곳: 가리키는 쪽이 orders 로 적힌다', (await page.locator('[data-referenced-from="orders"]').count()) === 1)
+
+    // 눌러서 가리키는 쪽으로 건너간다 — 그 표는 아무도 안 가리키니 칸 자체가 사라진다.
+    await page.locator('[data-referenced-from="orders"]').first().click()
+    await page.waitForTimeout(250)
+    const jumped = await page.locator('[data-table-active="true"]').first().getAttribute('data-table-row')
+    check('참조하는 곳: 누르면 그 테이블로 이동', jumped === 'orders')
+    check('참조하는 곳: 아무도 안 가리키면 칸을 안 그린다', (await page.locator('[data-referenced-by]').count()) === 0)
+
+    // 자기참조는 뺀다 — categories 는 자기 자신도 가리키지만 그 줄은 위 제약 목록이 이미 말한다.
+    await page.locator('[data-table-row="categories"]').first().click()
+    await page.waitForTimeout(250)
+    check('참조하는 곳: 자기참조는 세지 않는다(categories)', (await page.locator('[data-referenced-by="1"]').count()) === 1)
+    check('참조하는 곳: 남이 가리킨 것만 남는다(products)', (await page.locator('[data-referenced-from="products"]').count()) === 1)
+
+    // 제약 탭의 방향 필터 — 이 표를 가리키는 것만(종류 필터와 축이 다르다).
+    await page.locator('[data-table-row="users"]').first().click()
+    await click('[data-side-tab="constraints"]')
+    await page.waitForTimeout(200)
+    await click('[data-constraint-incoming="off"]')
+    await page.waitForTimeout(250)
+    check(
+      '제약 탭 방향 필터: users 를 가리키는 FK 한 줄만 남는다',
+      (await page.locator('[data-constraint-row]').count()) === 1 &&
+        (await page.locator('[data-constraint-row="fk_orders_user"]').count()) === 1
+    )
+    await click('[data-constraint-incoming="on"]') // 원위치 — 뒤 검사는 전체 목록을 본다
+    await page.waitForTimeout(150)
+    await click('[data-side-tab="tables"]')
+    await page.locator('[data-table-row="orders"]').first().click()
+    await page.waitForTimeout(200)
+  }
+
+  /*
+   * ── 자기참조 표시 + 우클릭 복사 (2026-08-19 화면 피드백 두 건) ──
+   * ⑴ 자기참조 FK 는 화살표 오른쪽 이름과 제목을 눈으로 대조해야 알 수 있었다 → 칩으로 못박는다.
+   * ⑵ 앱 전역이 `user-select:none` 이라 값을 끌어 고를 수도 복사할 수도 없었다
+   *    ("각 요소별로 내가 복사를 할 수가 없어. 드래그도 안되고"). 기본을 뒤집고 우클릭 메뉴를 달았다.
+   * 시드 계보상 categories 만 자기 자신을 가리킨다.
+   */
+  {
+    await click('[data-side-tab="tables"]')
+    await page.locator('[data-table-row="categories"]').first().click()
+    await page.waitForTimeout(300)
+    const detail = await body()
+    check('자기참조: categories 의 FK 줄에 칩이 붙는다', detail.includes('자기참조'))
+
+    // 남을 가리키는 FK 에는 안 붙는다 — 늘 붙으면 표시가 뜻을 잃는다.
+    await page.locator('[data-table-row="products"]').first().click()
+    await page.waitForTimeout(300)
+    check('자기참조: 남을 가리키는 FK 에는 안 붙는다(products)', !(await body()).includes('자기참조'))
+
+    /*
+     * 글자 선택의 두 갈래 — 전역 기본을 뒤집은 것의 회귀 가드.
+     *  · 기본은 고를 수 있다(읽기 전용 화면은 이걸로 끌어 복사한다).
+     *  · **클릭 편집칸은 못 고른다** — 여기서 끌면 손을 뗄 때 편집이 열려 고른 것이 날아간다.
+     *    그 자리의 복사 수단은 우클릭 메뉴다(바로 아래 검사).
+     */
+    const userSelect = await page.evaluate(() => ({
+      root: getComputedStyle(document.documentElement).userSelect,
+      editCell: (() => {
+        const el = document.querySelector('[data-edit-cell]')
+        return el ? getComputedStyle(el).userSelect : '없음'
+      })()
+    }))
+    check(`글자 선택: 기본은 고를 수 있다 (문서 ${userSelect.root})`, userSelect.root === 'text')
+    check(`글자 선택: 클릭 편집칸은 안 고른다 (${userSelect.editCell})`, userSelect.editCell === 'none')
+
+    // 우클릭 복사 — 제약 목록의 한 줄에서 메뉴가 뜨고, 고른 값이 실제로 클립보드에 담긴다.
+    await click('[data-side-tab="constraints"]')
+    await page.waitForSelector('[data-constraint-row]', { timeout: 5_000 })
+    await page.locator('[data-constraint-row]').first().click({ button: 'right' })
+    await page.waitForTimeout(400)
+    const items = await page.locator('[data-copy-item]').allInnerTexts()
+    check(`우클릭 복사: 메뉴가 뜬다 (${items.join('·') || '없음'})`, items.includes('이름') && items.includes('줄 전체'))
+    if (items.length > 0) {
+      const want = await page.locator('[data-constraint-row]').first().getAttribute('data-constraint-row')
+      await page.locator('[data-copy-item="이름"]').click()
+      await page.waitForTimeout(250)
+      const got = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''))
+      check(`우클릭 복사: 고른 값이 클립보드에 담긴다 (${got})`, got === want)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(200)
+    }
+    await click('[data-side-tab="tables"]')
+    await page.locator('[data-table-row="orders"]').first().click()
+    await page.waitForTimeout(200)
+  }
+
   // ── 사이드 패널 접기/펼치기 (DB 서비스 여섯 화면 공용 — §db-design.definition.side-panel AC-5) ──
   {
     // 접힌 패널은 **폭 0** 으로 눌릴 뿐 DOM 에는 남는다(검색어·고른 탭 유지). 안의 행은 잘려 있을

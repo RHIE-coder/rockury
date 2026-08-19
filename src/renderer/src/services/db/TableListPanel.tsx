@@ -1,9 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Eye, Layers, Search, Table2 } from 'lucide-react'
 import { Input } from '@renderer/ui/input'
+import { CopyMenu } from '@renderer/ui/copy-menu'
 import { cn } from '@renderer/lib/utils'
 import { SideListEmpty, SideListRow, SideListScroll, SideSectionHeader } from './sideList'
 import { groupTablesForList } from './tableList'
+import { tableCopyItems } from './copyText'
 import type { TableDef } from './workspaces/definition/types'
 
 /**
@@ -133,20 +135,26 @@ function TableListRow({
   extra?: ReactNode
 }) {
   return (
-    <SideListRow
-      icon={table.isView ? Eye : Table2}
-      name={table.name}
-      count={table.columns.length}
-      active={active}
-      onPick={onPick}
-      extra={extra}
-      attrs={{
-        // e2e 가 구조(ul/li)에 매이지 않고 이름으로 행을 집게 하는 훅 — 지우면 스모크가 깨진다.
-        'data-table-row': table.name,
-        // 고른 표는 뷰를 옮겨도 유지돼야 한다(2026-08-04) — 그 "유지"는 색으로만 드러나서,
-        // 검사가 클래스 문자열을 뒤지지 않게 훅으로 내놓는다.
-        'data-table-active': active ? 'true' : undefined
-      }}
-    />
+    // 목록에서 표 이름을 바로 집어 갈 수 있게 — 이름은 쿼리에 그대로 붙여 쓰는 값이다.
+    // 감싸는 div 는 지울 수 없다: `SideListRow` 는 받은 props 를 안 넘겨서 우클릭을 못 받는다.
+    <CopyMenu items={tableCopyItems(table)}>
+      <div>
+        <SideListRow
+          icon={table.isView ? Eye : Table2}
+          name={table.name}
+          count={table.columns.length}
+          active={active}
+          onPick={onPick}
+          extra={extra}
+          attrs={{
+            // e2e 가 구조(ul/li)에 매이지 않고 이름으로 행을 집게 하는 훅 — 지우면 스모크가 깨진다.
+            'data-table-row': table.name,
+            // 고른 표는 뷰를 옮겨도 유지돼야 한다(2026-08-04) — 그 "유지"는 색으로만 드러나서,
+            // 검사가 클래스 문자열을 뒤지지 않게 훅으로 내놓는다.
+            'data-table-active': active ? 'true' : undefined
+          }}
+        />
+      </div>
+    </CopyMenu>
   )
 }

@@ -1,3 +1,4 @@
+import { refTarget, referencingFks, sameTable, type TableRef } from '@shared/db/tableRef'
 import type { Constraint, TableDef } from './workspaces/definition/types'
 
 /**
@@ -21,19 +22,15 @@ import type { Constraint, TableDef } from './workspaces/definition/types'
  * `design.declaredSchemas` 에 남는다. 이 파일은 **이름을 지어내지 않고 비교만 한다.**
  */
 
-/** 테이블을 가리키는 최소 정보. TableDef 도 이 모양을 만족한다. */
-export interface TableRef {
-  schema?: string
-  name: string
-}
+/*
+ * 비교 규칙 자체(`TableRef`·`sameTable`·`refTarget`)는 **여기 없다** — `@shared/db/tableRef` 가
+ * 든다. 메인의 MCP 쓰기 관문이 같은 규칙을 써야 해서다(사본을 두면 한쪽만 고쳐진다).
+ * 화면 쪽 편의(이름 표기·묶기·목록에서 찾기)만 이 파일에 남는다.
+ */
+export { sameTable, refTarget, type TableRef }
 
 /** 스키마가 비었을 때 대신 쓸 이름 — 화면·비교에서 `undefined` 와 `''` 를 같게 다루기 위한 것. */
 const norm = (schema: string | undefined): string => schema ?? ''
-
-/** 같은 테이블인가 — 스키마까지 본다. 둘 다 스키마가 비면 같은 스키마로 친다. */
-export function sameTable(a: TableRef, b: TableRef): boolean {
-  return a.name === b.name && norm(a.schema) === norm(b.schema)
-}
 
 /**
  * `스키마.테이블` 한정 이름. 스키마가 없으면 이름만 — 단일 스키마 화면에서 `.` 이 붙지 않는다.
@@ -58,13 +55,15 @@ export function resolveRef(
   return tables.find((t) => sameTable(t, target))
 }
 
-/** FK 가 가리키는 대상을 (스키마, 이름) 으로 편다 — 목록에 없어도 무엇을 가리키는지는 안다. */
-export function refTarget(
-  from: TableRef,
-  con: Pick<Constraint, 'refTable' | 'refSchema'>
-): TableRef | undefined {
-  if (!con.refTable) return undefined
-  return { schema: con.refSchema ?? from.schema, name: con.refTable }
+/**
+ * `target` 을 **가리키는** FK 들 — `resolveRef` 의 반대 방향(누가 나를 참조하나).
+ * 자기참조도 들어온다 — 빼려면 부르는 쪽에서 거른다.
+ */
+export function referencingTables(
+  tables: readonly TableDef[],
+  target: TableRef
+): { table: TableDef; constraint: Constraint }[] {
+  return referencingFks(tables, (t) => t.constraints, target)
 }
 
 /** 목록에 스키마가 둘 이상 섞여 있나 — 화면이 이름 앞에 스키마를 붙일지 정하는 기준. */

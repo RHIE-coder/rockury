@@ -184,7 +184,7 @@ function RunRow({
             </pre>
           )}
           <span className="text-muted">
-            기준 버전: {run.baseVersion ?? 'Draft (버전 컷 전)'} · 이 기록은 고쳐지지 않습니다
+            기준 버전: {run.baseVersion ?? 'Draft (버전 확정 전)'} · 이 기록은 고쳐지지 않습니다
           </span>
         </div>
       )}

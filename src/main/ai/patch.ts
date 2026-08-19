@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { TableRecord } from '../store/tables'
 // 이름 규칙은 화면과 **한 벌**이다 — 두 벌이면 한쪽만 고쳐져 조용히 어긋난다.
 import { addSchema, checkSchemaName, renameSchema, resolveSchemas } from '../../shared/db/schemaCatalog'
+import { referencingFks, type TableRef } from '../../shared/db/tableRef'
 
 /**
  * 스키마 부분 수정 엔진 — 연산 목록을 현재 스키마에 차례로 적용하는 **순수 함수**.
@@ -172,13 +173,17 @@ function toConstraintRecord(
   return { ...rest, id: newId(), name: input.name ?? '', columns } as ConstraintRecord
 }
 
-/** 다른 테이블에서 이 테이블을 가리키는 FK 들 — 삭제·개명 시 함께 손봐야 하는 대상. */
-const referencingFks = (tables: TableRecord[], tableName: string) =>
-  tables.flatMap((t) =>
-    kaysOf(t)
-      .filter((k) => k.kind === 'fk' && k.refTable === tableName)
-      .map((k) => ({ table: t, constraint: k }))
-  )
+/**
+ * 이 테이블을 가리키는 FK 들 — 삭제·개명 시 함께 손봐야 하는 대상.
+ *
+ * 규칙은 `@shared/db/tableRef` 것을 그대로 쓴다(화면과 같은 함수). 예전엔 여기서
+ * `refTable === 이름` 하나로만 봤는데, 그러면 **두 스키마에 같은 이름 테이블**이 있을 때
+ * 남의 스키마 참조까지 세어 못 지우게 막았다. 이제 스키마까지 견준다.
+ *
+ * 이름이 아니라 **테이블(TableRef)** 을 받는다 — 개명은 이름을 바꾼 뒤에 가리키던 것들을
+ * 찾아야 해서, 이름으로 다시 찾게 하면 이미 없는 이름을 찾는 꼴이 된다(실제로 그렇게 깨졌다).
+ */
+const referencingFksOf = (tables: TableRecord[], target: TableRef) => referencingFks(tables, kaysOf, target)
 
 // ── 정합 검증 (set_schema · patch_schema 공용) ───────────────────────────────
 
@@ -291,7 +296,7 @@ export function applyOperations(
 
         case 'drop_table': {
           const t = findTable(tables, op.table)
-          const refs = referencingFks(tables, op.table).filter((r) => r.table.name !== op.table)
+          const refs = referencingFksOf(tables, t).filter((r) => r.table !== t)
           if (refs.length > 0)
             throw new Error(
               `테이블 "${op.table}" 을 가리키는 FK 가 남아 있습니다: ${refs
@@ -307,10 +312,12 @@ export function applyOperations(
           const t = findTable(tables, op.table)
           if (tables.some((x) => x.name === op.newName))
             throw new Error(`테이블 이름 "${op.newName}" 은 이미 쓰이고 있습니다.`)
+          // 가리키던 것들은 **옛 이름**으로 붙어 있다 — 바꾸기 전에 기준을 붙들어 둔다.
+          const was: TableRef = { schema: t.schema, name: t.name }
           t.name = op.newName
           // 가리키던 FK 도 같이 옮긴다 — 안 그러면 조용히 끊긴 참조가 남는다.
           let moved = 0
-          for (const { constraint } of referencingFks(tables, op.table)) {
+          for (const { constraint } of referencingFksOf(tables, was)) {
             constraint.refTable = op.newName
             moved++
           }
@@ -359,7 +366,7 @@ export function applyOperations(
           if (op.set.name && op.set.name !== oldName) {
             // 남이 이름으로 가리키는 자리(FK refColumns)는 따라 바꾸고, 손댈 수 없는 자리
             // (CHECK 의 SQL 식)는 경고로 알린다 — 조용히 깨진 채 두지 않는다.
-            for (const { table, constraint } of referencingFks(tables, op.table)) {
+            for (const { table, constraint } of referencingFksOf(tables, t)) {
               if (!(constraint.refColumns ?? []).includes(oldName)) continue
               constraint.refColumns = constraint.refColumns!.map((n) => (n === oldName ? op.set.name! : n))
               changes.push(`  ↳ "${table.name}" FK 의 참조 컬럼 이름도 갱신`)
@@ -386,7 +393,7 @@ export function applyOperations(
                 .map((k) => `${k.kind.toUpperCase()} ${k.name || k.id}`)
                 .join(', ')} — drop_constraint 로 먼저 떼어내세요.`
             )
-          const inbound = referencingFks(tables, op.table).filter((r) => (r.constraint.refColumns ?? []).includes(op.column))
+          const inbound = referencingFksOf(tables, t).filter((r) => (r.constraint.refColumns ?? []).includes(op.column))
           if (inbound.length > 0)
             throw new Error(
               `컬럼 "${op.table}.${op.column}" 을 가리키는 FK 가 있습니다: ${inbound

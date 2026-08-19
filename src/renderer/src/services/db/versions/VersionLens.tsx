@@ -39,7 +39,7 @@ export function VersionLens() {
           data-version-lens
           title={
             current.readOnly
-              ? `${current.label} — 컷된 버전이라 읽기 전용이에요`
+              ? `${current.label} — 확정된 버전이라 읽기 전용이에요`
               : 'Draft — 편집할 수 있는 작업본이에요'
           }
           className={cx(

@@ -152,6 +152,34 @@ describe('applyOperations — 남이 가리키는 참조', () => {
     expect(changes[0]).toContain('FK 1개 갱신')
   })
 
+  /*
+   * 예전엔 `refTable === 이름` 하나로만 봐서, 다른 스키마의 동명 테이블을 가리키는 FK 까지
+   * 세어 **못 지우게 막았다**(거짓 양성). 이제 스키마까지 견준다 — 규칙은 화면과 같은
+   * `@shared/db/tableRef` 것이다.
+   */
+  it('drop_table: 다른 스키마의 동명 테이블을 가리키는 FK 는 나를 막지 않는다', () => {
+    const twoSchemas: TableRecord[] = [
+      { id: 't_pub', designId: 'd1', schema: 'public', name: 'users', comment: '', columns: [], constraints: [] },
+      { id: 't_auth', designId: 'd1', schema: 'auth', name: 'users', comment: '', columns: [], constraints: [] },
+      {
+        id: 't_sess',
+        designId: 'd1',
+        schema: 'auth',
+        name: 'sessions',
+        comment: '',
+        columns: [col('s1', 'user_id')],
+        // refSchema 가 비었으니 **같은 스키마**(auth.users)를 가리킨다.
+        constraints: [
+          { id: 'sc1', kind: 'fk', name: 'fk_sess_user', columns: [{ columnId: 's1' }], refTable: 'users' }
+        ] as ConstraintRecord[]
+      }
+    ]
+    // 조준은 여전히 **맨 이름**이다(`findTable` 은 스키마를 안 받는다 — 같은 이름이 둘이면
+    // 먼저 것). 여기서는 그게 public.users 다. 아무도 그것을 안 가리키므로 지워진다.
+    const { tables } = apply([{ op: 'drop_table', table: 'users' }], twoSchemas, ['public', 'auth'])
+    expect(tables.map((t) => `${t.schema}.${t.name}`)).toEqual(['auth.users', 'auth.sessions'])
+  })
+
   it('update_column 개명: FK 의 refColumns 도 따라 바뀐다', () => {
     const { tables, changes } = apply([
       { op: 'update_column', table: 'users', column: 'id', set: { name: 'user_no' } }

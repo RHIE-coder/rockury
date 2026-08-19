@@ -311,14 +311,14 @@ export async function run(ctx) {
   const tl = await body()
   check('Timeline: 시드 버전 v0.3.14 표시', tl.includes('v0.3.14'))
 
-  // 버전 컷 (Patch → v0.3.15)
-  await click('button:has-text("버전 컷")')
+  // 버전 확정 (Patch → v0.3.15)
+  await click('button:has-text("버전 확정")')
   await page.waitForSelector('text=증가 유형', { timeout: 5_000 })
   await click('button[aria-pressed]:has-text("Patch")')
   await click('button[type="submit"]')
   await page.waitForTimeout(500)
-  check('버전 컷 후 v0.3.15 등장', (await body()).includes('v0.3.15'))
-  check('버전 컷: 시드 행 수 표시(스냅샷에 시드 동봉)', (await page.locator('[data-version-seed-rows]').count()) >= 1)
+  check('버전 확정 후 v0.3.15 등장', (await body()).includes('v0.3.15'))
+  check('버전 확정: 시드 행 수 표시(스냅샷에 시드 동봉)', (await page.locator('[data-version-seed-rows]').count()) >= 1)
 
   // ⭐ 버전 비교에 시드 섹션 — 시드 없던 옛 버전(v0.3.14)↔시드 담긴 새 버전(v0.3.15).
   //    CASE-design-045: 옛 스냅샷 폴백이 깨지지 않고 시드 델타가 보인다.

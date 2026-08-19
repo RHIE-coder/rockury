@@ -91,9 +91,9 @@ function CutDialog() {
     <Dialog open={open} onOpenChange={(o) => !o && dismiss()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>버전 컷</DialogTitle>
+          <DialogTitle>버전 확정</DialogTitle>
           <DialogDescription>
-            지금 Draft 를 불변 스냅샷으로 굳힙니다. 컷한 뒤 Draft 를 고쳐도 이 스냅샷은 안 바뀝니다.
+            지금 Draft 를 불변 스냅샷으로 굳힙니다. 확정한 뒤 Draft 를 고쳐도 이 스냅샷은 안 바뀝니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -146,7 +146,7 @@ function CutDialog() {
                       data-api-cut-approve
                       onChange={(e) => setApproved(e.target.checked)}
                     />
-                    위 변경이 기존 호출자를 깨뜨린다는 것을 알고 컷합니다
+                    위 변경이 기존 호출자를 깨뜨린다는 것을 알고 확정합니다
                   </label>
                 </>
               ) : (
@@ -165,7 +165,7 @@ function CutDialog() {
             data-api-cut-submit
             onClick={() => spec && void cut(spec.id, value.trim(), note).then((ok) => ok && dismiss())}
           >
-            컷하기
+            확정하기
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -209,14 +209,14 @@ export function TimelineView() {
         <span className="text-[11.5px] text-muted">— 명세 전체의 불변 스냅샷</span>
         <span className="flex-1" />
         <Button size="sm" className="h-7 text-[12px]" data-api-open-cut onClick={openCut}>
-          <Plus className="size-3.5" /> 버전 컷
+          <Plus className="size-3.5" /> 버전 확정
         </Button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
         {versions.length === 0 ? (
           <p className="px-4 py-4 text-[12px] text-muted" data-api-empty="no-version">
-            아직 컷한 버전이 없어요. 지금은 Draft 만 있습니다 — 실행 기록도 Draft 기준으로 남습니다.
+            아직 확정한 버전이 없어요. 지금은 Draft 만 있습니다 — 실행 기록도 Draft 기준으로 남습니다.
           </p>
         ) : (
           versions.map((v, i) => <VersionRow key={v.number} v={v} latest={i === 0} />)

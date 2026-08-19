@@ -7,8 +7,12 @@ import { DialectMark } from '../../DialectMark'
 import type { Constraint, ConstraintKind, TableDef } from '../../workspaces/definition/types'
 import { keyBadgesOf, checkColumnIds, resolveColumns } from '../../workspaces/definition/derive'
 import { FkPolicyChips } from '../../workspaces/definition/FkPolicyChips'
+import { SelfRefChip } from '../../workspaces/definition/SelfRefChip'
+import { CopyMenu } from '@renderer/ui/copy-menu'
+import { columnCopyItems, constraintCopyItems, tableCopyItems } from '../../copyText'
 import { qualifiedName, refTarget, type TableRef } from '../../schemaRef'
 import { outsideRefOf, outsideReason, type OutsideRef } from '../outsideRef'
+import { ReferencedBySection } from '../../ReferencedBySection'
 
 // 읽기 전용 컬럼 그리드: # · Name · Type · Keys · Null · Default · Comment
 const GRID =
@@ -52,7 +56,8 @@ export function TableDetail({
   onJump,
   outsideRefs = [],
   schemaLabel = '스키마',
-  onAddSchema
+  onAddSchema,
+  allTables = []
 }: {
   table: TableDef
   dialect: DialectId
@@ -63,6 +68,8 @@ export function TableDetail({
   schemaLabel?: string
   /** 범위 밖 대상을 눌렀을 때 그 스키마를 범위에 더한다. */
   onAddSchema?: (schema: string) => void
+  /** 들어오는 참조를 세려면 남들도 봐야 한다 — 안 주면 "참조하는 곳" 칸을 안 그린다. */
+  allTables?: readonly TableDef[]
 }) {
   const badgeMap = keyBadgesOf(table)
   const checkCols = checkColumnIds(table)
@@ -78,14 +85,14 @@ export function TableDetail({
             ) : (
               <Table2 className="size-4 shrink-0 text-muted" />
             )}
-            {/* 앱 전역은 user-select:none 이라 이름을 끌어 고를 수 없었다(2026-07-30 피드백) —
-                테이블 이름은 쿼리에 붙여 쓰는 값이라 `selectable` 로 선택·복사를 연다. */}
             {/* 스키마는 이름 앞에 흐리게 — 범위를 켜면 `card`(entity)와 `cards`(public)가
                 함께 있어, 제목만으로는 어느 쪽을 보고 있는지 알 수 없다. */}
-            <span className="selectable truncate font-mono">
-              {table.schema && <span className="text-muted">{table.schema}.</span>}
-              {table.name}
-            </span>
+            <CopyMenu items={tableCopyItems(table)}>
+              <span className="truncate font-mono">
+                {table.schema && <span className="text-muted">{table.schema}.</span>}
+                {table.name}
+              </span>
+            </CopyMenu>
             <span
               title="연결 방언 — DDL 은 이 벤더 구문으로 표시돼요"
               className="flex shrink-0 items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10px] font-semibold tracking-normal text-muted"
@@ -127,34 +134,35 @@ export function TableDetail({
           {table.columns.map((c, i) => {
             const badges = badgeMap.get(c.id) ?? []
             return (
-              <div
-                key={c.id}
-                className="grid items-center border-b border-line last:border-b-0 hover:bg-panel/60"
-                style={{ gridTemplateColumns: GRID, minHeight: 34 }}
-              >
-                <div className="px-1 text-right text-[11px] tabular-nums text-muted">{i + 1}</div>
-                <Cell text={c.name} className="font-mono text-[12.5px] text-fg" />
-                <Cell text={c.type} className="font-mono text-[12px] text-muted" />
-                <div className="flex flex-wrap gap-1 px-1">
-                  {badges.map((b) => (
-                    <Badge key={b.kind} variant={b.kind} className="px-1.5 py-0.5 text-[10px]">
-                      {b.kind.toUpperCase()}
-                      {b.pos != null && <span className="opacity-70">·{b.pos}</span>}
-                    </Badge>
-                  ))}
-                  {checkCols.has(c.id) && (
-                    <Badge variant="check" className="px-1.5 py-0.5 text-[10px]" title="CHECK 제약에 참여">
-                      CHK
-                    </Badge>
-                  )}
+              <CopyMenu key={c.id} items={columnCopyItems(table, c)}>
+                <div
+                  className="grid items-center border-b border-line last:border-b-0 hover:bg-panel/60"
+                  style={{ gridTemplateColumns: GRID, minHeight: 34 }}
+                >
+                  <div className="px-1 text-right text-[11px] tabular-nums text-muted">{i + 1}</div>
+                  <Cell text={c.name} className="font-mono text-[12.5px] text-fg" />
+                  <Cell text={c.type} className="font-mono text-[12px] text-muted" />
+                  <div className="flex flex-wrap gap-1 px-1">
+                    {badges.map((b) => (
+                      <Badge key={b.kind} variant={b.kind} className="px-1.5 py-0.5 text-[10px]">
+                        {b.kind.toUpperCase()}
+                        {b.pos != null && <span className="opacity-70">·{b.pos}</span>}
+                      </Badge>
+                    ))}
+                    {checkCols.has(c.id) && (
+                      <Badge variant="check" className="px-1.5 py-0.5 text-[10px]" title="CHECK 제약에 참여">
+                        CHK
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-center text-[11px] text-muted">{c.nullable ? 'NULL' : 'NOT NULL'}</div>
+                  <Cell
+                    text={c.defaultValue == null || c.defaultValue === '' ? '—' : c.defaultValue}
+                    className="font-mono text-[12px] text-muted"
+                  />
+                  <Cell text={c.comment || ''} className="text-[12px] text-muted" />
                 </div>
-                <div className="text-center text-[11px] text-muted">{c.nullable ? 'NULL' : 'NOT NULL'}</div>
-                <Cell
-                  text={c.defaultValue == null || c.defaultValue === '' ? '—' : c.defaultValue}
-                  className="font-mono text-[12px] text-muted"
-                />
-                <Cell text={c.comment || ''} className="text-[12px] text-muted" />
-              </div>
+              </CopyMenu>
             )
           })}
         </div>
@@ -170,41 +178,44 @@ export function TableDetail({
             {table.constraints.map((con) => {
               const cols = resolveColumns(table, con).map((r) => r.name)
               return (
-                <div
-                  key={con.id}
-                  className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-canvas px-3 py-1.5 text-[12px]"
-                >
-                  <Badge variant={KIND_VARIANT[con.kind]} className="px-1.5 py-0.5 text-[10px]">
-                    {con.kind.toUpperCase()}
-                  </Badge>
-                  <span className="font-mono text-fg">{con.name}</span>
-                  {cols.length > 0 && (
-                    <span className="font-mono text-muted">({cols.join(', ')})</span>
-                  )}
-                  {con.kind === 'fk' && con.refTable && (
-                    <span className="flex flex-wrap items-center gap-1.5 text-muted">
-                      <span className="text-accent-2">→</span>
-                      <FkTargetLink
-                        table={table}
-                        con={con}
-                        outside={outsideRefOf(outsideRefs, table, con.id)}
-                        schemaLabel={schemaLabel}
-                        onJump={onJump}
-                        onAddSchema={onAddSchema}
-                      />
-                      <span className="font-mono">({(con.refColumns ?? []).join(', ')})</span>
-                      <FkPolicyChips con={con} />
-                    </span>
-                  )}
-                  {con.kind === 'check' && con.expression && (
-                    <span className="font-mono text-muted">{con.expression}</span>
-                  )}
-                </div>
+                <CopyMenu key={con.id} items={constraintCopyItems(table, con)}>
+                  <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-canvas px-3 py-1.5 text-[12px]">
+                    <Badge variant={KIND_VARIANT[con.kind]} className="px-1.5 py-0.5 text-[10px]">
+                      {con.kind.toUpperCase()}
+                    </Badge>
+                    <span className="font-mono text-fg">{con.name}</span>
+                    {cols.length > 0 && (
+                      <span className="font-mono text-muted">({cols.join(', ')})</span>
+                    )}
+                    {con.kind === 'fk' && con.refTable && (
+                      <span className="flex flex-wrap items-center gap-1.5 text-muted">
+                        <span className="text-accent-2">→</span>
+                        <FkTargetLink
+                          table={table}
+                          con={con}
+                          outside={outsideRefOf(outsideRefs, table, con.id)}
+                          schemaLabel={schemaLabel}
+                          onJump={onJump}
+                          onAddSchema={onAddSchema}
+                        />
+                        <span className="font-mono">({(con.refColumns ?? []).join(', ')})</span>
+                        <FkPolicyChips con={con} />
+                        {/* 정책 뒤에 선다 — 화살표 오른쪽 이름과 제목을 대조해야 알던 사실이다. */}
+                        <SelfRefChip from={table} con={con} />
+                      </span>
+                    )}
+                    {con.kind === 'check' && con.expression && (
+                      <span className="font-mono text-muted">{con.expression}</span>
+                    )}
+                  </div>
+                </CopyMenu>
               )
             })}
           </div>
         </div>
       )}
+
+      <ReferencedBySection table={table} tables={allTables} onJump={onJump} />
     </div>
   )
 }

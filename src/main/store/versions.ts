@@ -86,7 +86,7 @@ export function createVersion(input: CreateVersionInput): VersionRecord {
   const existing = listVersions(input.designId).map((v) => v.number)
   // PK 충돌로도 막히지만 그 오류문(UNIQUE constraint)은 사람에게 아무 말도 안 한다.
   if (existing.includes(input.number))
-    throw new Error(`버전 "${input.number}" 가 이미 있습니다 — 다른 번호로 컷하세요.`)
+    throw new Error(`버전 "${input.number}" 가 이미 있습니다 — 다른 번호로 확정하세요.`)
   /*
    * 번호는 **뒤로 못 간다.** 타임라인은 컷한 시각 순으로 그려지는데 번호가 내려가면 두 순서가
    * 어긋나, 맨 위 줄에 붙는 "최신" 배지가 실제 최신 번호가 아닌 줄을 가리킨다. 무엇보다

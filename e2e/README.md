@@ -41,7 +41,7 @@ suites/NN-*.mjs       실제 체크. export const meta = { name, needsDb, desc }
 - **접근성 쿼리(`getByRole` 등)는 이 Electron 창을 크래시**시킨다 → **CSS/text 로케이터만** 사용.
 - Radix 메뉴아이템에서 곧바로 Dialog 를 열면 body `pointer-events:none` 이 잔존 → 앱 UI 가 코드에선 이미 `setTimeout(onSelect,0)` 로 회피(ContextBar).
 - `node:sqlite` 는 ExperimentalWarning 를 stderr 로 출력(무해, 필터 가능).
-- 선택 커밋은 `button[type="submit"]` 등으로 다이얼로그 버튼을 특정(타임라인의 "버전 컷"과 다이얼로그 "… 컷"이 텍스트로 겹침).
+- 선택 커밋은 `button[type="submit"]` 등으로 다이얼로그 버튼을 특정(타임라인의 "버전 확정"과 다이얼로그 "… 확정"이 텍스트로 겹침).
 - **모듈만 누르면 "마지막에 보던 뷰"로 열린다**(`nav/recall`). 그래서 특정 뷰의 요소를 집을
   거면 `[data-nav-module="…"]` 뒤에 `[data-nav-view="…"]` 까지 눌러야 한다. 안 그러면
   **단독으로는 통과하고 앞 스위트를 붙이면 30초 타임아웃**으로 죽는다 — 앞 스위트가 그 모듈을

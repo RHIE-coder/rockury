@@ -153,7 +153,9 @@ export function DiagramView() {
             isolated={isolated}
             detailSubtitle="실 DB 역설계 · 읽기"
             scope={{ availableSchemas, schemaLabel, onAddSchema: addSchema }}
-            detail={(t, jump) => <TableDetail table={t} dialect={conn.dbType} onJump={jump} />}
+            detail={(t, jump) => (
+              <TableDetail table={t} dialect={conn.dbType} onJump={jump} allTables={tables} />
+            )}
             sqlDetail={(t) => <SqlView table={t} dialect={conn.dbType} labeled={false} />}
           />
         </ReactFlowProvider>

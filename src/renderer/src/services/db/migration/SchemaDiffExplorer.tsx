@@ -8,6 +8,7 @@ import { ClipToggle, clipBox, useClipped } from '@renderer/ui/clipped'
 import { TableSidePanel } from '../TableSidePanel'
 import { ConstraintShape } from '../workspaces/definition/ConstraintShape'
 import { keyBadgesOf, type KeyBadge } from '../workspaces/definition/derive'
+import type { TableRef } from '@shared/db/tableRef'
 import type { Column, TableDef } from '../workspaces/definition/types'
 import type { VersionSnapshot } from '../versions/store'
 import {
@@ -172,7 +173,7 @@ function ColumnLine({
  * 열 배치도 Definition 과 맞춘다 — 종류 배지 · 이름 · 내용. 같은 자리에 같은 것이 있어야
  * 두 화면을 오갈 때 눈이 다시 자리를 안 찾는다.
  */
-function ConstraintLine({ row }: { row: ConstraintRow }): ReactElement {
+function ConstraintLine({ row, from }: { row: ConstraintRow; from: TableRef }): ReactElement {
   // 옛 모습(취소선)은 정책까지 든 한 줄이라 제일 잘 잘린다 — 그 줄도 스스로 펼친다.
   const before = useClipped<HTMLSpanElement>(row.before ?? '')
   return (
@@ -190,7 +191,7 @@ function ConstraintLine({ row }: { row: ConstraintRow }): ReactElement {
         {row.name}
       </Cell>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1.5">
-        {row.con && <ConstraintShape con={row.con} cols={row.cols} />}
+        {row.con && <ConstraintShape con={row.con} cols={row.cols} from={from} />}
         {/* 바뀐 줄에만 옛 모습을 덧댄다 — 정책까지 든 문자열이라 무엇이 무엇으로인지가 여기서 읽힌다. */}
         {row.status === 'modified' && row.before && (
           <span className="flex min-w-0 items-center gap-1">
@@ -349,7 +350,7 @@ function TablePanel({ t }: { t: TableView }): ReactElement {
             </h3>
             <div className="overflow-hidden rounded-[10px] border border-line">
               {constraints.map((k) => (
-                <ConstraintLine key={`k:${k.kind}:${k.name}`} row={k} />
+                <ConstraintLine key={`k:${k.kind}:${k.name}`} row={k} from={t.def} />
               ))}
             </div>
           </>

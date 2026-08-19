@@ -33,9 +33,11 @@ export function TableSidePanel({
 }) {
   const [tab, setTab] = useState<'tables' | 'constraints' | 'groups'>('tables')
   const [filter, setFilter] = useState<KindFilter>('ALL')
+  const [incomingOnly, setIncomingOnly] = useState(false)
 
   const constraintCount = flattenConstraints(tables).length
-  const activeName = tables.find((t) => t.id === activeId)?.name ?? null
+  // 방향 필터의 기준은 이름이 아니라 **테이블**이다 — 동명 다른 스키마를 가르려면 스키마가 있어야 한다.
+  const activeTable = tables.find((t) => t.id === activeId) ?? null
   // 그룹 탭이 없는 화면에서 그 탭을 보고 있었다면(화면 전환) 테이블로 되돌린다.
   const active = tab === 'groups' && !groupTab ? 'tables' : tab
 
@@ -72,10 +74,12 @@ export function TableSidePanel({
         ) : (
           <ConstraintListPanel
             tables={tables}
-            activeTableName={activeName}
+            activeTable={activeTable}
             onPickTable={onPick}
             filter={filter}
             onFilterChange={setFilter}
+            incomingOnly={incomingOnly}
+            onIncomingOnlyChange={setIncomingOnly}
           />
         )}
       </div>

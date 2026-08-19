@@ -136,7 +136,7 @@ export function AcceptView() {
             >
               {preview.diff.breaking.length > 0
                 ? `깨지는 변경 ${preview.diff.breaking.length}건 — 사람 승인이 필요합니다.`
-                : '깨지는 변경 없음 (더하기만 합니다). 버전 컷은 따로 하셔야 합니다.'}
+                : '깨지는 변경 없음 (더하기만 합니다). 버전 확정은 따로 하셔야 합니다.'}
             </p>
             <div className="flex items-center gap-2">
               <Button

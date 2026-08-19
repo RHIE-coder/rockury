@@ -285,7 +285,7 @@ export const API_TOOL_DEFS: ToolDef[] = [
   {
     name: 'api_list_versions',
     description:
-      '명세의 버전(불변 스냅샷) 이력 — 번호·메모·잠금·시각 (최신순, 스냅샷 본문 제외). 버전 컷은 사람이 앱에서 한다.',
+      '명세의 버전(불변 스냅샷) 이력 — 번호·메모·잠금·시각 (최신순, 스냅샷 본문 제외). 버전 확정은 사람이 앱에서 한다.',
     inputSchema: { specId: z.string().describe('명세 id (api_list_specs 로 확인)') },
     handler: ({ specId }) => {
       const spec = requireSpecDef(specId)

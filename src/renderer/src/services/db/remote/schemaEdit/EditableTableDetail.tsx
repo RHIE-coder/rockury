@@ -17,7 +17,9 @@ import { DialectMark } from '../../DialectMark'
 import type { ConstraintKind, FkAction, TableDef } from '../../workspaces/definition/types'
 import { keyBadgesOf, resolveColumns } from '../../workspaces/definition/derive'
 import { IMPLIED_FK_ACTION, type FkPolicyKind } from '../../workspaces/definition/fkPolicy'
+import { SelfRefChip } from '../../workspaces/definition/SelfRefChip'
 import { useSchemaEditStore } from './store'
+import { ReferencedBySection } from '../../ReferencedBySection'
 
 const GRID =
   '28px minmax(120px,1.2fr) minmax(120px,1.2fr) 104px 44px minmax(90px,0.9fr) minmax(110px,1.3fr) 32px'
@@ -284,6 +286,9 @@ export function EditableTableDetail({ table, dialect, allTables }: { table: Tabl
                         value={con.onUpdate}
                         onChange={(v) => s.updateConstraint(con.id, { onUpdate: v })}
                       />
+                      {/* 참조 테이블을 자기 자신으로 고른 순간 보인다 — 고르는 자리에서 알아야
+                          "왜 이 표가 목록에 또 있지"를 안 묻는다. */}
+                      <SelfRefChip from={table} con={con} />
                     </span>
                   )}
                   {con.kind === 'check' && (
@@ -303,6 +308,9 @@ export function EditableTableDetail({ table, dialect, allTables }: { table: Tabl
           </div>
         </div>
       )}
+
+      {/* 들어오는 참조 — 편집 중에도 보인다. 컬럼을 지우기 전에 무엇이 깨지는지가 여기 있다. */}
+      <ReferencedBySection table={table} tables={allTables} />
     </div>
   )
 }

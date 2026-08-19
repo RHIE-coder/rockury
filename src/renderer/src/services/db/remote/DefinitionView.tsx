@@ -226,6 +226,7 @@ export function DefinitionView() {
                       outsideRefs={outsideRefs}
                       schemaLabel={schemaLabel}
                       onAddSchema={addSchema}
+                      allTables={list}
                     />
                   ) : (
                     <SqlView table={active} dialect={conn.dbType} allTables={list} schemaName={conn.name} />

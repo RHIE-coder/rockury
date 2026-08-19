@@ -93,9 +93,12 @@ Electron + electron-vite · React 19 · TypeScript 7 · Tailwind v4 + Radix · Z
 | 워크트리에서 일한다 · 새 서비스/IPC 채널/e2e 스위트를 만든다 | `docs/agents/parallel-dev.md` |
 | 가드가 걸렸는데 이유를 모른다 · 가드를 고친다 | `docs/agents/guardrails.md` |
 | e2e 를 쓴다(앱 구동 함정·패턴) | `e2e/README.md` |
-| 이 기능이 무엇이어야 하나 · 무엇을 검증하나 | `docs/spec/<svc>-*.md` · `docs/qa/<svc>-*.md` |
 | 합의된 용어의 뜻 | `docs/glossary.md` |
-| DB 서비스가 왜 이 모양인가(설계 근거·로드맵) | `docs/before-steward-background/` |
+
+**명세 정본(`docs/spec/`·`docs/qa/`)과 `docs/before-steward-background/` 는 걷어냈다**
+(2026-08-19 · `3578bbd`). 이 기능이 무엇이어야 하는지는 지금 **코드 옆 주석과 커밋 메시지**가
+정본이다 — 소스 주석에 남은 `docs/spec/…` 표시는 아직 안 걷은 옛 자취다. 지운 문서를 읽어야
+하면 `git show 3578bbd^:docs/spec/db-design.md` 처럼 이력에서 꺼낸다.
 
 명령: `npm run dev` · `npm test`(watch `test:watch`) · `npm run build` ·
 `npm run surface-verify`(화면 품질) · `npm run db:up`(도커 테스트 DB).

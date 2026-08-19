@@ -102,11 +102,11 @@ export function RowDetailDialog({
                         <span className="font-mono text-[11.5px] italic text-muted">NULL</span>
                       ) : v.kind === 'json' ? (
                         // 긴 JSON 은 세로로만 늘린다 — 가로로 넘치면 표 밖으로 밀려난다.
-                        <pre className="selectable max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-panel/60 p-2 font-mono text-[11.5px] text-fg">
+                        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-panel/60 p-2 font-mono text-[11.5px] text-fg">
                           {v.text}
                         </pre>
                       ) : (
-                        <span className="selectable whitespace-pre-wrap break-all font-mono text-[11.5px] text-fg">
+                        <span className="whitespace-pre-wrap break-all font-mono text-[11.5px] text-fg">
                           {v.text}
                         </span>
                       )}

@@ -96,7 +96,7 @@ export function DiffView() {
       <PlaceholderView
         icon={GitCompare}
         title="비교할 버전이 없어요"
-        subtitle="Timeline 에서 버전을 한 번 컷하면 Draft 와 비교할 수 있습니다."
+        subtitle="Timeline 에서 버전을 한 번 확정하면 Draft 와 비교할 수 있습니다."
       />
     )
   }

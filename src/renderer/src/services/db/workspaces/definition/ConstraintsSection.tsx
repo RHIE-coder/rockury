@@ -32,6 +32,8 @@ import { RefTableCard } from './FkRef'
 import { checkColumns, resolveColumns } from './derive'
 import { IMPLIED_FK_ACTION } from './fkPolicy'
 import { ConstraintShape } from './ConstraintShape'
+import { CopyMenu } from '@renderer/ui/copy-menu'
+import { constraintCopyItems } from '../../copyText'
 import type { Constraint, ConstraintKind, FkAction, TableDef } from './types'
 
 const CONSTRAINT_KINDS: ConstraintKind[] = ['pk', 'uk', 'fk', 'check', 'idx']
@@ -57,6 +59,7 @@ function ConstraintSummary({ table, con }: { table: TableDef; con: Constraint })
     <ConstraintShape
       con={con}
       cols={resolveColumns(table, con)}
+      from={table}
       emptyText="컬럼 없음 — 클릭해서 편집"
       className="overflow-hidden"
     />
@@ -420,6 +423,7 @@ export function ConstraintsSection({ readOnly = false }: { readOnly?: boolean })
           const open = openId === k.id
           return (
             <div key={k.id} className="border-b border-line last:border-b-0">
+              <CopyMenu items={constraintCopyItems(table, k)}>
               <div
                 role={readOnly ? undefined : 'button'}
                 tabIndex={readOnly ? undefined : 0}
@@ -482,6 +486,7 @@ export function ConstraintsSection({ readOnly = false }: { readOnly?: boolean })
                   </div>
                 )}
               </div>
+              </CopyMenu>
               {open && !readOnly && <ConstraintEditor table={table} con={k} />}
             </div>
           )

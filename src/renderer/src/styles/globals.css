@@ -115,13 +115,39 @@ body {
   overflow: hidden;
 }
 
-/* 데스크탑 앱 느낌: 텍스트 드래그 선택 기본 비활성(입력/에디터 영역은 개별 허용) */
-* {
+/*
+ * 글자는 **기본으로 고를 수 있다.** 예전엔 데스크탑 앱 느낌을 내려고 `* { user-select: none }`
+ * 으로 전부 막고 `.selectable` 로 한 곳씩 뚫었는데, 뚫는 쪽이 늘 뒤늦어 정작 값(테이블·컬럼·
+ * 제약 이름)을 끌어 복사할 길이 없었다 — 같은 제보를 두 번 받았다(2026-07-30 테이블 이름,
+ * 2026-08-19 "드래그도 안되고"). 그래서 기본을 뒤집고 **누르는 자리만** 막는다.
+ *
+ * `*` 가 아니라 `html` 에 거는 것이 핵심이다: 상속된 값은 직접 걸린 선언에 언제나 진다.
+ * 그래서 React Flow 가 제 노드에 건 `user-select:none`(캔버스 끌기)도, Tailwind `select-none`
+ * 유틸리티도 특이도를 따질 것 없이 그대로 이긴다.
+ */
+html {
+  user-select: text;
+}
+
+/* 두 번 눌러 글자가 잡히면 조작이 어그러지는 자리 — 누르는 것들. */
+button,
+summary,
+label,
+select,
+[role='button'],
+[role='tab'],
+[role='menuitem'],
+[role='menuitemcheckbox'],
+[role='menuitemradio'],
+[role='option'],
+[role='checkbox'],
+[role='switch'] {
   user-select: none;
 }
+
+/* 위 금지 안쪽에 들어앉은 입력칸은 다시 연다(직접 걸어야 상속을 이긴다). */
 input,
 textarea,
-[contenteditable='true'],
-.selectable {
+[contenteditable='true'] {
   user-select: text;
 }
