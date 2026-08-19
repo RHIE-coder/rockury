@@ -3,7 +3,7 @@ import { safeFileName, sqlFileName } from './sqlFile'
 
 describe('safeFileName', () => {
   it('경로로 읽힐 글자를 바꾼다', () => {
-    expect(safeFileName('pokemon/tcg')).toBe('pokemon-tcg')
+    expect(safeFileName('shop/orders')).toBe('shop-orders')
     expect(safeFileName('prod:main')).toBe('prod-main')
     expect(safeFileName('a*b?c"d<e>f|g\\h')).toBe('a-b-c-d-e-f-g-h')
   })
@@ -22,11 +22,11 @@ describe('safeFileName', () => {
 
 describe('sqlFileName', () => {
   it('테이블 범위는 테이블 이름', () => {
-    expect(sqlFileName('table', 'card_texts', 'oh-my-pokemon')).toBe('card_texts.sql')
+    expect(sqlFileName('table', 'card_texts', 'shop')).toBe('card_texts.sql')
   })
 
   it('전체 범위는 설계/연결 이름', () => {
-    expect(sqlFileName('schema', 'card_texts', 'oh-my-pokemon')).toBe('oh-my-pokemon.sql')
+    expect(sqlFileName('schema', 'card_texts', 'shop')).toBe('shop.sql')
   })
 
   it('이름이 없거나 다 걸러지면 기본 이름으로 떨어진다', () => {

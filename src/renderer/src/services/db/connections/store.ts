@@ -5,6 +5,7 @@ import { useContextValue, useNav } from '@renderer/nav/useNav'
 import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
 import { useProjectStore } from '@renderer/shell/projectStore'
 import { dialectInfo, type DialectId } from '../dialects'
+import { DIALECT_MARKS } from '../DialectMark'
 import { partitionAutoCheck } from './autoCheck'
 
 /**
@@ -299,7 +300,7 @@ function pushConnOptions(connections: ConnectionDef[], scope: ProjectScope): voi
         id: c.id,
         label: c.name,
         hint: info.label,
-        dot: info.dot,
+        icon: DIALECT_MARKS[c.dbType],
         subtitle: c.dbType === 'sqlite' ? c.database : `${c.database}@${c.host}:${c.port}`
       }
     })

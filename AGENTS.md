@@ -99,3 +99,7 @@ Electron + electron-vite · React 19 · TypeScript 7 · Tailwind v4 + Radix · Z
 
 명령: `npm run dev` · `npm test`(watch `test:watch`) · `npm run build` ·
 `npm run surface-verify`(화면 품질) · `npm run db:up`(도커 테스트 DB).
+
+`scripts/` 아래 스크립트는 **`--help` 로 사용법을 낸다** — 설명의 원본은 파일 머리 주석 하나이고
+`scripts/lib/usage.cjs` 가 그걸 그대로 출력한다. 새 스크립트도 이 규약을 따른다(도움말 문자열을
+따로 두지 않는다 — 두 곳에 적으면 한쪽만 고쳐진다).

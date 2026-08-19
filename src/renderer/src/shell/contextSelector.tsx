@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check } from 'lucide-react'
 import { useContextValue, useNav } from '../nav/useNav'
@@ -14,29 +14,35 @@ import type { ContextOption, ContextSelector } from '../nav/types'
  */
 
 /**
- * 옵션 hint 렌더 — dot(벤더 컬러)이 있으면 "점 + 라벨" 배지 문구로, 없으면 흐린 텍스트로.
+ * 옵션 hint 렌더 — 표식(마크나 dot)이 있으면 "표식 + 라벨" 배지 문구로, 없으면 흐린 텍스트로.
  *
- * `compact` 는 **손잡이 자리가 빠듯해지면** 글자를 접고 점만 남긴다(폭을 벌어야 하는 손잡이 전용).
+ * `compact` 는 **손잡이 자리가 빠듯해지면** 글자를 접고 표식만 남긴다(폭을 벌어야 하는 손잡이 전용).
  * 기준은 화면 폭이 아니라 손잡이가 실제로 받는 자리다(`ModuleTabs` 의 `@container/handle`) —
  * 화면 폭으로 재던 동안 둘이 어긋나 1600~1679px 구간에서 안 접힌 채 글자가 개행됐다.
  */
 export function HintChip({
   hint,
   dot,
+  icon: Icon,
   compact = false
 }: {
   hint?: string
   dot?: string
+  icon?: ComponentType<{ className?: string }>
   compact?: boolean
 }) {
   if (!hint) return null
-  if (!dot) return <span className="shrink-0 text-[11px] text-muted">{hint}</span>
+  if (!dot && !Icon) return <span className="shrink-0 text-[11px] text-muted">{hint}</span>
   return (
     <span
       title={compact ? hint : undefined}
       className="flex shrink-0 items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10.5px] font-medium text-fg"
     >
-      <span className="size-1.5 rounded-full" style={{ background: dot }} />
+      {Icon ? (
+        <Icon className="size-3.5 shrink-0" />
+      ) : (
+        <span className="size-1.5 rounded-full" style={{ background: dot }} />
+      )}
       {compact ? <span className="@max-[540px]/handle:hidden">{hint}</span> : hint}
     </span>
   )
@@ -113,7 +119,7 @@ export function SelectorMenu({
                     )}
                   </span>
                 </span>
-                <HintChip hint={o.hint} dot={o.dot} />
+                <HintChip hint={o.hint} dot={o.dot} icon={o.icon} />
               </DropdownMenu.Item>
             )
           })}

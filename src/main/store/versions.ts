@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import { compareVersion, highestVersion, isVersionNumber } from '../../shared/versionNumber'
 
 /**
  * Version — Design 의 불변(immutable) 스냅샷(IA). `v0.3.13` 처럼 식별, 설계별 단조 증가.
@@ -74,6 +75,28 @@ export function updateVersionNote(id: string, note: string): void {
 
 export function createVersion(input: CreateVersionInput): VersionRecord {
   const d = getDb()
+  /*
+   * 번호는 이름표가 아니라 **뼈대**다 — id(`<설계>@<번호>`)의 일부이고, 타임라인 정렬·다음 번호
+   * 제안·버전 렌즈가 전부 세 자리 비교에 기댄다. 형식이 어긋난 번호가 한 줄만 섞여도 그 줄은
+   * `v0.0.0` 으로 취급돼 정렬이 조용히 어긋난다. 입구가 여럿(모달·가져오기·MCP)이라
+   * **마지막 문인 여기서** 막는다 — 화면 검증은 사람에게 먼저 알리는 몫이고, 이 줄이 보증이다.
+   */
+  if (!isVersionNumber(input.number))
+    throw new Error(`버전 번호 형식이 아닙니다("${input.number}") — v0.1.0 같은 형태여야 합니다.`)
+  const existing = listVersions(input.designId).map((v) => v.number)
+  // PK 충돌로도 막히지만 그 오류문(UNIQUE constraint)은 사람에게 아무 말도 안 한다.
+  if (existing.includes(input.number))
+    throw new Error(`버전 "${input.number}" 가 이미 있습니다 — 다른 번호로 컷하세요.`)
+  /*
+   * 번호는 **뒤로 못 간다.** 타임라인은 컷한 시각 순으로 그려지는데 번호가 내려가면 두 순서가
+   * 어긋나, 맨 위 줄에 붙는 "최신" 배지가 실제 최신 번호가 아닌 줄을 가리킨다. 무엇보다
+   * 마이그레이션 이력(`v0.1.0 → v0.2.0`)이 계보를 잃는다 — 되돌리기는 버전 삭제가 맡는다.
+   */
+  const top = highestVersion(existing)
+  if (top && compareVersion(input.number, top) < 0)
+    throw new Error(
+      `버전 번호는 뒤로 갈 수 없습니다("${input.number}") — 최신이 "${top}" 이라 그보다 높아야 합니다.`
+    )
   const record: VersionRecord = {
     id: `${input.designId}@${input.number}`,
     designId: input.designId,

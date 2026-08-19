@@ -3,6 +3,7 @@ import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { isReadOnlyLens, useVersionLens, useVersionsStore } from '../../versions/store'
 import { changedDesignIds } from '../definition/designScope'
 import type { TableDef } from '../definition/types'
+import { seedLensView, seedRestoreAction, type SeedLensView } from './seedLens'
 import { createSeedSet, cycleSeedColumnRole } from './seedSet'
 import type { SeedPkStrategy, SeedRow, SeedSet, SeedStrength } from './types'
 // 순환 참조 주의: seed → {designs, versions, definition/designScope} 방향만 존재.
@@ -27,6 +28,11 @@ interface SeedState {
   setEditing: (key: string | null) => void
 
   addSet: (t: TableDef) => void
+  /**
+   * 아직 없는 세트를 들인다 — 되먹임으로 **실 DB 행부터** 담을 때 쓴다.
+   * 이미 있는 것은 건드리지 않는다(짝짓기 기준·무시 컬럼을 사람이 손봤을 수 있다).
+   */
+  ensureSets: (designId: string, sets: SeedSet[]) => void
   removeSet: (key: string) => void
   /** 컬럼 역할 순환 — 짝짓기 → 포함 → 무시 → 짝짓기(버튼 하나). */
   cycleColumnRole: (column: string, allowKey?: boolean) => void
@@ -89,6 +95,15 @@ export const useSeedStore = create<SeedState>()((set) => ({
     const next = createSeedSet(t)
     set((s) => ({ sets: [...s.sets, next], activeKey: setKey(next), editing: null }))
   },
+  ensureSets: (designId, sets) =>
+    set((s) => {
+      const have = new Set(s.sets.filter((x) => x.designId === designId).map((x) => x.tableName))
+      const added = sets.filter((x) => !have.has(x.tableName)).map((x) => ({ ...x, designId }))
+      if (added.length === 0) return {}
+      // 활성 세트는 비어 있을 때만 채운다 — 보던 세트를 말없이 갈아치우지 않는다.
+      return { sets: [...s.sets, ...added], activeKey: s.activeKey || setKey(added[0]) }
+    }),
+
   removeSet: (key) =>
     set((s) => {
       const sets = s.sets.filter((x) => setKey(x) !== key)
@@ -142,12 +157,15 @@ export const useSeedStore = create<SeedState>()((set) => ({
 }))
 
 /**
- * 활성 Design 스코프의 시드 세트.
+ * 활성 Design 스코프의 시드 세트 **와 그 출처**.
  * Design 렌즈(도구줄 시점 손잡이)가 'draft'면 편집 가능한 작업본, 커밋 버전이면 그 스냅샷의 시드
  * (읽기 전용)를 반환한다 — Definition 의 `useDesignTables` 와 같은 규칙.
- * 시드 개념이 없던 옛 스냅샷은 빈 목록으로 읽는다.
+ *
+ * 다른 점 하나: 스냅샷의 `seeds` 는 **없을 수 있다**(시드 기능 이전 버전·실 DB 역설계 버전).
+ * 그때 Draft 로 흘려보내면 지금 편집본이 "이 버전의 시드"인 척 보이므로, 출처를 갈라 알린다
+ * (판정은 `seedLens.ts` — 화면·되돌리기·컷이 같은 규칙을 쓴다).
  */
-export function useDesignSeedSets(): SeedSet[] {
+export function useSeedLensView(): SeedLensView {
   const design = useActiveDesign()
   const lens = useVersionLens()
   const draft = useSeedStore((s) => s.sets)
@@ -156,9 +174,12 @@ export function useDesignSeedSets(): SeedSet[] {
       ? s.byDesign[design.id]?.find((v) => v.number === lens)?.snapshot.seeds
       : undefined
   )
-  if (!design) return []
-  if (snapshotSeeds) return snapshotSeeds
-  return draft.filter((x) => x.designId === design.id)
+  return seedLensView({ designId: design?.id ?? null, readOnly: isReadOnlyLens(lens), snapshotSeeds, draft })
+}
+
+/** 활성 Design 스코프의 시드 세트(출처가 필요 없는 자리용). */
+export function useDesignSeedSets(): SeedSet[] {
+  return useSeedLensView().sets
 }
 
 /** 현재 활성 세트 — 스코프 밖이면 첫 세트로 폴백, 없으면 undefined. */
@@ -166,6 +187,21 @@ export function useActiveSeedSet(): SeedSet | undefined {
   const scoped = useDesignSeedSets()
   const activeKey = useSeedStore((s) => s.activeKey)
   return scoped.find((x) => setKey(x) === activeKey) ?? scoped[0]
+}
+
+/**
+ * 버전 스냅샷의 시드를 Draft 에 앉힌다 — Definition 의 `restoreDraftFromSnapshot` 의 시드 짝.
+ * 기록이 없는 버전이면 아무것도 하지 않는다(`seedRestoreAction` 의 판정).
+ * 활성 세트 키는 비운다: 사라진 세트를 가리킨 채로 두면 이후 편집이 조용히 no-op 이 된다.
+ */
+export function restoreDraftSeedsFromSnapshot(designId: string, snapshotSeeds: SeedSet[] | undefined): void {
+  const action = seedRestoreAction(snapshotSeeds, designId)
+  if (action.kind === 'keep') return
+  useSeedStore.setState((s) => ({
+    sets: [...s.sets.filter((x) => x.designId !== designId), ...action.sets],
+    activeKey: '',
+    editing: null
+  }))
 }
 
 // ── 저장소 연동 ───────────────────────────────────────────────────────────

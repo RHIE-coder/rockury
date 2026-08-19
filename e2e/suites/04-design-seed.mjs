@@ -335,6 +335,49 @@ export async function run(ctx) {
   await page.waitForTimeout(300)
   check('버전 비교: 고름을 풀면 비교가 닫힌다', (await page.locator('[data-version-diff]').count()) === 0)
 
+  // ⭐ 시드는 버전에 귀속된다 — 렌즈로 읽을 때도, 되돌릴 때도. (2026-08-18 사용자 제보)
+  //    핵심은 "시드 0개"와 "시드 기록 없음"을 가르는 것: 기록이 없는 옛 버전(v0.3.14)을 보면서
+  //    Draft 시드가 "이 버전의 시드"인 척 보이면 안 되고, 그 버전으로 되돌린다고 지워져도 안 된다.
+  {
+    await click('button:has-text("Seed")')
+    await page.waitForTimeout(300)
+
+    // 시드를 담기 전 컷된 버전 → 기록 없음(Draft 로 새지 않는다)
+    await click('[data-version-lens]')
+    await click('[data-version-lens-option="v0.3.14"]')
+    await page.waitForTimeout(400)
+    check('Seed(옛 버전): 시드 기록 없음 상태', (await page.locator('[data-seed-unrecorded]').count()) === 1)
+    check(
+      'Seed(옛 버전): Draft 시드가 이 버전 것처럼 보이지 않는다',
+      (await page.locator('[data-seed-set-row="orders"]').count()) === 0
+    )
+
+    // 시드를 담아 컷한 버전 → 그 버전의 시드가 보인다
+    await click('[data-version-lens]')
+    await click('[data-version-lens-option="v0.3.15"]')
+    await page.waitForTimeout(400)
+    check('Seed(시드 담긴 버전): 기록 없음 상태가 아니다', (await page.locator('[data-seed-unrecorded]').count()) === 0)
+    check('Seed(시드 담긴 버전): 그 버전의 세트가 보인다', (await page.locator('[data-seed-set-row="orders"]').count()) === 1)
+
+    await click('[data-version-lens]')
+    await click('[data-version-lens-option="draft"]')
+    await page.waitForTimeout(400)
+
+    // 되돌리기 창 — 기록 없는 버전이면 "시드는 그대로 둔다"고 밝힌다(조용히 지우지 않는다).
+    await click('button:has-text("Versions")')
+    await page.waitForSelector('text=버전 타임라인', { timeout: 5_000 })
+    await click('[data-restore-version="v0.3.14"]')
+    await page.waitForSelector('[data-restore-confirm]', { timeout: 8_000 })
+    await page.waitForTimeout(300)
+    check(
+      '되돌리기(옛 버전): 시드 기록 없음을 밝힌다',
+      (await page.locator('[data-restore-seed-unrecorded]').count()) === 1
+    )
+    // 되돌리진 않는다 — 뒤 스위트가 지금 Draft 를 그대로 본다(상태 의존 순서).
+    await click('button:has-text("취소")')
+    await page.waitForTimeout(300)
+  }
+
   // ⭐ CASE-design-065 — 커밋 버전을 **열람**하는 동안에는 배치·그룹을 저장하지 않는다.
   //    지나간 버전의 화면을 만졌다고 정본이 바뀌면 안 된다(정본 db-design.diagram.scope AC-2).
   {

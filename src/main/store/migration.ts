@@ -17,6 +17,12 @@ import { getDb } from './db'
  */
 export type MigrationLogKind = 'map' | 'apply' | 'seed-apply'
 
+/**
+ * 어떻게 끝났나. `rolled-back` 을 실패와 가르는 이유: 사람이 영향 행수를 보고 **일부러 물린 것**은
+ * 오류가 아니다. 둘을 한 칸에 담으면 기록만 보고는 사고인지 판단인지 알 수 없다.
+ */
+export type MigrationLogStatus = 'success' | 'error' | 'rolled-back'
+
 export interface MigrationLogRecord {
   id: string
   envId: string
@@ -24,7 +30,7 @@ export interface MigrationLogRecord {
   fromVersion: string
   toVersion: string
   summary: string
-  status: 'success' | 'error'
+  status: MigrationLogStatus
   detail: string
   createdAt: string
 }
@@ -35,7 +41,7 @@ export interface CreateLogInput {
   fromVersion?: string
   toVersion?: string
   summary?: string
-  status?: 'success' | 'error'
+  status?: MigrationLogStatus
   detail?: string
 }
 
@@ -58,7 +64,7 @@ const toLog = (r: LogRow): MigrationLogRecord => ({
   fromVersion: r.from_version,
   toVersion: r.to_version,
   summary: r.summary,
-  status: r.status as 'success' | 'error',
+  status: r.status as MigrationLogStatus,
   detail: r.detail,
   createdAt: r.created_at
 })

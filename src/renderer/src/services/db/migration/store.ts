@@ -9,16 +9,17 @@ import { identifyVersion, type IdentifyResult } from './identify'
 import { removalSignature } from './planGate'
 import { generateRevert, type RevertPlan } from './revert'
 import { generateMigration, type MigrationPlan } from './ddlDiff'
+import { applyLogDetail, logTargetOf, outcomeLogDetail, scopeLogDetail } from './logDetail'
 
 /** migration_logs 레코드(구조적 — main/store/migration 과 동일). */
 export interface MigrationLog {
   id: string
   envId: string
-  kind: 'apply' | 'map'
+  kind: 'apply' | 'map' | 'seed-apply'
   fromVersion: string
   toVersion: string
   summary: string
-  status: 'success' | 'error'
+  status: 'success' | 'error' | 'rolled-back'
   detail: string
   createdAt: string
 }
@@ -99,7 +100,16 @@ interface MigrationState {
   loadPlan: (connectionId: string, designId: string, dialect: DialectId, version: string) => Promise<void>
   run: (connectionId: string, designId: string) => Promise<void>
   confirm: (connectionId: string, designId: string) => Promise<void>
-  rollback: () => Promise<void>
+  /** 물리기. 연결 id 를 주면 "되돌렸다"는 사실도 기록에 남긴다. */
+  rollback: (connectionId?: string) => Promise<void>
+  /** 성공이 아닌 끝(실패·롤백)을 기록에 남긴다 — 실패해도 본 작업의 오류 문구를 덮지 않는다. */
+  logOutcome: (
+    connectionId: string,
+    kind: MigrationLog['kind'],
+    status: MigrationLog['status'],
+    attempted: string,
+    cause?: unknown
+  ) => Promise<void>
   loadLogs: (connectionId: string, designId: string) => Promise<void>
   dismissError: () => void
 }
@@ -229,12 +239,15 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     try {
       const binding = await get().resolveBinding(connectionId, designId)
       const actual = get().actual ?? (await get().introspectActual(connectionId, designId))
+      const target = await logTargetOf(connectionId)
       await window.rockury.environments.setApplied(binding.id, version)
       await window.rockury.migration.appendLog({
         envId: binding.id,
         kind: 'map',
         toVersion: version,
-        summary: `맵핑 확정 — 이 연결은 ${version} 입니다 (${actual.tables.length}개 테이블)`
+        // 배지·버전 칸이 "맵핑 → v0.1.0" 을 이미 그린다 — 요약에서 되풀이하지 않는다.
+        summary: '버전 확정',
+        detail: target ? scopeLogDetail({ target, tables: actual.tables }) : undefined
       })
       set({ identified: null })
       await get().runDiagnosis(connectionId, designId)
@@ -352,30 +365,46 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
         return
       }
 
-      const { txId } = await window.rockury.query.txBegin(connectionId)
+      // txId 를 밖에 둔다 — 문이 도중에 터지면 잡아서 닫아야 한다(안 닫으면 실 DB 에 잠금이 남는다).
+      let opened: string | null = null
+      let done = 0
       let affected = 0
-      for (const st of plan.statements) {
-        const r = await window.rockury.query.txExec(txId, st.sql)
-        affected += r.affectedRows ?? 0
+      try {
+        opened = (await window.rockury.query.txBegin(connectionId)).txId
+        for (const st of plan.statements) {
+          const r = await window.rockury.query.txExec(opened, st.sql)
+          affected += r.affectedRows ?? 0
+          done++
+        }
+      } catch (e) {
+        if (opened) await window.rockury.query.txRollback(opened).catch(() => {})
+        // 실패도 남긴다 — 성공만 남는 기록은 감사 기록이 아니다.
+        await get().logOutcome(connectionId, 'apply', 'error', `문 ${plan.statements.length}개 중 ${done}개째에서 실패`, e)
+        throw e
       }
-      set({ tx: { txId, affected, statements: plan.statements.length }, loading: false })
+      set({ tx: { txId: opened, affected, statements: plan.statements.length }, loading: false })
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), loading: false, tx: null })
     }
   },
 
   confirm: async (connectionId, designId) => {
-    const { tx, targetVersion, remoteVersion, binding } = get()
+    const { tx, targetVersion, remoteVersion, binding, plan } = get()
     if (!tx || !targetVersion || !binding) return
     try {
       await window.rockury.query.txCommit(tx.txId)
+      const target = await logTargetOf(connectionId)
       await window.rockury.environments.setApplied(binding.id, targetVersion)
       await window.rockury.migration.appendLog({
         envId: binding.id,
         kind: 'apply',
         fromVersion: remoteVersion,
         toVersion: targetVersion,
-        summary: `${tx.statements}개 문 반영 · 영향 ${tx.affected}행`
+        summary: `문 ${tx.statements}개 · 영향 ${tx.affected}행`,
+        detail:
+          target && plan
+            ? applyLogDetail({ target, statements: plan.statements, affected: tx.affected })
+            : undefined
       })
       set({ tx: null, plan: null, planDiff: null, planTarget: null, revert: null, interrupted: null })
       await get().loadLogs(connectionId, designId)
@@ -385,7 +414,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     }
   },
 
-  rollback: async () => {
+  rollback: async (connectionId) => {
     const tx = get().tx
     if (!tx) return
     try {
@@ -393,7 +422,33 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     } catch {
       // 이미 정리됐을 수 있음
     }
+    // 물린 것도 남긴다 — "실행했다가 되돌렸다"는 감사에서 성공만큼 중요한 사실이다.
+    if (connectionId)
+      await get().logOutcome(
+        connectionId,
+        'apply',
+        'rolled-back',
+        `문 ${tx.statements}개 실행 뒤 롤백`
+      )
     set({ tx: null, interrupted: null })
+  },
+
+  logOutcome: async (connectionId, kind, status, attempted, cause) => {
+    const binding = get().binding
+    if (!binding) return
+    const target = await logTargetOf(connectionId)
+    const message = cause instanceof Error ? cause.message : cause ? String(cause) : undefined
+    try {
+      await window.rockury.migration.appendLog({
+        envId: binding.id,
+        kind,
+        status,
+        summary: attempted,
+        detail: target ? outcomeLogDetail({ target, attempted, message }) : message
+      })
+    } catch {
+      // 기록 남기기가 실패해도 본 작업의 오류 문구를 덮지 않는다.
+    }
   },
 
   loadLogs: async (connectionId, designId) => {

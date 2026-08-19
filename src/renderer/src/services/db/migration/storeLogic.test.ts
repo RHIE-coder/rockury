@@ -39,8 +39,34 @@ const env = (over: Partial<EnvResponse> = {}): EnvResponse => ({
   ...over
 })
 
+/** 기록 상세가 "어디에 한 일인가"를 담으려면 연결 하나가 실제로 있어야 한다. */
+const conn = {
+  id: 'c1',
+  name: 'test-mysql',
+  dbType: 'mysql' as const,
+  host: '127.0.0.1',
+  port: 3306,
+  database: 'testdb',
+  user: 'app',
+  sslEnabled: false,
+  schemas: [],
+  autoCheckDisabled: false,
+  groupId: null,
+  projectId: null,
+  sortOrder: 0,
+  createdAt: '',
+  updatedAt: ''
+}
+
 const api = {
   introspection: { run: vi.fn(async () => introspected()) },
+  // 기록 상세를 만들 때 접속 스토어를 늦게 부른다(logDetail.logTargetOf) — 그 스토어의
+  // 하이드레이션이 찾는 것들.
+  connections: {
+    list: vi.fn(async () => [conn]),
+    sampleStatus: vi.fn(async () => ({ path: '', fileExists: false, connectionId: null }))
+  },
+  connectionGroups: { list: vi.fn(async () => []) },
   environments: {
     ensure: vi.fn(async (): Promise<EnvResponse> => env()),
     setApplied: vi.fn(async () => ({}))
@@ -58,9 +84,12 @@ const api = {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks()
   ;(globalThis as unknown as { window: unknown }).window = { rockury: api }
+  // window 를 세운 **뒤** 늦게 부른다 — 이 스토어는 읽히는 순간 window 를 건드린다.
+  const { useConnectionsStore } = await import('../connections/store')
+  useConnectionsStore.setState({ connections: [conn], loaded: true })
   useMigrationStore.setState({
     binding: null, actual: null, actualScope: [], remoteVersion: '', identified: null,
     diagnosis: null, diagTarget: null, diagDiff: null, targetVersion: null,
@@ -101,6 +130,18 @@ describe('맵핑 — 판정은 읽기만 한다', () => {
     expect(api.migration.appendLog).toHaveBeenCalledWith(expect.objectContaining({ kind: 'map', toVersion: 'v0.1.0' }))
   })
 
+  /**
+   * 회귀(2026-08-18 사용자: "기록이 이렇게 있으면 감사용으로 사용할 수 있는거야?").
+   * 요약 한 줄만 남기면 되짚을 수 없다 — 어디에·무엇을 이 상세에 있어야 한다.
+   */
+  it('기록에 대상과 범위를 남긴다 — 요약 한 줄로 끝내지 않는다', async () => {
+    await useMigrationStore.getState().confirmMapping('c1', 'd1', 'v0.1.0')
+
+    const arg = api.migration.appendLog.mock.calls.at(-1)?.[0] as { detail?: string }
+    expect(arg.detail).toContain('연결 test-mysql')
+    expect(arg.detail).toContain('app@127.0.0.1:3306/testdb')
+    expect(arg.detail).toContain('테이블 ')
+  })
 })
 
 describe('결속 갈아타기 — 앞 연결의 계획을 새 연결로 들고 가지 않는다', () => {
@@ -225,5 +266,40 @@ describe('run → confirm 시퀀스', () => {
     expect(api.environments.setApplied).toHaveBeenCalledWith('env1', 'v1')
     expect(api.migration.appendLog).toHaveBeenCalledWith(expect.objectContaining({ kind: 'apply', toVersion: 'v1' }))
     expect(useMigrationStore.getState().tx).toBeNull()
+  })
+
+  it('반영 기록에 실제로 나간 문을 남긴다', async () => {
+    await primeActual()
+    useMigrationStore.setState({
+      binding: { id: 'env1', targetVersion: 'v1', appliedVersion: null },
+      targetVersion: 'v1',
+      remoteVersion: '',
+      plan: { statements: [{ sql: 'ALTER TABLE `t` ADD COLUMN `x` int NULL;', kind: 'alter', destructive: false, table: 't' }], destructiveCount: 0, unsupported: [] }
+    })
+
+    await useMigrationStore.getState().run('c1', 'd1')
+    await useMigrationStore.getState().confirm('c1', 'd1')
+
+    const arg = api.migration.appendLog.mock.calls.at(-1)?.[0] as { detail?: string }
+    expect(arg.detail).toContain('ALTER TABLE `t` ADD COLUMN `x` int NULL;')
+    expect(arg.detail).toContain('대상 t')
+  })
+
+  /** 성공만 남는 기록은 감사 기록이 아니다 — 물린 것도 남고, 실패와 구별된다. */
+  it('롤백도 기록에 남긴다 — 실패가 아니라 되돌림으로', async () => {
+    await primeActual()
+    useMigrationStore.setState({
+      binding: { id: 'env1', targetVersion: 'v1', appliedVersion: null },
+      targetVersion: 'v1',
+      plan: { statements: [{ sql: 'CREATE TABLE `y` (id INT);', kind: 'create', destructive: false, table: 'y' }], destructiveCount: 0, unsupported: [] }
+    })
+
+    await useMigrationStore.getState().run('c1', 'd1')
+    await useMigrationStore.getState().rollback('c1')
+
+    expect(api.query.txRollback).toHaveBeenCalledWith('tx1')
+    expect(api.migration.appendLog).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'apply', status: 'rolled-back' })
+    )
   })
 })

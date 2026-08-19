@@ -5,8 +5,9 @@ import { cx } from '@renderer/lib/cx'
 import { useNav } from '@renderer/nav/useNav'
 import {
   reconcileScope,
-  scopeCountLabel,
+  scopeFace,
   scopeModel,
+  scopeNamesLine,
   scopeSummary,
   shownScope,
   toggleSchema
@@ -84,6 +85,8 @@ export function ScopeSelector() {
   // 손잡이에는 **지금 실제로 보고 있는 것**을 적는다 — 안 고른 연결도 이름이 뜬다.
   const shown = shownScope(selected, loaded ?? [])
 
+  const face = scopeFace(shown)
+
   const apply = (next: string[]): void => {
     void setSchemas(conn.id, next)
     // 저장이 끝나기를 기다리지 않고 새 범위로 바로 다시 읽는다 — 손잡이를 누른 즉시 화면이 따라온다.
@@ -96,7 +99,14 @@ export function ScopeSelector() {
         <button
           type="button"
           data-scope-selector
-          title={`${model.schemaLabel} 범위 — 여기서 고른 것을 Definition·Diagram·Data·Query 가 함께 봅니다`}
+          /* 짧은 판이 이름을 감추므로 tooltip 이 전부 밝힌다(§scopeNamesLine). */
+          title={[
+            `${model.schemaLabel} 범위`,
+            scopeNamesLine(shown),
+            '여기서 고른 것을 Definition·Diagram·Data·Query 가 함께 봅니다'
+          ]
+            .filter(Boolean)
+            .join('\n')}
           className={cx(
             // 좁아지면 자기가 줄어든다 — 손잡이 밖으로 글자가 나가지 않게(2026-08-05).
             'flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[13px] transition-colors',
@@ -109,10 +119,14 @@ export function ScopeSelector() {
           <FolderTree size={13} className="shrink-0 text-muted" />
           {/* 자기 상한 안에서만 줄어든다(`shrink-0` + `max-w`) — 모자란 폭은 연결 이름이 받는다.
               같이 줄어들던 동안은 `piccard` 가 `picca…` 로 갈렸다(2026-08-07 제보). */}
-          <span className="max-w-[120px] shrink-0 truncate font-mono text-[12px] font-semibold">
-            {/* 두 단으로 접힌 손잡이에서는 개수만 적는다(§scopeCountLabel). */}
-            <span className="@max-[420px]/handle:hidden">{scopeSummary(shown)}</span>
-            <span className="hidden @max-[420px]/handle:inline">{scopeCountLabel(shown)}</span>
+          <span className="flex max-w-[120px] shrink-0 items-center font-mono text-[12px] font-semibold">
+            {/* 두 단으로 접힌 손잡이에서는 짧은 판으로 적는다(§ScopeFace). */}
+            <span className="min-w-0 truncate @max-[420px]/handle:hidden">{scopeSummary(shown)}</span>
+            <span className="hidden min-w-0 truncate @max-[420px]/handle:block">{face.head}</span>
+            {face.rest > 0 && (
+              /* 이름이 길어 말줄임이 걸려도 **수는 남는다** — 합친 문자열이면 여기가 먼저 삼켰다. */
+              <span className="hidden shrink-0 @max-[420px]/handle:block">+{face.rest}</span>
+            )}
           </span>
           <ChevronDown size={12} className="shrink-0 text-muted" />
         </button>

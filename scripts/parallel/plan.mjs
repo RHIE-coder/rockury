@@ -95,3 +95,20 @@ export function syncVerdict({ exists, behind = 0, ahead = 0, dirty = 0 }) {
     text: dirty > 0 ? `${behind}커밋 뒤처짐 (미커밋 ${dirty}건 — 겹치면 git 이 거부)` : `${behind}커밋 뒤처짐`
   }
 }
+
+/**
+ * 명령줄을 명령·플래그로 가른다 — **순수 계산**.
+ *
+ * 도움말 요청을 명령 판정보다 **먼저** 본다. 예전엔 "`--` 로 시작하면 명령이 아니다"만 보고
+ * 기본값 `setup` 으로 떨어뜨려서, `--help` 를 친 사람이 워크트리 5개를 실제로 만들고
+ * `npm install` 까지 돌게 됐다(2026-08-18 실측).
+ *
+ * @param argv `process.argv.slice(2)`
+ */
+export function parseArgs(argv) {
+  return {
+    help: argv.includes('--help') || argv.includes('-h'),
+    cmd: argv.find((a) => !a.startsWith('-')) ?? 'setup',
+    noInstall: argv.includes('--no-install')
+  }
+}

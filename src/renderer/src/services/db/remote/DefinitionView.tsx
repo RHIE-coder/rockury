@@ -5,6 +5,7 @@ import { Button } from '@renderer/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { dialectInfo } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { qualifiedName, sameTable, type TableRef } from '../schemaRef'
 import { classifyOutsideRefs } from './outsideRef'
 import { useScope } from './useScope'
@@ -137,7 +138,7 @@ export function DefinitionView() {
             title="연결 방언"
             className="flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-medium text-fg"
           >
-            <span className="size-2 rounded-full" style={{ background: dialectInfo(conn.dbType).dot }} />
+            <DialectMark dialect={conn.dbType} />
             {dialectInfo(conn.dbType).label}
           </span>
           {isEditing ? (

@@ -12,7 +12,7 @@ export type { DialectId }
 export interface DialectInfo {
   id: DialectId
   label: string
-  /** 벤더 아이덴티티 컬러 — 배지 dot 에 쓰인다. */
+  /** 벤더 아이덴티티 컬러 — 벤더 마크(`DialectMark`)를 이 색으로 물들인다. */
   dot: string
   /** 생성 모달 카드 등에 쓰는 한 줄 소개. */
   blurb: string

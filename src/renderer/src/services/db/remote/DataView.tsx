@@ -28,6 +28,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import type { Constraint, TableDef } from '../workspaces/definition/types'
 import { downloadText } from '../download'
 import { dialectInfo } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { useActiveConnection } from '../connections/store'
 import { sameTable } from '../schemaRef'
 import type { DialectId } from '../dialects'
@@ -333,7 +334,7 @@ export function DataView() {
           title="연결 방언"
           className="flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-medium text-fg"
         >
-          <span className="size-2 rounded-full" style={{ background: dialectInfo(conn.dbType).dot }} />
+          <DialectMark dialect={conn.dbType} />
           {dialectInfo(conn.dbType).label}
         </span>
       </div>

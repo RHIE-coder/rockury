@@ -1,4 +1,12 @@
-import { FIRST_VERSION, nextVersion, type BumpLevel } from '@shared/versionNumber'
+import {
+  FIRST_VERSION,
+  compareVersion,
+  formatVersion,
+  highestVersion,
+  nextVersion,
+  parseVersion,
+  type BumpLevel
+} from '@shared/versionNumber'
 import type { TableDef } from '../workspaces/definition/types'
 
 /**
@@ -28,6 +36,29 @@ export function planImport(ctx: ImportContext, level: BumpLevel = 'patch'): Impo
   if (!ctx.hasDesign) return { mode: 'new-design', suggestedNumber: FIRST_VERSION }
   if (!ctx.latestVersionNumber) return { mode: 'version-up', suggestedNumber: FIRST_VERSION }
   return { mode: 'version-up', suggestedNumber: nextVersion(ctx.latestVersionNumber, level) }
+}
+
+/** 번호 칸 판정 결과 — 저장할 정규형과, 못 쓸 때의 사유(칸 아래에 그대로 보인다). */
+export interface NumberCheck {
+  /** 정규형으로 고친 번호. 형식이 아니면 null. */
+  number: string | null
+  error: string | null
+}
+
+/**
+ * 가져오기 창 "버전 번호" 칸 판정 — **사람이 번호를 직접 적는 유일한 컷 입구**라 여기서 막는다
+ * (버전 컷 모달은 Patch/Minor/Major 버튼으로만 고르고, MCP `create_version` 은 제 손으로 검증한다).
+ * 적힌 그대로가 아니라 정규형으로 **고쳐서** 돌려준다 — `0.2` 로 적어도 `v0.2.0` 으로 저장된다.
+ */
+export function checkImportNumber(raw: string, existing: string[]): NumberCheck {
+  const p = parseVersion(raw ?? '')
+  if (!p) return { number: null, error: (raw ?? '').trim() ? 'v0.1.0 형태여야 합니다' : '버전 번호 필요' }
+  const number = formatVersion(p)
+  if (existing.includes(number)) return { number, error: '이미 있는 번호' }
+  // 번호는 뒤로 못 간다 — 저장소도 같은 규칙으로 거절한다(`main/store/versions`).
+  const top = highestVersion(existing)
+  if (top && compareVersion(number, top) < 0) return { number, error: `${top} 보다 높아야 합니다` }
+  return { number, error: null }
 }
 
 /** 새 설계 이름 기본값 — 연결 이름에서 파생(편집 가능). */

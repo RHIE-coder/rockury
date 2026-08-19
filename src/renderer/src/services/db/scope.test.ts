@@ -3,12 +3,13 @@ import type { ConnectionDef } from './connections/store'
 import {
   catalogConnectionDraft,
   designSchemas,
-  designScopeCountLabel,
+  designScopeFace,
   designScopeSummary,
   findConnectionForCatalog,
   reconcileScope,
-  scopeCountLabel,
+  scopeFace,
   scopeModel,
+  scopeNamesLine,
   scopeSummary,
   scopedTables,
   shownScope,
@@ -73,19 +74,57 @@ describe('scopeSummary', () => {
   })
 })
 
-describe('scopeCountLabel — 두 단으로 접힌 손잡이는 개수만 적는다', () => {
-  it('숫자만 — 단위는 옆 아이콘이 말한다', () => {
-    expect(scopeCountLabel(['public'])).toBe('1')
-    expect(scopeCountLabel(['service1', 'service2', 'service3', 'testdb'])).toBe('4')
+describe('scopeFace — 두 단으로 접힌 손잡이의 짧은 판', () => {
+  /*
+   * 처음엔 개수만 적었다(`4`). "4개"인지 "4번"인지 애매하고 어느 스키마를 보고 있나에
+   * 답을 못 했다(2026-08-18 사용자 지적) — 그래서 위 손잡이(`public 외 3`)와 같은 문법의
+   * 짧은 판으로 바꿨다.
+   */
+  it('하나면 그 이름만, 여럿이면 첫 이름 + 나머지 수', () => {
+    expect(scopeFace(['public'])).toEqual({ head: 'public', rest: 0 })
+    expect(scopeFace(['service1', 'service2', 'service3', 'testdb'])).toEqual({
+      head: 'service1',
+      rest: 3
+    })
   })
 
-  it('셀 것이 없으면 자리 이름 — "0" 은 "고른 게 없다"가 아니라 "없다"로 읽힌다', () => {
-    expect(scopeCountLabel([])).toBe('범위')
+  it('이름과 수를 **따로** 낸다 — 한 문자열이면 말줄임이 `+3` 을 삼켜 개수가 사라진다', () => {
+    const face = scopeFace(['analytics_warehouse_events', 'b', 'c'])
+    expect(face.head).toBe('analytics_warehouse_events')
+    expect(face.rest).toBe(2)
   })
 
-  it('설계 범위는 안 골랐으면 전부이므로 고를 수 있는 것의 수를 센다', () => {
-    expect(designScopeCountLabel([], ['auth', 'billing', 'public'])).toBe('3')
-    expect(designScopeCountLabel(['public'], ['auth', 'billing', 'public'])).toBe('1')
+  it('볼 것이 없으면 자리 이름 — `scopeSummary` 와 같은 규칙', () => {
+    expect(scopeFace([])).toEqual({ head: '범위', rest: 0 })
+  })
+
+  /*
+   * 빈 자리의 말은 **넓은 판과 같아야 한다.** 설계부는 `designScopeSummary` 가 `스키마`,
+   * 운영부는 `scopeSummary` 가 `범위` 라 서로 다르다 — 짧은 판이 한 낱말로 고정돼 있던 동안은
+   * 폭을 줄이면 `스키마` 가 `범위` 로 바뀌었다(2026-08-18 실측).
+   */
+  it('빈 자리의 말은 넓은 판과 같다 — 설계부는 `스키마`, 운영부는 `범위`', () => {
+    expect(designScopeFace([], [])).toEqual({ head: '스키마', rest: 0 })
+    expect(designScopeSummary([], [])).toBe('스키마')
+    expect(scopeFace([]).head).toBe(scopeSummary([]))
+  })
+
+  it('설계 범위는 안 골랐으면 전부이므로 고를 수 있는 것들을 든다', () => {
+    expect(designScopeFace([], ['auth', 'billing', 'public'])).toEqual({ head: 'auth', rest: 2 })
+    expect(designScopeFace(['public'], ['auth', 'billing', 'public'])).toEqual({
+      head: 'public',
+      rest: 0
+    })
+  })
+})
+
+describe('scopeNamesLine — 짧은 판이 감춘 이름을 tooltip 이 밝힌다', () => {
+  it('고른 것을 다 적는다', () => {
+    expect(scopeNamesLine(['service1', 'testdb'])).toBe('보는 중: service1 · testdb')
+  })
+
+  it('밝힐 것이 없으면 빈 문자열 — 부르는 쪽이 그 줄을 아예 안 넣는다', () => {
+    expect(scopeNamesLine([])).toBe('')
   })
 })
 

@@ -192,7 +192,7 @@ describe('설계 편집본(Draft) 반영', () => {
   // 실 DB 를 40개 읽고도 Design 화면엔 예전 16개가 남아 "가져왔는데 안 들어왔다"가 됐다.
   const design = {
     id: 'd1',
-    name: 'pokemon-tcg',
+    name: 'shop',
     description: '',
     dialect: 'postgresql' as const,
     schemas: [] as string[],

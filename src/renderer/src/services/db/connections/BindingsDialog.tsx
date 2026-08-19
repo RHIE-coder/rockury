@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/ui/select'
-import { dialectInfo } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { useDesignsStore, useScopedDesigns } from '../designs/store'
 import { useDesignVersions } from '../versions/store'
 import { useConnectionsStore } from './store'
@@ -85,13 +85,12 @@ function BindingRow({ connectionId, binding }: { connectionId: string; binding: 
   const unbind = useEnvManageStore((s) => s.unbind)
   const busy = useEnvManageStore((s) => s.busy)
   const [confirming, setConfirming] = useState(false)
-  const info = design ? dialectInfo(design.dialect) : null
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-line bg-canvas px-3 py-2.5">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-fg">
-          {info && <span className="size-2 shrink-0 rounded-full" style={{ background: info.dot }} />}
+          {design && <DialectMark dialect={design.dialect} className="size-4" />}
           {design ? design.name : <span className="text-destructive">(삭제된 설계)</span>}
         </span>
         <span className="text-[11px] text-muted">

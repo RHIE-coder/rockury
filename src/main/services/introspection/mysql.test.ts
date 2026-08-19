@@ -8,17 +8,17 @@ import { introspectMysql, parseCreateTableChecks, parseCreateTableForeignKeys } 
  */
 
 const CREATE_CARDS = [
-  'CREATE TABLE `pokemon_cards` (',
+  'CREATE TABLE `cards` (',
   '  `id` bigint NOT NULL AUTO_INCREMENT,',
   '  `set_id` bigint NOT NULL,',
   '  `price` int DEFAULT NULL,',
   '  PRIMARY KEY (`id`),',
-  '  CONSTRAINT `pokemon_cards_set_fk` FOREIGN KEY (`set_id`) REFERENCES `pokemon_card_sets` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,',
-  '  CONSTRAINT `pokemon_cards_price_chk` CHECK ((`price` > 0))',
+  '  CONSTRAINT `cards_set_fk` FOREIGN KEY (`set_id`) REFERENCES `card_sets` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,',
+  '  CONSTRAINT `cards_price_chk` CHECK ((`price` > 0))',
   ') ENGINE=InnoDB'
 ].join('\n')
 
-const CREATE_SETS = ['CREATE TABLE `pokemon_card_sets` (', '  `id` bigint NOT NULL', ')'].join('\n')
+const CREATE_SETS = ['CREATE TABLE `card_sets` (', '  `id` bigint NOT NULL', ')'].join('\n')
 
 /** 질의문의 특징적인 조각으로 골라 답하는 가짜 연결. */
 function fakeConn(answer: (sql: string) => unknown[] | Error, spy?: (sql: string) => void): Connection {
@@ -33,13 +33,13 @@ function fakeConn(answer: (sql: string) => unknown[] | Error, spy?: (sql: string
 }
 
 const TABLE_ROWS = [
-  { schema: 'piccard', name: 'pokemon_cards', comment: '', ttype: 'BASE TABLE' },
-  { schema: 'piccard', name: 'pokemon_card_sets', comment: '', ttype: 'BASE TABLE' }
+  { schema: 'piccard', name: 'cards', comment: '', ttype: 'BASE TABLE' },
+  { schema: 'piccard', name: 'card_sets', comment: '', ttype: 'BASE TABLE' }
 ]
 const PK_ROW = {
   schema: 'piccard',
   cschema: 'piccard',
-  tbl: 'pokemon_cards',
+  tbl: 'cards',
   name: 'PRIMARY',
   col: 'id',
   ref_schema: null,
@@ -50,19 +50,19 @@ const PK_ROW = {
 const FK_ROW = {
   schema: 'piccard',
   cschema: 'piccard',
-  tbl: 'pokemon_cards',
-  name: 'pokemon_cards_set_fk',
+  tbl: 'cards',
+  name: 'cards_set_fk',
   col: 'set_id',
   ref_schema: 'piccard',
-  ref_table: 'pokemon_card_sets',
+  ref_table: 'card_sets',
   ref_col: 'id',
   ord: 1
 }
 const TC_ROWS = [
-  { schema: 'piccard', tbl: 'pokemon_cards', name: 'PRIMARY', ctype: 'PRIMARY KEY' },
-  { schema: 'piccard', tbl: 'pokemon_cards', name: 'pokemon_cards_set_fk', ctype: 'FOREIGN KEY' },
-  { schema: 'piccard', tbl: 'pokemon_cards', name: 'pokemon_cards_price_chk', ctype: 'CHECK' },
-  { schema: 'piccard', tbl: 'pokemon_card_sets', name: 'PRIMARY', ctype: 'PRIMARY KEY' }
+  { schema: 'piccard', tbl: 'cards', name: 'PRIMARY', ctype: 'PRIMARY KEY' },
+  { schema: 'piccard', tbl: 'cards', name: 'cards_set_fk', ctype: 'FOREIGN KEY' },
+  { schema: 'piccard', tbl: 'cards', name: 'cards_price_chk', ctype: 'CHECK' },
+  { schema: 'piccard', tbl: 'card_sets', name: 'PRIMARY', ctype: 'PRIMARY KEY' }
 ]
 
 /** 각 information_schema 뷰가 이 계정에 보이는지. 실패는 빈 결과이거나 오류다(둘 다 겪었다). */
@@ -87,8 +87,8 @@ function router(v: Vis) {
         ? [
             {
               schema: 'piccard',
-              tbl: 'pokemon_cards',
-              name: 'pokemon_cards_set_fk',
+              tbl: 'cards',
+              name: 'cards_set_fk',
               del: 'CASCADE',
               upd: 'CASCADE'
             }
@@ -96,13 +96,13 @@ function router(v: Vis) {
         : []
     if (sql.includes('CHECK_CONSTRAINTS'))
       return clauses
-        ? [{ schema: 'piccard', name: 'pokemon_cards_price_chk', expr: '(`price` > 0)' }]
+        ? [{ schema: 'piccard', name: 'cards_price_chk', expr: '(`price` > 0)' }]
         : []
     if (sql.startsWith('SHOW CREATE TABLE')) {
       if (!ddl) return new Error('권한 없음')
-      return sql.includes('`pokemon_cards`')
-        ? [{ Table: 'pokemon_cards', 'Create Table': CREATE_CARDS }]
-        : [{ Table: 'pokemon_card_sets', 'Create Table': CREATE_SETS }]
+      return sql.includes('`cards`')
+        ? [{ Table: 'cards', 'Create Table': CREATE_CARDS }]
+        : [{ Table: 'card_sets', 'Create Table': CREATE_SETS }]
     }
     return []
   }
@@ -130,8 +130,8 @@ describe('introspectMysql — 제약을 못 보는 계정', () => {
     expect(ir.checks).toEqual([
       {
         schema: 'piccard',
-        table: 'pokemon_cards',
-        name: 'pokemon_cards_price_chk',
+        table: 'cards',
+        name: 'cards_price_chk',
         expression: '`price` > 0'
       }
     ])
@@ -144,8 +144,8 @@ describe('introspectMysql — 제약을 못 보는 계정', () => {
     const ir = await run({ rules: false }, (s) => seen.push(s))
 
     expect(ir.foreignKeys[0]).toMatchObject({
-      table: 'pokemon_cards',
-      refTable: 'pokemon_card_sets',
+      table: 'cards',
+      refTable: 'card_sets',
       refColumn: 'id',
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
@@ -153,23 +153,23 @@ describe('introspectMysql — 제약을 못 보는 계정', () => {
     // FK 가 달린 표만 다시 읽는다 — 관계 없는 표까지 훑지 않는다.
     const ddlQueries = seen.filter((s) => s.startsWith('SHOW CREATE TABLE'))
     expect(ddlQueries).toHaveLength(1)
-    expect(ddlQueries[0]).toContain('`pokemon_cards`')
+    expect(ddlQueries[0]).toContain('`cards`')
   })
 
   it('심판(TABLE_CONSTRAINTS)이 안 보이면 FK·CHECK 를 실물에서 읽는다', async () => {
     const ir = await quiet(() => run({ tc: false, kcu: false, rules: false, clauses: false }))
 
-    expect(ir.foreignKeys.map((f) => f.name)).toEqual(['pokemon_cards_set_fk'])
+    expect(ir.foreignKeys.map((f) => f.name)).toEqual(['cards_set_fk'])
     expect(ir.checks.map((c) => c.expression)).toEqual(['`price` > 0'])
     expect(ir.warnings).toEqual([])
   })
 
   it('표마다 권한이 다른 계정 — 심판이 한 줄도 못 본 표만 실물로 확인한다', async () => {
     const seen: string[] = []
-    // 심판은 pokemon_card_sets 만 본다. pokemon_cards 는 "제약 없는 표"가 아니라 "안 보이는 표"다.
+    // 심판은 card_sets 만 본다. cards 는 "제약 없는 표"가 아니라 "안 보이는 표"다.
     const partial = (sql: string): unknown[] | Error =>
       sql.includes('TABLE_CONSTRAINTS')
-        ? TC_ROWS.filter((r) => r.tbl === 'pokemon_card_sets')
+        ? TC_ROWS.filter((r) => r.tbl === 'card_sets')
         : sql.includes('KEY_COLUMN_USAGE')
           ? [PK_ROW]
           : sql.includes('CHECK_CONSTRAINTS')
@@ -177,11 +177,11 @@ describe('introspectMysql — 제약을 못 보는 계정', () => {
             : router({})(sql)
     const ir = await introspectMysql(fakeConn(partial, (s) => seen.push(s)), 'mysql', ['piccard'])
 
-    expect(ir.foreignKeys.map((f) => f.name)).toEqual(['pokemon_cards_set_fk'])
-    expect(ir.checks.map((c) => c.name)).toEqual(['pokemon_cards_price_chk'])
+    expect(ir.foreignKeys.map((f) => f.name)).toEqual(['cards_set_fk'])
+    expect(ir.checks.map((c) => c.name)).toEqual(['cards_price_chk'])
     const ddlQueries = seen.filter((s) => s.startsWith('SHOW CREATE TABLE'))
     expect(ddlQueries).toHaveLength(1)
-    expect(ddlQueries[0]).toContain('`pokemon_cards`')
+    expect(ddlQueries[0]).toContain('`cards`')
   })
 
   it('심판이 보이고 FK·CHECK 가 정말 없으면 실물을 안 뒤진다', async () => {
@@ -204,7 +204,7 @@ describe('introspectMysql — 제약을 못 보는 계정', () => {
 
     expect(ir.foreignKeys).toHaveLength(1) // KCU 로 세운 관계는 산다
     expect(ir.foreignKeys[0].onDelete).toBe('NO ACTION') // 규칙만 못 읽었다
-    expect(ir.warnings).toEqual(['제약을 못 읽은 표 1개 — piccard.pokemon_cards'])
+    expect(ir.warnings).toEqual(['제약을 못 읽은 표 1개 — piccard.cards'])
   })
 })
 

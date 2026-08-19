@@ -5,6 +5,7 @@ import { Button } from '@renderer/ui/button'
 import { useNav, useContextValue } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { dialectInfo } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { useConnectionBindings, useEnvManageStore } from '../environments/store'
 import {
   useConnectionsStore,
@@ -54,7 +55,7 @@ function ConnCard({ conn, active }: { conn: ConnectionDef; active: boolean }) {
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-[13.5px] font-semibold text-fg">{conn.name}</span>
           <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted">
-            <span className="size-1.5 rounded-full" style={{ background: info.dot }} />
+            <DialectMark dialect={conn.dbType} />
             {info.label}
             {conn.autoCheckDisabled && (
               <span className="flex items-center gap-0.5 text-[10.5px] text-muted/80" title="Connections 진입·새로고침 시 자동 확인에서 제외됨 (연결 테스트 버튼으로 수동 확인 가능)">
@@ -117,7 +118,7 @@ function GhostCard({ conn }: { conn?: ConnectionDef }) {
     <div className="flex rotate-2 flex-col gap-1.5 rounded-xl border border-accent/60 bg-canvas p-3.5 opacity-95 shadow-2xl ring-1 ring-accent/30">
       <span className="truncate text-[13.5px] font-semibold text-fg">{conn.name}</span>
       <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted">
-        <span className="size-1.5 rounded-full" style={{ background: info.dot }} />
+        <DialectMark dialect={conn.dbType} />
         {info.label}
       </span>
       <span className="truncate font-mono text-[11.5px] text-muted">{target}</span>

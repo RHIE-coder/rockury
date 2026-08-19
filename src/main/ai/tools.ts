@@ -6,7 +6,7 @@ import { listTables, replaceTablesForDesign, type TableRecord } from '../store/t
 import { createVersion, listVersions } from '../store/versions'
 import { DIALECT_IDS, DIALECT_META } from '../../shared/dialects'
 import { checkSchemaName, suggestSchemaName, supportsSchemas } from '../../shared/db/schemaCatalog'
-import { formatVersion, nextVersion, parseVersion } from '../../shared/versionNumber'
+import { compareVersion, formatVersion, highestVersion, nextVersion, parseVersion } from '../../shared/versionNumber'
 import type { StoreChangedEvent } from '../../shared/storeChanged'
 import { applyOperations, assertTablesConsistent, patchOpSchema } from './patch'
 import { UIUX_TOOL_DEFS } from './uiuxTools'
@@ -436,7 +436,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: 'create_version',
     description:
-      '설계의 현재 작업본(draft)을 그 시점 스냅샷으로 잘라 버전을 만든다(버전 컷 — 스냅샷은 서버가 뜬다). number 를 생략하면 최신 버전에서 patch 증가(v0.1.0 형태). 같은 번호로 다시 컷할 수 없다.',
+      '설계의 현재 작업본(draft)을 그 시점 스냅샷으로 잘라 버전을 만든다(버전 컷 — 스냅샷은 서버가 뜬다). number 를 생략하면 최신 버전에서 patch 증가(v0.1.0 형태). 번호는 설계 안에서 단조 증가한다 — 같은 번호로 다시 컷할 수 없고, 최신보다 낮은 번호도 쓸 수 없다.',
     inputSchema: {
       designId: z.string().optional().describe('설계 id (list_designs 로 확인, 필수)'),
       number: z.string().optional().describe('버전 번호 (선택, 예: v0.2.0 — 생략 시 최신에서 patch 증가)'),
@@ -457,6 +457,10 @@ export const TOOL_DEFS: ToolDef[] = [
       }
       if (versions.some((v) => v.number === number))
         throw new Error(`버전 "${number}" 가 이미 있습니다 — list_versions 로 확인하고 다른 번호를 쓰세요.`)
+      // 번호는 뒤로 못 간다(저장소도 같은 규칙) — 에이전트에게는 어디로 올려야 하는지까지 말한다.
+      const top = highestVersion(versions.map((v) => v.number))
+      if (top && compareVersion(number, top) < 0)
+        throw new Error(`버전 "${number}" 는 최신 "${top}" 보다 낮습니다 — 번호는 뒤로 갈 수 없습니다.`)
       const snapshot = { tables: listTables().filter((t) => t.designId === d.id) }
       const v = createVersion({ designId: d.id, number, note: typeof args.note === 'string' ? args.note : '', snapshot })
       notifyStoreChanged({ domain: 'versions', designId: d.id })

@@ -62,7 +62,7 @@ function BarSelector({ sel, enabled }: { sel: ContextSelector; enabled: boolean 
       {current ? (
         <>
           <span className="font-medium text-fg">{current.label}</span>
-          <HintChip hint={current.hint} dot={current.dot} />
+          <HintChip hint={current.hint} dot={current.dot} icon={current.icon} />
         </>
       ) : (
         <span className="italic text-muted">{sel.placeholder ?? 'Select…'}</span>

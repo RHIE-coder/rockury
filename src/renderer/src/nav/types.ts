@@ -43,6 +43,11 @@ export interface ContextOption {
   subtitle?: string
   /** 옵션 아이덴티티 컬러 점(예: 벤더 컬러). CSS color 값. */
   dot?: string
+  /**
+   * 점 대신 그릴 아이덴티티 마크(예: DB 벤더 로고). 있으면 `dot` 을 덮는다 —
+   * 마크가 제 색을 이미 품고 있어 점을 겹쳐 두면 같은 말을 두 번 한다.
+   */
+  icon?: ComponentType<{ className?: string }>
 }
 
 /** 셀렉터 드롭다운 하단(구분선 아래)의 액션 — 예: Design 의 "새 설계…". */

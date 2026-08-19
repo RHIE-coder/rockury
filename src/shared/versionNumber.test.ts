@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { parseVersion, formatVersion, nextVersion, FIRST_VERSION } from './versionNumber'
+import {
+  parseVersion,
+  formatVersion,
+  nextVersion,
+  isVersionNumber,
+  compareVersion,
+  highestVersion,
+  FIRST_VERSION
+} from './versionNumber'
 
 describe('parseVersion', () => {
   it('v 접두 + 세 자리를 파싱한다', () => {
@@ -46,5 +54,42 @@ describe('nextVersion', () => {
   })
   it('파싱 불가하면 첫 버전으로 안전 복귀', () => {
     expect(nextVersion('draft')).toBe(FIRST_VERSION)
+  })
+})
+
+describe('isVersionNumber', () => {
+  it('정규형만 통과', () => {
+    expect(isVersionNumber('v0.1.0')).toBe(true)
+    expect(isVersionNumber('v12.4.130')).toBe(true)
+  })
+  it('사람이 적은 축약형·잡문자는 거절 — 고쳐서 넣는 것은 부르는 쪽 몫', () => {
+    expect(isVersionNumber('0.2')).toBe(false)
+    expect(isVersionNumber('v2')).toBe(false)
+    expect(isVersionNumber(' v0.1.0 ')).toBe(false)
+    expect(isVersionNumber('v01.0.0')).toBe(false)
+    expect(isVersionNumber('최종본')).toBe(false)
+    expect(isVersionNumber('')).toBe(false)
+  })
+})
+
+describe('compareVersion', () => {
+  it('자리별로 견준다 — 10 은 9 보다 높다(문자 정렬이 아니다)', () => {
+    expect(compareVersion('v0.1.0', 'v0.2.0')).toBeLessThan(0)
+    expect(compareVersion('v0.3.10', 'v0.3.9')).toBeGreaterThan(0)
+    expect(compareVersion('v1.0.0', 'v0.9.9')).toBeGreaterThan(0)
+    expect(compareVersion('v1.2.3', 'v1.2.3')).toBe(0)
+  })
+})
+
+describe('highestVersion', () => {
+  it('가장 높은 번호를 고른다 — 목록 순서와 무관', () => {
+    expect(highestVersion(['v0.1.0', 'v0.3.10', 'v0.3.9'])).toBe('v0.3.10')
+  })
+  it('빈 목록은 null', () => {
+    expect(highestVersion([])).toBeNull()
+  })
+  it('정규형이 아닌 옛 번호는 뺀다 — 화면 정렬과 같은 눈으로 봐야 컷이 막히지 않는다', () => {
+    expect(highestVersion(['2.0', 'v0.1.0'])).toBe('v0.1.0')
+    expect(highestVersion(['최종본'])).toBeNull()
   })
 })

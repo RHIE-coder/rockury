@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SERVICES, planWorktrees, syncVerdict } from './plan.mjs'
+import { SERVICES, parseArgs, planWorktrees, syncVerdict } from './plan.mjs'
 
 /**
  * TestPlan: parallel-dev · Scenario S7 (CASE-pdev-060)
@@ -124,5 +124,32 @@ describe('워크트리 동기화 판정', () => {
     for (const c of cases) {
       expect(syncVerdict(c).text).not.toMatch(/reset|--hard|force/)
     }
+  })
+})
+
+describe('명령줄 파싱', () => {
+  it('회귀 — `--help` 는 setup 으로 떨어지지 않는다', () => {
+    // 예전 판정(`argv[2]` 가 `--` 로 시작하면 기본값 setup)은 도움말을 부른 사람에게
+    // 워크트리 5개 생성 + npm install 을 실행시켰다.
+    expect(parseArgs(['--help']).help).toBe(true)
+    expect(parseArgs(['-h']).help).toBe(true)
+    expect(parseArgs(['sync', '--help']).help).toBe(true)
+  })
+
+  it('명령이 없으면 setup, 있으면 그 명령', () => {
+    expect(parseArgs([]).cmd).toBe('setup')
+    expect(parseArgs(['status']).cmd).toBe('status')
+    expect(parseArgs(['sync']).cmd).toBe('sync')
+    expect(parseArgs(['remove']).cmd).toBe('remove')
+  })
+
+  it('플래그는 명령으로 읽지 않는다 — 순서가 바뀌어도 같다', () => {
+    expect(parseArgs(['--no-install']).cmd).toBe('setup')
+    expect(parseArgs(['--no-install', 'status'])).toMatchObject({ cmd: 'status', noInstall: true })
+    expect(parseArgs(['status', '--no-install'])).toMatchObject({ cmd: 'status', noInstall: true })
+  })
+
+  it('모르는 명령은 그대로 넘긴다 — 안내는 부르는 쪽 몫', () => {
+    expect(parseArgs(['foo']).cmd).toBe('foo')
   })
 })

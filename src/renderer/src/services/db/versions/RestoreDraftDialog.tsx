@@ -12,6 +12,7 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { isEmptyDiff } from './diff'
 import { useRestoreStore } from './restoreStore'
+import { isEmptySeedDiff } from './seedDiff'
 
 /**
  * 버전 → Draft 되돌리기 확인 창.
@@ -25,7 +26,9 @@ export function RestoreDraftDialog() {
   if (!target) return null
 
   const diff = st.diff
-  const same = !!diff && isEmptyDiff(diff)
+  const seedDiff = st.seedDiff
+  // 시드만 다른 되돌리기도 할 일이 있는 되돌리기다 — 스키마 diff 만 보면 버튼이 잠겼다.
+  const same = !!diff && isEmptyDiff(diff) && (!seedDiff || isEmptySeedDiff(seedDiff))
 
   return (
     <Dialog open={st.open} onOpenChange={(o) => !o && !st.running && st.close()}>
@@ -44,7 +47,7 @@ export function RestoreDraftDialog() {
           <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-panel/60 p-3">
             {same ? (
               <p className="text-[12.5px] text-muted">지금 Draft 와 같습니다 — 바뀌는 것이 없어요.</p>
-            ) : diff ? (
+            ) : diff && !isEmptyDiff(diff) ? (
               <>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-muted">
                   <span>
@@ -83,6 +86,34 @@ export function RestoreDraftDialog() {
                 )}
               </>
             ) : null}
+
+            {/* 시드 — 스키마와 함께 되돌아간다. 담긴 적 없는 버전이면 대신 그 사실을 말한다. */}
+            {!same && seedDiff && !isEmptySeedDiff(seedDiff) && (
+              <div data-restore-seed className="flex flex-col gap-1">
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-muted">
+                  <span>
+                    시드 세트 <b className="text-success">+{seedDiff.summary.setsAdded}</b>{' '}
+                    <b className="text-accent-2">~{seedDiff.summary.setsModified}</b>{' '}
+                    <b className="text-destructive">−{seedDiff.summary.setsRemoved}</b>
+                  </span>
+                  <span>
+                    시드 행 <b className="text-success">+{seedDiff.summary.rowsAdded}</b>{' '}
+                    <b className="text-accent-2">~{seedDiff.summary.rowsModified}</b>{' '}
+                    <b className="text-destructive">−{seedDiff.summary.rowsRemoved}</b>
+                  </span>
+                </div>
+                {seedDiff.summary.rowsRemoved > 0 && (
+                  <p className="text-[11.5px] text-destructive">
+                    시드 {seedDiff.summary.rowsRemoved}행이 Draft 에서 사라집니다.
+                  </p>
+                )}
+              </div>
+            )}
+            {st.seedUnrecorded && (
+              <p data-restore-seed-unrecorded className="text-[11.5px] text-muted">
+                이 버전엔 시드 기록이 없어요 — 시드는 그대로 둡니다.
+              </p>
+            )}
           </div>
 
           <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line bg-panel/50 px-3 py-2.5">

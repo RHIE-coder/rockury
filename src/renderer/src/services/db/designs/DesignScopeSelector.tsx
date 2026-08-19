@@ -2,7 +2,13 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, FolderTree, Settings2 } from 'lucide-react'
 import { cx } from '@renderer/lib/cx'
 import { ScopeMenu } from '../connections/ScopeMenu'
-import { designScopeCountLabel, designScopeSummary, scopeModel, toggleDesignSchema } from '../scope'
+import {
+  designScopeFace,
+  designScopeSummary,
+  scopeModel,
+  scopeNamesLine,
+  toggleDesignSchema
+} from '../scope'
 import { resolveSchemas } from '@shared/db/schemaCatalog'
 import { useDesignTables } from '../workspaces/definition/store'
 import { useActiveDesign, useDesignsStore } from './store'
@@ -43,6 +49,9 @@ export function DesignScopeSelector() {
   if (!model.selectable) return null
 
   const selected = design.schemas.filter((s) => available.includes(s))
+  // 안 고른 상태는 "전부"다 — tooltip 도 짧은 판도 그때는 고를 수 있는 것들을 든다.
+  const shown = selected.length > 0 ? selected : available
+  const face = designScopeFace(selected, available)
 
   return (
     <DropdownMenu.Root>
@@ -50,7 +59,14 @@ export function DesignScopeSelector() {
         <button
           type="button"
           data-design-scope
-          title={`${model.schemaLabel} 범위 — 여기서 고른 것을 Definition·Diagram 이 함께 봅니다`}
+          /* 짧은 판이 이름을 감추므로 tooltip 이 전부 밝힌다(§scopeNamesLine). */
+          title={[
+            `${model.schemaLabel} 범위`,
+            scopeNamesLine(shown),
+            '여기서 고른 것을 Definition·Diagram 이 함께 봅니다'
+          ]
+            .filter(Boolean)
+            .join('\n')}
           className={cx(
             // 좁아지면 자기가 줄어든다 — 손잡이 밖으로 글자가 나가지 않게(2026-08-05).
             'flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[13px] transition-colors',
@@ -66,12 +82,16 @@ export function DesignScopeSelector() {
           */}
           <FolderTree size={13} className="shrink-0 text-muted" />
           {/* 자기 상한 안에서만 줄어든다 — 모자란 폭은 설계 이름이 받는다(`ScopeSelector` 와 같은 규칙). */}
-          <span className="max-w-[120px] shrink-0 truncate font-mono text-[12px] font-semibold">
-            {/* 두 단으로 접힌 손잡이에서는 이름을 늘어놓을 자리가 없다 — 개수만(§scopeCountLabel). */}
-            <span className="@max-[420px]/handle:hidden">{designScopeSummary(selected, available)}</span>
-            <span className="hidden @max-[420px]/handle:inline">
-              {designScopeCountLabel(selected, available)}
+          <span className="flex max-w-[120px] shrink-0 items-center font-mono text-[12px] font-semibold">
+            {/* 두 단으로 접힌 손잡이에서는 짧은 판으로 적는다(§ScopeFace). */}
+            <span className="min-w-0 truncate @max-[420px]/handle:hidden">
+              {designScopeSummary(selected, available)}
             </span>
+            <span className="hidden min-w-0 truncate @max-[420px]/handle:block">{face.head}</span>
+            {face.rest > 0 && (
+              /* 이름이 길어 말줄임이 걸려도 **수는 남는다** — 합친 문자열이면 여기가 먼저 삼켰다. */
+              <span className="hidden shrink-0 @max-[420px]/handle:block">+{face.rest}</span>
+            )}
           </span>
           <ChevronDown size={12} className="shrink-0 text-muted" />
         </button>

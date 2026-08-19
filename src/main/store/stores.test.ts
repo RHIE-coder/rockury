@@ -497,13 +497,13 @@ describe('grantSets — 권한 세트 (연결 독립)', () => {
       name: 'grants-conn', dbType: 'mysql', host: 'h', port: 3306, database: 'd', user: 'u',
       encryptedPassword: '', sslEnabled: false, autoCheckDisabled: true
     })
-    const set = createGrantSet('생존-확인', [{ pattern: 'pokemon_*', privileges: ['SELECT', 'INSERT'] }])
+    const set = createGrantSet('생존-확인', [{ pattern: 'order_*', privileges: ['SELECT', 'INSERT'] }])
 
     deleteConnection(conn.id)
 
     const survived = listGrantSets().find((s) => s.id === set.id)
     expect(survived).toBeDefined()
-    expect(survived?.items).toEqual([{ pattern: 'pokemon_*', privileges: ['SELECT', 'INSERT'] }])
+    expect(survived?.items).toEqual([{ pattern: 'order_*', privileges: ['SELECT', 'INSERT'] }])
     deleteGrantSet(set.id)
   })
 
@@ -566,12 +566,12 @@ describe('versions (컷 · 조회 · 삭제)', () => {
   it('생성→목록(최신순)→삭제(잘못 컷된 버전 회수)', () => {
     const d = 'design_ver'
     createVersion({ designId: d, number: 'v0.1.0', note: '첫', snapshot: { tables: [] } })
-    const bad = createVersion({ designId: d, number: 'v0.0.1', note: '잘못 컷', snapshot: { tables: [{ id: 't:x' }] } })
-    expect(listVersions(d).map((v) => v.number)).toContain('v0.0.1')
+    const bad = createVersion({ designId: d, number: 'v0.2.0', note: '잘못 컷', snapshot: { tables: [{ id: 't:x' }] } })
+    expect(listVersions(d).map((v) => v.number)).toContain('v0.2.0')
 
     deleteVersion(bad.id)
     const after = listVersions(d)
-    expect(after.map((v) => v.number)).not.toContain('v0.0.1')
+    expect(after.map((v) => v.number)).not.toContain('v0.2.0')
     expect(after.map((v) => v.number)).toContain('v0.1.0') // 다른 버전은 보존
 
     // 없는 id 삭제해도 안전(멱등).
@@ -585,9 +585,9 @@ describe('versions (컷 · 조회 · 삭제)', () => {
     const v = createVersion({ designId: d, number: 'v1.0.0', note: '', snapshot: { tables: [{ id: 't:a' }] } })
     expect(listVersions(d)[0].note).toBe('')
 
-    updateVersionNote(v.id, '  포켓몬 스키마 최초 반영  ')
+    updateVersionNote(v.id, '  주문 스키마 최초 반영  ')
     const after = listVersions(d)[0]
-    expect(after.note).toBe('포켓몬 스키마 최초 반영') // 앞뒤 공백은 다듬는다
+    expect(after.note).toBe('주문 스키마 최초 반영') // 앞뒤 공백은 다듬는다
     expect(after.number).toBe('v1.0.0') // 번호 불변 — id 의 일부다
     expect(after.snapshot).toEqual({ tables: [{ id: 't:a' }] }) // 스냅샷 불변 — 그때의 증거다
     expect(after.createdAt).toBe(v.createdAt) // 컷 시각도 안 움직인다
@@ -602,6 +602,40 @@ describe('versions (컷 · 조회 · 삭제)', () => {
 
   it('없는 id 를 고쳐도 안전(멱등) — 지운 버전을 고치려 해도 안 터진다', () => {
     expect(() => updateVersionNote('design_ver_none@v9.9.9', '뭐든')).not.toThrow()
+  })
+
+  // 번호는 id 의 일부이자 정렬 근거다 — 형식이 어긋난 번호가 한 줄 섞이면 그 줄이 v0.0.0 취급이
+  // 되어 타임라인이 조용히 어긋난다. 입구(가져오기 창)가 자유 입력이라 마지막 문에서 막는다.
+  it('형식이 아닌 번호는 저장하지 않는다', () => {
+    const d = 'design_ver_bad'
+    expect(() => createVersion({ designId: d, number: '최종본', snapshot: { tables: [] } })).toThrow(/형식/)
+    expect(() => createVersion({ designId: d, number: '0.2', snapshot: { tables: [] } })).toThrow(/형식/)
+    expect(() => createVersion({ designId: d, number: '', snapshot: { tables: [] } })).toThrow(/형식/)
+    expect(listVersions(d)).toEqual([])
+  })
+
+  // 타임라인은 컷한 시각 순인데 번호가 내려가면 "최신" 배지가 엉뚱한 줄에 붙고, 이력의
+  // 계보(v0.1.0 → v0.2.0)도 끊긴다. 되돌리기는 삭제가 맡는다.
+  it('최신보다 낮은 번호로는 컷하지 못한다 — 번호는 뒤로 안 간다', () => {
+    const d = 'design_ver_back'
+    createVersion({ designId: d, number: 'v0.2.0', snapshot: { tables: [] } })
+    expect(() => createVersion({ designId: d, number: 'v0.1.9', snapshot: { tables: [] } })).toThrow(/뒤로/)
+    // 자리별로 견준다 — v0.2.10 은 v0.2.9 보다 높다(문자 정렬이면 거꾸로 막힌다).
+    createVersion({ designId: d, number: 'v0.2.9', snapshot: { tables: [] } })
+    expect(() => createVersion({ designId: d, number: 'v0.2.10', snapshot: { tables: [] } })).not.toThrow()
+    // 잘못 컷한 최신을 지우면 그 자리까지는 다시 쓸 수 있다.
+    deleteVersion(`${d}@v0.2.10`)
+    deleteVersion(`${d}@v0.2.9`)
+    expect(() => createVersion({ designId: d, number: 'v0.2.1', snapshot: { tables: [] } })).not.toThrow()
+  })
+
+  it('같은 번호로 두 번 컷하지 못한다 — 사람이 읽을 수 있는 사유로 막는다', () => {
+    const d = 'design_ver_dup'
+    createVersion({ designId: d, number: 'v0.1.0', snapshot: { tables: [] } })
+    expect(() => createVersion({ designId: d, number: 'v0.1.0', snapshot: { tables: [] } })).toThrow(/이미 있습니다/)
+    expect(listVersions(d)).toHaveLength(1)
+    // 다른 설계는 같은 번호를 쓸 수 있다 — 번호는 설계 안에서만 유일하다.
+    expect(() => createVersion({ designId: 'design_ver_dup2', number: 'v0.1.0', snapshot: { tables: [] } })).not.toThrow()
   })
 })
 

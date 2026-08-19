@@ -13,6 +13,7 @@ import {
 } from '@renderer/ui/dialog'
 import { cn } from '@renderer/lib/utils'
 import { DIALECTS } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { useConnectionsStore, type ConnFormInput } from './store'
 import { defaultPort, isFileBased, validateConnForm, type ConnDbType } from './validate'
 
@@ -168,7 +169,7 @@ export function ConnectionDialog() {
                       selected ? 'border-accent bg-accent-soft text-fg' : 'border-line text-muted hover:bg-panel'
                     )}
                   >
-                    <span className="size-2 rounded-full" style={{ background: dd.dot }} />
+                    <DialectMark dialect={dd.id} />
                     {dd.id}
                   </button>
                 )

@@ -436,6 +436,87 @@ export async function run(ctx) {
     })
     check('시드 되먹임: 채택한 값이 설계 시드에 담김', seededDesc === '운영에서 고친 설명')
 
+    /*
+     * ⭐ 되먹임의 재료 고르기 — **세트가 없는 테이블도** 골라 운영 행을 시드로 들인다.
+     * 2026-08-18 사용자: "테이블 안에 있는 일부 데이터를 가져올 수는 없는거야? Seed Data 로
+     * 셋팅하게". 예전에는 세트가 있는 테이블만 대상이라, 운영에 이미 있는 행을 손으로 다시
+     * 쳐 넣어야 했다. `settings` 는 PK 가 `DEFAULT (UUID())` 라 짝짓기 기준을 UNIQUE(`key`)
+     * 에서 찾아야 하는, 운영 DB 에서 가져온 표의 흔한 모양이다.
+     */
+    check(
+      '되먹임 대상: 세트가 없는 테이블도 목록에 선다',
+      (await page.locator('[data-seed-source="settings"]').count()) === 1
+    )
+    check(
+      '되먹임 대상: 짝짓기 기준을 못 세우는 표는 이유를 단다(조용히 빼지 않는다)',
+      (await page.locator('[data-seed-source] >> text=짝짓기 기준 없음').count()) >= 1
+    )
+    /*
+     * 같은 이름이 스키마마다 있으면 **한 줄만** 서야 한다 — 시드는 테이블을 이름으로만
+     * 가리켜서, 두 줄을 그리면 체크가 함께 켜지고 React 키까지 겹쳤다(2026-08-18 사용자).
+     * 스키마를 여럿 걸친 판정은 `seedSource.test.ts` 가 직접 덮는다(여기 설계는 단일 스키마).
+     */
+    check(
+      '되먹임 대상: 이름당 한 줄',
+      (await page.locator('[data-seed-source="settings"]').count()) === 1
+    )
+    await page.locator('[data-seed-source="settings"] button[role="checkbox"]').click()
+    await click('button:has-text("실 DB 읽기")')
+    await page.waitForSelector('[data-seed-import-row="new"]', { timeout: 15_000 })
+    const fresh = await page.locator('[data-seed-import-row="new"]').count()
+    check('되먹임: 세트 없던 테이블의 운영 행이 후보로 올라온다', fresh === 5)
+    for (let i = 0; i < fresh; i++) {
+      await page.locator('[data-seed-import-row="new"] button[role="checkbox"]').nth(i).click()
+    }
+    await click('[data-seed-import-accept]')
+    await page.waitForTimeout(1000)
+    const made = await page.evaluate(async () => {
+      const s = (await window.rockury.seedSets.list()).find((x) => x.tableName === 'settings')
+      return s ? { key: s.naturalKey, rows: s.rows.length } : null
+    })
+    check('되먹임: 담으면 시드 세트가 생긴다', !!made && made.rows === 5)
+    check(
+      '되먹임: 짝짓기 기준을 UNIQUE 에서 찾는다(PK 가 DB 생성일 때)',
+      JSON.stringify(made?.key) === JSON.stringify(['key'])
+    )
+
+    // ⭐ 기록은 감사용이다 — 요약 한 줄이 아니라 어디에·무엇을 이 남아야 한다(같은 날 사용자 지적).
+    await click('[data-nav-view="logs"]')
+    await page.waitForTimeout(600)
+    const logs = await body()
+    check(
+      '기록: 상세에 대상 연결·계정·주소가 남는다',
+      logs.includes('연결 E2E-mysql') && logs.includes('test@') && logs.includes(':13306/testdb')
+    )
+    // 문구 — 배지·버전 칸이 이미 말한 것을 요약이 되풀이하지 않는다(2026-08-18 사용자, 세 번 지적).
+    check('기록 요약: 버전을 두 번 말하지 않는다', !/운영 DB 가져오기 →/.test(logs))
+    check('기록 배지: 안에서만 쓰던 말(맵핑) 대신 뜻을 쓴다', !logs.includes('맵핑') && logs.includes('버전 지정'))
+    check('기록: 상세를 누르면 모달이 열린다', (await page.locator('[data-log-detail]').count()) >= 1)
+    await page.locator('[data-log-detail]').first().click()
+    await page.waitForTimeout(400)
+    check('기록 모달: 갈래로 갈라 보인다(스키마·테이블)', (await body()).includes('스키마'))
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+    /*
+     * 상세를 남기기 전에 쌓인 기록은 요약 한 줄뿐이라, 고친 뒤에도 **화면이 그대로**였다
+     * (2026-08-18 사용자: "달라진게 하나도 없는데"). 그런 기록은 버전 스냅샷에서 되짚어 보인다.
+     */
+    await page.evaluate(async ([cid, dname]) => {
+      const d = (await window.rockury.designs.list()).find((x) => x.name === dname)
+      const e = await window.rockury.environments.ensure(cid, d.id, 'v0.1.0')
+      await window.rockury.migration.appendLog({ envId: e.id, kind: 'map', toVersion: 'v0.1.0', summary: '옛 방식 기록' })
+    }, [connId, 'e2e-imported'])
+    await click('button:has-text("새로고침")')
+    await page.waitForTimeout(600)
+    // 방금 넣은 것이 맨 위(최신순) — 그 기록을 열어 되짚었다는 표식을 본다.
+    await page.locator('[data-log-detail]').first().click()
+    await page.waitForTimeout(400)
+    check('기록: 상세 없이 쌓인 옛 기록도 스냅샷에서 되짚어 보인다', (await body()).includes('되짚음'))
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+    await click('[data-nav-view="seed"]')
+    await page.waitForTimeout(400)
+
     // ── DB 원상복구(심은 행 제거) ──
     await page.evaluate(
       async ([cid, n]) => window.rockury.query.runParams(cid, 'DELETE FROM roles WHERE name = ?', [n]),

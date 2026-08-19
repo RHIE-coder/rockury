@@ -1,4 +1,16 @@
-// 테스트 DB 기동: Docker 컨테이너(mysql/mariadb/postgresql) + 로컬 SQLite 파일 생성.
+// 테스트 DB 기동 — 도커 컨테이너 3개(mysql·mariadb·postgresql)를 띄우고 로컬 SQLite 파일을 만든다.
+//
+//   npm run db:up       기동(멱등 — 이미 떠 있으면 그대로 둔다)
+//   npm run db:status   현황만 본다
+//   npm run db:down     정리
+//   npm run db:reset    내렸다가 다시 올린다
+//   node scripts/test-db/setup.mjs --help   이 사용법
+//
+// 접속: mysql localhost:13306 · mariadb 13307 · postgresql 15432 (DB testdb / 계정 test / test)
+//       sqlite scripts/test-db/data/testdb.sqlite
+//
+// 전제는 도커가 떠 있는 것. init/*.sql 은 **빈 볼륨에서만** 돌기 때문에, 이미 떠 있는 컨테이너에는
+// 스키마 변경이 안 먹는다 — 그때는 `npm run db:reset` 이다.
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -7,6 +19,10 @@ import {
   SCRIPT_DIR, DATA_DIR, SQLITE_PATH, CONTAINERS,
   log, ok, warn, fail, styleText, dockerEnv
 } from './lib.mjs';
+import { fileURLToPath } from 'node:url';
+import { helpIfAsked } from '../lib/usage.cjs';
+
+helpIfAsked(fileURLToPath(import.meta.url)); // 부수효과보다 먼저 — 늦게 보면 도움말이 실행이 된다
 
 // 1. Docker 컨테이너 기동 (전용 rockury 네트워크는 compose 가 함께 만든다)
 log('Starting Docker containers...');

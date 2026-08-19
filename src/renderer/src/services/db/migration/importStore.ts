@@ -10,7 +10,8 @@ import { useDesignsStore } from '../designs/store'
 import { restoreDraftFromSnapshot, useDefinitionStore } from '../workspaces/definition/store'
 import { useConnectionsStore, type ConnectionDef } from '../connections/store'
 import type { DesignDef } from '../designs/store'
-import { defaultImportDesignName, planImport, scopeTableIds, type ImportMode } from './importSchema'
+import { checkImportNumber, defaultImportDesignName, planImport, scopeTableIds, type ImportMode } from './importSchema'
+import { scopeLogDetail, logTarget } from './logDetail'
 import { useMigrationStore } from './store'
 
 /**
@@ -42,7 +43,17 @@ interface ImportState {
   /** prepare 가 캐시하는 활성 설계 컨텍스트(모드 토글 시 재-introspect 없이 재계산). */
   latestNumber: string | null
   prevSnapshot: VersionSnapshot | null
+  /** 대상 설계에 이미 있는 번호 — 번호 칸의 중복 판정 기준(새 설계 갈래에서는 견줄 것이 없다). */
+  existingNumbers: string[]
 
+  /**
+   * 방금 스키마를 들인 설계 id. 가져오기는 **틀만** 들여온다 — 운영이 돌아가는 데 필요한 행
+   * (admin 계정·Role 같은 Init Data)은 따로 들여야 하는데, 그 다음 걸음이 어디 있는지 화면에
+   * 아무 표시가 없었다(2026-08-18 사용자). 진단 화면이 이걸 보고 한 줄로 이어 준다.
+   */
+  justImported: string | null
+  /** 이어 주기 한 줄을 닫은 설계들(이 세션 한정) — 닫았으면 그 설계에서는 다시 안 띄운다. */
+  seedHintOff: string[]
   /** 이 연결에서 고를 수 있는 스키마. 아직 못 읽었으면 null. */
   availableSchemas: string[] | null
   /** 카탈로그(database) 목록 — PostgreSQL 만 채워진다. */
@@ -76,6 +87,8 @@ interface ImportState {
   /** 다른 카탈로그(database)를 가져온다 — 그 database 에 붙는 연결로 대상을 갈아탄다. */
   switchConnection: (target: ConnectionDef) => void
   execute: () => Promise<void>
+  /** 이어 주기 한 줄을 닫는다 — 사람이 안 하겠다고 했으면 그 설계에서는 다시 안 띄운다. */
+  dismissImported: (designId: string) => void
 }
 
 export const useImportStore = create<ImportState>()((set, get) => ({
@@ -91,6 +104,9 @@ export const useImportStore = create<ImportState>()((set, get) => ({
   hasPrevVersion: false,
   latestNumber: null,
   prevSnapshot: null,
+  existingNumbers: [],
+  justImported: null,
+  seedHintOff: [],
   availableSchemas: null,
   catalogs: [],
   scopeLoading: false,
@@ -114,11 +130,13 @@ export const useImportStore = create<ImportState>()((set, get) => ({
       design,
       phase: 'preparing',
       error: null,
+      justImported: null,
       actual: null,
       diff: null,
       hasPrevVersion: false,
       latestNumber: null,
       prevSnapshot: null,
+      existingNumbers: [],
       availableSchemas: null,
       catalogs: [],
       scopeError: null,
@@ -145,11 +163,14 @@ export const useImportStore = create<ImportState>()((set, get) => ({
       // 활성 설계의 최신 버전 + 스냅샷 캐시(모드 토글 시 재-introspect 없이 재계산).
       let latest: string | null = null
       let prevSnapshot: VersionSnapshot | null = null
+      let existingNumbers: string[] = []
       if (design) {
         await useVersionsStore.getState().ensureLoaded(design.id)
-        const top = useVersionsStore.getState().byDesign[design.id]?.[0]
+        const list = useVersionsStore.getState().byDesign[design.id] ?? []
+        const top = list[0]
         latest = top?.number ?? null
         prevSnapshot = top?.snapshot ?? null
+        existingNumbers = list.map((v) => v.number)
       }
 
       // 역설계 — new-design 은 아직 설계 id 가 없어 미리보기용 placeholder('')로 읽는다.
@@ -160,7 +181,7 @@ export const useImportStore = create<ImportState>()((set, get) => ({
       const ir = await window.rockury.introspection.run(connection.id, connection.schemas)
       const actual: VersionSnapshot = { tables: normalizeSchema(ir, design?.id ?? '') }
 
-      set({ phase: 'ready', actual, latestNumber: latest, prevSnapshot })
+      set({ phase: 'ready', actual, latestNumber: latest, prevSnapshot, existingNumbers })
       // 기본 모드로 파생값(번호·diff) 계산.
       get().chooseMode(get().mode)
     } catch (e) {
@@ -251,12 +272,18 @@ export const useImportStore = create<ImportState>()((set, get) => ({
 
   execute: async () => {
     const { connection, design, actual, number, note, designName, mode, applyToDraft } = get()
-    const num = number.trim()
     if (!connection || !actual) return
     // 최신 버전과 똑같으면 버전은 안 만든다 — 그래도 설계 반영은 남아 있을 수 있다.
     const noChanges = !!get().hasPrevVersion && !!get().diff && isEmptyDiff(get().diff!)
     const cutVersion = !noChanges
-    if (cutVersion && !num) return
+    // 번호 판정은 화면이 이미 해서 버튼을 막지만, 여기서도 본다 — 저장소는 형식이 어긋난 번호를
+    // 던져서 거절하고(`main/store/versions`), 그때는 새 설계만 만들어진 채로 끝난다.
+    const check = checkImportNumber(number, mode === 'new-design' ? [] : get().existingNumbers)
+    if (cutVersion && (!check.number || check.error)) {
+      set({ error: `버전 번호 — ${check.error}` })
+      return
+    }
+    const num = check.number ?? ''
     set({ phase: 'running', error: null })
     try {
       // 1) 대상 설계 확보 — new-design 이면 연결 벤더로 새 설계를 만든다.
@@ -274,6 +301,9 @@ export const useImportStore = create<ImportState>()((set, get) => ({
 
       // 2) 스냅샷의 소속 설계 id 확정(new-design 은 placeholder 였음).
       //    버전 스냅샷은 이름 기반 id 를 유지한다 — 이후 version-up 역설계와 안정적으로 매칭되도록.
+      //    `seeds` 는 **일부러 비운다(= 없음)**. 실 DB 에는 "시드 선언"이 없어 역설계로 알 수
+      //    없다. 여기에 `[]` 를 넣으면 "시드가 0개인 버전"이 되어, 이 버전으로 되돌릴 때
+      //    근거 없이 Draft 시드를 지운다(`seedRestoreAction` — 모름과 0개는 다르다).
       const snapshot: VersionSnapshot = {
         tables: actual.tables.map((t) => (t.designId === designId ? t : { ...t, designId }))
       }
@@ -299,11 +329,15 @@ export const useImportStore = create<ImportState>()((set, get) => ({
         await window.rockury.environments.setApplied(env.id, num)
 
         // 5) 이력에 남긴다 — 이 버전이 어디서 왔는지(실 DB 역설계)는 나중에 되짚을 값이다.
+        //    요약은 한 줄이라 "몇 개"까지만 담긴다. 되짚을 때 필요한 것은 **어느 스키마의 무엇**
+        //    이라 상세로 내린다(2026-08-18 사용자: "스키마도 있어야하는거아니야?").
         await window.rockury.migration.appendLog({
           envId: env.id,
           kind: 'map',
           toVersion: num,
-          summary: `운영 DB 가져오기 → ${num} (${snapshot.tables.length}개 테이블)`
+          // 배지가 "맵핑", 옆 칸이 "— → v0.1.0", 상세가 테이블을 이미 말한다 — 요약은 사건 이름만.
+          summary: '운영 DB 가져오기',
+          detail: scopeLogDetail({ target: logTarget(connection), tables: snapshot.tables })
         })
       }
 
@@ -312,9 +346,15 @@ export const useImportStore = create<ImportState>()((set, get) => ({
       // 7) 진단 갱신 — 방금 들인 버전이 곧 실 DB 라 "설계와 일치"가 된다.
       void useMigrationStore.getState().runDiagnosis(connection.id, designId)
 
-      set({ open: false, phase: 'idle' })
+      set({ open: false, phase: 'idle', justImported: designId })
     } catch (e) {
       set({ phase: 'ready', error: errorMessage(e, '가져오기에 실패했습니다.') })
     }
-  }
+  },
+
+  dismissImported: (designId) =>
+    set((s) => ({
+      justImported: null,
+      seedHintOff: s.seedHintOff.includes(designId) ? s.seedHintOff : [...s.seedHintOff, designId]
+    }))
 }))

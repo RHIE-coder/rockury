@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 import { useActiveDesign } from '../../designs/store'
 import { dialectInfo } from '../../dialects'
+import { DialectMark } from '../../DialectMark'
 import { defaultSuggestions, isKnownType, typeSuggestions } from '../../typeCatalog'
 import { useActiveTable, useDefinitionStore, useDesignTables, useDesignReadOnly } from './store'
 import { checkColumnIds, keyBadgesOf, type KeyBadge } from './derive'
@@ -343,10 +344,7 @@ export function TableForm() {
               title="설계 방언 — 타입·디폴트는 이 벤더의 네이티브 구문 그대로"
               className="flex shrink-0 items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10px] font-semibold tracking-normal text-muted"
             >
-              <span
-                className="size-1.5 rounded-full"
-                style={{ background: dialectInfo(design.dialect).dot }}
-              />
+              <DialectMark dialect={design.dialect} />
               {dialectInfo(design.dialect).label}
             </span>
             <span className="font-medium text-muted">/</span>

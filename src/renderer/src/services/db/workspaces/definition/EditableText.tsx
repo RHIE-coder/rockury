@@ -143,6 +143,7 @@ export function EditableText({
       <>
         <Input
           ref={inputRef}
+          data-edit-input={editKey}
           autoFocus
           value={draft}
           onChange={(e) => {
@@ -224,6 +225,7 @@ export function EditableText({
     <div className="flex min-w-0 items-start gap-0.5">
       <button
         type="button"
+        data-edit-cell={editKey}
         onClick={() => setEditing(editKey)}
         title={warnTitle}
         className={cn(

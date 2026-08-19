@@ -14,6 +14,7 @@ import {
 import { WorkspacePanels } from '@renderer/shell/WorkspacePanels'
 import { useActiveConnection } from '../connections/store'
 import { dialectInfo } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { HighlightedSqlLine } from '../workspaces/definition/HighlightedSql'
 import { ConnectionError } from './ConnectionError'
 import { IntrospectNotice } from './IntrospectNotice'
@@ -152,7 +153,7 @@ export function GrantView() {
         </div>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-medium text-fg">
-            <span className="size-2 rounded-full" style={{ background: dialectInfo(conn.dbType).dot }} />
+            <DialectMark dialect={conn.dbType} />
             {dialectInfo(conn.dbType).label}
           </span>
           {!sqlite && (

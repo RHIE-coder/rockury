@@ -71,12 +71,7 @@ export function ModuleTabs() {
         손잡이는 탭 목록 **바깥**에 둔다 — 안에 넣으면 radix 의 화살표 이동(roving focus)이
         드롭다운 단추까지 탭으로 셈해, 좌우 키로 모듈을 넘기다 손잡이에 걸린다.
       */}
-      {/*
-        `@container/modulerow` — 가운데 탭이 "좁으면 이름을 접고 아이콘만"을 판정하는 **자**다.
-        이 줄의 폭은 창에서 곧바로 오므로(안쪽 내용과 무관) 접혀서 좁아지고 좁아져서 또 접히는
-        되먹임이 없다. 손잡이의 자(`@container/handle`)와 같은 이유로 화면 폭이 아니라 자리를 잰다.
-      */}
-      <div className="@container/modulerow flex items-center border-b border-line bg-canvas px-3 py-2.5">
+      <div className="flex items-center border-b border-line bg-canvas px-3 py-2.5">
         {/*
           양옆 자리는 **남는 폭을 정확히 반씩** 먹는다(`flex-1 basis-0`). 손잡이 내용이 길든 짧든,
           한쪽만 있든 둘 다 있든 두 자리의 폭이 같으므로 **가운데 묶음이 늘 같은 자리에 선다**.
@@ -195,9 +190,6 @@ function ModuleTrigger({ module: m, split }: { module: Module; split: boolean })
       value={m.id}
       // surface-verify 자동 순회 훅(전 모듈 캡처) — 지우면 UI 게이트가 화면을 잃는다.
       data-nav-module={m.id}
-      // 좁아지면 이름이 접혀 아이콘만 남는다 — 그때 이 탭의 이름은 여기서만 나온다.
-      title={m.label}
-      aria-label={m.label}
       // 테두리 폭은 모든 탭이 함께 잡아 둔다(색은 문만 넣는다) — 문에만 주면 그 탭 하나가
       // 2px 높아져 줄의 밑선이 어긋난다.
       className={cx(
@@ -221,16 +213,16 @@ function ModuleTrigger({ module: m, split }: { module: Module; split: boolean })
     >
       <Icon size={16} className="shrink-0" />
       {/*
-        좁으면 **아이콘만 남긴다**(2026-08-17 사용자 지시). 이 줄에서 이름이 세 번(Design ·
-        Migration · Remote) 차지하는 폭이 양옆 손잡이 자리를 그만큼 좁힌다 — 아이콘은 자리를
-        지키니 어디를 누르는지는 그대로 보이고, 이름은 tooltip 과 아래 뷰 탭 줄이 받는다.
-
-        임계 1000px 은 **이 줄의 안쪽 폭**이다(컨테이너 질의는 padding 안쪽을 잰다) — 창 폭으로는
-        약 1088px(사이드바 64 + 이 줄의 좌우 여백 24 를 뺀 값). 창 하한이 960 이라 임계를 더
-        낮추면 하한 근처에서만 걸려 사실상 안 쓰이는 장치가 된다. 실측: 1080 창에서 접히고
-        1120 에서는 이름이 선다.
+        **이름은 안 접는다.** 2026-08-17 에 "좁으면 아이콘만"을 넣었다가 이튿날 걷어냈다 —
+        접어서 아낀 폭이 **어디에도 필요하지 않았다.** 이 줄에서 폭을 다투는 상대는 양옆 손잡이
+        뿐이고, 그 손잡이는 좁으면 스스로 두 단으로 접힌다(`AreaHandle`). 접힌 뒤로는 1080 창에서
+        440px, 하한인 960 창에서도 손잡이마다 281px 가 남는다. 그런데도 이름을 접으니 세 아이콘이
+        한 덩어리로 붙고, 탭 하나만 담은 부서 카드가 **빈 알약**으로 보였다
+        (2026-08-18 사용자: "UI 어떻게 생각해?").
+        손잡이가 이 줄에 서는 것은 DB 세 모듈뿐이므로(`handleLayout: 'sides'`) 다른 서비스에는
+        애초에 다툴 상대가 없다.
       */}
-      <span className="@max-[1000px]/modulerow:hidden">{m.label}</span>
+      {m.label}
     </Tabs.Trigger>
   )
 }

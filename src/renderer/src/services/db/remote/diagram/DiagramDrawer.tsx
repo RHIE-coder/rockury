@@ -84,10 +84,17 @@ export function DiagramDrawer({
 
         {open && (
           <div className="min-h-0 flex-1 overflow-auto">
-            {title ? (
-              body
-            ) : (
+            {/*
+              크게 보기가 떠 있는 동안엔 **같은 내용을 여기 또 그리지 않는다.** 두 벌이 동시에
+              살아 있으면 편집 상태(`editing` 키 하나)를 둘이 나눠 가져, 칸을 눌러 뜬 입력칸이
+              곧바로 닫혔다 — 뒤에 가려진 쪽 입력칸이 자동 포커스를 집었다가 모달의 포커스
+              가둠(Radix)에 밀려 blur → 그 blur 가 편집을 끝내 버린다(2026-08-18 제보:
+              "여기서 왜 편집이 안될까?").
+            */}
+            {!title ? (
               <p className="px-4 py-6 text-center text-[12px] text-muted">선택된 테이블 없음</p>
+            ) : (
+              !big && body
             )}
           </div>
         )}

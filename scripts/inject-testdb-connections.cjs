@@ -1,15 +1,28 @@
-// dev 편의 — test-db(4벤더) Connection 을 앱 로컬 DB(rockury.db)에 미리 심는다.
-// 비밀번호는 앱과 동일한 safeStorage 키로 암호화해야 앱이 복호화할 수 있으므로,
-// 반드시 Electron 런타임에서 실행한다:  npm run db:seed-connections
-// (사전: npm run db:up 으로 test-db 기동. 앱이 실행 중이면 시드 후 앱을 재시작/리로드.)
+// test-db 접속 4개(mysql·mariadb·postgresql·sqlite)를 앱 로컬 DB(rockury.db)의 **접속 목록에
+// 넣어 주는** dev 편의 스크립트. 넣는 것은 접속 정보뿐 — 설계·데이터는 건드리지 않는다.
+// 같은 이름의 접속이 이미 있으면 건너뛴다(멱등 — 두 번 돌려도 같다).
+//
+//   npm run db:up                             먼저 test-db 를 띄우고
+//   npm run dev:inject-connections            넣는다
+//   npm run dev:inject-connections -- --help  이 사용법
+//
+// Electron 런타임으로 도는 이유: 비밀번호를 앱과 **같은 safeStorage 키**로 암호화해야 앱이 풀 수
+// 있다. 그래서 node 가 아니라 electron 으로 띄운다(키체인 접근 권한이 필요할 수 있다).
+// 넣은 뒤 앱이 실행 중이면 재시작/리로드해야 목록에 보인다.
+//
+// 이름에 seed 를 안 쓰는 이유: 이 프로젝트에서 "시드"는 설계가 정의하는 기준 데이터
+// (seed_sets · Studio › Seed)를 가리키는 말로 이미 쓰인다. 이건 그것과 아무 상관이 없다.
 const { app, safeStorage } = require('electron')
 const { DatabaseSync } = require('node:sqlite')
 const { randomUUID } = require('node:crypto')
 const path = require('path')
+const { helpIfAsked } = require('./lib/usage.cjs')
+
+helpIfAsked(__filename) // 앱을 띄우기 전에 — 늦게 보면 도움말 요청이 DB 를 건드린다
 
 const SQLITE_FILE = path.resolve(__dirname, 'test-db/data/testdb.sqlite')
 
-const SEEDS = [
+const CONNECTIONS = [
   { name: 'test-mysql', dbType: 'mysql', host: 'localhost', port: 13306, database: 'testdb', user: 'test', password: 'test' },
   { name: 'test-mariadb', dbType: 'mariadb', host: 'localhost', port: 13307, database: 'testdb', user: 'test', password: 'test' },
   { name: 'test-postgresql', dbType: 'postgresql', host: 'localhost', port: 15432, database: 'testdb', user: 'test', password: 'test' },
@@ -60,7 +73,7 @@ app.whenReady().then(() => {
 
     const now = new Date().toISOString()
     let added = 0
-    for (const s of SEEDS) {
+    for (const s of CONNECTIONS) {
       if (existing.has(s.name)) {
         console.log(`• 이미 있음: ${s.name}`)
         continue
@@ -86,7 +99,7 @@ app.whenReady().then(() => {
     console.log(`\n완료 — ${added}개 추가. 앱이 실행 중이면 재시작/리로드하세요.`)
     app.exit(0)
   } catch (e) {
-    console.error('✗ 시드 실패:', e && e.message ? e.message : e)
+    console.error('✗ 넣기 실패:', e && e.message ? e.message : e)
     app.exit(1)
   }
 })

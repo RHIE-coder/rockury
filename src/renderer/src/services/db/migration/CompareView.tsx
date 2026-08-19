@@ -9,7 +9,7 @@ import {
   SelectValue
 } from '@renderer/ui/select'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
-import { dialectInfo } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { useActiveConnection, useScopedConnections } from '../connections/store'
 import { normalizeSchema } from '../remote/introspection'
 import { diffSnapshots, type SchemaDiff } from '../versions/diff'
@@ -41,7 +41,6 @@ export function CompareView(): ReactElement {
 
   const others = connections.filter((c) => c.id !== base.id)
   const other = others.find((c) => c.id === otherId) ?? null
-  const baseInfo = dialectInfo(base.dbType)
 
   const compare = async (): Promise<void> => {
     if (!other) return
@@ -85,7 +84,7 @@ export function CompareView(): ReactElement {
             <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
               기준
               <span className="flex items-center gap-1.5 rounded-md bg-canvas px-2 py-1 font-mono text-[12px] normal-case tracking-normal text-fg ring-1 ring-line">
-                <span className="size-1.5 rounded-full" style={{ background: baseInfo.dot }} />
+                <DialectMark dialect={base.dbType} />
                 {base.name}
               </span>
             </span>

@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { cx } from '@renderer/lib/cx'
 import { useActiveDesign } from '../../designs/store'
 import { dialectInfo } from '../../dialects'
+import { DialectMark } from '../../DialectMark'
 import { useDefinitionStore } from './store'
 
 const FORMS: { id: 'table' | 'sql'; label: string; icon: LucideIcon }[] = [
@@ -51,10 +52,7 @@ export function DefinitionToolbar() {
             title="설계 방언 — DDL 은 이 벤더 구문으로 출력돼요"
             className="flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-medium text-fg"
           >
-            <span
-              className="size-2 rounded-full"
-              style={{ background: dialectInfo(design.dialect).dot }}
-            />
+            <DialectMark dialect={design.dialect} />
             {dialectInfo(design.dialect).label}
           </span>
         )}

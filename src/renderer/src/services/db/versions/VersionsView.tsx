@@ -3,11 +3,11 @@ import { GitCommitHorizontal, Layers, Lock, Milestone, RotateCcw, Sprout, Trash2
 import { Button } from '@renderer/ui/button'
 import { Checkbox } from '@renderer/ui/checkbox'
 import { useActiveDesign } from '../designs/store'
-import { dialectInfo } from '../dialects'
 import { useDesignTables } from '../workspaces/definition/store'
-import { useDesignSeedSets } from '../workspaces/seed/store'
+import { useSeedLensView } from '../workspaces/seed/store'
 import { CutVersionDialog } from './CutVersionDialog'
 import { comparePair, togglePick } from './compareSelection'
+import { DialectMark } from '../DialectMark'
 import { useRestoreStore } from './restoreStore'
 import { latestVer } from './semver'
 import { VersionDiffPanel } from './VersionDiffPanel'
@@ -161,7 +161,9 @@ export function VersionsView() {
   const design = useActiveDesign()
   const versions = useDesignVersions(design?.id ?? null)
   const tables = useDesignTables()
-  const seeds = useDesignSeedSets()
+  const seedLens = useSeedLensView()
+  // 기록이 없는 버전을 보며 컷하면 "시드 0개"를 지어내지 않는다 — 모름은 모름으로 물려준다.
+  const seeds = seedLens.source === 'unrecorded' ? undefined : seedLens.sets
   const [cutOpen, setCutOpen] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
 
@@ -174,7 +176,6 @@ export function VersionsView() {
   }
 
   const latest = latestVer(versions.map((v) => v.number))
-  const info = dialectInfo(design.dialect)
   const pair = comparePair(versions, picked)
 
   return (
@@ -187,7 +188,7 @@ export function VersionsView() {
               <Milestone className="size-4 text-muted" />
               버전 타임라인
               <span className="flex items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10.5px] font-medium text-fg">
-                <span className="size-1.5 rounded-full" style={{ background: info.dot }} />
+                <DialectMark dialect={design.dialect} />
                 {design.name}
               </span>
             </div>
@@ -242,7 +243,7 @@ export function VersionsView() {
           designId={design.id}
           latest={latest}
           tableCount={tables.length}
-          seedRowCount={seeds.reduce((n, s) => n + s.rows.length, 0)}
+          seedRowCount={(seeds ?? []).reduce((n, s) => n + s.rows.length, 0)}
           // 시드도 버전에 동봉한다 — 시드는 서비스 정책의 바탕이라 Diff 대상(spec db-design.seed.version-diff).
           snapshot={{ tables, seeds }}
         />

@@ -11,7 +11,7 @@ const TABLES = [
 ]
 
 describe('expandPattern', () => {
-  it('`*` 접두 일치 — pokemon_* 꼴', () => {
+  it('`*` 접두 일치 — orders* 꼴', () => {
     expect(expandPattern('orders*', TABLES).map((t) => `${t.db}.${t.table}`)).toEqual([
       'shop.orders',
       'shop.orders_archive',

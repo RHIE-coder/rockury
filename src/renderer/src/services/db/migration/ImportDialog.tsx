@@ -19,6 +19,7 @@ import { useScopedConnections } from '../connections/store'
 import { reconcileScope, scopeModel, scopeSummary, shownScope, toggleSchema } from '../scope'
 import { useDefinitionStore } from '../workspaces/definition/store'
 import { isEmptyDiff } from '../versions/diff'
+import { checkImportNumber } from './importSchema'
 import { useImportStore } from './importStore'
 
 /**
@@ -44,7 +45,9 @@ export function ImportDialog() {
   const nameOk = !isNew || st.designName.trim().length > 0
   // 버전 차이가 없어도 **설계 반영은 남아 있다** — 그때는 번호도 필요 없다(버전을 안 만드니까).
   const draftOnly = noChanges && st.applyToDraft && !isNew
-  const numberOk = noChanges ? true : st.number.trim().length > 0
+  // 번호는 사람이 직접 적는 유일한 컷 입구다 — 형식·중복을 여기서 보고 못 쓰면 버튼을 막는다.
+  const numberCheck = checkImportNumber(st.number, isNew ? [] : st.existingNumbers)
+  const numberOk = noChanges ? true : !numberCheck.error
   const canSubmit =
     st.phase === 'ready' && !!st.actual && numberOk && nameOk && (!noChanges || draftOnly)
 
@@ -200,9 +203,16 @@ export function ImportDialog() {
                 onChange={(e) => st.setNumber(e.target.value)}
                 placeholder="v0.1.0"
                 className="h-9 font-mono text-[13px] font-normal"
+                aria-invalid={!noChanges && !!numberCheck.error}
+                data-import-number
                 // 차이가 없으면 버전을 안 만든다 — 쓸 수 없는 칸을 열어 두면 뭘 하는 칸인지 흐려진다.
                 disabled={busy || noChanges}
               />
+              {!noChanges && numberCheck.error && (
+                <span data-import-number-error className="text-[11px] font-normal text-destructive">
+                  {numberCheck.error}
+                </span>
+              )}
             </label>
           </div>
 

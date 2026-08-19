@@ -13,6 +13,7 @@ import {
 import { useNav } from '@renderer/nav/useNav'
 import { cn } from '@renderer/lib/utils'
 import { DIALECTS, type DialectId } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { checkSchemaName, suggestSchemaName, supportsSchemas } from '@shared/db/schemaCatalog'
 import { scopeModel } from '../scope'
 import { useDesignsStore } from './store'
@@ -126,7 +127,7 @@ export function CreateDesignDialog() {
                     )}
                   >
                     <span className="flex items-center gap-1.5 text-[13px] font-semibold text-fg">
-                      <span className="size-2 rounded-full" style={{ background: d.dot }} />
+                      <DialectMark dialect={d.id} className="size-4" />
                       {d.label}
                     </span>
                     <span className="text-[11px] leading-snug text-muted">{d.blurb}</span>

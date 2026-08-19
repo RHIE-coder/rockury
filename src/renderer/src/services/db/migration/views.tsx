@@ -10,11 +10,13 @@ import {
   Layers,
   Link2,
   Loader2,
+  Maximize2,
   Play,
   Radar,
   RefreshCw,
   ScrollText,
   Server,
+  Sprout,
   Undo2,
   Upload,
   XCircle
@@ -41,11 +43,13 @@ import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useNav } from '@renderer/nav/useNav'
 import { useActiveDesign, useScopedDesigns, type DesignDef } from '../designs/store'
 import { useActiveConnection, type ConnectionDef } from '../connections/store'
-import { useDesignVersions } from '../versions/store'
+import { useDesignVersions, useVersionsStore } from '../versions/store'
+import { useDesignSeedSets } from '../workspaces/seed/store'
 import type { SchemaDiff } from '../versions/diff'
 import { isEmptyDiff } from '../versions/diff'
 import { isEmptySeedDiff, type SeedDiff } from '../versions/seedDiff'
-import { useMigrationStore } from './store'
+import { derivedScopeDetail, logDetailPreview, LOG_KIND_LABEL, logSummaryText, parseLogDetail } from './logDetail'
+import { useMigrationStore, type MigrationLog } from './store'
 import { SchemaDiffExplorer } from './SchemaDiffExplorer'
 import { diagnosisState, shouldIdentify } from './diagnose'
 import { planGate, removals } from './planGate'
@@ -332,11 +336,57 @@ export function DiagnoseView(): ReactElement {
       ) : (
         <>
           <DiagnoseActions ctx={ctx} />
+          <SeedFollowUp ctx={ctx} />
           <SeedSummary diff={st.diagnosis?.ahead?.seed} />
           <DiagnoseTables ctx={ctx} />
         </>
       )}
     </Shell>
+  )
+}
+
+/**
+ * 이어 주기 — 가져오기는 **틀만** 들여온다.
+ *
+ * 운영이 돌아가는 데 필요한 행(admin 계정·Role 같은 Init Data)은 실 DB 에 이미 있는데, 그걸
+ * 시드로 들이는 다음 걸음이 화면 어디에도 안 보였다(2026-08-18 사용자).
+ *
+ * 조건을 "방금 가져왔다"로만 걸었더니 **이미 가져와 둔 설계에서는 영영 안 떴다**(같은 날
+ * 사용자: "달라진게 하나도 없는데"). 진짜 조건은 시점이 아니라 상태다 — **시드 세트가 하나도
+ * 없는 설계**. 세트가 생기면 저절로 사라지므로 늘 떠 있는 잔소리가 되지 않고, 그전에 닫으면
+ * 그 설계에서는 다시 안 뜬다.
+ *
+ * 문구는 **아는 것만** 말한다. 예전 문구("운영 행은 아직 안 들어왔습니다")는 우리가 모르는
+ * 것을 단정했다 — 운영의 어느 행이 시드여야 하는지는 사람만 정한다(같은 날 사용자: "운영에
+ * 있는 모든 데이터를 원하는게 아닐텐데 … 무슨 기준으로 이걸 띄우는거야?"). 우리가 아는 것은
+ * "이 설계엔 시드가 없다" 하나뿐이고, 그게 그대로 띄우는 기준이다.
+ */
+function SeedFollowUp({ ctx }: { ctx: Ctx }): ReactElement | null {
+  const justImported = useImportStore((s) => s.justImported)
+  const off = useImportStore((s) => s.seedHintOff)
+  const dismissImported = useImportStore((s) => s.dismissImported)
+  const sets = useDesignSeedSets()
+  const selectView = useNav((s) => s.selectView)
+  const show = !off.includes(ctx.design.id) && (justImported === ctx.design.id || sets.length === 0)
+  if (!show) return null
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-accent/30 bg-accent-soft/50 px-3 py-2 text-[12.5px]">
+      <Sprout className="size-4 shrink-0 text-muted" />
+      <span className="min-w-0 flex-1">시드 없음</span>
+      <Button
+        size="sm"
+        onClick={() => {
+          dismissImported(ctx.design.id)
+          selectView('seed')
+        }}
+      >
+        운영에서 가져오기
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => dismissImported(ctx.design.id)}>
+        닫기
+      </Button>
+    </div>
   )
 }
 
@@ -1006,7 +1056,7 @@ export function RunView(): ReactElement {
               <span className="min-w-0 flex-1">
                 {st.tx.statements}개 문 실행됨 · 영향 <b className="font-mono">{st.tx.affected}</b>행 · 아직 커밋되지 않았습니다
               </span>
-              <Button size="sm" variant="ghost" onClick={() => void st.rollback()}>롤백</Button>
+              <Button size="sm" variant="ghost" onClick={() => void st.rollback(ctx.connection.id)}>롤백</Button>
               <Button size="sm" onClick={() => void st.confirm(ctx.connection.id, ctx.design.id)}>커밋</Button>
             </div>
           )}
@@ -1034,10 +1084,184 @@ export function RunView(): ReactElement {
 }
 
 // ═══════════════════════════ Logs ═══════════════════════════
-const KIND_LABEL: Record<string, string> = {
-  map: '맵핑',
-  apply: '반영',
-  'seed-apply': '시드'
+
+/**
+ * 어떻게 끝났나 — 셋을 눈으로 가른다. 롤백을 실패와 같은 빨간 X 로 그리면 사람이 **일부러
+ * 물린 것**이 사고로 보인다(기록만 보고 판단인지 사고인지 알 수 있어야 한다).
+ */
+function OutcomeMark({ status }: { status: MigrationLog['status'] }): ReactElement {
+  if (status === 'success') return <CheckCircle2 className="size-3.5 shrink-0 text-success" />
+  if (status === 'rolled-back') return <Undo2 className="size-3.5 shrink-0 text-muted" />
+  return <XCircle className="size-3.5 shrink-0 text-destructive" />
+}
+
+/** 모달 안의 한 묶음 — 이름과 내용. */
+function DetailBlock({ label, children }: { label: string; children: ReactNode }): ReactElement {
+  return (
+    <section className="flex flex-col gap-1.5">
+      <span className="text-[11px] font-semibold tracking-wide text-muted">{label}</span>
+      {children}
+    </section>
+  )
+}
+
+const Chips = ({ items }: { items: string[] }): ReactElement => (
+  <div className="flex max-h-44 flex-wrap gap-1 overflow-y-auto pr-0.5">
+    {items.map((t) => (
+      <span key={t} className="rounded bg-panel-strong px-1.5 py-0.5 font-mono text-[11.5px] text-fg">
+        {t}
+      </span>
+    ))}
+  </div>
+)
+
+/**
+ * 기록 하나를 통째로 — 접힌 줄글 대신 갈래로 갈라 그린다(2026-08-18 사용자 요청).
+ * 저장은 글줄 그대로 두고 **읽을 때** 나눈다(`parseLogDetail` 주석에 그 까닭이 있다).
+ */
+function LogDetailDialog({
+  log,
+  detail,
+  open,
+  onOpenChange
+}: {
+  log: MigrationLog
+  detail: string
+  open: boolean
+  onOpenChange: (v: boolean) => void
+}): ReactElement {
+  const v = parseLogDetail(detail)
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <OutcomeMark status={log.status} />
+            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+              {LOG_KIND_LABEL[log.kind] ?? log.kind}
+            </Badge>
+            <span className="min-w-0 truncate">{logSummaryText(log)}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-muted">
+          {(log.fromVersion || log.toVersion) && (
+            <span className="font-mono">
+              {log.fromVersion || '—'} <ArrowRight className="inline size-3" /> {log.toVersion || '—'}
+            </span>
+          )}
+          <span>{new Date(log.createdAt).toLocaleString()}</span>
+          {v.derived && (
+            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+              버전 스냅샷에서 되짚음
+            </Badge>
+          )}
+        </div>
+
+        <div className="mt-3 flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
+          {v.target && (
+            <DetailBlock label="대상">
+              <span className="font-mono text-[12px] text-fg">{v.target}</span>
+            </DetailBlock>
+          )}
+          {v.stats && (
+            <DetailBlock label="셈">
+              <span className="text-[12.5px] text-fg">{v.stats}</span>
+            </DetailBlock>
+          )}
+          {v.schemas.length > 0 && (
+            <DetailBlock label="스키마">
+              <Chips items={v.schemas.map((x) => `${x.schema} ${x.count}`)} />
+            </DetailBlock>
+          )}
+          {v.tables.length > 0 && (
+            <DetailBlock label={`테이블 ${v.tables.length}`}>
+              <Chips items={v.tables} />
+            </DetailBlock>
+          )}
+          {v.rowChanges.length > 0 && (
+            <DetailBlock label="행">
+              <div className="flex flex-col gap-1">
+                {v.rowChanges.map((r) => (
+                  <div key={r.table} className="flex gap-2 text-[12px]">
+                    <span className="shrink-0 font-mono text-muted">{r.table}</span>
+                    <span className="min-w-0 flex-1 text-fg">{r.items.join(' · ')}</span>
+                  </div>
+                ))}
+              </div>
+            </DetailBlock>
+          )}
+          {v.statements.length > 0 && (
+            <DetailBlock label={`나간 문 ${v.statements.length}`}>
+              <div className="flex flex-col gap-1">
+                {v.statements.map((sql, i) => (
+                  <pre
+                    key={i}
+                    className="whitespace-pre-wrap break-all rounded-md bg-panel-strong px-2 py-1.5 font-mono text-[11.5px] text-fg"
+                  >
+                    {sql}
+                  </pre>
+                ))}
+              </div>
+            </DetailBlock>
+          )}
+          {v.notes.length > 0 && (
+            <DetailBlock label="그 밖">
+              <div className="flex flex-col gap-0.5">
+                {v.notes.map((n, i) => (
+                  <span key={i} className="text-[12px] text-muted">
+                    {n}
+                  </span>
+                ))}
+              </div>
+            </DetailBlock>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * 목록에서는 상세를 **맛보기로만** 보인다 — 반영 기록엔 나간 문 전문이, 가져오기 기록엔 테이블
+ * 이름이 통째로 들어 있어 목록에 다 펴면 한 줄이 화면을 먹는다. 전부 보는 자리는 모달이다
+ * (2026-08-18 사용자: "클릭하면 모달로 좀더 이쁘게"). 펴기/접기와 모달 둘을 같이 두지 않는다 —
+ * 같은 일을 하는 손잡이가 둘이면 어느 쪽이 무엇인지 매번 재야 한다.
+ */
+function LogDetail({ log, detail }: { log: MigrationLog; detail: string }): ReactElement {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        data-log-detail
+        onClick={() => setOpen(true)}
+        className="group ml-[26px] flex w-[calc(100%-26px)] flex-col items-start gap-0.5 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-panel-strong/60"
+      >
+        <span className="line-clamp-2 w-full whitespace-pre-wrap break-all font-mono text-[11px] leading-[1.5] text-muted">
+          {logDetailPreview(detail)}
+        </span>
+        <span className="flex items-center gap-0.5 text-[11px] text-muted transition-colors group-hover:text-fg">
+          <Maximize2 className="size-3" /> 자세히
+        </span>
+      </button>
+      <LogDetailDialog log={log} detail={detail} open={open} onOpenChange={setOpen} />
+    </>
+  )
+}
+
+/**
+ * 상세가 빈 기록 — 상세를 남기기 시작(2026-08-18)하기 전에 쌓인 것들.
+ * 맵핑 기록은 버전을 가리키므로 그 스냅샷에서 되짚어 보인다. 되짚을 것이 없으면 그렇다고 적는다 —
+ * 빈칸으로 두면 화면이 고장난 것처럼 보인다.
+ */
+function LegacyDetail({ log, designId }: { log: MigrationLog; designId: string }): ReactElement {
+  const snapshot = useVersionsStore((s) =>
+    s.byDesign[designId]?.find((v) => v.number === log.toVersion)?.snapshot
+  )
+  const detail = derivedScopeDetail(snapshot?.tables ?? [])
+  if (!detail) return <div className="pl-[26px] text-[11px] text-muted">상세 없음</div>
+  return <LogDetail log={log} detail={detail} />
 }
 
 export function LogsView(): ReactElement {
@@ -1047,6 +1271,8 @@ export function LogsView(): ReactElement {
   const did = ctx?.design.id
   useEffect(() => {
     if (cid && did) void useMigrationStore.getState().loadLogs(cid, did)
+    // 옛 기록을 되짚으려면 그 설계의 버전 스냅샷이 실려 있어야 한다.
+    if (did) void useVersionsStore.getState().ensureLoaded(did)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cid, did])
   if (!ctx) return fallback!
@@ -1066,19 +1292,19 @@ export function LogsView(): ReactElement {
           {st.logs.map((l) => (
             <div key={l.id} className="flex flex-col gap-1 rounded-md border border-line bg-canvas px-3 py-2 text-[12px]">
               <div className="flex items-center gap-3">
-                {l.status === 'success' ? <CheckCircle2 className="size-3.5 shrink-0 text-success" /> : <XCircle className="size-3.5 shrink-0 text-destructive" />}
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{KIND_LABEL[l.kind] ?? l.kind}</Badge>
+                <OutcomeMark status={l.status} />
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{LOG_KIND_LABEL[l.kind] ?? l.kind}</Badge>
                 {/* 버전이 양쪽 다 비면 "— → —" 만 남아 자리만 먹는다(드리프트 기록이 대개 그렇다). */}
                 {(l.fromVersion || l.toVersion) && (
                   <span className="shrink-0 font-mono text-muted">
                     {l.fromVersion || '—'} <ArrowRight className="inline size-3" /> {l.toVersion || '—'}
                   </span>
                 )}
-                <span className="min-w-0 flex-1 truncate text-fg">{l.summary}</span>
+                <span className="min-w-0 flex-1 truncate text-fg">{logSummaryText(l)}</span>
                 <span className="shrink-0 text-[11px] text-muted">{new Date(l.createdAt).toLocaleString()}</span>
               </div>
-              {/* 상세가 기록의 값어치다 — 어느 테이블이 어떻게 달랐나. 안 보이면 남긴 뜻이 없다. */}
-              {l.detail && <div className="pl-[26px] font-mono text-[11px] text-muted">{l.detail}</div>}
+              {/* 상세가 기록의 값어치다 — 어디에·무엇을·어떻게. 안 보이면 남긴 뜻이 없다. */}
+              {l.detail ? <LogDetail log={l} detail={l.detail} /> : <LegacyDetail log={l} designId={ctx.design.id} />}
             </div>
           ))}
         </div>

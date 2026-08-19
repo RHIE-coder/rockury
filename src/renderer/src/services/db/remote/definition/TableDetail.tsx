@@ -3,6 +3,7 @@ import { Badge } from '@renderer/ui/badge'
 import { ClipToggle, clipBox, useClipped } from '@renderer/ui/clipped'
 import { cn } from '@renderer/lib/utils'
 import { dialectInfo, type DialectId } from '../../dialects'
+import { DialectMark } from '../../DialectMark'
 import type { Constraint, ConstraintKind, TableDef } from '../../workspaces/definition/types'
 import { keyBadgesOf, checkColumnIds, resolveColumns } from '../../workspaces/definition/derive'
 import { FkPolicyChips } from '../../workspaces/definition/FkPolicyChips'
@@ -89,7 +90,7 @@ export function TableDetail({
               title="연결 방언 — DDL 은 이 벤더 구문으로 표시돼요"
               className="flex shrink-0 items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10px] font-semibold tracking-normal text-muted"
             >
-              <span className="size-1.5 rounded-full" style={{ background: dialectInfo(dialect).dot }} />
+              <DialectMark dialect={dialect} />
               {dialectInfo(dialect).label}
             </span>
             {table.isView && (

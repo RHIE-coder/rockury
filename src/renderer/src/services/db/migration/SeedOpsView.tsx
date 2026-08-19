@@ -10,6 +10,7 @@ import { useActiveConnection } from '../connections/store'
 import { useActiveDesign } from '../designs/store'
 import { useDesignTables } from '../workspaces/definition/store'
 import { useDesignSeedSets, useSeedStore } from '../workspaces/seed/store'
+import { seedSetsToCreate, seedSourceOptions, SOURCE_BLOCK_LABEL } from '../workspaces/seed/seedSource'
 import type { SeedImportCandidate } from '../workspaces/seed/seedImportPlan'
 import { candidateKey, useSeedOpsStore, type SeedOpsContext } from './seedOpsStore'
 
@@ -198,7 +199,7 @@ function ApplyTab({ ctx }: { ctx: SeedOpsContext }): ReactElement {
             {tx.statements}개 문 실행 · 영향 {tx.affected}행 — 확인하고 확정하세요.
           </span>
           <span className="ml-auto flex gap-1.5">
-            <Button size="sm" variant="ghost" onClick={() => void rollback()}>
+            <Button size="sm" variant="ghost" onClick={() => void rollback(ctx)}>
               롤백
             </Button>
             <Button size="sm" onClick={() => void commit(ctx)}>
@@ -217,21 +218,114 @@ const STATUS_LABEL: Record<SeedImportCandidate['status'], string> = {
   'only-in-design': '실 DB 에 없음'
 }
 
+/**
+ * 대상 테이블 고르기 — 실 DB 에서 행을 읽어 올 표.
+ *
+ * 세트가 없는 테이블도 여기 선다. 그게 이 화면이 생긴 까닭이다: 운영 DB 를 방금 가져온 설계는
+ * 세트가 0개라, 예전에는 되먹임이 통째로 막혀 admin 계정·Role 을 손으로 다시 쳐 넣어야 했다.
+ */
+function SourcePicker({ ctx }: { ctx: SeedOpsContext }): ReactElement {
+  const sources = useSeedOpsStore((s) => s.sources)
+  const initSources = useSeedOpsStore((s) => s.initSources)
+  const toggleSource = useSeedOpsStore((s) => s.toggleSource)
+  const setSources = useSeedOpsStore((s) => s.setSources)
+  const [q, setQ] = useState('')
+
+  useEffect(() => {
+    initSources(ctx)
+    // 설계가 바뀌면 고른 것도 의미가 없다 — 그때 다시 기본값으로.
+  }, [ctx.designId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const options = useMemo(
+    () => seedSourceOptions(ctx.tables, ctx.sets, ctx.defaultSchema),
+    [ctx.tables, ctx.sets, ctx.defaultSchema]
+  )
+  const picked = new Set(sources ?? [])
+  const key = q.trim().toLowerCase()
+  const shown = key ? options.filter((o) => o.tableName.toLowerCase().includes(key)) : options
+  const takeable = options.filter((o) => o.ready)
+
+  return (
+    <section className="overflow-hidden rounded-[10px] border border-line">
+      <div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-2">
+        <span className="text-[12px] font-semibold text-fg">대상 테이블</span>
+        {/* "0 / 14" 는 표가 14개라는 말로 읽혔다 — 고른 수만 말하고, 몇 개까지 고를 수 있는지는 `전부` 가 맡는다. */}
+        <span className="text-[11.5px] text-muted">
+          {picked.size > 0 ? `${picked.size}개 고름` : '고른 것 없음'}
+        </span>
+        <span className="ml-auto flex gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setSources(takeable.map((o) => o.tableName))}
+            disabled={picked.size === takeable.length}
+          >
+            전부
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSources([])} disabled={picked.size === 0}>
+            해제
+          </Button>
+        </span>
+      </div>
+      <div className="border-b border-line px-3 py-1.5">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="테이블 검색…"
+          className="h-7 text-[12px]"
+        />
+      </div>
+      {shown.length === 0 ? (
+        <div className="px-3 py-2 text-[12px] text-muted">해당 테이블 없음</div>
+      ) : (
+        <ul className="max-h-64 divide-y divide-line overflow-auto">
+          {shown.map((o) => (
+            <li key={o.tableName} className="flex items-center gap-2 px-3 py-1.5" data-seed-source={o.tableName}>
+              <Checkbox
+                checked={picked.has(o.tableName)}
+                disabled={!o.ready}
+                onCheckedChange={() => toggleSource(o.tableName)}
+                aria-label={o.tableName}
+              />
+              <span className={cn('font-mono text-[12px]', o.ready ? 'text-fg' : 'text-muted')}>
+                {/* 스키마를 앞에 붙여 어느 표인지 못박는다 — 이름만 보이면 같은 이름끼리 헷갈린다. */}
+                {o.schema && <span className="text-muted">{o.schema}.</span>}
+                {o.tableName}
+              </span>
+              {o.hasSet && <Badge variant="check">시드 있음</Badge>}
+              {o.ready ? (
+                <span className="truncate font-mono text-[11px] text-muted">짝짓기 {o.naturalKey.join(', ')}</span>
+              ) : (
+                <span className="truncate text-[11px] text-warning">
+                  {o.reason ? SOURCE_BLOCK_LABEL[o.reason] : '읽을 수 없음'}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 function ImportTab({ ctx }: { ctx: SeedOpsContext }): ReactElement {
-  const { importPlan, accepted, loading } = useSeedOpsStore()
+  const { importPlan, accepted, loading, sources } = useSeedOpsStore()
   const loadImport = useSeedOpsStore((s) => s.loadImport)
   const toggleAccept = useSeedOpsStore((s) => s.toggleAccept)
   const acceptedCandidates = useSeedOpsStore((s) => s.acceptedCandidates)
   const clearImport = useSeedOpsStore((s) => s.clearImport)
   const applyImported = useSeedStore((s) => s.applyImported)
+  const ensureSets = useSeedStore((s) => s.ensureSets)
 
   const takeable = (importPlan?.candidates ?? []).filter((c) => c.status !== 'only-in-design')
   const chosen = takeable.filter((c) => accepted[candidateKey(c)]).length
 
   return (
     <div className="flex flex-col gap-3">
+      <SourcePicker ctx={ctx} />
+
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => void loadImport(ctx)} disabled={loading}>
+        <Button size="sm" onClick={() => void loadImport(ctx)} disabled={loading || (sources ?? []).length === 0}>
           {loading ? <Loader2 className="animate-spin" /> : <Download />}
           실 DB 읽기
         </Button>
@@ -248,9 +342,20 @@ function ImportTab({ ctx }: { ctx: SeedOpsContext }): ReactElement {
             className="ml-auto"
             data-seed-import-accept
             onClick={() => {
+              const items = acceptedCandidates()
+              // 세트가 없는 테이블은 **먼저 만든다** — 없으면 담기가 조용히 아무것도 안 한다.
+              ensureSets(
+                ctx.designId,
+                seedSetsToCreate({
+                  tables: ctx.tables,
+                  sets: ctx.sets,
+                  tableNames: items.map((c) => c.table),
+                  defaultSchema: ctx.defaultSchema
+                })
+              )
               applyImported(
                 ctx.designId,
-                acceptedCandidates().map((c) => ({
+                items.map((c) => ({
                   table: c.table,
                   rowId: c.rowId,
                   values: c.values,
@@ -266,7 +371,8 @@ function ImportTab({ ctx }: { ctx: SeedOpsContext }): ReactElement {
       </div>
 
       {importPlan && importPlan.notes.length > 0 && (
-        <ul className="flex flex-col gap-1 rounded-md bg-panel-strong px-2 py-1.5">
+        // 알림은 행·컬럼마다 하나씩 나와 표 여럿을 고르면 벽이 된다 — 줄이지 말고 접어서 담는다.
+        <ul className="flex max-h-40 flex-col gap-1 overflow-auto rounded-md bg-panel-strong px-2 py-1.5">
           {importPlan.notes.map((n, i) => (
             <li key={i} className="text-[11.5px] text-muted">
               {n}
@@ -338,11 +444,22 @@ export function SeedOpsView(): ReactElement {
   const tables = useDesignTables()
   const error = useSeedOpsStore((s) => s.error)
   const loadVariables = useSeedOpsStore((s) => s.loadVariables)
-  const [tab, setTab] = useState<Tab>('apply')
+  /*
+   * 세트가 없으면 **되먹임 쪽에 서서 연다** — 반영할 시드가 없는 자리에서 반영 탭을 먼저
+   * 보여 줘 봐야 할 것이 없다. 재료(실 DB 행)를 들이는 것이 그때의 유일한 다음 걸음이다.
+   */
+  const [tab, setTab] = useState<Tab>(sets.length === 0 ? 'import' : 'apply')
 
   const ctx: SeedOpsContext | null =
     design && connection
-      ? { connectionId: connection.id, designId: design.id, dialect: design.dialect, sets, tables }
+      ? {
+          connectionId: connection.id,
+          designId: design.id,
+          dialect: design.dialect,
+          defaultSchema: connection.database,
+          sets,
+          tables
+        }
       : null
 
   useEffect(() => {
@@ -352,13 +469,11 @@ export function SeedOpsView(): ReactElement {
 
   if (!connection) return <Guard title="연결을 선택하세요" sub="시드를 심을 대상 실 DB 를 고르세요." />
   if (!design) return <Guard title="설계를 선택하세요" sub="반영할 시드는 설계가 가지고 있어요." />
-  if (sets.length === 0)
-    return (
-      <Guard
-        title="이 설계엔 시드 세트가 없어요"
-        sub="Design › Seed 에서 기준 데이터를 먼저 저작하세요."
-      />
-    )
+  /*
+   * 세트가 없어도 화면을 막지 않는다. 예전엔 여기서 "Design › Seed 에서 먼저 저작하세요"로
+   * 돌려보냈는데, 그 재료(admin 계정·Role 같은 운영 필수 행)는 이미 실 DB 에 있었다 —
+   * 되먹임이 그걸 들이는 길인데 그 길이 막혀 있었다(2026-08-18 사용자).
+   */
 
   return (
     <div className="mx-auto flex max-w-[1000px] flex-col gap-3 px-5 py-5">
@@ -410,7 +525,21 @@ export function SeedOpsView(): ReactElement {
         </div>
       )}
 
-      {ctx && (tab === 'apply' ? <ApplyTab ctx={ctx} /> : <ImportTab ctx={ctx} />)}
+      {ctx &&
+        (tab === 'apply' ? (
+          sets.length === 0 ? (
+            <div className="flex flex-col items-start gap-2 rounded-[10px] border border-line bg-panel/60 px-3 py-3">
+              <span className="text-[12.5px] text-fg">심을 시드 없음</span>
+              <Button size="sm" variant="soft" onClick={() => setTab('import')}>
+                <ArrowLeftRight /> 운영에서 가져오기
+              </Button>
+            </div>
+          ) : (
+            <ApplyTab ctx={ctx} />
+          )
+        ) : (
+          <ImportTab ctx={ctx} />
+        ))}
     </div>
   )
 }

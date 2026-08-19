@@ -13,7 +13,7 @@ describe('schemaFromTableId', () => {
   })
 
   it('설계 Draft 의 접두(`<설계>:`)가 붙어 있어도 되찾는다', () => {
-    expect(schemaFromTableId('pokemon-tcg:t:entity.users')).toBe('entity')
+    expect(schemaFromTableId('shop-orders:t:entity.users')).toBe('entity')
     // 설계 이름에 `t:` 를 닮은 조각이 있어도 마지막 `t:` 부터 읽어 흔들리지 않는다.
     expect(schemaFromTableId('cart:t:billing.invoices')).toBe('billing')
   })

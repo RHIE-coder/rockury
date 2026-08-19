@@ -1,7 +1,14 @@
-// 테스트 DB 상태 확인: 컨테이너 · 전용 네트워크 · SQLite 파일.
+// 테스트 DB 현황 — 컨테이너·전용 네트워크·SQLite 파일이 있는지만 본다. 아무것도 바꾸지 않는다.
+//
+//   npm run db:status
+//   node scripts/test-db/status.mjs --help   이 사용법
 import { execSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { SCRIPT_DIR, SQLITE_PATH, log, styleText, dockerEnv } from './lib.mjs';
+import { fileURLToPath } from 'node:url';
+import { helpIfAsked } from '../lib/usage.cjs';
+
+helpIfAsked(fileURLToPath(import.meta.url)); // 부수효과보다 먼저 — 늦게 보면 도움말이 실행이 된다
 
 // Docker 컨테이너
 log(styleText('bold', 'Docker containers:'));

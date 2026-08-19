@@ -11,6 +11,7 @@ import {
 } from '@renderer/ui/dialog'
 import { cn } from '@renderer/lib/utils'
 import { dialectInfo } from '../dialects'
+import { DialectMark } from '../DialectMark'
 import { useDefinitionStore } from '../workspaces/definition/store'
 import { useDesignsStore, useScopedDesigns, type DesignDef } from './store'
 
@@ -36,7 +37,7 @@ function DesignRow({ design }: { design: DesignDef }) {
         title="벤더는 고정 속성 — 변경하려면 포팅으로 새 설계를 만드세요"
         className="mt-1 flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-panel px-2 py-1 text-[11px] font-medium text-muted"
       >
-        <span className="size-2 rounded-full" style={{ background: info.dot }} />
+        <DialectMark dialect={design.dialect} />
         {info.label}
         <Lock className="size-3 opacity-60" />
       </span>

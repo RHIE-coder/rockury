@@ -53,22 +53,49 @@ export function scopeSummary(schemas: readonly string[]): string {
 }
 
 /**
- * 좁은 손잡이(두 단으로 접힌 자리)에 적을 말 — **개수만**(2026-08-17 사용자 지시).
+ * 좁은 손잡이(두 단으로 접힌 자리)에 적을 **짧은 판** — `service1+3`.
  *
- * 아랫줄에는 시점과 범위가 나란히 서므로 이름을 늘어놓을 자리가 없다. 단위를 글자로 안 붙이는
- * 이유는 옆 아이콘이 이미 "스키마"를 말하고 있기 때문이다 — 붙이면 자리를 두 배로 먹는다.
- * 아직 아무것도 못 읽어 셀 것이 없을 때만 자리 이름(`범위`)으로 둔다(`scopeSummary` 와 같은 규칙).
+ * 처음엔 개수만 적었다(`4`). 그러면 "4개"인지 "4번"인지 애매하고, 무엇보다 **어느 스키마를
+ * 보고 있나**에 답을 못 한다(2026-08-18 사용자 지적). 실측해 보니 아랫줄에는 46px 가 비어 있어
+ * 이름 하나는 들어간다 — 그래서 위 손잡이의 `public 외 3` 과 **같은 문법의 짧은 판**으로 적는다.
+ * 같은 값이 폭에 따라 아예 다른 모양이 되면 눈이 매번 다시 배운다.
+ *
+ * 이름과 나머지 수를 **따로 낸다.** 한 문자열로 합치면 이름이 길 때 말줄임이 `+3` 을 삼켜
+ * 개수가 사라진다 — 화면은 이름만 줄이고 수는 늘 남긴다.
  */
-export function scopeCountLabel(schemas: readonly string[]): string {
-  return schemas.length === 0 ? '범위' : String(schemas.length)
+export interface ScopeFace {
+  /** 앞에 세울 이름. 볼 것이 하나도 없으면 자리 이름(`범위`) — `scopeSummary` 와 같은 규칙. */
+  head: string
+  /** 뒤에 붙는 나머지 수. 0 이면 안 붙인다. */
+  rest: number
 }
 
-/** 설계 범위의 개수 표기 — 안 골랐으면 "전부"이므로 고를 수 있는 것의 수를 센다. */
-export function designScopeCountLabel(
+/**
+ * @param empty 볼 것이 하나도 없을 때 세울 말. **넓은 판과 같은 낱말을 넘겨야 한다** —
+ *   같은 값이 폭에 따라 `스키마`/`범위` 로 갈리면 눈이 두 낱말을 따로 배운다.
+ */
+export function scopeFace(schemas: readonly string[], empty = '범위'): ScopeFace {
+  if (schemas.length === 0) return { head: empty, rest: 0 }
+  return { head: schemas[0], rest: schemas.length - 1 }
+}
+
+/**
+ * 설계 범위의 짧은 판 — 안 골랐으면 "전부"이므로 고를 수 있는 것들을 든다.
+ * 빈 자리의 말은 `designScopeSummary` 와 같게 `스키마`다(운영부는 `범위`).
+ */
+export function designScopeFace(
   selected: readonly string[],
   available: readonly string[]
-): string {
-  return scopeCountLabel(selected.length > 0 ? selected : available)
+): ScopeFace {
+  return scopeFace(selected.length > 0 ? selected : available, '스키마')
+}
+
+/**
+ * 손잡이 tooltip 에 넣을 줄 — 짧은 판이 이름을 감추므로 **여기서 전부 밝힌다.**
+ * 밝힐 것이 없으면 빈 문자열이고, 부르는 쪽이 그 줄을 아예 안 넣는다.
+ */
+export function scopeNamesLine(schemas: readonly string[]): string {
+  return schemas.length === 0 ? '' : `보는 중: ${schemas.join(' · ')}`
 }
 
 /**

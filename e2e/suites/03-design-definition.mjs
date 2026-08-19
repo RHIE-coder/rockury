@@ -270,6 +270,48 @@ export async function run(ctx) {
     (await page.locator('[data-diagram-drawer="open"]').count()) > 0 &&
       (await page.locator('[data-diagram-drawer="open"]').innerText()).includes('제약')
   )
+  /*
+   * CASE-design-065 — **크게 보기 안에서도 칸 편집이 된다.**
+   *   회귀(2026-08-18 화면 제보 "여기서 왜 편집이 안될까?"): 서랍과 모달이 같은 폼을 **동시에**
+   *   그리던 동안, 칸을 눌러 뜬 입력칸이 한 프레임 만에 닫혔다. 뒤에 가려진 사본의 입력칸이
+   *   자동 포커스를 집었다가 모달의 포커스 가둠에 밀려 blur → 그 blur 가 편집을 끝냈다.
+   *   그래서 "입력칸이 떠서 남아 있는가"까지 본다 — 값만 보면 원인을 못 가른다.
+   */
+  {
+    await page.locator('[data-drawer-expand]').first().click()
+    await page.waitForTimeout(400)
+    const modal = page.locator('[data-drawer-modal]')
+    check('Design › Diagram: 크게 보기 → 모달', (await modal.count()) === 1)
+    // 같은 폼이 두 벌 살아 있지 않다 — 컬럼 행의 드래그 손잡이가 한 벌치만 보인다.
+    const grips = await page.locator('button[aria-label="드래그로 순서 변경"]').count()
+    const gripsInModal = await modal.locator('button[aria-label="드래그로 순서 변경"]').count()
+    check(
+      `Design › Diagram(크게 보기): 편집 폼이 한 벌만 산다 (전체 ${grips} = 모달 ${gripsInModal})`,
+      gripsInModal > 0 && grips === gripsInModal
+    )
+
+    await modal.locator('button:has-text("컬럼 추가")').last().click()
+    await page.waitForTimeout(250)
+    // 새로 붙은 컬럼의 Name 칸 — 편집칸은 placeholder 가 없으니 편집 키로 집는다.
+    await modal.locator('[data-edit-cell^="col:"][data-edit-cell$=":name"]').last().click()
+    await page.waitForTimeout(250)
+    check(
+      'Design › Diagram(크게 보기): 칸을 누르면 입력칸이 떠서 남는다',
+      (await page.locator('[data-edit-input]').count()) === 1
+    )
+    await page.locator('[data-edit-input]').fill('probe_col')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+    check('Design › Diagram(크게 보기): 입력값이 커밋된다', (await modal.innerText()).includes('probe_col'))
+
+    await page.keyboard.press('Escape') // 모달 닫기
+    await page.waitForTimeout(300)
+    check('Design › Diagram: 모달 닫힘', (await page.locator('[data-drawer-modal]').count()) === 0)
+    check(
+      'Design › Diagram: 모달에서 고친 값이 서랍에도 그대로',
+      (await page.locator('[data-diagram-drawer="open"]').innerText()).includes('probe_col')
+    )
+  }
   await page.locator('[data-drawer-toggle]').first().click() // 접어서 캔버스 자리를 돌려준다
   await page.waitForTimeout(250)
   // 드래그 → 설계 스코프(design:commerce-core) 위치 저장

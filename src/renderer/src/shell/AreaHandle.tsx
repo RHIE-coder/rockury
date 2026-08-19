@@ -84,7 +84,12 @@ export function AreaHandle({
         // 아니라 칸을 줄로 못박아 세우는 것이므로 그 바닥선을 안 깬다.)
         'flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[9px] border bg-canvas px-1.5 py-1',
         // 자리가 좁으면 두 단 — 위는 이름, 아래는 시점·범위(§두 단 접기).
-        '@max-[420px]/handle:flex-col @max-[420px]/handle:items-start @max-[420px]/handle:gap-0.5',
+        //
+        // 두 단일 때는 **세로를 조인다**(`py-0.5` + 줄 사이 여백 0). 안 조이면 이 손잡이가
+        // 줄 높이를 정해 모듈 줄이 78px 까지 자라고, 가운데 카드(34px)가 그 안에 떠서 위아래
+        // 여백만 넓어진다(2026-08-18 사용자: "세로가 두툼하다"). 두 줄 각각이 22px 이므로
+        // 조이면 48px — 한 줄일 때(34px)보다 14px 만 높다.
+        '@max-[420px]/handle:flex-col @max-[420px]/handle:items-start @max-[420px]/handle:gap-0 @max-[420px]/handle:py-0.5',
         tinted ? AREA_TINT[area] : 'border-line'
       )}
     >
@@ -193,7 +198,7 @@ function HandleSelector({ sel }: { sel: ContextSelector }) {
               >
                 {current.label}
               </span>
-              <HintChip hint={current.hint} dot={current.dot} compact />
+              <HintChip hint={current.hint} dot={current.dot} icon={current.icon} compact />
             </>
           ) : (
             <span className="shrink-0 italic text-muted">{sel.placeholder ?? 'Select…'}</span>

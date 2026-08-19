@@ -235,21 +235,27 @@ export const dbService: Service = {
        */
       views: [
         /*
-         * 묶음이 둘이다: **도구**(보는 것) · 설계 → 실제(하는 것).
+         * 묶음이 둘이다: **도구**(보는 것) · 설계 ↔ 실제(맞추는 것).
          * 항목 하나짜리 묶음은 두지 않는다 — 이름이 항목 이름과 겹쳐 줄 하나를 그냥 먹는다
          * (2026-08-12 사용자). `실제 → 설계` 묶음이 그래서 사라졌다: 그 안에 있던 `가져오기`
          * 탭은 창을 여는 버튼 하나만 담고 있었고, 새 설계냐 기존 설계냐는 진단이 이미 판정해
          * 둔 것이라 탭에서 다시 고를 일이 없었다(2026-08-14 사용자: "지우자").
          * 되먹임으로 들어가는 문은 이제 **진단 화면의 버튼 둘**이다.
+         *
+         * 화살표가 `→` 에서 `↔` 로 넓어진 까닭(2026-08-18 사용자: "이 위치가 맞을까?"):
+         * Seed 는 두 방향을 다 한다(설계→운영 반영 · 운영→설계 되먹임). 묶음 이름이 한 방향을
+         * 못박고 있으면 그 안의 Seed 가 이름과 어긋난다. Seed 만 따로 묶을 수는 없으니
+         * (항목 하나짜리 묶음 금지) 이름을 이 묶음이 실제로 하는 일 — **설계와 실제를 맞추는
+         * 것** — 으로 넓혔다. 방향 자체는 각 화면이 제 손잡이로 말한다.
          */
         { id: 'diagnose', label: '진단', icon: Radar, workspace: DiagnoseView, group: '도구' },
         // 실DB↔실DB 비교(예: 개발기↔운영기) — 설계 무관, 연결 2개만 필요.
         { id: 'compare', label: '비교', icon: GitCompare, workspace: CompareView, group: '도구' },
         { id: 'logs', label: '기록', icon: ScrollText, workspace: LogsView, group: '도구' },
-        { id: 'plan', label: '계획', icon: FileDiff, workspace: PlanView, group: '설계 → 실제', groupTone: 'design' },
-        { id: 'run', label: '실행', icon: Play, workspace: RunView, group: '설계 → 실제', groupTone: 'design' },
+        { id: 'plan', label: '계획', icon: FileDiff, workspace: PlanView, group: '설계 ↔ 실제', groupTone: 'design' },
+        { id: 'run', label: '실행', icon: Play, workspace: RunView, group: '설계 ↔ 실제', groupTone: 'design' },
         // 시드 반영 — 스키마(계획/실행)와 갈라 둔다: 대상이 데이터고 게이트도 따로다.
-        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView, group: '설계 → 실제', groupTone: 'design' }
+        { id: 'seed', label: 'Seed', icon: Sprout, workspace: SeedOpsView, group: '설계 ↔ 실제', groupTone: 'design' }
       ]
     },
 

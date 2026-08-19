@@ -4,6 +4,7 @@ import { useContextValue, useNav } from '@renderer/nav/useNav'
 import { filterByScope, type ProjectScope } from '@renderer/shell/projectScope'
 import { useProjectStore } from '@renderer/shell/projectStore'
 import { dialectInfo, type DialectId } from '../dialects'
+import { DIALECT_MARKS } from '../DialectMark'
 
 /**
  * Design(설계) — 이름·버전을 가진 스키마 청사진(§IA).
@@ -167,7 +168,7 @@ function pushDesignOptions(designs: DesignDef[], scope: ProjectScope): void {
         id: d.id,
         label: d.name,
         hint: info.label,
-        dot: info.dot,
+        icon: DIALECT_MARKS[d.dialect],
         subtitle: d.description || undefined
       }
     })

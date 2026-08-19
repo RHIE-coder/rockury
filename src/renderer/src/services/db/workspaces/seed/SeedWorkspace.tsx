@@ -35,7 +35,7 @@ import {
   SEED_ROLE_LABEL
 } from './seedSet'
 import { SeedSetDialog } from './SeedSetDialog'
-import { setKey, useActiveSeedSet, useDesignSeedSets, useSeedStore } from './store'
+import { setKey, useActiveSeedSet, useSeedLensView, useSeedStore } from './store'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/ui/select'
 import { pkPreview, pkRuleOptions, pkRuleVariesPerRow, PK_RULE_CUSTOM, PK_TEMPLATE_TOKENS } from './seedPk'
 import {
@@ -147,6 +147,28 @@ function NoSeedSetState({ onCreate, hasTables }: { onCreate: () => void; hasTabl
           테이블에서 시드 세트 만들기
         </Button>
       )}
+    </div>
+  )
+}
+
+/**
+ * 이 버전에는 시드 기록이 아예 없다 — "시드 0개"와 다르다.
+ * 시드 기능 이전에 컷된 버전과 실 DB 역설계로 만든 버전(가져오기·Drift)이 여기 해당한다.
+ */
+function UnrecordedSeedState({ versionId }: { versionId: string }) {
+  return (
+    <div data-seed-unrecorded className="flex h-full flex-col items-center justify-center gap-3.5 text-center">
+      <div className="flex size-12 items-center justify-center rounded-2xl bg-panel-strong text-muted">
+        <Sprout size={22} />
+      </div>
+      <div>
+        <div className="text-[14px] font-semibold text-fg">
+          <span className="font-mono">{versionId}</span> 에 시드 기록 없음
+        </div>
+        <p className="mt-1 max-w-80 text-[12px] leading-relaxed text-muted">
+          시드를 담기 전에 컷된 버전이에요. Draft 로 돌아가면 지금 시드를 볼 수 있어요.
+        </p>
+      </div>
     </div>
   )
 }
@@ -955,7 +977,7 @@ function SeedGridRow({
 export function SeedWorkspace() {
   const design = useActiveDesign()
   const tables = useDesignTables()
-  const sets = useDesignSeedSets()
+  const { sets, source } = useSeedLensView()
   const active = useActiveSeedSet()
   const readOnly = useDesignReadOnly()
   const versionId = useVersionLens()
@@ -1016,11 +1038,16 @@ export function SeedWorkspace() {
           <div className="flex items-center gap-2 border-b border-line bg-accent-2-soft px-4 py-1.5 text-[12px] text-accent-2">
             <span className="font-medium">읽기 전용</span>
             <span className="font-mono font-semibold">{versionId}</span>
-            <span className="text-accent-2/80">컷된 버전의 시드를 보고 있어요.</span>
+            {/* 기록이 없는 버전에 "이 버전의 시드를 보고 있다"고 말하면 거짓이 된다 — 갈라 적는다. */}
+            <span className="text-accent-2/80">
+              {source === 'unrecorded' ? '이 버전엔 시드 기록이 없어요.' : '컷된 버전의 시드를 보고 있어요.'}
+            </span>
           </div>
         )}
 
-        {!active ? (
+        {source === 'unrecorded' ? (
+          <UnrecordedSeedState versionId={versionId} />
+        ) : !active ? (
           <NoSeedSetState onCreate={() => setPickOpen(true)} hasTables={tables.length > 0} />
         ) : (
           <>

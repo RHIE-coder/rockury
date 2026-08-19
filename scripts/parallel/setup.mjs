@@ -6,17 +6,20 @@
 //   node scripts/parallel/setup.mjs sync      워크트리를 main 최신으로 끌어올린다(빨리감기만)
 //   node scripts/parallel/setup.mjs remove    워크트리 정리(미커밋 변경이 있으면 멈춘다)
 //   node scripts/parallel/setup.mjs --no-install   npm install 을 건너뛴다(빠른 확인용)
+//   node scripts/parallel/setup.mjs --help    이 사용법
 //
 // 준비가 끝나면 각 폴더에서 사람이 `claude` 를 띄운다 — 이 스크립트는 판만 깔아 준다.
 import { execFileSync, spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SERVICES, describePlan, planWorktrees, syncVerdict } from './plan.mjs'
+import { SERVICES, describePlan, parseArgs, planWorktrees, syncVerdict } from './plan.mjs'
+import { helpIfAsked, usageOf } from '../lib/usage.cjs'
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const cmd = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : 'setup'
-const NO_INSTALL = process.argv.includes('--no-install')
+const SELF = fileURLToPath(import.meta.url)
+const REPO = path.resolve(path.dirname(SELF), '..', '..')
+helpIfAsked(SELF) // 명령 판정보다 먼저 — 늦게 보면 도움말 요청이 setup 을 실행한다
+const { cmd, noInstall: NO_INSTALL } = parseArgs(process.argv.slice(2))
 
 const C = { dim: '\x1b[2m', b: '\x1b[1m', g: '\x1b[32m', y: '\x1b[33m', r: '\x1b[31m', x: '\x1b[0m' }
 const say = (s = '') => console.log(s)
@@ -258,7 +261,7 @@ else if (cmd === 'sync') sync()
 else if (cmd === 'remove') remove()
 else if (cmd === 'setup') setup()
 else {
-  say(`알 수 없는 명령: ${cmd}`)
-  say('사용법: node scripts/parallel/setup.mjs [setup|status|sync|remove] [--no-install]')
+  say(`알 수 없는 명령: ${cmd}\n`)
+  say(usageOf(SELF))
   process.exitCode = 1
 }

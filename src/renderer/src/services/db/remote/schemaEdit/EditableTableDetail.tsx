@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger
 } from '@renderer/ui/dropdown-menu'
 import { dialectInfo, type DialectId } from '../../dialects'
+import { DialectMark } from '../../DialectMark'
 import type { ConstraintKind, FkAction, TableDef } from '../../workspaces/definition/types'
 import { keyBadgesOf, resolveColumns } from '../../workspaces/definition/derive'
 import { IMPLIED_FK_ACTION, type FkPolicyKind } from '../../workspaces/definition/fkPolicy'
@@ -134,7 +135,7 @@ export function EditableTableDetail({ table, dialect, allTables }: { table: Tabl
             title="연결 방언 — DDL 은 이 벤더 구문"
             className="flex shrink-0 items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-[10px] font-semibold text-muted"
           >
-            <span className="size-1.5 rounded-full" style={{ background: dialectInfo(dialect).dot }} />
+            <DialectMark dialect={dialect} />
             {dialectInfo(dialect).label}
           </span>
         </div>
