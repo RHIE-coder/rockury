@@ -107,3 +107,22 @@ surface-verify 판정기(`e2e/surface/checks.mjs`)에 문구 검사를 넣으면
   git 의 판정 규칙을 여기서 다시 구현하는 꼴이 된다.
   구분자를 NUL 로 고른 것 자체는 그대로다(이름에 절대 못 들어가는 글자라 고른 것) — 표기만
   이스케이프로 적는다.
+
+## 9. 공유 제보 폴더는 워크트리가 지우지 못한다
+
+`.harness/steward/project/hooks/no-shared-feedback-delete.mjs` — 워크트리 세션의 `Bash` 명령이
+`.harness/feedback` 을 지우거나 옮기려 하면 거부한다(`.claude/settings.json` 의 `PreToolUse`).
+판정은 `no-shared-feedback-delete.test.mjs` 가 `npm test` 에서 지킨다.
+
+**왜**: 워크트리의 `.harness/feedback` 은 사본이 아니라 main 폴더 한 자리를 가리키는 링크다.
+그런데 `AGENTS.md` 는 매 세션 "읽고 고쳤으면 폴더를 지운다"고 말한다 — 그대로 따르면 다른
+서비스가 아직 처리 못 한 제보까지 함께 사라진다. gitignore 대상이라 **되돌릴 커밋이 없다.**
+병렬 개발의 제보 규칙 넷 중 유일하게 복구가 안 되는 항목이라 여기만 기계로 막았다(나머지
+셋은 어겨도 시간 몇 분이라 가드 비용이 더 비싸다).
+
+**막지 않는 것**: main 폴더에서 지우는 것(다 처리한 제보를 치우는 정상 흐름), 그리고 읽기.
+`grep -rn "rm" .harness/feedback/` 처럼 글자로만 들어 있는 경우까지 막으면 제보를 읽는 일
+자체가 안 되므로, **명령 자리에 있는** 동사만 센다.
+
+**걸렸다면**: 지우지 말고 그 폴더에 `done-<서비스>.md` 를 남긴다. 남의 몫이 섞여 있으면
+`handoff-<받을서비스>.md` 도. 폴더 삭제는 main 폴더에서 병합할 때 한다.
