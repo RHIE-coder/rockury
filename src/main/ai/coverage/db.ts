@@ -43,6 +43,12 @@ export const dbCoverage: ServiceCoverage = {
     // 에이전트가 버전을 다루는 도구는 `create_version` 하나로 충분하다(2026-08-05).
     'versions:updateNote': '버전 메모는 확정한 사람이 적는 것 — 지금 노출 이유 없음',
 
+    // ── 컬럼 묶음: 사람이 화면에서 손으로 쌓는 재료 — 에이전트는 스키마를 직접 쓰면 된다 ──
+    //    (`patch_schema` 로 컬럼을 더할 수 있으니 묶음을 거칠 이유가 없다.)
+    'columnSets:list': '사람이 화면에서 쌓는 재료 — 에이전트는 patch_schema 로 직접 더한다',
+    'columnSets:create': '같은 이유 — 묶음은 사람의 손버릇을 담는 자리다',
+    'columnSets:delete': '지우기 — 사람이 앱에서만',
+
     // ── 연결/실 DB 실행: 자격증명·파괴 가능 조작 — 별도 게이트 설계 전에는 노출 금지 ──
     'connections:list': '연결 메타에 호스트·계정 포함 — 민감정보 마스킹 설계 후 검토',
     'connections:create': '자격증명 쓰기 — 노출 금지',

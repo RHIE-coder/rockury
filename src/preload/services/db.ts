@@ -9,6 +9,7 @@ import type { GrantsIR } from '../../main/services/grants/types'
 import type { GrantChange, StatementPlan } from '../../main/services/grants/statements'
 import type { ApplyResult } from '../../main/services/grantsService'
 import type { GrantSetItem, GrantSetRecord } from '../../main/store/grantSets'
+import type { ColumnSetColumn, ColumnSetRecord } from '../../shared/db/columnSet'
 import type { QueryResult, TxBeginResult, ExplainResult } from '../../main/services/queryService'
 import type { AppendHistoryInput, QueryHistoryRecord } from '../../main/store/queryHistory'
 import type { FolderRecord, SavedQueryRecord } from '../../main/store/savedQueries'
@@ -135,6 +136,13 @@ export const dbApi = {
     // 설계 스코프 저장 — 전량 교체(replaceAll)는 제거됨(에이전트·화면 동시 작업 경합 차단).
     replaceForDesign: (designId: string, records: TableRecord[]): Promise<void> =>
       ipcRenderer.invoke('tables:replaceForDesign', designId, records)
+  },
+  /** 컬럼 묶음 — 여러 표에 되풀이해 넣는 컬럼 세트. 설계에 안 매인다. */
+  columnSets: {
+    list: (): Promise<ColumnSetRecord[]> => ipcRenderer.invoke('columnSets:list'),
+    create: (name: string, columns: ColumnSetColumn[]): Promise<ColumnSetRecord> =>
+      ipcRenderer.invoke('columnSets:create', name, columns),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke('columnSets:delete', id)
   },
   seedSets: {
     list: (): Promise<SeedSetRecord[]> => ipcRenderer.invoke('seedSets:list'),

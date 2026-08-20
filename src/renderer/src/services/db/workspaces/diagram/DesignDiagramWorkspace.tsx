@@ -1,17 +1,18 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import type { Connection } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { GitBranch, Plus, Eye, Layers, LayoutGrid, Lock } from 'lucide-react'
+import { GitBranch, Plus, Eye, Layers, LayoutGrid, Lock, CopyPlus } from 'lucide-react'
 import { Button } from '@renderer/ui/button'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
-import { useActiveDesign } from '../../designs/store'
+import { useActiveDesign, useDesignsStore } from '../../designs/store'
 import { useDefinitionStore, useScopedDesignTables, useDesignReadOnly } from '../definition/store'
 import { TableForm } from '../definition/TableForm'
 import { SqlForm } from '../definition/SqlForm'
 import { DiagramSurface } from '../../remote/diagram/DiagramSurface'
 import { useDiagramLayout } from '../../remote/diagram/useDiagramLayout'
 import { buildFkPatch } from './fk'
+import { ImportTablesDialog } from './ImportTablesDialog'
 
 /**
  * Design › Diagram(설계부 · depth 3) — 활성 설계의 **가상 ERD 편집기**.
@@ -25,6 +26,14 @@ export function DesignDiagramWorkspace() {
   const scoped = useScopedDesignTables()
   const addTable = useDefinitionStore((s) => s.addTable)
   const addView = useDefinitionStore((s) => s.addView)
+
+  const [importOpen, setImportOpen] = useState(false)
+  /*
+   * 가져올 것이 **어디에든** 있어야 손잡이를 연다. 예전엔 "다른 설계가 있나"만 봤는데,
+   * 이제 자기 자신도 출처가 된다(복붙) — 이 설계에 표가 하나라도 있으면 열 이유가 있다.
+   */
+  const hasOtherDesign = useDesignsStore((s) => s.designs.some((d) => d.id !== design?.id))
+  const canImport = hasOtherDesign || scoped.length > 0
 
   // useDesignTables 는 매 렌더 새 배열 → 콘텐츠 기준으로 identity 안정화(재배치 폭주 방지).
   const scopedSig = JSON.stringify(scoped)
@@ -112,6 +121,17 @@ export function DesignDiagramWorkspace() {
               <Button size="sm" variant="ghost" data-group-create-toolbar onClick={() => layout.createGroup()}>
                 <Layers /> 그룹 추가
               </Button>
+              {canImport && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-import-tables
+                  title="다른 설계의 테이블을 이 설계로 복제"
+                  onClick={() => setImportOpen(true)}
+                >
+                  <CopyPlus /> 가져오기
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -123,9 +143,16 @@ export function DesignDiagramWorkspace() {
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-muted">
           이 설계에는 테이블이 없습니다.
           {!readOnly && (
-            <Button size="sm" variant="outline" onClick={() => addTable(design.id)}>
-              <Plus /> 첫 테이블 추가
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => addTable(design.id)}>
+                <Plus /> 첫 테이블 추가
+              </Button>
+              {canImport && (
+                <Button size="sm" variant="ghost" data-import-tables onClick={() => setImportOpen(true)}>
+                  <CopyPlus /> 가져오기
+                </Button>
+              )}
+            </div>
           )}
         </div>
       ) : (
@@ -154,6 +181,8 @@ export function DesignDiagramWorkspace() {
           />
         </ReactFlowProvider>
       )}
+
+      <ImportTablesDialog open={importOpen} onOpenChange={setImportOpen} target={design} />
     </div>
   )
 }

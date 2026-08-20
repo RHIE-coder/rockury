@@ -1,3 +1,9 @@
+import {
+  createColumnSet,
+  deleteColumnSet,
+  listColumnSets,
+  type ColumnSetColumn
+} from '../../store/columnSets'
 import { ipcMain } from 'electron'
 import {
   createDesign,
@@ -58,6 +64,16 @@ export function registerStoreIpc(): void {
   ipcMain.handle('seedSets:replaceForDesign', (event, designId: string, records: SeedSetRecord[]) =>
     writingRaw(event, { domain: 'seeds', designId }, () => replaceSeedSetsForDesign(designId, records))
   )
+
+  /*
+   * 컬럼 묶음 — 설계에 안 매인다(재활용이 존재 이유). 그래서 `writingRaw` 로 감싸지 않는다:
+   * 설계 스코프 알림(어느 설계가 바뀌었나)을 보낼 대상이 없다.
+   */
+  ipcMain.handle('columnSets:list', () => listColumnSets())
+  ipcMain.handle('columnSets:create', (_event, name: string, columns: ColumnSetColumn[]) =>
+    createColumnSet(name, columns)
+  )
+  ipcMain.handle('columnSets:delete', (_event, id: string) => deleteColumnSet(id))
 
   // 환경 변수 값 — 목록은 평문을 싣지 않고, 평문은 반영 직전 resolve 로만 나간다.
   ipcMain.handle('envVars:list', (_event, envId: string) => listEnvVariables(envId))

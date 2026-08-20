@@ -20,6 +20,15 @@ import type { Column, Constraint, ConstraintKind, TableDef } from './types'
 type Form = 'table' | 'sql'
 let seq = 1
 
+/**
+ * 새 id 발급 — **번호 권한은 이 모듈 하나**다. 저장소 `tables` 의 PK 는 설계 무관 전역 id 라
+ * 밖에서 따로 번호를 지어내면 언젠가 겹친다(`init` 이 로드된 최대 번호 위로 `seq` 를 올려 둔다).
+ * 복제 같은 바깥 계산은 이 함수를 받아 쓴다.
+ */
+export function mintDefinitionId(prefix: 'tbl' | 'col' | 'con'): string {
+  return `${prefix}-${seq++}`
+}
+
 interface DefinitionState {
   form: Form
   /** 저장소(SQLite) 하이드레이션 완료 여부. write-through 는 이 이후에만 발동. */
@@ -67,6 +76,10 @@ interface DefinitionState {
   addTable: (designId: string) => void
   /** 뷰 신설 — 본문 SELECT 는 비운 채 만들고 사람이 채운다(컬럼도 사람이 적는다). */
   addView: (designId: string) => void
+  /** 만들어진 테이블을 그대로 이어 붙인다(다른 설계에서 복제해 온 것). id 는 부르는 쪽이 발급한다. */
+  insertTables: (tables: TableDef[]) => void
+  /** 이미 있는 표들을 **id 로 찾아 통째로 갈아끼운다**(컬럼을 여러 표에 한 번에 넣을 때). */
+  applyTables: (tables: TableDef[]) => void
   updateTable: (patch: Partial<Pick<TableDef, 'name' | 'schema' | 'comment' | 'viewSql'>>) => void
   /**
    * 한 스키마의 **표 전부**를 다른 스키마 이름으로 옮긴다 — 스키마 이름 바꾸기의 실체.
@@ -394,6 +407,24 @@ export const useDefinitionStore = create<DefinitionState>()((set) => ({
         viewSql: ''
       }
       return { tables: [...s.tables, view], activeTableId: id, editing: null, openConstraintId: null }
+    }),
+  insertTables: (incoming) =>
+    set((s) =>
+      incoming.length === 0
+        ? {}
+        : {
+            tables: [...s.tables, ...incoming],
+            activeTableId: incoming[0].id,
+            editing: null,
+            openConstraintId: null
+          }
+    ),
+  applyTables: (changed) =>
+    set((s) => {
+      if (changed.length === 0) return {}
+      // id 로 갈아끼운다 — 배열 자리(index)로 찾으면 다른 설계 표가 섞인 목록에서 어긋난다.
+      const byId = new Map(changed.map((t) => [t.id, t]))
+      return { tables: s.tables.map((t) => byId.get(t.id) ?? t) }
     }),
   updateTable: (patch) => set((s) => patchActive(s, (t) => ({ ...t, ...patch }))),
   moveSchema: (designId, from, to) =>

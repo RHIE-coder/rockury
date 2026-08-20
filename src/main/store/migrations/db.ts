@@ -28,7 +28,8 @@ export const dbMigration: ServiceMigration = {
     'env_variables',
     'diagram_layouts',
     'db_grant_sets',
-    'db_data_filters'
+    'db_data_filters',
+    'db_column_sets'
   ],
 
   before(d: DatabaseSync): void {
@@ -275,6 +276,17 @@ export const dbMigration: ServiceMigration = {
 
     -- 권한 세트(§db-remote.grants.sets) — 연결 참조가 **없다**: 연결을 지워도 세트는 남아
     -- 다른 환경에 재적용된다(재활용이 존재 이유). items 는 (테이블 패턴 × 권한들) JSON.
+    -- 컬럼 묶음 — 여러 표에 되풀이해 넣는 컬럼 세트(created_at·updated_at 등).
+    -- 설계 참조가 **없다**: 설계를 지워도 남아 다른 설계에 다시 쓰인다(재활용이 존재 이유,
+    -- db_grant_sets 와 같은 결). columns 는 (이름·타입·NULL·기본값·설명) JSON — id 는 안 담는다.
+    CREATE TABLE IF NOT EXISTS db_column_sets (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      columns    TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS db_grant_sets (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,

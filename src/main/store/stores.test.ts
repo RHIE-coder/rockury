@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { setDbPath } from './db'
+import { createColumnSet, deleteColumnSet, listColumnSets } from './columnSets'
 import { createSample, resetSample } from './sampleDb'
 import { findSampleConnection, SAMPLE_DIR } from '../../shared/db/samplePlan'
 import {
@@ -509,6 +510,51 @@ describe('grantSets — 권한 세트 (연결 독립)', () => {
 
   it('없는 세트 수정은 명시적 오류 — 조용히 새로 만들지 않는다', () => {
     expect(() => updateGrantSet('no-such-id', { name: 'x' })).toThrow()
+  })
+})
+
+describe('columnSets — 컬럼 묶음 (설계 독립)', () => {
+  const cols = [
+    { name: 'created_at', type: 'DATETIME', nullable: false, defaultValue: 'now()', comment: '생성 시각' },
+    { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: null, comment: '' }
+  ]
+
+  it('저장→목록→삭제 왕복', () => {
+    const made = createColumnSet('타임스탬프', cols)
+    expect(listColumnSets().map((s) => s.name)).toContain('타임스탬프')
+    expect(listColumnSets().find((s) => s.id === made.id)?.columns).toEqual(cols)
+    deleteColumnSet(made.id)
+    expect(listColumnSets().find((s) => s.id === made.id)).toBeUndefined()
+  })
+
+  it('설계를 지워도 묶음은 남는다 — 스키마에 설계 참조 자체가 없다(재활용이 존재 이유)', () => {
+    const d = createDesign({ name: 'colset-design', dialect: 'mysql', description: '' })
+    const set = createColumnSet('생존-확인', cols)
+    deleteDesign(d.id)
+    expect(listColumnSets().find((s) => s.id === set.id)?.columns).toEqual(cols)
+    deleteColumnSet(set.id)
+  })
+
+  it('컬럼 id 는 안 담는다 — 넣을 때 대상마다 새로 발급하므로 저장해 둔 id 는 충돌의 씨앗이다', () => {
+    const made = createColumnSet('id-없음', [
+      { id: 'col-9', name: 'memo', type: 'TEXT', nullable: true, defaultValue: null, comment: '' }
+    ] as never)
+    expect(made.columns[0]).not.toHaveProperty('id')
+    deleteColumnSet(made.id)
+  })
+
+  it('이름 없는 줄은 버린다', () => {
+    const made = createColumnSet('걸러짐', [
+      { name: '  ', type: 'TEXT', nullable: true, defaultValue: null, comment: '' },
+      { name: 'ok', type: 'TEXT', nullable: true, defaultValue: null, comment: '' }
+    ])
+    expect(made.columns.map((c) => c.name)).toEqual(['ok'])
+    deleteColumnSet(made.id)
+  })
+
+  it('빈 이름·빈 목록은 사람이 읽을 수 있는 사유로 거절한다', () => {
+    expect(() => createColumnSet('  ', cols)).toThrow(/이름/)
+    expect(() => createColumnSet('빈-묶음', [])).toThrow(/컬럼/)
   })
 })
 

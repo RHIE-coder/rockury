@@ -585,4 +585,270 @@ export async function run(ctx) {
     await page.locator('[data-side-tab="tables"]').first().click()
     await page.waitForTimeout(150)
   }
+
+  /*
+   * ── 다른 설계의 테이블 가져오기(복제) — 2026-08-02 요청, 2026-08-20 마감 ──
+   * **복제이지 동기화가 아니다** — 떠 온 뒤로 원본과 줄이 끊긴다. 여기서 못 박는 것 다섯:
+   *  ⑴ 손잡이는 **가져올 곳이 있을 때만** 뜬다(설계가 하나뿐이면 고를 출처가 없다).
+   *  ⑵ FK 로 엮인 표가 딸려오고, 복제본끼리 관계가 다시 붙는다.
+   *  ⑶ 이름이 겹치면 `_copy` 를 받거나(rename) 통째로 건너뛴다(skip) — 사람이 고른다.
+   *  ⑷ 출처 설계는 안 다친다.
+   *  ⑸ 껐다 켜도 남는다(write-through 가 받는가).
+   * 임시 설계는 **지우고 나간다** — 남기면 뒤 스위트의 설계 선택이 흔들린다.
+   */
+  {
+    const designCount = await page.evaluate(async () => (await window.rockury.designs.list()).length)
+    if (designCount === 1) {
+      check('Design › Diagram: 가져올 곳이 없으면 가져오기 손잡이도 없다', (await page.locator('[data-import-tables]').count()) === 0)
+    }
+
+    // 빈 설계를 하나 만들어 그리로 옮긴다 — 벤더는 출처와 같게(벤더 경고는 여기 관심사가 아니다).
+    const tmpId = await page.evaluate(async () => {
+      const d = await window.rockury.designs.create({ name: 'e2e-copy-into', dialect: 'mysql', description: '' })
+      // 칸(`service2`)에 든 표 하나 — 들어오는 칸 없는 orders 와 **안 겹쳐야** 한다.
+      await window.rockury.tables.replaceForDesign(d.id, [
+        {
+          id: 'e2e-s2-orders',
+          designId: d.id,
+          schema: 'service2',
+          name: 'orders',
+          comment: '',
+          columns: [{ id: 'e2e-c1', name: 'id', type: 'bigint', nullable: false, defaultValue: null, comment: '' }],
+          constraints: []
+        }
+      ])
+      window.__rockuryNav.setContextValue('design', d.id)
+      return d.id
+    })
+    await page.reload()
+    await page.waitForSelector('text=Design', { timeout: 15_000 })
+    await click('button:has-text("Design")')
+    await click('button:has-text("Diagram")')
+    await page.waitForTimeout(800)
+    check('Design › Diagram: 가져올 곳이 생기면 손잡이가 뜬다', (await page.locator('[data-import-tables]').count()) > 0)
+
+    await page.locator('[data-import-tables]').first().click()
+    await page.waitForSelector('[data-import-dialog]', { timeout: 5_000 })
+    check('가져오기: 모달이 열린다', (await page.locator('[data-import-dialog]').count()) === 1)
+
+    /*
+     * 기본 출처는 **이 설계 자신**이다(복붙이 이 창의 첫 쓰임 · 2026-08-20).
+     * 그래서 남의 설계에서 떠 오는 아래 검사들은 출처를 **명시해서** 고른다.
+     */
+    check('가져오기: 기본 출처는 이 설계 자신(복붙)', (await page.locator('[data-import-source]').first().getAttribute('data-import-source')) === tmpId)
+    check('복붙: 이 설계의 표가 목록에 선다(service2.orders)', (await page.locator('[data-import-row="orders"]').count()) === 1)
+    await click('[data-import-all]')
+    await page.waitForTimeout(300)
+    check('복붙: 자기 자신이라 이름이 겹쳐 복사본 이름을 받는다', (await page.locator('[data-import-dest="service2.orders_copy"]').count()) === 1)
+
+    await page.locator('[data-import-source]').first().click()
+    await page.waitForTimeout(400)
+    await page.locator('[role="option"]:has-text("commerce-core")').first().click()
+    await page.waitForTimeout(500)
+    check('가져오기: 출처를 다른 설계로 바꾼다(commerce-core)', (await page.locator('[data-import-source]').first().getAttribute('data-import-source')) === 'commerce-core')
+
+    // 한 표만 고른다 — FK 로 엮인 것이 딸려오는지 보려고(orders → users).
+    await page.locator('[data-import-row="orders"]').first().click()
+    await page.waitForTimeout(300)
+    check('가져오기: FK 로 엮인 표가 딸려온다(orders → users)', (await page.locator('[data-import-submit]').first().getAttribute('data-import-submit')) === '2')
+
+    await click('[data-import-all]')
+    await page.waitForTimeout(300)
+    check('가져오기: 전체 선택 = 시드 4표', (await page.locator('[data-import-submit]').first().getAttribute('data-import-submit')) === '4')
+    check('가져오기: 칸이 다르면 이름이 같아도 안 겹친다(service2.orders ≠ orders)', (await page.locator('[data-import-rename]').count()) === 0)
+
+    await page.locator('[data-import-submit]').first().click()
+    await page.waitForTimeout(1200)
+    check('가져오기: 4표가 이 설계로 복제된다', (await page.locator('[data-table-row="orders"]').count()) === 1 && (await page.locator('[data-table-row="users"]').count()) === 1)
+
+    // 복제본끼리 관계가 다시 붙었나 — 받는 설계 안에서 users 를 가리키는 FK 가 선다.
+    await click('[data-side-tab="tables"]')
+    await page.locator('[data-table-row="users"]').first().click()
+    await page.waitForTimeout(400)
+    check('가져오기: 복제본끼리 FK 가 다시 이어진다(users ← orders)', (await page.locator('[data-referenced-from="orders"]').count()) === 1)
+
+    // 한 번 더 — 이번엔 이름이 다 겹친다.
+    await page.locator('[data-import-tables]').first().click()
+    await page.waitForSelector('[data-import-dialog]', { timeout: 5_000 })
+    // 창을 다시 열면 출처가 자기 자신으로 되돌아간다(열 때마다 초기화) — 다시 골라 준다.
+    await page.locator('[data-import-source]').first().click()
+    await page.waitForTimeout(400)
+    await page.locator('[role="option"]:has-text("commerce-core")').first().click()
+    await page.waitForTimeout(500)
+    await click('[data-import-all]')
+    await page.waitForTimeout(300)
+    check('가져오기: 이름이 겹치면 복사본 이름을 준다(orders_copy)', (await page.locator('[data-import-rename="orders_copy"]').count()) === 1)
+    /*
+     * 받는 스키마 — **어느 스키마로 넣을지**. 옮기면 겹침 판정도 그 스키마 기준으로 따라간다.
+     * 지금 이 설계엔 칸 없는 4표 + `service2.orders` 가 있다. 그래서:
+     *   출처 그대로 → 넷 다 겹친다(위 검사) · service2 로 → `orders` 만 겹친다.
+     */
+    check('받는 스키마: 스키마가 있는 설계에서만 줄이 뜬다', (await page.locator('[data-import-into]').count()) === 1)
+    check('받는 스키마: 기본은 출처와 같음', (await page.locator('[data-import-into]').first().getAttribute('data-import-into')) === '__as-is__')
+    await page.locator('[data-import-into]').first().click()
+    await page.waitForTimeout(400)
+    await page.locator('[role="option"]:has-text("service2")').first().click()
+    await page.waitForTimeout(500)
+    check(
+      '받는 스키마: service2 로 옮기면 그 스키마 기준으로 겹침을 다시 센다(orders 만)',
+      (await page.locator('[data-import-rename="orders_copy"]').count()) === 1 &&
+        (await page.locator('[data-import-rename]').count()) === 1
+    )
+    check(
+      '받는 스키마: 줄마다 가는 곳을 한정 이름으로 찍는다(service2.orders_copy)',
+      (await page.locator('[data-import-dest="service2.orders_copy"]').count()) === 1 &&
+        (await page.locator('[data-import-dest="service2.users"]').count()) === 1
+    )
+    await click('[data-import-collision="skip"]')
+    await page.waitForTimeout(300)
+    check('가져오기: 건너뛰기로 바꾸면 겹친 것만 빠진다(service2 기준 orders 하나)', (await page.locator('[data-import-submit]').first().getAttribute('data-import-submit')) === '3' && (await page.locator('[data-import-skip]').count()) === 1)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+
+    // 출처는 안 다쳤나 + 뒷정리(임시 설계 삭제 → 원래 설계로 복귀).
+    const counts = await page.evaluate(async () => {
+      const rows = await window.rockury.tables.list()
+      const by = {}
+      for (const r of rows) by[r.designId] = (by[r.designId] ?? 0) + 1
+      return by
+    })
+    check(`가져오기: 출처 설계는 그대로다 (commerce-core ${counts['commerce-core']}표)`, counts['commerce-core'] === 4)
+
+
+    /*
+     * ── 컬럼을 여러 표에 한 번에 (2026-08-20 사용자 요청: "동일 컬럼을 여러 테이블에 추가할 때
+     *    일일이 하나씩 입력해야 한다") ──
+     * 위에서 복제해 온 표들이 이 임시 설계에 있다. `products` 의 컬럼 하나를 `users` 에 뿌린다.
+     * 이름이 겹치는 표(`orders` 가 둘)는 안 쓴다 — 이름으로 집는 로케이터가 흔들린다.
+     */
+    await click('button:has-text("Definition")')
+    await page.waitForTimeout(600)
+    await click('[data-side-tab="tables"]')
+    await page.locator('[data-table-row="products"]').first().click()
+    await page.waitForTimeout(500)
+    await page.locator('button[aria-label="더 보기"]').first().click()
+    await page.waitForTimeout(300)
+    await page.locator('[data-addcols-open]').first().click()
+    await page.waitForSelector('[data-addcols-dialog]', { timeout: 5_000 })
+    check('컬럼 뿌리기: 대상에 자기 자신은 없다', (await page.locator('[data-addcols-target="products"]').count()) === 0)
+    await page.locator('[data-addcols-col="sku"]').first().click()
+    await page.locator('[data-addcols-target="users"]').first().click()
+    await page.waitForTimeout(400)
+    check('컬럼 뿌리기: 고른 대상 줄에 결과가 미리 뜬다', (await page.locator('[data-addcols-summary="+sku"]').count()) === 1)
+    check('컬럼 뿌리기: 바뀔 표 수가 버튼에 적힌다', (await page.locator('[data-addcols-submit]').first().getAttribute('data-addcols-submit')) === '1')
+    await page.locator('[data-addcols-submit]').first().click()
+    await page.waitForTimeout(900)
+    await page.locator('[data-table-row="users"]').first().click()
+    await page.waitForTimeout(500)
+    check('컬럼 뿌리기: 대상 표에 컬럼이 생긴다', (await body()).includes('sku'))
+    // 두 번째: 같은 것을 또 넣으면 "이미 있음", 덮어쓰기로 바꾸면 "덮어씀".
+    await page.locator('[data-table-row="products"]').first().click()
+    await page.waitForTimeout(400)
+    await page.locator('button[aria-label="더 보기"]').first().click()
+    await page.waitForTimeout(300)
+    await page.locator('[data-addcols-open]').first().click()
+    await page.waitForSelector('[data-addcols-dialog]', { timeout: 5_000 })
+    await page.locator('[data-addcols-col="sku"]').first().click()
+    await page.locator('[data-addcols-target="users"]').first().click()
+    await page.waitForTimeout(400)
+    check('컬럼 뿌리기: 겹치면 "이미 있음"', (await page.locator('[data-addcols-summary="이미 있음 sku"]').count()) === 1)
+    check('컬럼 뿌리기: 바뀔 게 없으면 넣기가 잠긴다', await page.locator('[data-addcols-submit]').first().isDisabled())
+    await click('[data-addcols-collision="overwrite"]')
+    await page.waitForTimeout(400)
+    check('컬럼 뿌리기: 덮어쓰기로 바꾸면 "덮어씀"', (await page.locator('[data-addcols-summary="덮어씀 sku"]').count()) === 1)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+
+
+    /*
+     * ── 붙여넣기로 컬럼 만들기 (2026-08-20) ──
+     * 엑셀에서 긁어온 모양(탭으로 나뉜 칸)을 그대로 붙인다. 머리글 줄은 빠지고, 못 읽은 줄은
+     * 화면이 밝힌다. 설명 칸(`가입 시각`)까지 따라오는지가 이 검사의 핵심 — 예전엔 버려졌다.
+     */
+    await page.locator('button[aria-label="더 보기"]').first().click()
+    await page.waitForTimeout(300)
+    await page.locator('[data-addcols-open]').first().click()
+    await page.waitForSelector('[data-addcols-dialog]', { timeout: 5_000 })
+    await click('[data-addcols-mode="paste"]')
+    await page.waitForTimeout(300)
+    check('붙여넣기: 입력칸이 뜬다', (await page.locator('[data-addcols-paste]').count()) === 1)
+    await page.locator('[data-addcols-paste]').fill('컬럼\t타입\nsigned_up_at\tDATETIME\tNOT NULL\t가입 시각\n-- 여긴 주석')
+    await page.waitForTimeout(500)
+    check('붙여넣기: 머리글은 빼고 컬럼만 읽는다', (await page.locator('[data-addcols-col]').count()) === 1 && (await page.locator('[data-addcols-col="signed_up_at"]').count()) === 1)
+    check('붙여넣기: 못 읽은 줄을 밝힌다', (await page.locator('[data-addcols-dropped="1"]').count()) === 1)
+    await page.locator('[data-addcols-target="users"]').first().click()
+    await page.waitForTimeout(400)
+    check('붙여넣기: 미리보기가 뜬다', (await page.locator('[data-addcols-summary="+signed_up_at"]').count()) === 1)
+    await page.locator('[data-addcols-submit]').first().click()
+    await page.waitForTimeout(900)
+    const pasted = await page.evaluate(async () => {
+      const rows = await window.rockury.tables.list()
+      const t = rows.filter((r) => r.name === 'users').at(-1)
+      return t.columns.find((c) => c.name === 'signed_up_at')
+    })
+    check(`붙여넣기: 타입·NOT NULL·설명이 함께 들어간다 (${pasted?.type} · ${pasted?.comment})`,
+      pasted?.type === 'DATETIME' && pasted?.nullable === false && pasted?.comment === '가입 시각')
+
+
+    /*
+     * ── 컬럼 묶음(저장해 두고 다시 쓰기) — 2026-08-20 ⓒ ──
+     * 묶음은 **설계에 안 매인다**(재활용이 존재 이유). 여기서는 만들고·고르고·넣고·지우는 한 바퀴만
+     * 본다. 저장소에 남는지는 `stores.test.ts` 가 덮는다.
+     */
+    await page.locator('button[aria-label="더 보기"]').first().click()
+    await page.waitForTimeout(300)
+    await page.locator('[data-addcols-open]').first().click()
+    await page.waitForSelector('[data-addcols-dialog]', { timeout: 5_000 })
+    check('묶음: 출처 갈래가 셋이다', (await page.locator('[data-addcols-mode]').count()) === 3)
+    await click('[data-addcols-mode="paste"]')
+    await page.waitForTimeout(300)
+    await page.locator('[data-addcols-paste]').fill('audited_at\tDATETIME\tNOT NULL\t감사 시각')
+    await page.waitForTimeout(500)
+    await page.locator('[data-addcols-save-name]').fill('감사-묶음')
+    await page.waitForTimeout(200)
+    await page.locator('[data-addcols-save]').click()
+    await page.waitForTimeout(800)
+    await click('[data-addcols-mode="set"]')
+    await page.waitForTimeout(400)
+    check('묶음: 저장한 것이 목록에 뜬다', (await page.locator('[data-addcols-set="감사-묶음"]').count()) === 1)
+    check('묶음 모드에선 저장 칸을 안 낸다 — 이미 묶음이다', (await page.locator('[data-addcols-save-name]').count()) === 0)
+    await page.locator('[data-addcols-set="감사-묶음"]').click()
+    await page.waitForTimeout(400)
+    check('묶음: 고르면 컬럼이 다 골라진 채로 뜬다', (await page.locator('[data-addcols-col="audited_at"]').count()) === 1)
+    await page.locator('[data-addcols-target="users"]').first().click()
+    await page.waitForTimeout(400)
+    check('묶음: 미리보기가 뜬다', (await page.locator('[data-addcols-summary="+audited_at"]').count()) === 1)
+    await page.locator('[data-addcols-submit]').first().click()
+    await page.waitForTimeout(900)
+    const fromSet = await page.evaluate(async () => {
+      const rows = await window.rockury.tables.list()
+      const t = rows.filter((r) => r.name === 'users').at(-1)
+      return t.columns.find((c) => c.name === 'audited_at')
+    })
+    check(`묶음: 값까지 함께 들어간다 (${fromSet?.type} · ${fromSet?.comment})`,
+      fromSet?.type === 'DATETIME' && fromSet?.nullable === false && fromSet?.comment === '감사 시각')
+    // 뒷정리 — 묶음은 설계와 함께 안 지워지므로 여기서 손으로 치운다(뒤 스위트에 남으면 안 된다).
+    await page.locator('button[aria-label="더 보기"]').first().click()
+    await page.waitForTimeout(300)
+    await page.locator('[data-addcols-open]').first().click()
+    await page.waitForSelector('[data-addcols-dialog]', { timeout: 5_000 })
+    await click('[data-addcols-mode="set"]')
+    await page.waitForTimeout(400)
+    await page.locator('[data-addcols-set-delete="감사-묶음"]').click()
+    await page.waitForTimeout(700)
+    check('묶음: 지우면 목록에서 사라진다', (await page.locator('[data-addcols-set="감사-묶음"]').count()) === 0)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+
+    await page.evaluate(async (id) => {
+      await window.rockury.designs.delete(id)
+      window.__rockuryNav.setContextValue('design', 'commerce-core')
+    }, tmpId)
+    await page.reload()
+    await page.waitForSelector('text=Design', { timeout: 15_000 })
+    await click('button:has-text("Design")')
+    await click('button:has-text("Definition")')
+    await page.waitForTimeout(600)
+    check('가져오기: 뒷정리 — 임시 설계를 지우고 원래 설계로 돌아온다', (await body()).includes('orders'))
+  }
 }

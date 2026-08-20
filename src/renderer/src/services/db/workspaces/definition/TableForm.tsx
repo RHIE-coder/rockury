@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   DndContext,
   PointerSensor,
@@ -8,7 +9,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowDown, ArrowUp, Eye, GripVertical, MoreHorizontal, Pencil, Plus, Table2, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, Eye, GripVertical, MoreHorizontal, Pencil, Plus, Table2, Trash2 } from 'lucide-react'
 import { Badge } from '@renderer/ui/badge'
 import { Button } from '@renderer/ui/button'
 import { Checkbox } from '@renderer/ui/checkbox'
@@ -24,6 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/ui/tooltip'
 import { CopyMenu } from '@renderer/ui/copy-menu'
 import { columnCopyItems } from '../../copyText'
+import { AddColumnsDialog } from './AddColumnsDialog'
 import { cn } from '@renderer/lib/utils'
 import { useActiveDesign } from '../../designs/store'
 import { dialectInfo } from '../../dialects'
@@ -297,6 +299,7 @@ export function TableForm() {
   const table = useActiveTable()
   const siblings = useDesignTables()
   const addColumn = useDefinitionStore((s) => s.addColumn)
+  const [addColsOpen, setAddColsOpen] = useState(false)
   const reorderColumns = useDefinitionStore((s) => s.reorderColumns)
   const updateTable = useDefinitionStore((s) => s.updateTable)
   const deleteTable = useDefinitionStore((s) => s.deleteTable)
@@ -431,6 +434,16 @@ export function TableForm() {
                   <Pencil />
                   설명 편집
                 </DropdownMenuItem>
+                {/* 뷰에는 안 낸다 — 뷰의 결과 컬럼은 본문 SELECT 가 정한다. */}
+                {!isView && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem data-addcols-open onSelect={() => setTimeout(() => setAddColsOpen(true), 0)}>
+                      <Copy />
+                      다른 테이블에도 넣기
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem data-definition-toggle-view onSelect={() => askToggleView()}>
                   {isView ? <Table2 /> : <Eye />}
@@ -518,6 +531,8 @@ export function TableForm() {
           if (t) setActiveTable(t.id)
         }}
       />
+
+      <AddColumnsDialog open={addColsOpen} onOpenChange={setAddColsOpen} source={table} />
     </div>
   )
 }
