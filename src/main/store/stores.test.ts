@@ -552,6 +552,17 @@ describe('columnSets — 컬럼 묶음 (설계 독립)', () => {
     deleteColumnSet(made.id)
   })
 
+  it('같은 이름은 두 번 저장하지 못한다 — 목록이 이름으로만 서서 둘을 가릴 길이 없다', () => {
+    const made = createColumnSet('겹침-확인', cols)
+    expect(() => createColumnSet('겹침-확인', cols)).toThrow(/이미 있습니다/)
+    // 앞뒤 공백만 다른 것도 같은 이름으로 본다.
+    expect(() => createColumnSet('  겹침-확인  ', cols)).toThrow(/이미 있습니다/)
+    // 지우면 그 이름을 다시 쓸 수 있다.
+    deleteColumnSet(made.id)
+    const again = createColumnSet('겹침-확인', cols)
+    deleteColumnSet(again.id)
+  })
+
   it('빈 이름·빈 목록은 사람이 읽을 수 있는 사유로 거절한다', () => {
     expect(() => createColumnSet('  ', cols)).toThrow(/이름/)
     expect(() => createColumnSet('빈-묶음', [])).toThrow(/컬럼/)

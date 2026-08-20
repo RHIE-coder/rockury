@@ -5,6 +5,7 @@ import {
   type ColumnSetColumn
 } from '../../store/columnSets'
 import { ipcMain } from 'electron'
+import { envelope } from '../envelope'
 import {
   createDesign,
   deleteDesign,
@@ -69,11 +70,13 @@ export function registerStoreIpc(): void {
    * 컬럼 묶음 — 설계에 안 매인다(재활용이 존재 이유). 그래서 `writingRaw` 로 감싸지 않는다:
    * 설계 스코프 알림(어느 설계가 바뀌었나)을 보낼 대상이 없다.
    */
-  ipcMain.handle('columnSets:list', () => listColumnSets())
+  //   **봉투(envelope)로 낸다** — 저장이 거절될 때(같은 이름) 사유를 화면이 그대로 보여야 하는데,
+  //   raw invoke 는 Electron 이 `Error invoking remote method '…': Error: …` 로 감싸 버린다.
+  ipcMain.handle('columnSets:list', () => envelope(() => listColumnSets()))
   ipcMain.handle('columnSets:create', (_event, name: string, columns: ColumnSetColumn[]) =>
-    createColumnSet(name, columns)
+    envelope(() => createColumnSet(name, columns))
   )
-  ipcMain.handle('columnSets:delete', (_event, id: string) => deleteColumnSet(id))
+  ipcMain.handle('columnSets:delete', (_event, id: string) => envelope(() => deleteColumnSet(id)))
 
   // 환경 변수 값 — 목록은 평문을 싣지 않고, 평문은 반영 직전 resolve 로만 나간다.
   ipcMain.handle('envVars:list', (_event, envId: string) => listEnvVariables(envId))

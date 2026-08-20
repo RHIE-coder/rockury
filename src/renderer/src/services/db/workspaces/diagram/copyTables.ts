@@ -1,3 +1,4 @@
+import { copyName } from '../../copyName'
 import { qualifiedName, refTarget, resolveRef, sameTable, type TableRef } from '../../schemaRef'
 import type { Constraint, TableDef } from '../definition/types'
 
@@ -100,14 +101,6 @@ export function relatedClosure(source: readonly TableDef[], picked: readonly str
     }
   }
   return source.filter((t) => chosen.has(t.id)).map((t) => t.id)
-}
-
-/** 겹치지 않는 복사본 이름 — `_copy`, `_copy2`, … 중 아무 데도 안 걸리는 첫 번째. */
-export function copyName(base: string, taken: (name: string) => boolean): string {
-  if (!taken(`${base}_copy`)) return `${base}_copy`
-  let n = 2
-  while (taken(`${base}_copy${n}`)) n++
-  return `${base}_copy${n}`
 }
 
 /** 스키마+이름 한 쌍의 지도 키 — 스키마 없음(`undefined`)과 빈 문자열을 같게 다룬다. */

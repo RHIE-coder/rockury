@@ -1,3 +1,4 @@
+import { copyName } from '../../copyName'
 import type { Column, TableDef } from './types'
 
 /**
@@ -12,8 +13,13 @@ import type { Column, TableDef } from './types'
  *     걸려 있던 PK·FK·인덱스가 통째로 허공을 가리킨다. 그래서 덮는 것은 값뿐이다.
  */
 
-/** 이미 같은 이름이 있을 때 — 손 안 대거나(skip), 값만 갈아끼우거나(overwrite). */
-export type ColumnCollision = 'skip' | 'overwrite'
+/**
+ * 이미 같은 이름이 있을 때 무엇을 하나.
+ *  · `skip`      — 건너뛴다. 있던 컬럼은 손 안 댄다.
+ *  · `overwrite` — 있던 컬럼의 **값만** 간다(id·자리는 그대로 — 걸린 제약이 id 로 매달려 있다).
+ *  · `rename`    — `_copy` 를 붙여 **사본으로 넣는다.** 표 가져오기와 같은 이름 규칙(`copyName`).
+ */
+export type ColumnCollision = 'skip' | 'overwrite' | 'rename'
 
 export interface ColumnCopyInput {
   /** 넣을 컬럼 — 출처 테이블에서 고른 것. */
@@ -36,6 +42,8 @@ export interface ColumnCopyRow {
   overwritten: string[]
   /** 이미 있어서 손 안 댄 컬럼 이름. */
   skipped: string[]
+  /** 이름이 겹쳐 사본으로 들어간 이름(들어간 뒤 이름). */
+  renamed: string[]
 }
 
 export interface ColumnCopyResult {
@@ -64,6 +72,7 @@ export function buildColumnCopy(input: ColumnCopyInput): ColumnCopyResult {
     const added: string[] = []
     const overwritten: string[] = []
     const skipped: string[] = []
+    const renamed: string[] = []
     // 이번 대상에서 자라나는 목록 — 넣을 컬럼 둘이 같은 이름이어도 뒤엣것이 앞엣것과 겹친다.
     let next = [...target.columns]
 
@@ -78,13 +87,20 @@ export function buildColumnCopy(input: ColumnCopyInput): ColumnCopyResult {
         skipped.push(col.name)
         continue
       }
+      if (onCollision === 'rename') {
+        // 이번 배치에서 방금 정해진 이름도 "쓰인 이름"이다 — 사본 둘이 같은 이름을 받으면 안 된다.
+        const name = copyName(col.name, (n) => next.some((c) => c.name === n))
+        next.push({ ...col, id: mintId(), name, drift: undefined })
+        renamed.push(name)
+        continue
+      }
       // id 유지 — 이 컬럼에 걸린 제약이 id 로 매달려 있다.
       next = next.map((c, i) => (i === at ? { ...c, ...valuesOf(col) } : c))
       overwritten.push(col.name)
     }
 
-    rows.push({ tableId: target.id, tableName: target.name, schema: target.schema, added, overwritten, skipped })
-    if (added.length > 0 || overwritten.length > 0) tables.push({ ...target, columns: next })
+    rows.push({ tableId: target.id, tableName: target.name, schema: target.schema, added, overwritten, skipped, renamed })
+    if (added.length > 0 || overwritten.length > 0 || renamed.length > 0) tables.push({ ...target, columns: next })
   }
 
   return { rows, tables }
@@ -94,6 +110,7 @@ export function buildColumnCopy(input: ColumnCopyInput): ColumnCopyResult {
 export function rowSummary(row: ColumnCopyRow): string {
   const parts: string[] = []
   if (row.added.length > 0) parts.push(`+${row.added.join(', ')}`)
+  if (row.renamed.length > 0) parts.push(`사본 ${row.renamed.join(', ')}`)
   if (row.overwritten.length > 0) parts.push(`덮어씀 ${row.overwritten.join(', ')}`)
   if (row.skipped.length > 0) parts.push(`이미 있음 ${row.skipped.join(', ')}`)
   return parts.join(' · ')

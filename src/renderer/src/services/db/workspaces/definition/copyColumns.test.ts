@@ -110,13 +110,51 @@ describe('buildColumnCopy — 여러 컬럼', () => {
 
 describe('rowSummary — 미리보기 한 줄', () => {
   it('한 일만 적는다', () => {
-    expect(rowSummary({ tableId: 't', tableName: 'orders', added: ['a', 'b'], overwritten: [], skipped: [] })).toBe('+a, b')
-    expect(rowSummary({ tableId: 't', tableName: 'orders', added: [], overwritten: ['a'], skipped: ['b'] })).toBe(
+    expect(rowSummary({ tableId: 't', tableName: 'orders', added: ['a', 'b'], overwritten: [], skipped: [], renamed: [] })).toBe('+a, b')
+    expect(rowSummary({ tableId: 't', tableName: 'orders', added: [], overwritten: ['a'], skipped: ['b'], renamed: [] })).toBe(
       '덮어씀 a · 이미 있음 b'
     )
   })
 
   it('아무것도 안 하면 빈 줄', () => {
-    expect(rowSummary({ tableId: 't', tableName: 'orders', added: [], overwritten: [], skipped: [] })).toBe('')
+    expect(rowSummary({ tableId: 't', tableName: 'orders', added: [], overwritten: [], skipped: [], renamed: [] })).toBe('')
+  })
+})
+
+/*
+ * ── 사본 만들기 — 겹칠 때의 세 번째 갈래 (2026-08-20 사용자 요청) ──
+ * 표 가져오기가 쓰는 이름 규칙(`copyName`)을 그대로 쓴다. 두 창이 "이름이 겹칠 때"를
+ * 다르게 굴리면 같은 낱말이 자리마다 다른 뜻이 된다.
+ */
+describe('buildColumnCopy — 사본 만들기', () => {
+  const targets = () => [tbl('orders', [col('o1', 'id'), col('o2', 'created_at', { type: 'TIMESTAMP' })])]
+
+  it('겹치면 `_copy` 를 붙여 새로 넣는다 — 있던 컬럼은 손 안 댄다', () => {
+    const r = run({ columns: [createdAt], targets: targets(), onCollision: 'rename' })
+    expect(r.tables[0].columns.map((c) => c.name)).toEqual(['id', 'created_at', 'created_at_copy'])
+    const kept = r.tables[0].columns.find((c) => c.name === 'created_at')!
+    expect([kept.id, kept.type]).toEqual(['o2', 'TIMESTAMP']) // 원래 것 그대로
+    expect(r.rows[0].renamed).toEqual(['created_at_copy'])
+  })
+
+  it('사본에도 새 id 를 준다', () => {
+    const r = run({ columns: [createdAt], targets: targets(), onCollision: 'rename' })
+    expect(r.tables[0].columns.find((c) => c.name === 'created_at_copy')?.id).toBe('new-1')
+  })
+
+  it('사본 이름까지 겹치면 `_copy2` 로 간다', () => {
+    const t = tbl('orders', [col('o1', 'created_at'), col('o2', 'created_at_copy')])
+    const r = run({ columns: [createdAt], targets: [t], onCollision: 'rename' })
+    expect(r.rows[0].renamed).toEqual(['created_at_copy2'])
+  })
+
+  it('안 겹치는 컬럼은 그냥 들어간다 — 사본 갈래여도 이름을 안 바꾼다', () => {
+    const r = run({ columns: [updatedAt], targets: targets(), onCollision: 'rename' })
+    expect(r.rows[0]).toMatchObject({ added: ['updated_at'], renamed: [] })
+  })
+
+  it('요약에 사본이 적힌다', () => {
+    const r = run({ columns: [createdAt, updatedAt], targets: targets(), onCollision: 'rename' })
+    expect(rowSummary(r.rows[0])).toBe('+updated_at · 사본 created_at_copy')
   })
 })

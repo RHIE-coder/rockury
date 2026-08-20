@@ -53,6 +53,16 @@ export function listColumnSets(): ColumnSetRecord[] {
 export function createColumnSet(name: string, columns: ColumnSetColumn[]): ColumnSetRecord {
   const trimmed = name.trim()
   if (trimmed === '') throw new Error('묶음 이름을 적어 주세요.')
+  /*
+   * 같은 이름을 두 번 저장하지 못하게 한다 — 목록이 이름으로만 서서, 둘이 나란히 있으면
+   * 어느 것이 무엇인지 화면에서 가릴 길이 없다(고르는 순간 결과가 갈리는데도).
+   *
+   * 저장소 UNIQUE 인덱스가 아니라 여기서 막는 이유: 인덱스는 **이미 들어와 있는 중복**이 있으면
+   * 마이그레이션 자체를 실패시킨다. 앱이 안 뜨는 것이 이름이 겹치는 것보다 나쁘다.
+   * 대소문자·공백은 다듬은 뒤 그대로 견준다 — 사람이 적은 대로 남기고, 눈에 같은 것만 막는다.
+   */
+  if (listColumnSets().some((s) => s.name === trimmed))
+    throw new Error(`"${trimmed}" 묶음이 이미 있습니다 — 다른 이름을 쓰거나 있던 것을 지우세요.`)
   const safe = sanitizeColumnSet(columns)
   if (safe.length === 0) throw new Error('묶음에 담을 컬럼이 없습니다.')
   const now = new Date().toISOString()

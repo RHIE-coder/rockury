@@ -55,6 +55,8 @@ export function AddColumnsDialog({
   const [sets, setSets] = useState<ColumnSetRecord[]>([])
   const [setId, setSetId] = useState<string | null>(null)
   const [saveName, setSaveName] = useState('')
+  /** 저장이 거절된 사유 — 안 보이면 눌러도 아무 일도 안 난 것으로 읽힌다. */
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -65,6 +67,7 @@ export function AddColumnsDialog({
     setPasted('')
     setSetId(null)
     setSaveName('')
+    setSaveError(null)
     // 다른 창에서 만든 묶음도 보여야 한다 — 열 때마다 저장소에서 다시 읽는다.
     void window.rockury.columnSets.list().then(setSets)
   }, [open, source.id])
@@ -117,7 +120,7 @@ export function AddColumnsDialog({
   )
   const rowOf = useMemo(() => new Map(preview.rows.map((r) => [r.tableId, r])), [preview])
   const changing = targets.length > 0 && columns.length > 0
-    ? preview.rows.filter((r) => pickedTargets.includes(r.tableId) && (r.added.length > 0 || r.overwritten.length > 0)).length
+    ? preview.rows.filter((r) => pickedTargets.includes(r.tableId) && (r.added.length > 0 || r.overwritten.length > 0 || r.renamed.length > 0)).length
     : 0
 
   const toggle = (list: string[], set: (v: string[]) => void, id: string): void =>
@@ -145,7 +148,14 @@ export function AddColumnsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        {/*
+          두 칸은 **같은 높이**로 선다. 예전엔 안쪽 상자가 저마다 높이를 정해(`max-h`+`min-h`)
+          왼쪽이 컬럼 10줄로 길어지는 동안 오른쪽은 표 3줄에서 끊겨, 밑이 안 맞고 오른쪽만 뭉텅
+          비어 보였다(2026-08-20 화면 피드백: "이거 UI 왜이래?").
+          높이는 **바깥 격자**가 정하고 안쪽은 그 높이를 채운다 — 격자 칸은 기본이 늘어남(stretch)이라
+          짧은 쪽이 긴 쪽에 맞춰진다.
+        */}
+        <div className="mt-4 grid max-h-[38vh] min-h-[11rem] grid-cols-2 gap-3">
           <Section
             title="넣을 컬럼"
             count={pickedCols.length}
@@ -197,7 +207,7 @@ export function AddColumnsDialog({
               </div>
             )}
             {mode === 'set' && (
-              <div className="flex flex-wrap gap-1 border-b border-line p-2">
+              <div className="flex flex-wrap items-center gap-1 border-b border-line p-2">
                 {sets.length === 0 ? (
                   <span className="px-1 py-0.5 text-[11.5px] text-muted">저장해 둔 묶음 없음</span>
                 ) : (
@@ -234,6 +244,22 @@ export function AddColumnsDialog({
                     </span>
                   ))
                 )}
+                {/*
+                  묶음이 **어디에 살고 원본과 어떤 사이인지**를 못박는다. 둘 다 화면 어디에도
+                  안 적혀 있어서 사람이 물어봐야만 알 수 있었다(2026-08-20 사용자:
+                  "테이블이 지워지면 없어지는거야? Design 한정인거야 아니면 전역 데이터인거야?").
+                  라벨 두 줄로 두는 이유: 문장으로 풀면 길어지고, 정작 답인 낱말이 묻힌다.
+                */}
+                <dl className="mt-1 w-full text-[10.5px] leading-relaxed text-muted">
+                  <div className="flex gap-1.5">
+                    <dt className="shrink-0 font-semibold">저장 위치</dt>
+                    <dd>앱 전체 (프로젝트·설계 무관)</dd>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <dt className="shrink-0 font-semibold">원본 반영</dt>
+                    <dd>안 함 (값만 저장)</dd>
+                  </div>
+                </dl>
               </div>
             )}
             {available.length === 0 ? (
@@ -299,8 +325,9 @@ export function AddColumnsDialog({
           <div className="flex overflow-hidden rounded-md border border-line">
             {(
               [
-                ['skip', '그대로 두기'],
-                ['overwrite', '값 덮어쓰기']
+                ['skip', '건너뛰기'],
+                ['overwrite', '값 덮어쓰기'],
+                ['rename', '사본 만들기']
               ] as const
             ).map(([mode, label]) => (
               <button
@@ -318,29 +345,42 @@ export function AddColumnsDialog({
               </button>
             ))}
           </div>
-          {/* 덮어쓸 때만 밝힌다 — 이름·자리는 안 건드리고 값만 간다는 것이 자명하지 않다. */}
+          {/* 고른 갈래가 무엇을 하는지 자명하지 않을 때만 한 줄. 건너뛰기는 낱말이 곧 뜻이라 안 적는다. */}
           {onCollision === 'overwrite' && (
             <span className="min-w-0 truncate text-[11px] text-muted">
               타입·NULL·기본값·설명만 갑니다 (걸린 제약은 그대로)
             </span>
           )}
+          {onCollision === 'rename' && (
+            <span className="min-w-0 truncate text-[11px] text-muted">이름 뒤에 _copy 를 붙여 넣습니다</span>
+          )}
         </div>
 
-        {mode !== 'set' && columns.length > 0 && (
-          <div className="mt-2 flex items-center gap-2">
+        {/*
+          저장 줄은 **늘 보인다.** 예전엔 컬럼을 골라야 나타나서, `묶음` 탭만 열어 본 사람은
+          만드는 길이 없는 것으로 보였다(2026-08-20 사용자: "그니까 묶음 어떻게 만드냐고").
+          고른 것이 없으면 잠긴 채로 서 있다 — 있다는 사실과 언제 켜지는지가 함께 보인다.
+        */}
+        {mode !== 'set' && (
+          <div className="mt-2 flex items-center gap-2 text-[12px] text-fg">
+            <span className="shrink-0 text-muted">묶음으로 저장</span>
             <input
               data-addcols-save-name
               value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              placeholder="고른 컬럼을 묶음으로 저장 (이름)"
-              className="min-w-0 flex-1 rounded border border-line bg-canvas px-2 py-1 text-[12px] text-fg outline-none placeholder:text-muted focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              onChange={(e) => {
+                setSaveName(e.target.value)
+                setSaveError(null)
+              }}
+              disabled={columns.length === 0}
+              placeholder="묶음 이름"
+              className="min-w-0 flex-1 rounded border border-line bg-canvas px-2 py-1 text-[12px] text-fg outline-none placeholder:text-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
             />
             <Button
               type="button"
               variant="ghost"
               size="sm"
               data-addcols-save
-              disabled={saveName.trim() === ''}
+              disabled={columns.length === 0 || saveName.trim() === ''}
               onClick={() => {
                 // 저장은 **id 를 뺀 값**만 — 넣을 때 대상마다 새로 발급하므로 담아 둘 뜻이 없다.
                 const payload = columns.map(({ name, type, nullable, defaultValue, comment }) => ({
@@ -350,15 +390,25 @@ export function AddColumnsDialog({
                   defaultValue,
                   comment
                 }))
-                void window.rockury.columnSets.create(saveName.trim(), payload).then((made) => {
-                  setSets((prev) => [...prev, made].sort((a, b) => a.name.localeCompare(b.name)))
-                  setSaveName('')
-                })
+                void window.rockury.columnSets
+                  .create(saveName.trim(), payload)
+                  .then((made) => {
+                    setSets((prev) => [...prev, made].sort((a, b) => a.name.localeCompare(b.name)))
+                    setSaveName('')
+                    setSaveError(null)
+                  })
+                  // 거절 사유를 그대로 보인다 — 삼키면 눌러도 아무 일 없는 것처럼 보인다.
+                  .catch((e: unknown) => setSaveError(e instanceof Error ? e.message : String(e)))
               }}
             >
               묶음으로 저장
             </Button>
           </div>
+        )}
+        {saveError && (
+          <p data-addcols-save-error className="mt-1 text-[11px] text-danger">
+            {saveError}
+          </p>
         )}
 
         <DialogFooter className="mt-4 items-center">
@@ -391,12 +441,13 @@ function Section({
 }) {
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="mb-1 flex items-center gap-1.5 px-0.5 text-[11px] text-muted">
+      {/* 머리줄 높이를 못박는다 — 한쪽에만 갈래 버튼이 있어 안 맞추면 두 상자의 윗변이 어긋난다. */}
+      <div className="mb-1 flex h-[26px] shrink-0 items-center gap-1.5 px-0.5 text-[11px] text-muted">
         <span>{title}</span>
         {count > 0 && <span className="tabular-nums">{count}</span>}
         {right && <span className="ml-auto">{right}</span>}
       </div>
-      <div className="max-h-[34vh] min-h-[9rem] overflow-auto rounded-lg border border-line">{children}</div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-line">{children}</div>
     </div>
   )
 }

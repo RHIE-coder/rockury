@@ -731,6 +731,25 @@ export async function run(ctx) {
     await page.locator('[data-addcols-open]').first().click()
     await page.waitForSelector('[data-addcols-dialog]', { timeout: 5_000 })
     check('컬럼 뿌리기: 대상에 자기 자신은 없다', (await page.locator('[data-addcols-target="products"]').count()) === 0)
+    /*
+     * 두 칸의 높이 — 2026-08-20 화면 피드백("이거 UI 왜이래?"). 왼쪽이 컬럼 수만큼 길어지는 동안
+     * 오른쪽은 표 몇 줄에서 끊겨 밑이 안 맞았다. 높이는 바깥 격자가 정하고 안쪽이 채운다.
+     */
+    {
+      const box = await page.evaluate(() => {
+        const dlg = document.querySelector('[data-addcols-dialog]')
+        const grid = [...dlg.querySelectorAll('div')].find((d) => d.className.includes('grid-cols-2'))
+        return [...grid.children].map((c) => {
+          const r = c.querySelector('.overflow-auto').getBoundingClientRect()
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom) }
+        })
+      })
+      check(
+        `컬럼 뿌리기: 두 칸의 윗변·밑변이 맞는다 (${box[0].top}~${box[0].bottom} vs ${box[1].top}~${box[1].bottom})`,
+        box.length === 2 && box[0].top === box[1].top && box[0].bottom === box[1].bottom
+      )
+    }
+
     await page.locator('[data-addcols-col="sku"]').first().click()
     await page.locator('[data-addcols-target="users"]').first().click()
     await page.waitForTimeout(400)
@@ -756,6 +775,12 @@ export async function run(ctx) {
     await click('[data-addcols-collision="overwrite"]')
     await page.waitForTimeout(400)
     check('컬럼 뿌리기: 덮어쓰기로 바꾸면 "덮어씀"', (await page.locator('[data-addcols-summary="덮어씀 sku"]').count()) === 1)
+    // 세 번째 갈래 — 사본 만들기. 겹치면 `_copy` 를 붙여 새로 넣고, 있던 컬럼은 손 안 댄다.
+    await click('[data-addcols-collision="rename"]')
+    await page.waitForTimeout(400)
+    check('컬럼 뿌리기: 사본 만들기로 바꾸면 "사본"으로 뜬다', (await page.locator('[data-addcols-summary="사본 sku_copy"]').count()) === 1)
+    check('컬럼 뿌리기: 사본만 생겨도 넣기가 열린다', !(await page.locator('[data-addcols-submit]').first().isDisabled()))
+
     await page.keyboard.press('Escape')
     await page.waitForTimeout(300)
 
@@ -808,6 +833,16 @@ export async function run(ctx) {
     await page.waitForTimeout(200)
     await page.locator('[data-addcols-save]').click()
     await page.waitForTimeout(800)
+    // 같은 이름은 두 번 저장 안 된다 — 목록이 이름으로만 서서 둘을 가릴 길이 없다.
+    await page.locator('[data-addcols-save-name]').fill('감사-묶음')
+    await page.waitForTimeout(200)
+    await page.locator('[data-addcols-save]').click()
+    await page.waitForTimeout(700)
+    const dupMsg = await page.evaluate(
+      () => document.querySelector('[data-addcols-save-error]')?.textContent?.trim() ?? ''
+    )
+    check(`묶음: 같은 이름이면 사유가 뜬다 (${dupMsg.slice(0, 40)})`, dupMsg.includes('이미 있습니다'))
+
     await click('[data-addcols-mode="set"]')
     await page.waitForTimeout(400)
     check('묶음: 저장한 것이 목록에 뜬다', (await page.locator('[data-addcols-set="감사-묶음"]').count()) === 1)

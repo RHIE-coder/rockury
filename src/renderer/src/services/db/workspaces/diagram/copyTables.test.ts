@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Column, Constraint, TableDef } from '../definition/types'
-import { buildCopy, copyName, relatedClosure, type CopyInput } from './copyTables'
+import { copyName } from '../../copyName'
+import { buildCopy, relatedClosure, type CopyInput } from './copyTables'
 
 const col = (t: string, n: string): Column => ({
   id: `${t}.${n}`,

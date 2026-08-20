@@ -139,10 +139,11 @@ export const dbApi = {
   },
   /** 컬럼 묶음 — 여러 표에 되풀이해 넣는 컬럼 세트. 설계에 안 매인다. */
   columnSets: {
-    list: (): Promise<ColumnSetRecord[]> => ipcRenderer.invoke('columnSets:list'),
+    list: (): Promise<ColumnSetRecord[]> => unwrap(ipcRenderer.invoke('columnSets:list')),
+    // 봉투를 벗겨 **사유 그대로** throw 한다 — 화면이 그 문장을 그대로 보인다.
     create: (name: string, columns: ColumnSetColumn[]): Promise<ColumnSetRecord> =>
-      ipcRenderer.invoke('columnSets:create', name, columns),
-    delete: (id: string): Promise<void> => ipcRenderer.invoke('columnSets:delete', id)
+      unwrap(ipcRenderer.invoke('columnSets:create', name, columns)),
+    delete: (id: string): Promise<void> => unwrap(ipcRenderer.invoke('columnSets:delete', id))
   },
   seedSets: {
     list: (): Promise<SeedSetRecord[]> => ipcRenderer.invoke('seedSets:list'),
