@@ -5,7 +5,7 @@ import { useApiStore } from '../store'
 import { useContractStore, useContractSync } from './store'
 
 /**
- * Contract › Logs — `docs/spec/api-contract.md` § logs.
+ * Contract › Logs
  *
  * 판정과 흡수를 **한 타임라인**에 둔다: "왜 이 필드가 명세에 있지"를 되짚으려면
  * 언제 판정했고 언제 받아들였나가 나란히 보여야 한다. 이력은 고쳐지지 않는다.

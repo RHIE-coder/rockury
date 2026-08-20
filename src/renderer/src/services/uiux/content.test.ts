@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { EMPTY_CONTENT, parseContent, serializeContent } from './content'
 import type { SurfaceContent } from './types'
 
-/** 정의: `docs/qa/uiux-ia.md` S4 (CASE-uiux-030~033) · 명세: `docs/spec/uiux-ia.md` §7 INV-3. */
 describe('화면 내용 읽기 — 어떤 입력에도 던지지 않는다 (INV-3)', () => {
   it('CASE-uiux-030 빈 값·깨진 JSON·객체가 아닌 것은 빈 내용으로', () => {
     for (const bad of ['', null, undefined, '{', 'null', '[]', '"문자열"', '42']) {

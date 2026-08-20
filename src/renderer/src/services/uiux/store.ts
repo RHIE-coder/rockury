@@ -19,7 +19,7 @@ export type SpecNoteRow = Awaited<ReturnType<Api['listNotes']>>[number]
 export type SpecVersionRow = Awaited<ReturnType<Api['listVersions']>>[number]
 
 /**
- * UI/UX 설계 상태 — 명세 정본 `docs/spec/uiux-ia.md` §7.
+ * UI/UX 설계 상태
  *
  * 위계(프로젝트·앱·서비스·화면)는 저장소가 정본이고 여기는 그 사본이다. 편집은 **낙관적 반영이
  * 아니라 저장 후 반영**이다 — 주소 유일성 같은 규칙을 저장소가 최종 판정하므로, 먼저 화면에

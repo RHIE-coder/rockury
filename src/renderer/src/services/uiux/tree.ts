@@ -1,7 +1,7 @@
 import type { NavKind, SpecComponent, SpecSection, SurfaceContent, SurfaceEvent } from './types'
 
 /**
- * 화면 안 트리 조작 — 명세 정본 `docs/spec/uiux-ia.md` §6(구조가 데이터, 조작은 캔버스).
+ * 화면 안 트리 조작 — 구조가 데이터, 조작은 캔버스.
  *
  * **Spec 뷰와 Canvas 가 같이 쓰는 층이다.** 드래그로 옮기든 폼으로 고치든 결국 여기를 부른다 —
  * 편집 규칙이 화면마다 흩어지면 한쪽에서만 되는 조작이 생기고, 그때부터 두 화면이 서로 다른

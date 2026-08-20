@@ -7,7 +7,7 @@ import { diffSnapshots, takeSnapshot, type ChangeKind, type Snapshot } from '../
 import { useActiveProject, useSpecStore, useTree } from '../store'
 
 /**
- * Versions — 설계 스냅샷과 비교. 명세 정본 `docs/spec/uiux-ia.md` Surface `uiux.versions`.
+ * Versions — 설계 스냅샷과 비교.
  *
  * 컷은 **사람의 판단**이다("여기까지가 한 덩어리") — 그래서 에이전트에게 열지 않는다.
  * 비교는 **화면 단위**로 본다: 요소 하나까지 훑어 내려가면 "무엇이 바뀌었나"가 아니라

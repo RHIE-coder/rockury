@@ -8,7 +8,6 @@ import { useActiveProject, useSpecStore, useTree } from '../store'
 
 /**
  * Rules — 값 제약·검증·활성 조건을 **사람 말로** 모아 본다.
- * 명세 정본 `docs/spec/uiux-ia.md` Surface `uiux.rules`.
  *
  * 규칙은 요소에 붙어 있고(구조화 데이터), 여기는 그것을 프로젝트 전체에서 모아 읽는 렌즈다 —
  * 흐름(Flows)이 이벤트를 모아 보는 것과 같은 자리.

@@ -2,7 +2,7 @@ import type { Positions } from './layout'
 
 /**
  * 다이어그램 그룹(레이어)의 순수 계산 — 세 ERD 캔버스(Design 가상 · Remote 읽기 · Remote 편집)
- * 공용. 정본: `docs/spec/db-remote.md` §db-remote.diagram.group.
+ * 공용.
  *
  * 핵심 결정: **소속은 명시 멤버십으로 든다.** 노드 좌표가 어느 영역 안인지로 소속을 "추정"하면
  * `자동 배치` 한 번에 묶음이 통째로 흩어진다. 영역 안으로 끌어다 놓는 동작은 멤버십을 **갱신**할 뿐,

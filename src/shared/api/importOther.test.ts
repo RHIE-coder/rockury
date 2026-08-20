@@ -3,7 +3,7 @@ import { importProto } from './importProto'
 import { importGraphql } from './importGraphql'
 import { ImportError } from './importOpenapi'
 
-/** proto·GraphQL 가져오기 — `docs/qa/api-studio.md` CASE-apistudio-021·022·023. */
+/** proto·GraphQL 가져오기 — CASE-apistudio-021·022·023. */
 
 const PROTO = `
 syntax = "proto3";

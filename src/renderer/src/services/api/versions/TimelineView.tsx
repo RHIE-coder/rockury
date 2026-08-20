@@ -18,7 +18,7 @@ import { cutImpact, suggestNextNumber, useVersionsStore, useVersionsSync } from 
 import type { VersionRecord } from '../../../../../preload/services/api'
 
 /**
- * Versions › Timeline — `docs/spec/api-studio.md` § versions.timeline.
+ * Versions › Timeline
  *
  * 컷은 **사람만** 한다(MCP 에 컷 도구가 없다). 그리고 깨지는 변경이 있으면 승인 게이트를
  * 지난다 — 무엇이 왜 깨지는지 항목별로 보이고, 안 보고 지나칠 수 없게 한다.

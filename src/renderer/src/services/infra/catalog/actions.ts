@@ -2,7 +2,6 @@ import type { ActionDef, ProbeCall } from './types'
 
 /**
  * 액션 버튼의 **순수 계산** — 인자 검사 · 잠금 판정 · 치환값 만들기 · 명령 미리보기.
- * 명세: `docs/spec/infra-catalog.md` §actions.
  *
  * 왜 버튼인가(D9): 노드에 "접근"하는 일의 대부분은 정해진 명령 한 줄이다. 터미널을 붙이면
  * 네이티브 모듈(PTY)이 필요하고 프로젝트 규칙과 부딪힌다. 그리고 Supabase·Vercel·Cloudflare 처럼

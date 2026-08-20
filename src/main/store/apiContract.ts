@@ -5,7 +5,7 @@ import type { DriftGrade, DriftResult } from '../../shared/api/drift'
 import type { AbsorbChange } from '../../shared/api/absorb'
 
 /**
- * 판정·흡수 이력 — `docs/spec/api-contract.md` § logs.
+ * 판정·흡수 이력
  *
  * 판정과 흡수를 **한 타임라인**에 둔다: "왜 이 필드가 명세에 있지"를 되짚으려면
  * "언제 판정했고 언제 받아들였나"가 나란히 보여야 한다.

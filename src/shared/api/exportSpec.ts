@@ -1,7 +1,7 @@
 import type { FieldDef, InterfaceKind, SpecDef } from './types'
 
 /**
- * 내보내기 — `docs/spec/api-studio.md` § requests.export.
+ * 내보내기
  *
  * **불변식 ⑥: 환경 값이 실리지 않는다.** 구조적으로 그렇다 — `SpecDef` 는 값을 들지 않고
  * `{{이름}}` 참조만 든다. 그래서 내보낸 파일을 git 에 올려도 키가 박히지 않는다.

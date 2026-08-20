@@ -5,7 +5,7 @@ import { escapeHtml, renderTemplate } from './template'
 import { tokenCss, type TokenMap } from './tokens'
 
 /**
- * 화면 구조 → 실제 화면 — 명세 정본 `docs/spec/uiux-ia.md` §6.
+ * 화면 구조 → 실제 화면
  *
  * 조각마다 `<style>` 을 그대로 붙이면 클래스 이름이 겹쳐 서로를 덮는다(여러 조각이 `.c`·`.f` 를
  * 쓴다). 그렇다고 인스턴스마다 그림자 뿌리를 하나씩 만들면 화면 하나에 수십 개가 생긴다.

@@ -23,7 +23,7 @@ import { ConnectionError } from './ConnectionError'
  * Remote › Diagram(운영부 · depth 3, §ops-plan 2e) — 실 DB 를 역설계(introspection)한 ERD.
  * Object 뷰와 같은 `TableDef[]`(useRemoteStore)를 소비하되 그래프로 렌더.
  * 배치·그룹은 **연결(Connection)별**로 영속하고, 화면·캔버스·상세 서랍은 Design ERD 와 같은
- * 공용 표면(`DiagramSurface`)을 쓴다. 정본: `docs/spec/db-remote.md` §db-remote.diagram.
+ * 공용 표면(`DiagramSurface`)을 쓴다.
  */
 export function DiagramView() {
   const conn = useActiveConnection()

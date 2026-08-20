@@ -1,7 +1,7 @@
 import type { RequestDef } from './types'
 
 /**
- * 요청 트리 — `docs/spec/api-studio.md` § requests.tree.
+ * 요청 트리
  *
  * `RequestDef.folder` 는 `결제/환불` 처럼 슬래시로 이은 한 줄이다. 폴더를 엔티티로 두지
  * 않는 이유: 빈 폴더라는 상태가 생기면 "요청은 없는데 폴더만 있는" 것을 저장·정리·동기화해야

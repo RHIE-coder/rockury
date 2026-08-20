@@ -2,7 +2,6 @@ import { getDb } from './db'
 
 /**
  * 시드 세트 저장 (IPC 경계 형태) — 설계가 정의하는 기준 데이터(roles·permissions 류).
- * 정본 명세: `docs/spec/db-design.md` Section `db-design.seed.persistence`.
  *
  * 문서형 저장: 선언(자연키·무시 컬럼)과 행은 JSON 블롭으로 둔다 — `tables` 와 같은 방식.
  * 컬럼을 이름으로 가리키므로 스키마 컬럼 id 와 조인할 필요가 없다(실 DB 에선 이름이 정체성).

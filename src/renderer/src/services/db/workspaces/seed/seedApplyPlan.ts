@@ -7,7 +7,7 @@ import { seedApplyReadiness } from './seedSet'
 import type { SeedRow, SeedSet } from './types'
 
 /**
- * **설계 → 운영 반영 계획**(순수) — 정본 `docs/spec/db-design.md` Section `db-design.seed.apply-contract`.
+ * **설계 → 운영 반영 계획**(순수).
  *
  * 실 DB 를 건드리지 않는다. 지금 실 DB 에 있는 행 목록을 입력으로 받아, 무엇을 넣고 고치고
  * 지울 후보로 볼지 **문장 목록**으로 계산한다. 실행(트랜잭션 게이트)은 이 계획을 그대로 태운다.

@@ -5,7 +5,6 @@ import type { Verdict } from './types'
 
 /**
  * 대조 결과를 **설계 다이어그램 위에 겹쳐 보이기** 위한 순수 계산.
- * 명세: `docs/spec/infra-architecture.md` §reconcile.result AC-3 · §reconcile.bootstrap AC-2.
  *
  * 표(대조 뷰)와 그림(설계 뷰)이 **같은 계산을 본다.** 그림 쪽에서 판정을 다시 계산하면
  * 두 화면이 서로 다른 답을 말할 수 있고, 그러면 사용자는 어느 쪽을 믿어야 할지 모른다.

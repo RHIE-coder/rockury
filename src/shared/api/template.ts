@@ -9,7 +9,7 @@ import type { Scope } from './resolve'
 import type { ValueOrigin } from './types'
 
 /**
- * 템플릿 치환 — `docs/spec/api-studio.md` § requests.template.
+ * 템플릿 치환
  *
  * `{{이름}}` 은 값 참조, `{{함수(...)}}` 는 내장 함수 호출이다. 사용자 코드는 실행하지 않으므로
  * 여기서 도는 것은 전부 우리가 목록으로 가진 순수 함수뿐이다(불변식 ⑤).

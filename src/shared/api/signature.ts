@@ -1,7 +1,7 @@
 import type { ParamDef } from './types'
 
 /**
- * 파라미터 시그니처 — `docs/spec/api-studio.md` § requests.signature.
+ * 파라미터 시그니처
  *
  * **요청은 함수다.** 이 시그니처가 실행 화면의 입력칸을 만들고, 그대로 MCP 응답에 실려
  * AI 가 구현할 때 읽는 문서가 된다(spec §6-J). 그래서 검증도 화면이 아니라 여기 한 곳에

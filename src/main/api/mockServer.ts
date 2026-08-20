@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http'
 import { suggestPort } from '../../shared/api/inbox'
 
 /**
- * 모의(가짜) 서버 — `docs/spec/api-studio.md` § mocking.server.
+ * 모의(가짜) 서버
  *
  * Inbox 수신 서버와 같은 규율을 그대로 쓴다:
  *   · **`127.0.0.1` 에만 바인딩**한다(호스트를 바꿀 손잡이가 없다)

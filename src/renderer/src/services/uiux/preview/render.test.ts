@@ -7,7 +7,6 @@ import { DEFAULT_TOKENS, tokenVarName, VIEWPORT_WIDTH } from './tokens'
 import { renderTemplate } from './template'
 import type { SurfaceContent } from '../types'
 
-/** 정의: `docs/qa/uiux-ia.md` S8 (CASE-uiux-070~077) · 명세: `docs/spec/uiux-ia.md` §6. */
 
 describe('토큰이 렌더를 지배한다', () => {
   it('CASE-uiux-070 고르기 목록의 모든 종류에 조각이 있다 (빈칸이면 대체 조각으로 떨어진다)', () => {

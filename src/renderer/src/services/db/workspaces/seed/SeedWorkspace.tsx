@@ -51,7 +51,7 @@ import {
 } from './types'
 
 /**
- * Design › Seed — 기준 데이터(시드) 저작 화면. 정본: `docs/spec/db-design.md` Surface `db-design.seed`.
+ * Design › Seed — 기준 데이터(시드) 저작 화면.
  * 실 DB 를 건드리지 않는다 — 저장은 로컬 설계 저장소뿐(Design 공통 불변식).
  */
 

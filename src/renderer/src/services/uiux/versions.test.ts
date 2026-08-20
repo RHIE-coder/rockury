@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { diffSnapshots, nextVersionNumber, takeSnapshot, type Snapshot } from './versions'
 import type { SpecTree } from './store'
 
-/** 정의: `docs/qa/uiux-ia.md` S15 (CASE-uiux-130~134) · 명세: `docs/spec/uiux-ia.md` `uiux.versions`. */
+/** CASE-uiux-130~134 · `uiux.versions`. */
 
 const snap = (
   surfaces: { key: string; name?: string; kind?: string; status?: string; content?: string }[]

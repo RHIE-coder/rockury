@@ -1,7 +1,7 @@
 import type { FieldDef, FieldType, InteractionShape } from './types'
 
 /**
- * proto 서술자 → 우리 응답 모양 — `docs/spec/api-contract.md` § drift.complete.
+ * proto 서술자 → 우리 응답 모양
  *
  * gRPC 는 서버가 자기 스키마를 **표준으로** 뱉는다(reflection = 서버에게 "네 정의를 내놔"라고
  * 물어보는 표준 기능). 그래서 완전 판정 대상인데, 뱉는 것이 protobuf 자체 형식이라 우리

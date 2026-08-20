@@ -15,7 +15,6 @@ import {
 } from './tree'
 import type { SurfaceContent } from './types'
 
-/** 정의: `docs/qa/uiux-ia.md` S5 (CASE-uiux-040~047) · 명세: `docs/spec/uiux-ia.md` §6. */
 
 /** 두 섹션 · 컴포넌트 3개짜리 표본. */
 const sample = (): SurfaceContent => ({

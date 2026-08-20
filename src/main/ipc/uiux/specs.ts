@@ -24,7 +24,7 @@ import type { UiuxChangedEvent } from '../../ai/uiuxTools'
 import { notifyPeersOn } from '../peers'
 
 /**
- * UI/UX 설계 저장소 IPC — 명세 정본 `docs/spec/uiux-ia.md` §7.
+ * UI/UX 설계 저장소 IPC
  *
  * 층(Project·Application·Service·Surface)마다 채널을 따로 두지 않고 `level` 인자로 가른다 —
  * 층이 넷인데 CRUD 를 각각 열면 채널이 12개가 되고, 규칙(주소 유일성·연쇄 삭제)이 흩어진다.

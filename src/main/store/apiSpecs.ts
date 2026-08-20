@@ -3,7 +3,7 @@ import { INTERFACE_KINDS, interfaceMeta, type InterfaceKind, type RequestDef, ty
 import { validateParamDefs } from '../../shared/api/signature'
 
 /**
- * API 명세 저장소 — `docs/spec/api-service.md` §2.
+ * API 명세 저장소
  *
  * **명세의 데이터 규칙은 여기 한 곳에서 강제한다.** 화면·IPC·MCP 세 진입 경로가 있는데
  * 규칙이 화면에 있으면 나머지 둘이 그냥 우회한다(steward build 규율).

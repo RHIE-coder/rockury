@@ -18,7 +18,7 @@ import {
 } from '../store/uiuxSpecs'
 
 /**
- * UI/UX 서비스의 MCP 도구 — 명세 정본 `docs/spec/uiux-ia.md` §1·§8.
+ * UI/UX 서비스의 MCP 도구
  *
  * 도구를 `tools.ts` 에 직접 쓰지 않고 이 파일로 뺀 이유는 병렬 개발이다 — 다섯 서비스가 같은
  * 배열에 줄을 더하면 매번 충돌한다. `tools.ts` 는 이 배열을 펼쳐 넣기만 한다(두 줄).

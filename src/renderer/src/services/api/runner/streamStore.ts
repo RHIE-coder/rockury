@@ -4,7 +4,7 @@ import type { StreamTransport } from '@shared/api/stream'
 import { ipcErrorText } from '../errorText'
 
 /**
- * 스트림 세션 스토어 — `docs/spec/api-runner.md` § stream.session.
+ * 스트림 세션 스토어
  *
  * **세션은 여기 안 산다.** 소켓은 메인 프로세스가 들고 있고 이 스토어는 그 그림자다 —
  * 화면을 나갔다 와도 세션이 안 끊기는 것이 그 덕이다. 여기서 하는 일은 밀려오는 이벤트를

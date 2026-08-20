@@ -5,7 +5,7 @@ import { blockingIssues, renderTemplate, type UsedRef } from './template'
 import { interfaceMeta, type EnvironmentDef, type InterfaceKind, type RequestDef } from './types'
 
 /**
- * 요청 조립 — `docs/spec/api-runner.md` § send.compose.
+ * 요청 조립
  *
  * 여기서 세 가지가 한꺼번에 결정된다:
  *   ① 최종 요청(주소·헤더·본문)      ② **값마다 어디서 왔는지**      ③ 보낼 수 있는가

@@ -5,7 +5,7 @@ import { addColumnIfMissing, type ServiceMigration } from './types'
  * Infra 서비스의 로컬 저장소 스키마.
  *
  * 담는 것은 **설계본과 카탈로그**다 — Rockury 는 인프라를 구축하지 않고, 설계를 들고 있다가
- * 실물과 대조만 한다(`docs/spec/infra-architecture.md` 공통 불변식).
+ * 실물과 대조만 한다(공통 불변식).
  * 실물 스냅샷(M2)·미들웨어(M5) 테이블은 그 마일스톤에서 여기에 더한다.
  *
  * 모든 이름은 `infra_` 접두어 — 서비스끼리 겹치면 앱이 안 켜진다(네임스페이스 규칙).

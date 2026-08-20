@@ -38,7 +38,6 @@ export interface DiagramLayoutApi {
 
 /**
  * ERD 배치·그룹의 로드/저장(세 캔버스 공용). 스코프 키는 Remote = 연결 id, Design = `design:<설계 id>`.
- * 정본: `docs/spec/db-remote.md` §db-remote.diagram.layout / .group.
  *
  * 저장은 **부분 갱신**이다 — 캔버스는 위치·뷰포트만, 패널은 그룹만 넘긴다.
  * 메인 저장소가 안 넘어온 항목을 그대로 두므로 서로의 저장을 지우지 않는다.

@@ -11,7 +11,7 @@ export const meta = {
 export async function run(ctx) {
   const { check, click, body } = ctx
   let page = ctx.page
-  // ── Design › Seed — 시드 세트 저작(선언 → 행 → 변수). CASE-design-040~044 (docs/qa/db-design.md) ──
+ // ── Design › Seed — 시드 세트 저작(선언 → 행 → 변수). CASE-design-040~044 ──
   {
     await click('button:has-text("Seed")')
     await page.waitForSelector('text=아직 시드 세트가 없어요', { timeout: 8_000 })

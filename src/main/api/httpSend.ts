@@ -1,7 +1,7 @@
 import type { RunStatus } from '../../shared/api/types'
 
 /**
- * 실제 전송 — `docs/spec/api-runner.md` § send.execute.
+ * 실제 전송
  *
  * Node 내장 `fetch` 만 쓴다(의존성 추가 없음 — 그건 `main` 몫).
  * 이 파일의 알맹이는 전송 자체가 아니라 **실패를 갈래로 나누는 것**이다.

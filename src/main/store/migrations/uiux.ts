@@ -3,7 +3,7 @@ import type { ServiceMigration } from './types'
 import { promoteProjectsToShared } from './promoteProjects'
 
 /**
- * UI/UX 서비스의 로컬 저장소 스키마 — 명세 정본 `docs/spec/uiux-ia.md` §7.
+ * UI/UX 서비스의 로컬 저장소 스키마
  *
  * 설계 대상의 위계는 6층(Project > Application > Service > Surface > Section > Component)인데
  * **행으로 두는 건 위 네 층뿐**이다. 화면 안(Section·Component)은 트리라서 관계로 펴면 조인

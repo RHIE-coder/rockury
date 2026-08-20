@@ -11,7 +11,7 @@ import { useOpsStore, useOpsSync } from './store'
 import { useApiStore } from '../store'
 
 /**
- * Environments — `docs/spec/api-runner.md` § environments.
+ * Environments
  *
  * 여기 있는 값은 **환경 값**이다: 환경마다 다르고 호출마다 같다(base URL·키).
  * 호출마다 달라지는 값은 여기가 아니라 요청의 **호출 파라미터** 쪽이다 — 이 갈래가

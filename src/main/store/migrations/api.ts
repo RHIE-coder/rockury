@@ -1,7 +1,7 @@
 import { addColumnIfMissing, type ServiceMigration } from './types'
 
 /**
- * API 서비스의 로컬 저장소 스키마 — `docs/spec/api-service.md` §2 도메인 모델.
+ * API 서비스의 로컬 저장소 스키마 — 도메인 모델.
  *
  * 이름은 전부 `api_` 접두어다(AGENTS.md 네임스페이스 규칙 — 두 서비스가 같은 테이블을
  * 선언하면 앱이 안 켜진다). 다른 서비스 파일이나 `store/db.ts` 는 건드리지 않는다.

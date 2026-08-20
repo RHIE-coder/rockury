@@ -3,7 +3,7 @@ import { INTROSPECTION_QUERY, IntrospectionError, parseIntrospection } from '../
 import type { ServerSchema, UnavailableReason } from '../../shared/api/drift'
 
 /**
- * 서버에게 스키마를 물어본다 — `docs/spec/api-contract.md` § drift.complete.
+ * 서버에게 스키마를 물어본다
  *
  * 실패를 **갈래로 나누는 것**이 이 파일의 알맹이다. "완전 판정 못 했다"를 뭉뚱그리면
  * 사용자는 서버 설정을 봐야 할지, 권한을 봐야 할지, 주소를 봐야 할지 모른다.

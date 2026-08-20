@@ -18,7 +18,7 @@ import { ImportTablesDialog } from './ImportTablesDialog'
  * Design › Diagram(설계부 · depth 3) — 활성 설계의 **가상 ERD 편집기**.
  * 표시는 useScopedDesignTables(Draft/커밋 렌즈 + 스키마 범위), 편집은 useDefinitionStore 액션(저장은 자동 write-through).
  * 관계는 컬럼 핸들을 끌어 생성. 배치·그룹·상세 서랍은 Remote ERD 와 **같은 공용 표면**을 쓰고,
- * 저장 스코프만 설계별(`design:<id>`)이다. 정본: `docs/spec/db-design.md` §db-design.diagram.scope.
+ * 저장 스코프만 설계별(`design:<id>`)이다.
  */
 export function DesignDiagramWorkspace() {
   const design = useActiveDesign()

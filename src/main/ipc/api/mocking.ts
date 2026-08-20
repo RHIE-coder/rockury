@@ -66,7 +66,7 @@ function status(): MockStatus {
 }
 
 /**
- * 모의 서버 IPC — `docs/spec/api-studio.md` § mocking.server.
+ * 모의 서버 IPC
  *
  * 이 서비스의 한 문장이 여기서 특히 세게 걸린다 — **모르는 것을 안다고 말하지 않는다.**
  * 선언이 없으면 그럴듯한 JSON 을 지어내지 않고 **501 과 사유**를 준다. 지어내 주면

@@ -93,7 +93,7 @@ function status(): InboxStatus {
 }
 
 /**
- * 웹훅 수신 IPC — `docs/spec/api-runner.md` § inbox.
+ * 웹훅 수신 IPC
  *
  * 4모양 중 방향이 반대인 하나다. 그래서 관문도 반대다:
  *   · 보낼 수 있나를 안 묻는다 — 대신 **들어온 것이 선언한 모양과 맞나**를 묻는다

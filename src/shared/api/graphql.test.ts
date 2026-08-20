@@ -4,7 +4,7 @@ import { driftFromSchema } from './drift'
 import type { SpecDef } from './types'
 
 /**
- * GraphQL 완전 판정 — `docs/qa/api-contract.md` S1 (CASE-apicontract-001·005).
+ * GraphQL 완전 판정 — CASE-apicontract-001·005.
  * 서버가 표준으로 뱉은 스키마라 필수여부가 `모름` 이 아니다 — 이게 "완전"의 뜻이다.
  */
 

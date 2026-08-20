@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PATCH_OP_NAMES, applyPatch, type PatchOp } from './patch'
 import type { SpecDef } from './types'
 
-/** 명세 부분 수정 — `docs/qa/api-mcp.md` S4 (CASE-apimcp-033~035, 037). */
+/** 명세 부분 수정 — CASE-apimcp-033~035, 037. */
 
 const base = (): SpecDef => ({
   id: 's1',

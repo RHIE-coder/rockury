@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { collectRules, describeRule, hasRule } from './rules'
 import type { SurfaceContent } from './types'
 
-/** 정의: `docs/qa/uiux-ia.md` S14 (CASE-uiux-120~123) · 명세: `docs/spec/uiux-ia.md` `uiux.rules`. */
+/** CASE-uiux-120~123 · `uiux.rules`. */
 
 describe('규칙을 사람 말로', () => {
   it('CASE-uiux-120 값 제약을 문장으로', () => {

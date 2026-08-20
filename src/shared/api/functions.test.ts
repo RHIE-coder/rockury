@@ -3,7 +3,7 @@ import { BUILTIN_FUNCTIONS, callFunction, suggestFunction } from './functions'
 import { nodeFunctionEnv } from './nodeFunctionEnv'
 
 /**
- * 내장 함수 정본 검증 — `docs/qa/api-studio.md` S2 (CASE-apistudio-015~019, 01A).
+ * 내장 함수 정본 검증 — CASE-apistudio-015~019, 01A.
  * 값 가공은 이 목록으로만 한다(불변식 ⑤) — 그래서 목록 전체가 테스트로 덮여야 한다.
  */
 

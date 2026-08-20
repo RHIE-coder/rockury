@@ -44,7 +44,7 @@ import { rendererFunctionEnv, useActiveEnvironment, useOpsStore, useOpsSync } fr
 import { useStreamStore } from './streamStore'
 
 /**
- * Runner › Stream — `docs/spec/api-runner.md` § stream.session.
+ * Runner › Stream
  *
  * 단발(Send)과 가르는 것은 프로토콜이 아니라 **상호작용 모양**이다. 여기 사는 것은
  * 응답이 계속 오는 것(서버 스트리밍)과 내가 계속 보내는 것(양방향) 둘뿐이다.

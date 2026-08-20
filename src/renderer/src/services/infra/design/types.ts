@@ -2,7 +2,6 @@ import type { NodeDoc } from '../catalog/types'
 
 /**
  * 설계본 데이터 모델 — **Rockury 가 들고 있는 정본.** 실물은 이것과 대조되는 대상일 뿐이다.
- * 명세: `docs/spec/infra-architecture.md` §design.data.
  */
 
 export interface Design {

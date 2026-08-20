@@ -3,7 +3,6 @@
  *
  * 파일 입출력·화면과 분리해 둔다. 메인(만들기·다시 만들기)과 렌더러(버튼 라벨)가 같은 규칙을
  * 봐야 하는데, 규칙이 양쪽에 흩어지면 "버튼은 만들기라는데 눌러도 아무 일이 없는" 어긋남이 난다.
- * 정본: `docs/spec/db-connections.md` › Surface db-connections.sample.
  */
 
 /** userData 아래 샘플이 놓이는 자리. 경로 조립은 userData 를 아는 메인이 한다. */

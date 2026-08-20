@@ -11,7 +11,7 @@ import type { GrpcTarget } from '../../shared/api/grpcTarget'
 import type { UnavailableReason } from '../../shared/api/drift'
 
 /**
- * 서버에게 자기 정의를 물어본다(gRPC reflection) — `docs/spec/api-contract.md` § drift.complete.
+ * 서버에게 자기 정의를 물어본다(gRPC reflection)
  *
  * GraphQL 쪽 `introspect.ts` 와 같은 규율이다: **실패를 갈래로 나누고**, 어떤 경우에도
  * 관측 판정으로 조용히 내려가지 않는다. "완전 판정 못 했다"를 뭉뚱그리면 사용자는

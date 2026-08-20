@@ -2,7 +2,7 @@ import type { FieldDef, FieldType } from './types'
 import type { ServerSchema } from './drift'
 
 /**
- * GraphQL introspection — `docs/spec/api-contract.md` § drift.complete.
+ * GraphQL introspection
  *
  * GraphQL 이 완전 판정 대상인 이유는 여기 있다: **서버가 자기 스키마를 표준 질의 하나로
  * 통째로 뱉는다.** 스키마에서 서버를 만드는 방식이라 도로 뱉을 수 있고, 손으로 라우트를

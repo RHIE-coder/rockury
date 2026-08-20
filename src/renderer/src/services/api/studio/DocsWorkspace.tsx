@@ -216,7 +216,7 @@ type DocsTarget = 'spec' | 'request'
 const TARGET_LABEL: Record<DocsTarget, string> = { spec: '명세', request: '요청' }
 
 /**
- * Studio › Docs — `docs/spec/api-studio.md` § docs.
+ * Studio › Docs
  *
  * 핵심은 **가르는 것**이다. 자동 생성분(정의에서 나온 것)은 편집이 막혀 있고, 사람은
  * 정의에서 나올 수 없는 것만 쓴다. 손으로 쓴 파라미터 표는 반드시 썩는다 — 정의가 바뀔 때

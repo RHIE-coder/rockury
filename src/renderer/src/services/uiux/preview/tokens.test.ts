@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_TOKENS, diffTokens, mergeTokens, tokenGroup, tokenVarName } from './tokens'
 
-/** 정의: `docs/qa/uiux-ia.md` S12 (CASE-uiux-100~102) · 명세: `docs/spec/uiux-ia.md` `uiux.style`. */
+/** CASE-uiux-100~102 · `uiux.style`. */
 
 describe('토큰 병합', () => {
   it('CASE-uiux-100 덮어쓴 것만 바뀌고 나머지는 기본값 그대로', () => {

@@ -11,7 +11,6 @@ import { latestSnapshot, listCatalogs, listNodes, listProviders } from './store'
 
 /**
  * 메인 프로세스에서 대조 결과를 낸다 — **MCP 로 내보내기 위한 자리**
- * (`docs/spec/infra-architecture.md` §node-doc.mcp AC-4).
  *
  * 규칙을 여기 다시 쓰지 않는다. 화면이 부르는 것과 **똑같은 함수**(`@shared/infra/reconcile/diff`)를
  * 부른다 — 규칙을 두 벌 들고 있으면 화면과 에이전트가 서로 다른 답을 말하게 되고, 그건 이 서비스가

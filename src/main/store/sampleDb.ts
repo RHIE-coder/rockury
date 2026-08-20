@@ -3,7 +3,7 @@
  *
  * 준비물이 없다는 것이 이 기능의 전부다: 도커도, 네트워크도, 계정도 필요 없다.
  * 개발용 `npm run db:up` 이 만드는 `scripts/test-db/data/testdb.sqlite` 와는 **다른 파일**이라
- * 앱이 개발 환경을 건드리지 않는다. 정본: `docs/spec/db-connections.md` › db-connections.sample.
+ * 앱이 개발 환경을 건드리지 않는다.
  *
  * userData 경로는 인자로 받는다 — 이 계층이 electron 을 안 물어야 테스트에서 임시 폴더로 돌린다.
  */

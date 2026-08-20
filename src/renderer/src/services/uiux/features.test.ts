@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { completion, gaps, summarizeTree } from './features'
 import type { SpecTree } from './store'
 
-/** 정의: `docs/qa/uiux-ia.md` S11 (CASE-uiux-090~093) · 명세: `docs/spec/uiux-ia.md` §4·§8. */
 
 const surface = (id: string, serviceId: string, status: string) => ({
   id,

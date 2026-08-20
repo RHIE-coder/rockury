@@ -9,7 +9,7 @@ import { useActiveEnvironment } from '../ops/store'
 import { useContractStore, useContractSync } from './store'
 
 /**
- * Contract › Accept — `docs/spec/api-contract.md` § accept.
+ * Contract › Accept
  *
  * 고칠 방향이 둘이다:
  *   · **명세를 실제에 맞춘다** → 여기서 된다(서버에만 있는 것을 Draft 로 흡수)

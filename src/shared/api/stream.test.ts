@@ -19,7 +19,6 @@ import type { StreamMessage } from './types'
 /**
  * TestPlan: api-runner · Scenario S5
  *   CASE-apirunner-040 보내기 패널 가시성 · 041 타임라인 조립 · 042 세션→Run · 045 타임라인 도구
- * 대상 명세: `docs/spec/api-runner.md` § stream.session.
  */
 
 const msg = (o: Partial<StreamMessage> & { seq: number }): StreamMessage => ({

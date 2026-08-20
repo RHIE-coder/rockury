@@ -6,7 +6,7 @@ import { nodeFunctionEnv } from './nodeFunctionEnv'
 import type { EnvironmentDef, ParamDef } from './types'
 
 /**
- * 템플릿 치환 — `docs/qa/api-studio.md` S2 (CASE-apistudio-010~014, 01A)
+ * 템플릿 치환 — CASE-apistudio-010~014, 01A.
  * + 미리보기 마스킹(CASE-apirunner-021).
  */
 

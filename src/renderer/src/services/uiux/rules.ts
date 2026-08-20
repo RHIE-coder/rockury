@@ -1,7 +1,7 @@
 import type { Rule, SurfaceContent } from './types'
 
 /**
- * 규칙을 사람 말로 — 명세 정본 `docs/spec/uiux-ia.md` §3 · Surface `uiux.rules`.
+ * 규칙을 사람 말로.
  *
  * 규칙은 **구조화 데이터**로 저장한다(쿼리·비교·검증이 되어야 하니까). 그런데 구조 그대로 보이면
  * `{ constraints: { maxLength: 254, format: "email" } }` 같은 것이 화면에 뜬다 — 비개발자는 못

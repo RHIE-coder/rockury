@@ -6,7 +6,7 @@ import { useSpecStore } from '../store'
 import type { SurfaceContent, Viewport } from '../types'
 
 /**
- * 미리보기 — 명세 정본 `docs/spec/uiux-ia.md` §6.
+ * 미리보기
  *
  * **그림자 뿌리(Shadow DOM)에 그린다.** 앱은 Tailwind 전역 CSS 위에 서 있어서, 조각의
  * 클래스가 앱 것과 서로를 덮는다. 그림자 안은 그 경계가 막혀 있고 토큰만 CSS 변수로 상속돼

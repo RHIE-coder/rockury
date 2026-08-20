@@ -2,7 +2,7 @@ import type { SpecTree } from './store'
 import type { SurfaceStatus } from './types'
 
 /**
- * 능력 인덱스 집계 — 명세 정본 `docs/spec/uiux-ia.md` §4·§8.
+ * 능력 인덱스 집계
  *
  * **세는 단위가 화면이면 사람 말이 안 된다.** "화면 42개 중 31개 확인"은 아무 그림도 안 그려지지만
  * "결제: 5개 중 5개 확인 · 배송: 3개 중 0개"는 읽힌다. 그래서 앱 › 서비스로 접어 센다.

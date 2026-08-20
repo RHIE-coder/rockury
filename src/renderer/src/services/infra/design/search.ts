@@ -4,7 +4,6 @@ import type { NodeTypeDef } from '../catalog/types'
 
 /**
  * 설계본 노드 검색과 포커싱의 **순수 계산**.
- * 명세: `docs/spec/infra-architecture.md` §design.canvas AC-7.
  *
  * 팔레트(왼쪽 목록)의 '종류 검색'과는 다른 것이다 — 저건 *놓을 종류*를 고르는 거르개이고,
  * 이건 *이미 놓인 노드*를 찾는 것이다. 둘을 한 칸으로 합치면 "찾았는데 안 보인다"가 된다.

@@ -2,7 +2,7 @@ import { shapeOfBody } from './observed'
 import type { FieldDef, RequestDef, RunRecord, StreamMessage } from './types'
 
 /**
- * 웹훅 수신의 순수 규칙 — `docs/spec/api-runner.md` § inbox.
+ * 웹훅 수신의 순수 규칙
  *
  * 4모양 중 **유일하게 방향이 반대**다: 내가 안 보냈는데 들어온다. 그래서 "보낼 수 있나"를
  * 묻는 관문이 없고, 대신 **들어온 것이 선언한 모양과 맞나**를 묻는다.

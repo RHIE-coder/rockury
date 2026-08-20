@@ -1,7 +1,7 @@
 import type { SpecComponent, SpecSection, SurfaceContent, SurfaceEvent } from './types'
 
 /**
- * 화면 내용(JSON 한 칸)의 읽기·쓰기 — 명세 정본 `docs/spec/uiux-ia.md` §7(INV-3).
+ * 화면 내용(JSON 한 칸)의 읽기·쓰기 — INV-3.
  *
  * 저장소에서 읽은 JSON 은 **믿을 수 없다.** 손으로 고쳤을 수도, 예전 모델로 저장됐을 수도,
  * 에이전트가 잘못 썼을 수도 있다. 여기서 터지면 화면 목록 전체가 안 뜬다 — 그래서

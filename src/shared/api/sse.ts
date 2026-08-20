@@ -1,5 +1,5 @@
 /**
- * SSE(서버가 보내는 이벤트) 프레임 파서 — `docs/spec/api-runner.md` § stream.session.
+ * SSE(서버가 보내는 이벤트) 프레임 파서
  *
  * 왜 손으로 쓰나: Electron 메인에는 `EventSource` 가 없고(브라우저 API), 있어도 **헤더를
  * 못 싣는다** — 우리 요청은 인증 헤더가 붙는다. 그래서 `fetch` 로 열고 본문 스트림을

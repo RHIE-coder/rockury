@@ -100,7 +100,7 @@ export interface ErdCanvasProps {
 
 /**
  * ERD 캔버스(공용) — Design › Diagram(가상) · Remote › Diagram(읽기) · Remote › Diagram(편집)
- * 셋이 **이 한 벌**을 쓴다. 정본: `docs/spec/db-remote.md` §db-remote.diagram.
+ * 셋이 **이 한 벌**을 쓴다.
  * 예전에는 셋이 같은 200줄을 복제하고 있어, 배치 버그를 한 곳만 고치고 지나가기 쉬웠다.
  */
 export function ErdCanvas({

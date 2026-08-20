@@ -1,5 +1,5 @@
 /**
- * 최소 markdown 렌더 — `docs/spec/api-studio.md` § docs.authored AC-2.
+ * 최소 markdown 렌더.
  *
  * **왜 손으로 쓰나:** 의존성을 안 늘린다(그건 `main` 몫). 그리고 라이브러리를 쓰면 대부분
  * HTML 문자열을 돌려주는데, 그걸 화면에 붙이려면 `dangerouslySetInnerHTML` 이 필요해진다 —

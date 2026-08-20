@@ -3,7 +3,6 @@ import type { SeedRow, SeedSet } from './types'
 
 /**
  * 시드 **참조**(순수) — 한 시드 행이 다른 시드 행을 가리키는 표기 `@테이블#별칭`.
- * 정본: `docs/spec/db-design.md` Section `db-design.seed.reference`.
  *
  * 왜 문법을 도구가 못박나(사용자가 자유롭게 쓰면 안 되나):
  *  ① 반영할 때 기계가 읽어 그 환경의 **실제 id 로 치환**해야 한다,

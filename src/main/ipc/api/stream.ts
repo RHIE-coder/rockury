@@ -102,7 +102,7 @@ function currentSecrets(environmentId: string, fallback: string[]): string[] {
 }
 
 /**
- * 운영부 IPC — 스트림 세션(`docs/spec/api-runner.md` § stream.session).
+ * 운영부 IPC — 스트림 세션.
  *
  * 단발 전송(`api:send`)과 같은 규율을 그대로 쓴다:
  *   · 조립을 **두 번** 한다 — 실제로 붙을 것(실값) / 남길 것(가림)

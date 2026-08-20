@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { describeSignature, validateCall, validateParamDefs } from './signature'
 import type { ParamDef } from './types'
 
-/** 파라미터 시그니처 — `docs/qa/api-studio.md` S1 (CASE-apistudio-001~004). */
+/** 파라미터 시그니처 — CASE-apistudio-001~004. */
 
 const params: ParamDef[] = [
   { name: 'userId', type: 'string', required: true, description: '조회할 사용자' },

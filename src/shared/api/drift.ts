@@ -4,7 +4,7 @@ import { interfaceMeta } from './types'
 import type { FieldDef, RequestDef, RunRecord, SpecDef } from './types'
 
 /**
- * 판정 — `docs/spec/api-contract.md`.
+ * 판정.
  *
  * 이 앱이 Swagger(선언만 봄)·Postman(실제만 봄)과 갈리는 자리다. 그런데 갈리는 값어치는
  * "대조한다"가 아니라 **모르는 것을 안다고 말하지 않는다**에 있다:

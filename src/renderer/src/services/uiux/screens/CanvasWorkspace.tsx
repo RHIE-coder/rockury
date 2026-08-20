@@ -10,7 +10,6 @@ import { ScreensShell } from './ScreensShell'
 
 /**
  * Screens › Canvas — 고른 화면을 **실제 화면으로 보고 그 위에서 고친다.**
- * 명세 정본 `docs/spec/uiux-ia.md` Surface `uiux.screens.canvas`.
  *
  * 끌어 옮겨도 저장되는 것은 좌표가 아니라 **순서**다(§6). Spec 뷰의 위·아래 버튼과 **같은 함수**를
  * 부른다 — 편집 규칙이 화면마다 갈리면 한쪽에서만 되는 조작이 생긴다.

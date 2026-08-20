@@ -1,7 +1,7 @@
 import type { FieldDef, ParamDef, RequestDef, ResponseDef, SpecDef } from './types'
 
 /**
- * 깨지는 변경 판정 — `docs/spec/api-studio.md` § versions.diff.
+ * 깨지는 변경 판정
  *
  * 판정의 전부는 한 문장이다: **기존 호출자가 깨지는가.**
  * 거기서 요청과 응답의 방향이 갈린다 —

@@ -3,7 +3,6 @@ import { dropTarget, guideLine, isSamePlace, type NodeRect, type SectionRect } f
 import { moveComponent } from '../tree'
 import type { SurfaceContent } from '../types'
 
-/** 정의: `docs/qa/uiux-ia.md` S9 (CASE-uiux-080~085) · 명세: `docs/spec/uiux-ia.md` §6. */
 
 const rect = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom })
 

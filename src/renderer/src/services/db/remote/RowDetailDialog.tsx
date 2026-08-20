@@ -7,7 +7,7 @@ import { rowToJson, viewCell } from './rowDetail'
 /**
  * 결과 행 상세 — Query·Collection 의 결과 표에서 행을 누르면 뜬다.
  * 표에서는 칸이 잘려(`truncate`) 긴 값을 못 읽는다. 여기서는 **자르지 않고** 세로로 펴 보이고,
- * JSON 은 들여써서 보인다. 정본: `docs/spec/db-remote.md` §db-remote.result-grid.row-detail.
+ * JSON 은 들여써서 보인다.
  */
 export function RowDetailDialog({
   columns,

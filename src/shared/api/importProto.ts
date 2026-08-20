@@ -2,7 +2,7 @@ import { ImportError, type ImportResult } from './importOpenapi'
 import type { FieldDef, FieldType, InteractionShape, RequestDef } from './types'
 
 /**
- * `.proto` 가져오기 — `docs/spec/api-studio.md` § requests.import AC-2.
+ * `.proto` 가져오기.
  *
  * **스트리밍 종류를 사람이 고르지 않는다** — proto 메서드 정의가 정한다(shape AC-3).
  * 파서를 더하지 않고 좁은 규칙으로 읽되, 모르는 구문은 **버리지 않고 보고**한다.

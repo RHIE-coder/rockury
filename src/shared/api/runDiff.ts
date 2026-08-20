@@ -1,7 +1,7 @@
 import type { RunRecord } from './types'
 
 /**
- * 두 실행 기록의 응답 비교 — `docs/spec/api-runner.md` § history.list AC-4.
+ * 두 실행 기록의 응답 비교.
  *
  * "무엇이 달라졌나"를 묻는 자리다. 판정(`drift.ts`)과 다르다 — 판정은 **선언 대 실제**를
  * 보고, 여기는 **실제 대 실제**를 본다. 그래서 선언이 없어도 되고, 어긋남이라는 말도 안 쓴다.

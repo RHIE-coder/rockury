@@ -3,7 +3,7 @@ import { parseContent } from './content'
 import type { DataOp, NavKind, SurfaceEvent } from './types'
 
 /**
- * 흐름 — 명세 정본 `docs/spec/uiux-ia.md` §3.
+ * 흐름
  *
  * 이벤트는 **트리거 하나 + 효과 여럿**이다. 화면 전이와 데이터 변이를 갈래로 나누지 않는다 —
  * 삭제 버튼 한 번이 모달을 닫고 + 상품을 지우는데, 갈래를 나누면 같은 클릭이 두 군데로 찢어진다.

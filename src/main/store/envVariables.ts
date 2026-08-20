@@ -3,7 +3,6 @@ import { decrypt, encrypt } from '../infra/crypto'
 
 /**
  * 환경 변수 값 — 시드의 `{{NAME}}` 자리표시자를 반영할 때 채우는 값.
- * 정본: `docs/spec/db-design.md` Section `db-design.seed.variables` / `.apply-contract`.
  *
  * **값은 평문으로 저장하지 않는다** — 연결 비밀번호와 같은 OS 키체인 경로(`infra/crypto`)로
  * 암호화해 넣는다. 시드는 관리자 비밀번호 해시 같은 비밀값을 담는 자리라서, 설계 정본(설계 저장소)에

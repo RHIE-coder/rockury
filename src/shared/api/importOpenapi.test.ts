@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ImportError, importOpenapi } from './importOpenapi'
 
-/** OpenAPI 가져오기 — `docs/qa/api-studio.md` S3 (CASE-apistudio-020·023). */
+/** OpenAPI 가져오기 — CASE-apistudio-020·023. */
 
 const DOC = `openapi: 3.0.3
 info:

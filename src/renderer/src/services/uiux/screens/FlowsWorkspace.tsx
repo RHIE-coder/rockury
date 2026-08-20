@@ -8,7 +8,7 @@ import { surfaceKindLabel } from '../catalog'
 import { useActiveProject, useSpecStore, useTree } from '../store'
 
 /**
- * Flows — 화면 사이 흐름을 한 장으로. 명세 정본 `docs/spec/uiux-ia.md` Surface `uiux.flows`.
+ * Flows — 화면 사이 흐름을 한 장으로.
  *
  * 그래프 라이브러리를 들이지 않고 **SVG 로 직접 그린다**: 배치는 순수 계산(`flows.ts`)이고
  * 그리기는 사각형과 선뿐이라, 의존성을 하나 늘리는 값보다 직접 만드는 값이 싸다.

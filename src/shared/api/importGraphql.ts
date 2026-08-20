@@ -3,7 +3,7 @@ import { ImportError, type ImportResult } from './importOpenapi'
 import type { FieldDef, FieldType, ParamDef, ParamType, RequestDef } from './types'
 
 /**
- * GraphQL 가져오기 — `docs/spec/api-studio.md` § requests.import AC-3.
+ * GraphQL 가져오기.
  *
  * 두 갈래를 다 받는다: **SDL**(사람이 쓴 스키마 글)과 **introspection 결과**(서버가 뱉은 JSON).
  * SDL 은 파서를 더하지 않고 `type X { ... }` 블록만 좁게 읽고, 못 읽은 구문은 **보고**한다.

@@ -38,7 +38,7 @@ import './ops/store' // 환경 셀렉터 옵션·명세 전환 구독(부수효�
 import './rehydration' // 에이전트(MCP) 쓰기 → api:changed → 스코프 재조회 구독(부수효과 모듈)
 
 /**
- * API 서비스 IA — 정본 `docs/spec/api-service.md` §3.
+ * API 서비스 IA
  *
  *   설계부(design) : 명세를 짓고 버전을 컷한다. 환경 무관.
  *   운영부(ops)    : active 환경에 대고 쏘고, 그 기록으로 판정한다.

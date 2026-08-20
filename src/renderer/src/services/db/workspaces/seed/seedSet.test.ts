@@ -19,7 +19,6 @@ import {
 } from './seedSet'
 import type { SeedSet } from './types'
 
-/** CASE-design-001~004 (docs/qa/db-design.md) */
 
 const col = (id: string, name: string, over: Partial<TableDef['columns'][number]> = {}) => ({
   id,

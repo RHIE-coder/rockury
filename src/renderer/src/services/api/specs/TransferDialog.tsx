@@ -16,7 +16,7 @@ import { useApiStore } from '../store'
 import type { ImportPreview, ImportSourceKind } from '../../../../../preload/services/api'
 
 /**
- * 가져오기·내보내기 — `docs/spec/api-studio.md` § requests.import/export.
+ * 가져오기·내보내기
  *
  * 가져오기는 **기존 명세를 덮지 않는다**: 미리보기에서 추가/충돌/미해석을 먼저 보이고,
  * 겹치는 이름은 기존 것을 남긴다. 내보내기는 **값 없이** 나간다.

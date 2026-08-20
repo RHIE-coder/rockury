@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { uiuxService } from './index'
 
 /**
- * UI/UX 서비스 선언 무결성 — 정의는 `docs/qa/uiux-ia.md` (CASE-uiux-001~005),
- * 명세는 `docs/spec/uiux-ia.md` (Surface `uiux.shell`).
+ * UI/UX 서비스 선언 무결성 — CASE-uiux-001~005 (Surface `uiux.shell`).
  *
  * 선언이 깨지면 셸이 조용히 이상하게 그려진다(탭이 사라지거나, 두 칸이 같은 id 라 하나만 잡힌다).
  * 그래서 "깨지면 실제로 문제가 되는 것"만 붙든다 — 라벨 문자열을 그대로 옮겨 적지 않는다.

@@ -4,7 +4,6 @@ import { planSeedApply, type SeedApplyInput } from './seedApplyPlan'
 import { deterministicUuid, pkSeedString, renderPkTemplate } from './seedPk'
 import type { SeedRow, SeedSet } from './types'
 
-/** CASE-design-070~078 (docs/qa/db-design.md) */
 
 const col = (id: string, name: string, over: Partial<TableDef['columns'][number]> = {}) => ({
   id,

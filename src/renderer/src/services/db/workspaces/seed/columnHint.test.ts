@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { Constraint, TableDef } from '../definition/types'
 import { isRequiredForSeed, requiredSeedColumns, seedColumnHints } from './columnHint'
 
-/** CASE-design-005~007 (docs/qa/db-design.md) */
 
 const col = (id: string, name: string, over: Partial<TableDef['columns'][number]> = {}) => ({
   id,

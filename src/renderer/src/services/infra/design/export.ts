@@ -3,7 +3,6 @@ import type { DesignNode } from './types'
 
 /**
  * 설계 다이어그램 내보내기의 **순수 계산** — 파일 이름과 캔버스·이동값.
- * 명세: `docs/spec/infra-architecture.md` §design.canvas AC-6.
  *
  * 캡처 자체(DOM·html-to-image)는 뷰에 둔다. 여기 있는 것은 전부 입력→출력이 결정적이라
  * 테스트로 못 박을 수 있는 것들이다.

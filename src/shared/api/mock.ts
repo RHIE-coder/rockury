@@ -1,7 +1,7 @@
 import type { FieldDef, RequestDef, ResponseDef, SpecDef } from './types'
 
 /**
- * 모의(가짜) 서버의 순수 규칙 — `docs/spec/api-studio.md` § mocking.server.
+ * 모의(가짜) 서버의 순수 규칙
  *
  * 목적은 하나다: **프론트가 백엔드 완성을 안 기다려도 되게.**
  * 그런데 이 서비스의 한 문장이 여기서 특히 세게 걸린다 — **모르는 것을 안다고 말하지 않는다.**

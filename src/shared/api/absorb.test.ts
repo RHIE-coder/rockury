@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { previewAbsorb } from './absorb'
 import type { FieldDef, RequestDef, RunRecord, SpecDef } from './types'
 
-/** 흡수 — `docs/qa/api-contract.md` S4 (CASE-apicontract-030~033, 035). */
+/** 흡수 — CASE-apicontract-030~033, 035. */
 
 const f = (name: string, type: FieldDef['type'], requiredness: FieldDef['requiredness']): FieldDef => ({
   name,

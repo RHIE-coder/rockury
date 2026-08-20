@@ -19,7 +19,7 @@ import { useActiveEnvironment, useOpsSync } from '../ops/store'
 import { useInboxStore } from './inboxStore'
 
 /**
- * Runner › Inbox — `docs/spec/api-runner.md` § inbox.
+ * Runner › Inbox
  *
  * 4모양 중 **유일하게 방향이 반대**다: 내가 안 보냈는데 들어온다. 그래서 이 화면에는
  * "보내기"가 없고 대신 **주소를 내주고 기다리는 일**이 중심이다.

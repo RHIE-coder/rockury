@@ -52,7 +52,6 @@ export interface DiagramSurfaceProps {
  * ERD 화면 한 벌 — [좌측 패널(테이블·제약·그룹) | 캔버스 + 아래 상세보기 서랍].
  * Design › Diagram · Remote › Diagram(읽기/편집) 셋이 이걸 그대로 쓴다.
  * ⚠ `ReactFlowProvider` **안쪽**에 놓아야 한다(패널·캔버스가 같은 flow 를 본다).
- * 정본: `docs/spec/db-remote.md` §db-remote.diagram.
  */
 export function DiagramSurface({
   tables,

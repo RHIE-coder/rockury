@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { suggestPort } from '../../shared/api/inbox'
 
 /**
- * 로컬 웹훅 수신 서버 — `docs/spec/api-runner.md` § inbox.listener.
+ * 로컬 웹훅 수신 서버
  *
  * 1차 범위는 **로컬 전용**이다(AC-3). `127.0.0.1` 에만 바인딩한다 — `0.0.0.0` 으로 열면
  * 같은 네트워크의 아무 기기가 이 창구에 닿고, 그 사실이 화면 문구("이 컴퓨터 안에서만

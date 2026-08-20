@@ -11,7 +11,7 @@ import {
 import type { FieldDef, RequestDef, RunRecord, SpecDef, StreamMessage } from './types'
 
 /**
- * 판정 엔진 — `docs/qa/api-contract.md` S1~S3.
+ * 판정 엔진.
  *
  * 이 모듈이 지키는 한 문장: **모르는 것을 안다고 말하지 않는다.**
  *  · 안 쏴 본 요청은 일치가 아니라 **미관측**

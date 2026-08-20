@@ -7,7 +7,7 @@ import {
 } from './projects'
 
 /**
- * UI/UX 설계 저장소 — 명세 정본 `docs/spec/uiux-ia.md` §7.
+ * UI/UX 설계 저장소
  *
  * 위계 네 층(Project > Application > Service > Surface)이 행이고, 화면 안(Section·Component)은
  * `surfaces.content` JSON 한 칸이다. 층마다 CRUD 를 따로 쓰지 않고 **`level` 을 받는 한 벌**로 두는

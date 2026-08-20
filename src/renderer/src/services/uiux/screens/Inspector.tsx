@@ -8,7 +8,7 @@ import { describeRule } from '../rules'
 import type { Layout, NavKind, Rule, SurfaceContent } from '../types'
 
 /**
- * 속성 — 지금 고른 조각(화면·영역·요소) 하나를 고친다. 명세 정본 `docs/spec/uiux-ia.md` §6.
+ * 속성 — 지금 고른 조각(화면·영역·요소) 하나를 고친다.
  *
  * 배치는 **좌표가 아니라 방향과 칸 수**다. 세로로 쌓을지 가로로 늘어놓을지 격자로 나눌지만 정하고,
  * 실제 픽셀은 뷰포트가 정한다 — 그래서 화면 하나로 PC·태블릿·모바일이 모두 성립한다.

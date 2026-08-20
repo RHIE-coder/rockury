@@ -2,7 +2,7 @@ import { parseJsonOrYaml } from './yaml'
 import type { FieldDef, FieldType, ParamDef, ParamType, RequestDef, ResponseDef } from './types'
 
 /**
- * OpenAPI 3.x 가져오기 — `docs/spec/api-studio.md` § requests.import.
+ * OpenAPI 3.x 가져오기
  *
  * 없으면 첫 화면이 빈 화면이다 — 기존 API 가 있는 팀이 손으로 다시 칠 리 없다.
  *

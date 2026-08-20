@@ -57,7 +57,6 @@ describe('e2e 격리 불변식', () => {
   it('스위트는 폴더에서 자동 발견된다 — 러너에 목록을 하드코딩하지 않는다', () => {
     // 하드코딩한 등록 배열을 두면 ⑴ 스위트를 더할 때마다 공용 러너를 고쳐야 해서
     // 병렬 개발에서 매번 충돌하고 ⑵ 등록을 빠뜨린 스위트가 **조용히 안 돌아간다**.
-    // (docs/qa/parallel-dev.md CASE-pdev-003)
     const runner = files.find((f) => f.path === 'smoke.mjs')!.src
     expect(runner, '러너가 suites 폴더를 읽지 않는다').toMatch(/readdirSync\(SUITES_DIR\)/)
 

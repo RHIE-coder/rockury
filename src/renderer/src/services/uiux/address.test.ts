@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { duplicateKeys, isValidKey, keyProblem, parseSpecAddress, specAddress } from './address'
 
-/** 정의: `docs/qa/uiux-ia.md` S3 (CASE-uiux-020~024) · 명세: `docs/spec/uiux-ia.md` §7 INV-1·INV-2. */
 describe('주소 조각 규칙 (INV-2)', () => {
   it('CASE-uiux-020 소문자·숫자로 시작하는 소문자 영숫자·하이픈·밑줄만 통과한다', () => {
     for (const ok of ['login', 'a', '2fa', 'sign-up', 'my_page', 'v2-beta']) {

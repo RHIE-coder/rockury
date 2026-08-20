@@ -2,7 +2,7 @@ import { parseContent } from './content'
 import type { SpecTree } from './store'
 
 /**
- * 설계 스냅샷과 비교 — 명세 정본 `docs/spec/uiux-ia.md` Surface `uiux.versions`.
+ * 설계 스냅샷과 비교.
  *
  * 스냅샷은 **그 시점의 트리 통째**다. 차이만 저장하면 중간 버전 하나가 깨졌을 때 그 뒤가 전부
  * 못 읽히고, 설계 하나의 크기는 그렇게 크지 않다(화면 수십 장 × JSON).

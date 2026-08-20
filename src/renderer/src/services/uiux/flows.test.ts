@@ -3,7 +3,6 @@ import { buildGraph, surfaceEvents } from './flows'
 import type { SpecTree } from './store'
 import type { SurfaceContent } from './types'
 
-/** 정의: `docs/qa/uiux-ia.md` S13 (CASE-uiux-110~114) · 명세: `docs/spec/uiux-ia.md` §3. */
 
 const content = (events: SurfaceContent['events']): string =>
   JSON.stringify({ sections: [], events } satisfies SurfaceContent)

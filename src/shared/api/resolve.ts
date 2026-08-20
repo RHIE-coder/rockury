@@ -1,7 +1,7 @@
 import type { EnvironmentDef, ParamDef, ValueOrigin } from './types'
 
 /**
- * 값 해석 — `docs/spec/api-service.md` §2, `api-runner.md` § environments.resolution.
+ * 값 해석 — 환경 값과 호출 파라미터를 실제 값으로 푼다.
  *
  * 이 서비스의 핵심 모델은 **값이 두 종류라는 것**이다:
  *   · 환경 값     — 환경마다 다르고 호출마다 같다 (base URL·API 키)

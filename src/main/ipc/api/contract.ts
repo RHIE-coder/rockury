@@ -33,7 +33,7 @@ import {
 import { supportsCompleteDrift } from '../../../shared/api/types'
 
 /**
- * 판정 IPC — `docs/spec/api-contract.md`.
+ * 판정 IPC.
  *
  * 등급을 고르는 것이 여기서 제일 중요한 결정이다:
  *   · 서버가 스키마를 뱉는 종류(GraphQL·gRPC·SOAP) → **완전 판정**

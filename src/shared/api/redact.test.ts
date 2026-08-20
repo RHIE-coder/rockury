@@ -4,7 +4,7 @@ import { MASK } from './template'
 import type { EnvValue } from './types'
 
 /**
- * 아는 비밀 지우기 — `docs/qa/api-runner.md` CASE-apirunner-032 (기록 마스킹).
+ * 아는 비밀 지우기 — CASE-apirunner-032 (기록 마스킹).
  * 요청만 가리면 **응답이 되돌려준 값**이 그대로 남는다는 것을 실측으로 잡았다.
  */
 

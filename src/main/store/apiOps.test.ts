@@ -16,7 +16,7 @@ import {
   type AppendRunInput
 } from './apiOps'
 
-/** 운영부 저장소 — `docs/qa/api-runner.md` S2·S4 (CASE-apirunner-010~017, 030~037). */
+/** 운영부 저장소 — CASE-apirunner-010~017, 030~037. */
 
 beforeAll(() => {
   setDbPath(join(mkdtempSync(join(tmpdir(), 'rockury-api-ops-')), 'test.db'))

@@ -4,7 +4,7 @@ import { nodeFunctionEnv } from './nodeFunctionEnv'
 import type { EnvironmentDef, RequestDef } from './types'
 
 /**
- * 요청 조립 — `docs/qa/api-runner.md` S3 (CASE-apirunner-020~024) + 출처 표시(S1).
+ * 요청 조립 — CASE-apirunner-020~024 + 출처 표시(S1).
  * 여기가 "값이 어디서 왔나" 와 "보낼 수 있나" 를 한꺼번에 결정하는 자리다.
  */
 

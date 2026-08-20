@@ -2,7 +2,7 @@ import type { Layout } from '../types'
 import { tokenRef } from './tokens'
 
 /**
- * 배치 데이터 → CSS — 명세 정본 `docs/spec/uiux-ia.md` §6.
+ * 배치 데이터 → CSS
  *
  * 좌표가 없으므로 여기서 하는 일은 **방향과 칸 수를 CSS 로 옮기는 것**뿐이다.
  * 그래서 같은 구조가 폭만 바꿔도 안 깨진다(뷰포트 셋이 한 화면으로 성립하는 근거).

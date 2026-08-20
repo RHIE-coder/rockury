@@ -3,7 +3,7 @@ import { diffSpecs, hasBreaking } from './breaking'
 import type { FieldDef, ParamDef, RequestDef, ResponseDef, SpecDef } from './types'
 
 /**
- * 깨지는 변경 판정 — `docs/qa/api-studio.md` S5 (CASE-apistudio-040~045).
+ * 깨지는 변경 판정 — CASE-apistudio-040~045.
  *
  * 이 모듈의 전부는 **비대칭**이다:
  *   요청은 *더 요구하면* 깨지고, 응답은 *덜 주면* 깨진다.

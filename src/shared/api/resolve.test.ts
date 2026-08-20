@@ -3,7 +3,7 @@ import { buildScope, missingRefs, resolveValue } from './resolve'
 import type { EnvironmentDef, ParamDef } from './types'
 
 /**
- * 값 해석 — `docs/qa/api-runner.md` S1 (CASE-apirunner-001~004).
+ * 값 해석 — CASE-apirunner-001~004.
  * 이 서비스의 핵심 모델: **환경 값**과 **호출 파라미터**는 다른 것이고 섞이지 않는다.
  */
 

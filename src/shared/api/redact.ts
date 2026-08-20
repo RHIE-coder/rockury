@@ -2,7 +2,7 @@ import { MASK } from './template'
 import type { EnvValue } from './types'
 
 /**
- * 아는 비밀을 글자 단위로 지운다 — `docs/spec/api-runner.md` § send.observe AC-3.
+ * 아는 비밀을 글자 단위로 지운다.
  *
  * 요청을 가려 저장해도 **응답이 그 값을 되돌려주면 그대로 남는다**(키를 에코하는 서버,
  * 디버그 엔드포인트, 오류 메시지에 실린 인증 헤더 …). 그래서 저장 직전에 한 번 더 훑는다.

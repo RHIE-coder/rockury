@@ -14,7 +14,7 @@ import { SURFACE_KINDS } from '../catalog'
 import { useSpecStore, type SpecLevel } from '../store'
 
 /**
- * 위계 노드(프로젝트·앱·서비스·화면) 만들기·고치기 — 명세 정본 `docs/spec/uiux-ia.md` §7.
+ * 위계 노드(프로젝트·앱·서비스·화면) 만들기·고치기
  *
  * 층마다 모달을 따로 두지 않는다: 네 층의 입력이 같아서(주소 조각·이름·설명) 나누면 같은 폼이
  * 네 벌 복제되고, 주소 규칙 안내가 한 군데만 낡는다.

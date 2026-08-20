@@ -7,7 +7,7 @@ import { useApiStore } from '../store'
 import { DRAFT, resolveSide, useVersionsStore, useVersionsSync } from './store'
 
 /**
- * Versions › Diff — `docs/spec/api-studio.md` § versions.diff.
+ * Versions › Diff
  *
  * 이 화면의 알맹이는 **비대칭**이다: 요청은 *더 요구하면* 깨지고, 응답은 *덜 주면* 깨진다.
  * 그래서 같은 연산도 방향에 따라 판정이 갈린다 — 화면이 그 방향을 항상 함께 보인다.

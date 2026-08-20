@@ -97,7 +97,7 @@ Electron + electron-vite · React 19 · TypeScript 7 · Tailwind v4 + Radix · Z
 
 **명세 정본(`docs/spec/`·`docs/qa/`)과 `docs/before-steward-background/` 는 걷어냈다**
 (2026-08-19 · `3578bbd`). 이 기능이 무엇이어야 하는지는 지금 **코드 옆 주석과 커밋 메시지**가
-정본이다 — 소스 주석에 남은 `docs/spec/…` 표시는 아직 안 걷은 옛 자취다. 지운 문서를 읽어야
+정본이다 — 소스 주석에 남아 있던 `docs/spec/…` 표시도 전부 걷었다. 지운 문서를 읽어야
 하면 `git show 3578bbd^:docs/spec/db-design.md` 처럼 이력에서 꺼낸다.
 
 명령: `npm run dev` · `npm test`(watch `test:watch`) · `npm run build` ·

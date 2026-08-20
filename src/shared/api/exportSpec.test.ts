@@ -3,7 +3,7 @@ import { exportSpec, formatsFor } from './exportSpec'
 import { importOpenapi } from './importOpenapi'
 import type { RequestDef, SpecDef } from './types'
 
-/** 내보내기 — `docs/qa/api-studio.md` CASE-apistudio-025·026 (불변식 ⑥). */
+/** 내보내기 — CASE-apistudio-025·026 (불변식 ⑥). */
 
 const req = (over: Partial<RequestDef> = {}): RequestDef => ({
   id: 'r',

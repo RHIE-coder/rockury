@@ -2,7 +2,6 @@ import type { Discover, NodeDoc, NodeTypeDef } from './types'
 
 /**
  * 프리셋 — **모양만 있는 노드 종류**를 만들고, 나중에 탐침을 붙여 올리는(승격) 순수 로직.
- * 명세: `docs/spec/infra-catalog.md` §types.presets AC-3 · AC-4.
  *
  * 왜 따로 두나: 탐침 편집기는 "읽어 오는 법"을 만드는 곳이라 **탐침이 있어야만** 저장된다.
  * 그런데 그라파나 하나를 그림에 올리려고 CLI 정의부터 하라는 건 말이 안 된다(D3) —

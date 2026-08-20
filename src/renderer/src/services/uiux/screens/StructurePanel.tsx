@@ -8,7 +8,7 @@ import { useSpecStore } from '../store'
 import type { SurfaceContent } from '../types'
 
 /**
- * 화면 구조 — 섹션 › 컴포넌트. 명세 정본 `docs/spec/uiux-ia.md` §6.
+ * 화면 구조 — 섹션 › 컴포넌트.
  *
  * 저장되는 것은 **좌표가 아니라 순서와 묶음**이다. 여기서는 버튼으로 옮기고 Canvas 에서는
  * 끌어서 옮기지만, 둘 다 같은 순수 함수(`tree.ts`)를 부른다 — 편집 규칙이 화면마다 갈리지 않게.

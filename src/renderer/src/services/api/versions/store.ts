@@ -8,7 +8,7 @@ import type { VersionRecord } from '../../../../../preload/services/api'
 import { ipcErrorText } from '../errorText'
 
 /**
- * 버전 스토어 — `docs/spec/api-studio.md` § versions.
+ * 버전 스토어
  *
  * 버전은 **명세 전체의 불변 스냅샷**이다. 컷한 뒤 Draft 를 고쳐도 스냅샷은 안 흔들린다 —
  * 그래야 "어느 버전 기준의 관측인가"가 뜻을 갖는다.

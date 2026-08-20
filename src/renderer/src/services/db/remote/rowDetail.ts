@@ -2,7 +2,6 @@
  * 결과 행 상세 보기의 **값 판정** — 이 값을 그냥 글자로 보일지, JSON 으로 펴서 보일지.
  * 그리기(모달)는 `RowDetailDialog` 가 하고, 여기서는 판정만 한다.
  *
- * 정본: `docs/spec/db-remote.md` §db-remote.result-grid.row-detail.
  */
 
 export type CellView =

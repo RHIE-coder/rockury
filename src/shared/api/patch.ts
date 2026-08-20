@@ -2,7 +2,7 @@ import { interfaceMeta } from './types'
 import type { FieldDef, ParamDef, RequestDef, RequestFields, SpecDef } from './types'
 
 /**
- * 명세 부분 수정 — `docs/spec/api-mcp.md` § tools.write AC-4.
+ * 명세 부분 수정.
  *
  * 통째 반영(`set`)만 있으면 주석 한 줄을 고치려도 명세 전체를 다시 만들어 보내야 하고,
  * 그 왕복에서 새 오타가 섞인다 — DB 서비스가 33개 테이블 설계에서 실제로 겪은 일이다

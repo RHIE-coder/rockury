@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { escapeHtml, renderTemplate } from './template'
 
-/** 정의: `docs/qa/uiux-ia.md` S7 (CASE-uiux-060~064) · 명세: `docs/spec/uiux-ia.md` §6. */
 
 describe('값 넣기', () => {
   it('CASE-uiux-060 label 과 props 를 슬롯에 넣는다', () => {

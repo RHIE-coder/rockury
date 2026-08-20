@@ -1,5 +1,5 @@
 /**
- * IPC 오류를 사람이 읽을 문구로 — `docs/spec/api-service.md` 응답 규율.
+ * IPC 오류를 사람이 읽을 문구로 — 응답 규율.
  *
  * Electron 은 메인에서 던진 오류를 `Error invoking remote method 'api:startMock': Error: …`
  * 로 감싸 돌려준다. 그걸 그대로 배너에 넣으면 **잘 쓴 한국어 안내 앞에 영어 프레임워크

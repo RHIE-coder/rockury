@@ -2,7 +2,7 @@ import { rootFieldOf } from './graphql'
 import type { RunStatus } from './types'
 
 /**
- * GraphQL 구독(subscription) 규약 — `docs/spec/api-runner.md` § stream.session AC-7c.
+ * GraphQL 구독(subscription) 규약.
  *
  * WebSocket 을 열기만 해서는 아무것도 안 온다. 그 위에 **`graphql-transport-ws`** 라는
  * 하위 프로토콜(= 소켓 위에서 다시 정한 대화 규칙)이 얹혀 있고, 순서가 정해져 있다:

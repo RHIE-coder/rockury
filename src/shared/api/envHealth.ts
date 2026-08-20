@@ -2,7 +2,7 @@ import { collectRefs } from './template'
 import type { EnvValue, RequestDef } from './types'
 
 /**
- * 환경 값 건강 판정 — `docs/spec/api-runner.md` § environments.values AC-4.
+ * 환경 값 건강 판정.
  *
  * 두 가지를 가른다:
  *   · **고아** — 어느 요청도 안 쓰는 값. 지워도 되는지 사람이 판단할 수 있게 이름을 보인다.

@@ -4,7 +4,7 @@ import type { InboxStatus } from '../../../../../preload/services/api'
 import { ipcErrorText } from '../errorText'
 
 /**
- * 웹훅 수신 스토어 — `docs/spec/api-runner.md` § inbox.
+ * 웹훅 수신 스토어
  *
  * 스트림 스토어와 같은 성격이다 — **서버는 여기 안 산다.** 포트는 메인이 들고 있고 이건 그
  * 그림자다. 다른 점 하나: 스트림은 내가 접속을 시작하지만 여기는 **언제 올지 모르는 것을

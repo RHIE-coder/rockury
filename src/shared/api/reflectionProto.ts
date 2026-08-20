@@ -1,5 +1,5 @@
 /**
- * gRPC server reflection 규약의 정의 — `docs/spec/api-contract.md` § drift.complete.
+ * gRPC server reflection 규약의 정의
  *
  * **파일(`.proto`)로 두지 않고 여기 적는 이유**: `.proto` 를 빌드 산출물에 함께 실어 나르려면
  * 패키징 규칙을 건드려야 하는데(그건 `main` 몫이다), 이건 고정 규약이라 그럴 값이 없다.

@@ -9,7 +9,7 @@ import { useActiveProject, useSpecStore, useTree } from '../store'
 import type { SurfaceStatus } from '../types'
 
 /**
- * Features — 제품 한 줄 + 능력 인덱스 + 완성 상태. 명세 정본 `docs/spec/uiux-ia.md` Surface `uiux.features`.
+ * Features — 제품 한 줄 + 능력 인덱스 + 완성 상태.
  *
  * **이 서비스의 첫 화면이자 목차다.** 사람은 여기서 훑고 파고들고, 에이전트는 같은 집계를 MCP 로
  * 받아 "어디가 아직 안 덮였나"를 스스로 안다.

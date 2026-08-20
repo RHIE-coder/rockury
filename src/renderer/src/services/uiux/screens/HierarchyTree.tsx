@@ -5,7 +5,7 @@ import { surfaceKindLabel } from '../catalog'
 import { useActiveProject, useSpecStore, useTree } from '../store'
 
 /**
- * 위계 트리 — 앱 › 서비스 › 화면. 명세 정본 `docs/spec/uiux-ia.md` §2.
+ * 위계 트리 — 앱 › 서비스 › 화면.
  *
  * 프로젝트는 여기 없다 — 상단 컨텍스트 바가 고르는 축이라 트리에 또 두면 "지금 무엇을 보고
  * 있나"가 두 곳에서 갈린다.

@@ -10,7 +10,7 @@ import type {
 } from '../../shared/api/types'
 
 /**
- * 운영부 저장소 — 환경과 실행 기록. `docs/spec/api-runner.md`.
+ * 운영부 저장소 — 환경과 실행 기록.
  *
  * 여기서 지키는 것:
  *  · 환경 이름은 명세 안에서 유일 (같은 이름 둘이면 "어느 STG 냐"가 흐려진다)

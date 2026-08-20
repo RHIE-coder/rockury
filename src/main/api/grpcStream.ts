@@ -6,7 +6,7 @@ import { assumedNote, type GrpcTarget } from '../../shared/api/grpcTarget'
 import { SHAPE_LABEL, type InteractionShape, type RunStatus } from '../../shared/api/types'
 
 /**
- * gRPC 스트리밍 전송 — `docs/spec/api-runner.md` § stream.session AC-7b.
+ * gRPC 스트리밍 전송.
  *
  * WebSocket·SSE 와 결정적으로 다른 점: **글자를 그대로 흘려보낼 수 없다.** gRPC 메시지는
  * 그 메서드의 메시지 정의로 인코딩된 바이트다. 정의가 없으면 보낼 수도 읽을 수도 없다 —

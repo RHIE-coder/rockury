@@ -16,7 +16,7 @@ import { useActiveEnvironment } from '../ops/store'
 import { useContractStore, useContractSync } from './store'
 
 /**
- * Contract › Drift — `docs/spec/api-contract.md` § drift.
+ * Contract › Drift
  *
  * 이 화면이 이 앱의 값어치다. 그런데 값어치는 "어긋남을 찾는다"가 아니라
  * **"확인 안 된 것을 확인됐다고 말하지 않는다"** 에 있다:

@@ -1,7 +1,7 @@
 import type { FieldDef, FieldType } from './types'
 
 /**
- * 관측된 응답에서 **모양**만 뽑는다 — `docs/spec/api-studio.md` § requests.response AC-3,
+ * 관측된 응답에서 **모양**만 뽑는다
  * `api-mcp.md` § tools.read AC-3.
  *
  * 왜 본문이 아니라 모양이냐: 응답 본문에는 토큰·개인정보가 들어 있을 수 있다. 사람은 앱에서

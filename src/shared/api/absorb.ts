@@ -3,7 +3,7 @@ import { shapeOfBody } from './observed'
 import type { FieldDef, RunRecord, SpecDef } from './types'
 
 /**
- * 판정 결과를 명세로 흡수 — `docs/spec/api-contract.md` § accept.absorb.
+ * 판정 결과를 명세로 흡수
  *
  * **더하기만 한다.** 이미 선언된 것은 타입도 필수여부도 손대지 않는다 —
  * 실제가 옳다고 단정할 근거가 없기 때문이다(서버가 버그일 수도 있다).

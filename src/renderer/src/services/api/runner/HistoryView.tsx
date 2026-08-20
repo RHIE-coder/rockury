@@ -79,7 +79,7 @@ function SessionMessages({ run }: { run: RunRecord }) {
 }
 
 /**
- * Runner › History — `docs/spec/api-runner.md` § history.
+ * Runner › History
  *
  * 이 목록이 이 앱이 AI 에게 댈 수 있는 두 조각 중 하나다("사람이 쓰면서 쌓인 관측").
  * 그래서 **지나간 기록은 안 고친다** — 읽기와 재실행만 있다.

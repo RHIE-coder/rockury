@@ -2,7 +2,6 @@ import type { Catalog, Discover } from './types'
 
 /**
  * `연결 시험` 의 순수 계산 — 무엇으로 시험하고, 실패를 어떻게 말할 것인가.
- * 명세: `docs/spec/infra-catalog.md` §providers.credentials AC-4.
  *
  * 실제 실행은 메인 프로세스(`infra:runProbe`)가 한다. 여기 있는 것은 **고르기와 말하기**뿐이라
  * 전부 입력→출력이 결정적이다.

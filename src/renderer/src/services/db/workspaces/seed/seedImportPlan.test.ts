@@ -3,7 +3,6 @@ import type { Constraint, TableDef } from '../definition/types'
 import { planSeedImport } from './seedImportPlan'
 import type { SeedRow, SeedSet } from './types'
 
-/** CASE-design-080~084 (docs/qa/db-design.md) */
 
 const col = (id: string, name: string, over: Partial<TableDef['columns'][number]> = {}) => ({
   id,

@@ -3,7 +3,6 @@ import type { SeedSet } from './types'
 
 /**
  * 시드 세트 **선언** 판정(순수) — 자연키 기본값·완전성·등록 후보·상호 배타 토글.
- * 정본: `docs/spec/db-design.md` Section `db-design.seed.declaration` / `.set-list`.
  */
 
 /**

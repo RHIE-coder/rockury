@@ -1,7 +1,7 @@
 import type { ServiceCoverage } from './types'
 
 /**
- * API 서비스의 MCP 노출 지도 — 정본은 `docs/spec/api-mcp.md` § coverage.map.
+ * API 서비스의 MCP 노출 지도
  *
  * 이 서비스가 그은 선: **설계면만 연다.** 만들기·고치기 ○ / 지우기·실행 ×
  * (spec api-service §4-③). DB 서비스가 삭제 도구를 안 연 것과 같은 선이고,

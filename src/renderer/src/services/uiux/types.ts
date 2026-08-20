@@ -1,5 +1,5 @@
 /**
- * UI/UX 서비스 도메인 타입 — 명세 정본 `docs/spec/uiux-ia.md` §2(위계) · §7(데이터 모델).
+ * UI/UX 서비스 도메인 타입 — 위계와 데이터 모델.
  *
  * 위계는 6층이다: Project > Application > Service > Surface > Section > Component.
  * 타입 이름에 `Spec` 을 붙인 이유는 이름 충돌 때문이다 — 여기의 "Service" 는 좌측 레일의

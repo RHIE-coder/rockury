@@ -7,7 +7,7 @@ import { exportSpec, type ExportFormat, type ExportResult } from '../../../share
 import type { InterfaceKind, RequestDef } from '../../../shared/api/types'
 
 /**
- * 가져오기·내보내기 IPC — `docs/spec/api-studio.md` § requests.import/export.
+ * 가져오기·내보내기 IPC
  *
  * **가져오기는 기존 명세를 덮지 않는다**(AC-4). 먼저 미리보기를 만들고, 무엇이 추가·충돌인지
  * 보인 뒤에야 사람이 수락한다. 못 옮긴 것은 조용히 버리지 않고 목록으로 함께 나간다(AC-5).

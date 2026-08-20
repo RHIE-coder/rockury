@@ -12,7 +12,7 @@ import { OpsGuardBand } from '../ops/EnvironmentsView'
 import { rendererFunctionEnv, useActiveEnvironment, useOpsStore, useOpsSync } from '../ops/store'
 
 /**
- * Runner › Send — `docs/spec/api-runner.md` § send.
+ * Runner › Send
  *
  * 이 화면의 알맹이는 "보내기" 가 아니라 **보내기 전에 보이는 것**이다:
  *   · 최종 요청 전문        · 값마다 어디서 왔는지        · 왜 못 보내는지

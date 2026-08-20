@@ -16,7 +16,7 @@ import {
 import { useActiveProject, useSpecStore } from '../store'
 
 /**
- * Style — 이 프로젝트의 색·간격·글자. 명세 정본 `docs/spec/uiux-ia.md` Surface `uiux.style`.
+ * Style — 이 프로젝트의 색·간격·글자.
  *
  * **덮어쓴 값만 저장한다.** 기본 한 벌을 통째로 복사해 두면 나중에 기본이 좋아져도 이 프로젝트만
  * 옛 값에 묶인다. 그래서 저장은 차이만, 화면은 병합 결과를 보인다.

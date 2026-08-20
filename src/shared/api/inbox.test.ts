@@ -15,7 +15,6 @@ import type { FieldDef, RequestDef } from './types'
 /**
  * TestPlan: api-runner · Scenario S5
  *   CASE-apirunner-043 수신 본문 대조 · 044 포트 충돌 · 046 수신 목록 행 · 047 수신 → Run
- * 대상 명세: `docs/spec/api-runner.md` § inbox.
  */
 
 const f = (name: string, type: FieldDef['type'], requiredness: FieldDef['requiredness']): FieldDef => ({

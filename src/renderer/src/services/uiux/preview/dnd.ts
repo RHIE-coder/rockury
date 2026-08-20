@@ -2,7 +2,7 @@ import type { SurfaceContent } from '../types'
 import { findComponent } from '../tree'
 
 /**
- * 끌어놓기 계산 — 명세 정본 `docs/spec/uiux-ia.md` §6.
+ * 끌어놓기 계산
  *
  * **좌표는 여기서만 쓰이고 저장되지 않는다.** 화면에서 잰 사각형과 포인터 위치로 "어느 영역의
  * 몇 번째"를 정하고 나면, 남는 것은 순서뿐이다 — 그래서 끌어 옮겨도 결과가 여전히 구조다.

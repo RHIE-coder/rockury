@@ -315,7 +315,7 @@ export async function run(ctx) {
 
   // ⭐⭐ 시드 반영(설계→운영) + 되먹임(운영→설계) — 실 MySQL 에 트랜잭션 게이트로 쓴다.
   //    대상은 방금 역설계로 들여온 설계(e2e-imported)라 컬럼이 실 DB 와 정확히 맞는다.
-  //    CASE-design-090~094 (docs/qa/db-design.md). 끝에서 심은 행을 지워 DB 를 원상복구한다.
+ // CASE-design-090~094. 끝에서 심은 행을 지워 DB 를 원상복구한다.
   {
     const ROLE = 'e2e-seed-role'
     // 검증·정리용 직접 조회는 이 연결로 한다(화면은 활성 연결을 쓰고, 둘은 같은 테스트 DB 다).

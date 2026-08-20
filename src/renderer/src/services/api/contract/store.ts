@@ -8,7 +8,7 @@ import { useApiStore } from '../store'
 import { ipcErrorText } from '../errorText'
 
 /**
- * 판정 스토어 — `docs/spec/api-contract.md`.
+ * 판정 스토어.
  *
  * 화면이 지켜야 하는 것 하나: **결과가 없는 것과 어긋남이 없는 것을 섞지 않는다.**
  * `drift === null` 은 "아직 안 돌렸다"이지 "이상 없다"가 아니다.

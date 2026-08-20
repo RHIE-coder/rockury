@@ -19,7 +19,7 @@ import { describeSignature } from '../../shared/api/signature'
 import { INTERFACE_KINDS, INTERFACE_META, type SpecDef } from '../../shared/api/types'
 
 /**
- * API 서비스의 MCP 도구 — `docs/spec/api-mcp.md`.
+ * API 서비스의 MCP 도구.
  *
  * **설계면만 연다**: 만들기·고치기 ○ / 지우기·실행 × (spec §4-③).
  *  · 실행 도구가 없는 이유 — AI 는 터미널에서 더 잘 쏜다. 중간에 끼면 요청 id·환경 id 를

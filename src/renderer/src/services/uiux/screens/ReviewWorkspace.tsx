@@ -11,7 +11,7 @@ import { Preview } from './Preview'
 import { ScreensShell } from './ScreensShell'
 
 /**
- * Screens › Review — 화면 위 요소에 **의견을 붙인다.** 명세 정본 `docs/spec/uiux-ia.md` Surface `uiux.screens.review`.
+ * Screens › Review — 화면 위 요소에 **의견을 붙인다.**
  *
  * 스크린샷을 찍어 화살표를 그려 보내던 일을 대신하는 자리다. 의견은 **좌표가 아니라 요소에**
  * 붙으므로 배치가 바뀌어도 떠내려가지 않고, 에이전트가 "어느 요소에 대한 말인지" 정확히 안다.

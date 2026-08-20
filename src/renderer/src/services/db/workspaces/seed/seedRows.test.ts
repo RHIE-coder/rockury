@@ -10,7 +10,6 @@ import {
 } from './seedRows'
 import type { SeedRow } from './types'
 
-/** CASE-design-010~013 (docs/qa/db-design.md) */
 
 const row = (id: string, values: Record<string, string | null>): SeedRow => ({ id, values })
 

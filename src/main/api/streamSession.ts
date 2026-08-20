@@ -17,7 +17,7 @@ import type { GrpcTarget } from '../../shared/api/grpcTarget'
 import type { InteractionShape, RunStatus, StreamMessage, StreamState } from '../../shared/api/types'
 
 /**
- * 스트림 전송 — `docs/spec/api-runner.md` § stream.session.
+ * 스트림 전송
  *
  * 왜 메인 프로세스냐: 렌더러의 `WebSocket`·`EventSource` 는 **헤더를 못 싣는다**(브라우저가
  * 금지한다). 우리 요청은 인증 헤더가 붙으므로 창구가 아예 안 맞는다. 게다가 화면을 나갔다

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { observedShape, shapeOfBody, typeOf } from './observed'
 
 /**
- * 관측 모양 뽑기 — `docs/qa/api-studio.md` CASE-apistudio-077 (관측에서 제안)
+ * 관측 모양 뽑기 — CASE-apistudio-077 (관측에서 제안)
  * + `api-mcp.md` tools.read AC-3 (AI 에게는 모양까지).
  */
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { classifyFailure, sendHttp } from './httpSend'
 
-/** 실패 갈래 나누기 — `docs/qa/api-runner.md` CASE-apirunner-023 (execute AC-4). */
+/** 실패 갈래 나누기 — CASE-apirunner-023 (execute AC-4). */
 
 const errWith = (code: string, name = 'TypeError'): unknown =>
   Object.assign(new Error('fetch failed'), { name, cause: { code } })

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { SeedRow, SeedSet } from '../workspaces/seed/types'
 import { diffSeeds, isEmptySeedDiff } from './seedDiff'
 
-/** CASE-design-020~027 (docs/qa/db-design.md) */
 
 const row = (id: string, values: Record<string, string | null>): SeedRow => ({ id, values })
 
