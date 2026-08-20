@@ -8,7 +8,7 @@
  *    node 내장 모듈을 import 하면 빌드가 깨진다(실제로 깨졌다). 경로는 문자열로 쪼갠다.
  *
  * 워크트리는 `<…>/.worktrees/<저장소>/<서비스>` 라 마지막 마디가 서비스 이름이고,
- * 본진은 저장소 폴더 이름 그대로다.
+ * main 폴더는 저장소 폴더 이름 그대로다.
  */
 export function sourceLabel(sourceRoot: string): string {
   // 끝 슬래시·중복 슬래시를 흘려보내고, 윈도우 역슬래시도 같이 받는다.

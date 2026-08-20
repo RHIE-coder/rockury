@@ -112,3 +112,40 @@ export function parseArgs(argv) {
     noInstall: argv.includes('--no-install')
   }
 }
+
+/**
+ * 화면 피드백 폴더의 저장소 안 상대 경로.
+ *
+ * main 폴더에 있는 이 폴더 **하나**를 다섯 워크트리가 나눠 쓴다(각자 사본을 갖지 않는다).
+ * 왜 사본이 아닌가: "읽고 고쳤으면 폴더를 지운다"가 규약인데, 사본이면 그 삭제가 제 사본만
+ * 지우고 main 폴더의 원본은 남는다 — 남은 원본을 다음 사람이 또 집어 같은 것을 두 번 고치게 된다.
+ */
+export const FEEDBACK_DIR = path.join('.harness', 'feedback')
+
+/**
+ * 워크트리의 피드백 자리를 main 폴더에 이을지 판정한다 — **순수 계산**(파일을 건드리지 않는다).
+ *
+ * 사람이 남긴 제보를 말없이 지우지 않는 것이 요점이다. 자리가 비었거나 우리가 건 링크일
+ * 때만 손대고, 실물 폴더에 내용물이 있으면(= 그 워크트리에서 앱을 띄워 남긴 제보가 있다)
+ * 건드리지 않고 사람에게 넘긴다.
+ *
+ * @param exists  그 자리에 무언가 있는가
+ * @param isLink  그것이 심볼릭 링크인가
+ * @param target  링크라면 가리키는 곳(절대경로로 풀어서 넘긴다)
+ * @param want    가리켜야 할 곳 — main 폴더의 피드백 폴더(절대경로)
+ * @param entries 실물 폴더라면 그 안의 항목 수
+ */
+export function feedbackLinkVerdict({ exists, isLink = false, target = '', want, entries = 0 }) {
+  if (!exists) return { kind: 'missing', act: true, text: 'main 폴더의 피드백에 연결' }
+  if (isLink) {
+    return path.resolve(target) === path.resolve(want)
+      ? { kind: 'linked', act: false, text: '이미 연결됨' }
+      : { kind: 'relink', act: true, text: `다른 곳을 가리킴(${target}) — main 폴더로 다시 연결` }
+  }
+  if (entries === 0) return { kind: 'empty', act: true, text: '빈 폴더를 치우고 연결' }
+  return {
+    kind: 'occupied',
+    act: false,
+    text: `제보 ${entries}건이 든 실물 폴더 — 건드리지 않습니다. main 폴더로 옮긴 뒤 다시 실행하세요`
+  }
+}

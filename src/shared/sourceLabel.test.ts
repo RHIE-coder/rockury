@@ -7,7 +7,7 @@ describe('소스 폴더 라벨', () => {
     expect(sourceLabel('/Users/x/Workspace/.worktrees/rockury/db')).toBe('rockury:db')
   })
 
-  it('본진은 저장소 폴더 이름', () => {
+  it('main 폴더는 저장소 폴더 이름', () => {
     expect(sourceLabel('/Users/x/Workspace/rockury')).toBe('rockury')
   })
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { SERVICES, parseArgs, planWorktrees, syncVerdict } from './plan.mjs'
+import {
+  FEEDBACK_DIR,
+  SERVICES,
+  feedbackLinkVerdict,
+  parseArgs,
+  planWorktrees,
+  syncVerdict
+} from './plan.mjs'
 
 /**
  * TestPlan: parallel-dev · Scenario S7 (CASE-pdev-060)
@@ -151,5 +158,77 @@ describe('명령줄 파싱', () => {
 
   it('모르는 명령은 그대로 넘긴다 — 안내는 부르는 쪽 몫', () => {
     expect(parseArgs(['foo']).cmd).toBe('foo')
+  })
+})
+
+/**
+ * 화면 피드백은 main 폴더 하나를 다섯 워크트리가 나눠 쓴다 — 사본이 아니라 링크다.
+ * 판정의 요점은 하나: **사람이 남긴 제보를 말없이 지우지 않는다.**
+ */
+describe('워크트리 피드백 연결 판정', () => {
+  const WANT = '/Users/x/Workspace/rockury/.harness/feedback'
+
+  it('저장소 안 상대 경로는 앱이 쓰는 자리와 같다', () => {
+    // src/main/ipc/devFeedback.ts 가 `<소스루트>/.harness/feedback` 에 떨군다.
+    expect(FEEDBACK_DIR).toBe('.harness/feedback')
+  })
+
+  it('자리가 비었으면 연결한다', () => {
+    expect(feedbackLinkVerdict({ exists: false, want: WANT })).toMatchObject({
+      kind: 'missing',
+      act: true
+    })
+  })
+
+  it('이미 main 폴더를 가리키면 손대지 않는다 (멱등)', () => {
+    const v = feedbackLinkVerdict({ exists: true, isLink: true, target: WANT, want: WANT })
+    expect(v).toMatchObject({ kind: 'linked', act: false })
+  })
+
+  it('경로 표기가 달라도 같은 곳으로 알아본다', () => {
+    const v = feedbackLinkVerdict({
+      exists: true,
+      isLink: true,
+      target: '/Users/x/Workspace/rockury/./.harness//feedback',
+      want: WANT
+    })
+    expect(v.kind).toBe('linked')
+  })
+
+  it('링크가 딴 곳을 가리키면 다시 잇는다 — 저장소를 옮겼을 때', () => {
+    const v = feedbackLinkVerdict({
+      exists: true,
+      isLink: true,
+      target: '/Users/x/Old/rockury/.harness/feedback',
+      want: WANT
+    })
+    expect(v).toMatchObject({ kind: 'relink', act: true })
+  })
+
+  it('빈 실물 폴더는 치우고 잇는다 — 잃을 것이 없다', () => {
+    const v = feedbackLinkVerdict({ exists: true, entries: 0, want: WANT })
+    expect(v).toMatchObject({ kind: 'empty', act: true })
+  })
+
+  it('제보가 든 실물 폴더는 건드리지 않는다 — 사람 것을 말없이 지우지 않는다', () => {
+    const v = feedbackLinkVerdict({ exists: true, entries: 3, want: WANT })
+    expect(v).toMatchObject({ kind: 'occupied', act: false })
+    expect(v.text).toContain('3건')
+  })
+
+  it('손대는 판정은 링크이거나 빈 자리일 때뿐이다', () => {
+    const cases = [
+      { exists: false },
+      { exists: true, isLink: true, target: WANT },
+      { exists: true, isLink: true, target: '/elsewhere' },
+      { exists: true, entries: 0 },
+      { exists: true, entries: 1 },
+      { exists: true, entries: 99 }
+    ]
+    for (const c of cases) {
+      const v = feedbackLinkVerdict({ ...c, want: WANT })
+      // 내용물이 있는 실물 폴더에서 act 가 참이면 제보가 날아간다.
+      if (!c.isLink && (c.entries ?? 0) > 0) expect(v.act).toBe(false)
+    }
   })
 })

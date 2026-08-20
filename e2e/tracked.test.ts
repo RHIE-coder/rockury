@@ -8,7 +8,7 @@ import { dirname, join, relative, sep } from 'node:path'
  * 소스가 git 에 실제로 들어갔는지 검사한다.
  *
  * 실제 사고(2026-07-27): `.gitignore` 의 `coverage` 규칙이 깊이를 안 가려서
- * `src/main/ai/coverage/` 폴더 8개 파일이 **조용히 커밋에서 빠졌다.** 본진에는 파일이
+ * `src/main/ai/coverage/` 폴더 8개 파일이 **조용히 커밋에서 빠졌다.** main 폴더에는 파일이
  * 로컬로 남아 있어 typecheck·test·build 가 전부 통과했고, 워크트리를 새로 만들고 나서야
  * "모듈을 못 찾겠다"로 터졌다. 즉 **작업하던 컴퓨터에서는 절대 안 드러나는 종류의 사고**다.
  *

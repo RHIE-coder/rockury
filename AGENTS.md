@@ -18,7 +18,8 @@ Electron + electron-vite · React 19 · TypeScript 7 · Tailwind v4 + Radix · Z
 표시가 그려진 그림 · 표시마다의 메모 · 그 자리의 DOM 요소와 React 컴포넌트 사슬(= 소스 파일
 주소) · 그때 난 콘솔 오류 · nav 경로. 폴더 이름이 `<날짜>-<시각>-<화면>` 이라 **가장 최근
 것이 마지막 줄**이다. `_draft-` 로 시작하는 폴더는 **아직 안 끝난 것**이니 건너뛴다.
-읽고 고쳤으면 폴더를 지운다.
+읽고 고쳤으면 폴더를 지운다 — 단 **워크트리에서는 지우지 않는다**(main 폴더 몫 ·
+`docs/agents/parallel-dev.md`).
 
 네 가지를 놓치지 말 것 — `note.md` 가 넷 다 밝힌다:
 - **표시의 갈래** — "콕 집은 자리"는 **한 점**이다(좌표 옆 넓이를 "이만큼이 문제"로 읽지 말 것).
@@ -90,7 +91,7 @@ Electron + electron-vite · React 19 · TypeScript 7 · Tailwind v4 + Radix · Z
 
 | 언제 | 어디 |
 |---|---|
-| 워크트리에서 일한다 · 새 서비스/IPC 채널/e2e 스위트를 만든다 | `docs/agents/parallel-dev.md` |
+| 워크트리에서 일한다 · 화면 피드백을 나눠 맡는다 · 새 서비스/IPC 채널/e2e 스위트를 만든다 | `docs/agents/parallel-dev.md` |
 | 가드가 걸렸는데 이유를 모른다 · 가드를 고친다 | `docs/agents/guardrails.md` |
 | e2e 를 쓴다(앱 구동 함정·패턴) | `e2e/README.md` |
 | 합의된 용어의 뜻 | `docs/glossary.md` |

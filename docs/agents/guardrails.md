@@ -97,7 +97,7 @@ surface-verify 판정기(`e2e/surface/checks.mjs`)에 문구 검사를 넣으면
 
 - `e2e/tracked.test.ts` — `src`·`e2e`·`scripts` 의 파일이 전부 git 에 추적되는가.
   **왜**: `.gitignore` 의 `coverage` 규칙이 깊이를 안 가려 `src/main/ai/coverage/` 8개 파일이
-  조용히 커밋에서 빠졌다. 본진엔 로컬 파일이 남아 있어, 새 워크트리를 만들고서야 터졌다.
+  조용히 커밋에서 빠졌다. main 폴더엔 로컬 파일이 남아 있어, 새 워크트리를 만들고서야 터졌다.
 - `e2e/textSource.test.ts` — git 이 바이너리로 보는 파일이 있는가(`git ls-files --eol`).
   `src`·`e2e`·`scripts`·`docs`·`.harness` 를 본다 — 문서도 대상이다(설명하는 문장에 실제 NUL 을
   적는 사고가 실제로 났다).

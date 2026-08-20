@@ -4,6 +4,7 @@
 //   node scripts/parallel/setup.mjs           준비(멱등 — 두 번 돌려도 안전)
 //   node scripts/parallel/setup.mjs status    현황만 본다
 //   node scripts/parallel/setup.mjs sync      워크트리를 main 최신으로 끌어올린다(빨리감기만)
+//                                            겸사겸사 화면 피드백 연결도 수리한다
 //   node scripts/parallel/setup.mjs remove    워크트리 정리(미커밋 변경이 있으면 멈춘다)
 //   node scripts/parallel/setup.mjs --no-install   npm install 을 건너뛴다(빠른 확인용)
 //   node scripts/parallel/setup.mjs --help    이 사용법
@@ -13,7 +14,15 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SERVICES, describePlan, parseArgs, planWorktrees, syncVerdict } from './plan.mjs'
+import {
+  FEEDBACK_DIR,
+  SERVICES,
+  describePlan,
+  feedbackLinkVerdict,
+  parseArgs,
+  planWorktrees,
+  syncVerdict
+} from './plan.mjs'
 import { helpIfAsked, usageOf } from '../lib/usage.cjs'
 
 const SELF = fileURLToPath(import.meta.url)
@@ -54,6 +63,67 @@ function dirSizeMb(dir) {
   }
 }
 
+/** main 폴더의 화면 피드백 폴더 — 다섯 워크트리가 이 하나를 나눠 쓴다. */
+const FEEDBACK_HOME = path.join(REPO, FEEDBACK_DIR)
+
+/**
+ * ── 워크트리의 `.harness/feedback` 을 main 폴더로 잇는다(심볼릭 링크) ──
+ *
+ * 왜 필요한가: 앱은 **한 번에 하나만** 뜨고 화면이 다 붙어 있는 건 통합본인 main 폴더뿐이라,
+ * 제보는 사실상 언제나 main 폴더에 떨어진다. 그 폴더는 gitignore 대상이라 브랜치·병합 어느
+ * 경로로도 워크트리에 따라가지 않는다 — 워크트리 에이전트가 제보를 아예 못 본다.
+ *
+ * 왜 사본이 아니라 링크인가: 한 자리를 공유해야 "고쳤으면 지운다"가 모두에게 반영되고,
+ * 누가 무엇을 집었는지도 한 자리에 보인다. 사본을 뿌리면 같은 제보를 둘이 고친다.
+ *
+ * 되돌릴 수 없는 조작은 하지 않는다 — 실물 제보가 든 폴더는 판정이 막는다(plan.mjs).
+ */
+
+/** 그 자리에 지금 무엇이 있는지 읽는다 — 판정에 넘길 재료(읽기만 한다). */
+function feedbackSlot(dir) {
+  const at = path.join(dir, FEEDBACK_DIR)
+  try {
+    const st = fs.lstatSync(at)
+    const isLink = st.isSymbolicLink()
+    return {
+      exists: true,
+      isLink,
+      target: isLink ? path.resolve(path.dirname(at), fs.readlinkSync(at)) : '',
+      entries: isLink ? 0 : countEntries(at),
+      want: FEEDBACK_HOME
+    }
+  } catch {
+    return { exists: false, want: FEEDBACK_HOME }
+  }
+}
+
+/** 폴더 안 항목 수. 폴더가 아니거나 못 읽으면 1 — 정체를 모르면 손대지 않는 쪽으로 센다. */
+function countEntries(at) {
+  try {
+    return fs.readdirSync(at).length
+  } catch {
+    return 1
+  }
+}
+
+/** 판정대로 실제로 잇는다. 손댈 게 없으면 그대로 판정만 돌려준다. */
+function linkFeedback(dir) {
+  const at = path.join(dir, FEEDBACK_DIR)
+  // main 폴더 자리를 먼저 만든다 — 판정보다 앞에 둬야 "이미 연결됨"인 링크가 끊긴 채로 남지 않는다
+  // (제보를 다 처리하고 main 폴더 쪽을 폴더째 지운 뒤가 그 경우다).
+  fs.mkdirSync(FEEDBACK_HOME, { recursive: true })
+
+  const v = feedbackLinkVerdict(feedbackSlot(dir))
+  if (!v.act) return v
+
+  fs.mkdirSync(path.dirname(at), { recursive: true })
+  // 링크는 unlink, 빈 폴더는 rmdir — 재귀 삭제를 쓰지 않는다(제보를 날릴 길을 아예 안 둔다).
+  if (v.kind === 'relink') fs.unlinkSync(at)
+  else if (v.kind === 'empty') fs.rmdirSync(at)
+  fs.symlinkSync(FEEDBACK_HOME, at, 'dir')
+  return v
+}
+
 // ─────────────────────────────────────────────────────────────── status
 
 function showStatus() {
@@ -64,8 +134,9 @@ function showStatus() {
     const size = p.worktreeExists ? dirSizeMb(p.dir) : null
     const deps = p.worktreeExists && fs.existsSync(path.join(p.dir, 'node_modules'))
     const harness = p.worktreeExists && fs.existsSync(path.join(p.dir, '.harness-main'))
+    const fb = p.worktreeExists && feedbackLinkVerdict(feedbackSlot(p.dir)).kind === 'linked'
     const extra = p.worktreeExists
-      ? `  ${C.dim}${size ? size + 'MB' : ''} ${deps ? '· 의존성 ✔' : '· 의존성 없음(npm install 필요)'}${harness ? ' · steward ✔' : ' · steward 꺼짐'}${C.x}`
+      ? `  ${C.dim}${size ? size + 'MB' : ''} ${deps ? '· 의존성 ✔' : '· 의존성 없음(npm install 필요)'}${harness ? ' · steward ✔' : ' · steward 꺼짐'}${fb ? ' · 피드백 ✔' : ' · 피드백 끊김'}${C.x}`
       : ''
     say(`  ${mark} ${p.label.padEnd(6)} ${p.branch.padEnd(12)} ${p.dir}${extra}`)
   }
@@ -117,7 +188,15 @@ function setup() {
     fs.writeFileSync(path.join(p.dir, '.harness-main'), 'steward\n')
     say(`  ${C.g}✔${C.x} .harness-main (steward 활성)`)
 
-    // 3) 의존성 — node_modules 도 gitignore 대상이라 안 따라온다.
+    // 3) 화면 피드백 — main 폴더 하나로 잇는다(사본 아님). 역시 gitignore 대상이라 안 따라온다.
+    const fb = linkFeedback(p.dir)
+    say(
+      fb.act
+        ? `  ${C.g}✔${C.x} .harness/feedback → main 폴더 ${C.dim}(제보를 다섯이 나눠 쓴다)${C.x}`
+        : `  ${C.y}—${C.x} .harness/feedback ${fb.text}`
+    )
+
+    // 4) 의존성 — node_modules 도 gitignore 대상이라 안 따라온다.
     if (NO_INSTALL) {
       say(`  ${C.y}—${C.x} npm install 건너뜀 (직접 실행하세요)`)
     } else {
@@ -160,6 +239,22 @@ function sync() {
 
   let moved = 0
   let blocked = 0
+
+  // 화면 피드백은 브랜치 상태와 무관하다 — 갈라진 워크트리도 제보는 봐야 하니 먼저 챙긴다.
+  // (상설 워크트리는 이 연결이 생기기 전에 만들어졌을 수 있다. 여기가 그 수리 자리다.)
+  const fbLinked = []
+  const fbNeedsHuman = []
+  for (const p of plan().filter((x) => x.worktreeExists)) {
+    const v = linkFeedback(p.dir)
+    if (v.act) fbLinked.push(p.label)
+    else if (v.kind === 'occupied') fbNeedsHuman.push(`${p.label}: ${v.text}`)
+  }
+  if (fbLinked.length > 0) say(`  ${C.g}✔${C.x} 피드백 연결: ${fbLinked.join(' · ')}`)
+  for (const t of fbNeedsHuman) {
+    say(`  ${C.y}!${C.x} 피드백 ${t}`)
+    blocked++
+  }
+  if (fbLinked.length > 0 || fbNeedsHuman.length > 0) say()
 
   for (const p of plan()) {
     const count = (range) => {
