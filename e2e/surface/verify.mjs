@@ -11,7 +11,13 @@
 //   불변식: 실 앱 DB 를 절대 안 건드린다 — 격리된 임시 userData(--user-data-dir)로 띄우고 그것만 정리.
 //   함정: getByRole 계열은 이 창을 크래시시킨다 → CSS 로케이터 + DOM 평가(page.evaluate)만 쓴다.
 //
-//   사용: npm run build && node e2e/surface/verify.mjs [--update-baseline]
+//   ⭐ 범위 좁히기: `--only=db` 로 그 서비스 화면만 **다시 뜬다.** 나머지는 **지난 기록을 그대로
+//   이어받아** 기록 전체가 여전히 전 화면을 덮는다 — 안 그러면 좁힌 순간 다른 서비스가 기록에서
+//   사라져 커밋 관문이 "검사할 게 없어서" 조용히 통과한다(이 저장소가 제일 싫어하는 실패).
+//   그래서 지난 기록이 없으면 `--only` 는 거절한다: 이어받을 것이 없으면 구멍이 된다.
+//
+//   사용: npm run build && node e2e/surface/verify.mjs [--only=<서비스,...>] [--update-baseline]
+//         npm run surface-verify -- --only=db
 import { _electron as electron } from 'playwright-core'
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
@@ -64,6 +70,41 @@ fs.mkdirSync(ARTIFACTS, { recursive: true })
 //   없는데 다섯 서비스가 같은 파일을 갱신하면 충돌이 나기 때문이다.
 const BASELINE_DIR = path.join(APP, 'e2e/surface/baseline')
 const UPDATE_BASELINE = process.argv.includes('--update-baseline')
+
+const HELP = process.argv.includes('--help') || process.argv.includes('-h')
+if (HELP) {
+  console.log(
+    [
+      'surface-verify — 빌드된 앱을 띄워 전 화면을 재고 기록을 남긴다.',
+      '',
+      '  node e2e/surface/verify.mjs                  전 화면',
+      '  node e2e/surface/verify.mjs --only=db        그 서비스만 다시 뜬다(나머지는 지난 기록 이어받음)',
+      '  node e2e/surface/verify.mjs --only=db,api    여럿은 쉼표로',
+      '  node e2e/surface/verify.mjs --update-baseline  지금 상태를 수용 기준선으로 굳힌다(전 화면에서만)',
+      '',
+      '  --only 는 지난 기록이 있어야 쓸 수 있다 — 이어받을 것이 없으면 기록에 구멍이 난다.'
+    ].join('\n')
+  )
+  process.exit(0)
+}
+
+/** `--only=db,api` → ['db','api']. 안 주면 null(전부). */
+const ONLY = (() => {
+  const arg = process.argv.find((a) => a.startsWith('--only='))
+  if (!arg) return null
+  const ids = arg
+    .slice('--only='.length)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return ids.length > 0 ? ids : null
+})()
+
+if (ONLY && UPDATE_BASELINE) {
+  console.error('SURFACE-VERIFY FAIL: --update-baseline 은 전 화면에서만 쓴다(--only 와 같이 못 쓴다).')
+  console.error('  기준선은 화면 전체를 한 판정 기준으로 묶는 것이라, 일부만 갱신하면 나머지와 어긋난다.')
+  process.exit(2)
+}
 
 if (!fs.existsSync(MAIN)) {
   console.error('먼저 `npm run build` 를 실행하세요 (out/main/index.js 없음).')
@@ -190,7 +231,14 @@ try {
   }
 
   // ⭐ 전 화면 자동 순회 — 셸 훅(data-nav-*)에서 nav 트리를 발견해 모든 leaf 를 방문한다.
-  const serviceIds = await page.$$eval('[data-nav-service]', (els) => els.map((e) => e.getAttribute('data-nav-service')))
+  const allServiceIds = await page.$$eval('[data-nav-service]', (els) => els.map((e) => e.getAttribute('data-nav-service')))
+  if (ONLY) {
+    const unknown = ONLY.filter((s) => !allServiceIds.includes(s))
+    if (unknown.length > 0) {
+      throw new Error(`--only 에 없는 서비스: ${unknown.join(', ')} (쓸 수 있는 것: ${allServiceIds.join(', ')})`)
+    }
+  }
+  const serviceIds = ONLY ? allServiceIds.filter((s) => ONLY.includes(s)) : allServiceIds
   let leaves = 0
   for (const svc of serviceIds) {
     await page.locator(`[data-nav-service="${svc}"]`).click()
@@ -215,7 +263,8 @@ try {
   }
 
   // 실패 안전핀 — 순회가 boot 만 남기고 조용히 쪼그라드는 회귀를 기계로 차단.
-  if (leaves < MIN_LEAVES) {
+  //   범위를 좁혔으면 그 서비스 몫만 봐야 한다(한 서비스가 leaf 5개 미만일 수 있다).
+  if (leaves < (ONLY ? 1 : MIN_LEAVES)) {
     throw new Error(`nav 순회 실패: leaf ${leaves}개 < 최소 ${MIN_LEAVES} (data-nav-* 훅이 사라졌나?)`)
   }
 
@@ -228,14 +277,37 @@ try {
   }
   const baseline = loadBaseline(BASELINE_DIR)
 
-  const record = { generatedAt: null, feature: featureName(), captures, baseline }
+  /*
+   * 범위를 좁혔으면 **나머지 화면은 지난 기록에서 그대로 이어받는다.**
+   * 이어받지 않으면 기록이 이번에 뜬 몇 장으로 쪼그라들고, 커밋 관문은 그 몇 장만 보고 통과한다 —
+   * 다른 서비스의 회귀가 "검사 대상이 아니라서" 조용히 빠져나가는 길이 된다.
+   */
+  let finalCaptures = captures
+  let carried = 0
+  if (ONLY) {
+    const recPathPrev = path.join(ARTIFACTS, 'surface-verify.json')
+    if (!fs.existsSync(recPathPrev)) {
+      throw new Error('--only 는 지난 기록이 있어야 씁니다 — 먼저 범위 없이 한 번 돌리세요(npm run surface-verify).')
+    }
+    const prev = JSON.parse(fs.readFileSync(recPathPrev, 'utf8'))
+    const fresh = new Set(captures.map((c) => c.target))
+    const kept = (prev.captures ?? []).filter((c) => !fresh.has(c.target) && c.status !== 'cannot-verify')
+    carried = kept.length
+    if (carried === 0) {
+      throw new Error('--only: 지난 기록에 이어받을 화면이 없습니다 — 범위 없이 한 번 돌리세요.')
+    }
+    finalCaptures = [...captures, ...kept]
+  }
+
+  const record = { generatedAt: null, feature: featureName(), captures: finalCaptures, baseline }
   const recPath = path.join(ARTIFACTS, 'surface-verify.json')
   fs.writeFileSync(recPath, JSON.stringify(record, null, 2))
 
   const result = runChecks(record.captures, { baseline })
   const observed = result.findings.filter((f) => f.severity === 'observe').length
   console.log(`surface-verify → ${recPath}`)
-  console.log(`  화면 ${captures.length}개(leaf ${leaves}) · status=${result.status} · 차단 ${result.blockingCount}건 · 관찰(기준선 수용) ${observed}건`)
+  const scopeNote = ONLY ? ` · 범위 ${ONLY.join(',')} — 새로 뜬 ${captures.length}개 · 지난 기록에서 이어받은 ${carried}개` : ''
+  console.log(`  화면 ${finalCaptures.length}개(leaf ${leaves}) · status=${result.status} · 차단 ${result.blockingCount}건 · 관찰(기준선 수용) ${observed}건${scopeNote}`)
   for (const f of result.findings.filter((x) => x.severity === 'block').slice(0, 20)) {
     console.log(`  ✗ [${f.check}] (${f.formFactor}) ${f.detail}${f.text ? ` — "${f.text}"` : ''}`)
   }
