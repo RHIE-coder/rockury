@@ -27,7 +27,7 @@ export function DiagramEdit({ conn }: { conn: ConnectionDef }) {
   const addFk = useSchemaEditStore((s) => s.addFk)
 
   // 배치·그룹은 읽기 Diagram 과 같은 연결 스코프를 공유한다 — 편집 중에 옮긴 자리가 읽기 모드에도 남는다.
-  const layout = useDiagramLayout(conn.id, true)
+  const layout = useDiagramLayout(conn.id)
 
   const onConnectFk = useCallback(
     (c: Connection) => {
@@ -62,7 +62,6 @@ export function DiagramEdit({ conn }: { conn: ConnectionDef }) {
               exportName={conn.name}
               draggable
               editable
-              persist
               layout={layout}
               selectedId={activeId}
               onSelect={onSelect}

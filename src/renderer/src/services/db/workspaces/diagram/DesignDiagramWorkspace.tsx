@@ -6,19 +6,21 @@ import { GitBranch, Plus, Eye, Layers, LayoutGrid, Lock, CopyPlus } from 'lucide
 import { Button } from '@renderer/ui/button'
 import { PlaceholderView } from '@renderer/ui/PlaceholderView'
 import { useActiveDesign, useDesignsStore } from '../../designs/store'
+import { useVersionLens } from '../../versions/store'
 import { useDefinitionStore, useScopedDesignTables, useDesignReadOnly } from '../definition/store'
 import { TableForm } from '../definition/TableForm'
 import { SqlForm } from '../definition/SqlForm'
 import { DiagramSurface } from '../../remote/diagram/DiagramSurface'
 import { useDiagramLayout } from '../../remote/diagram/useDiagramLayout'
 import { buildFkPatch } from './fk'
+import { designLayoutFallbackScope, designLayoutScope } from './layoutScope'
 import { ImportTablesDialog } from './ImportTablesDialog'
 
 /**
  * Design › Diagram(설계부 · depth 3) — 활성 설계의 **가상 ERD 편집기**.
  * 표시는 useScopedDesignTables(Draft/커밋 렌즈 + 스키마 범위), 편집은 useDefinitionStore 액션(저장은 자동 write-through).
  * 관계는 컬럼 핸들을 끌어 생성. 배치·그룹·상세 서랍은 Remote ERD 와 **같은 공용 표면**을 쓰고,
- * 저장 스코프만 설계별(`design:<id>`)이다.
+ * 저장 스코프만 설계별(`design:<id>`)이다 — 커밋 버전은 여기에 버전 번호가 더 붙는다(`layoutScope.ts`).
  */
 export function DesignDiagramWorkspace() {
   const design = useActiveDesign()
@@ -48,9 +50,16 @@ export function DesignDiagramWorkspace() {
    * 여기 들어올 때 상세 서랍이 저절로 열리지는 않는다 — 서랍은 `DiagramSurface` 가 **누른 순간**만 연다.
    */
   const selectedId = useDefinitionStore((s) => s.activeTableId) || null
-  // 커밋 버전을 볼 때는 배치·그룹을 저장하지 않는다 — 지나간 버전의 화면을 만졌다고
-  // 정본이 바뀌면 안 된다(정본 §db-design.diagram.scope AC-2).
-  const layout = useDiagramLayout(design ? `design:${design.id}` : null, !readOnly)
+  /*
+   * 배치 저장 자리는 **시점마다 다르다**. 예전엔 설계당 한 벌이라, 지나간 버전의 화면을 만지면
+   * 작업본(Draft)의 그림까지 바뀌었다 — 그래서 커밋 버전에서는 배치를 통째로 잠가 뒀고,
+   * "자동 배치조차 못 누른다"는 불편이 됐다(2026-08-21 사용자 제보).
+   * 이제 버전은 자기 키를 쓰고(`design:<id>@<번호>`), 자기 기록이 없는 동안은 Draft 배치를
+   * 물려받는다 — 컷 직후에도 보던 모습 그대로 뜨고, 손대면 그 버전 몫으로만 갈라져 쌓인다.
+   */
+  const lens = useVersionLens()
+  const scopeKey = designLayoutScope(design?.id, lens)
+  const layout = useDiagramLayout(scopeKey, designLayoutFallbackScope(design?.id, lens))
 
   // 빈 캔버스를 눌러 고름을 풀면 Definition 도 함께 푼다 — 한 값을 둘이 보는 이상 한쪽만
   // 남겨 둘 수 없다(그 경우 Definition 은 예전처럼 목록 첫 표로 돌아간다).
@@ -94,45 +103,48 @@ export function DesignDiagramWorkspace() {
         <div className="flex flex-col">
           <h2 className="text-[14px] font-bold text-fg">
             Diagram <span className="font-normal text-muted">· {design.name}</span>
+            {/* 잠긴 것은 **스키마뿐**이다 — 배치·그룹은 이 버전 몫으로 따로 저장된다. */}
             {readOnly && (
               <span className="ml-2 inline-flex items-center gap-1 rounded bg-panel-strong px-1.5 py-0.5 text-[10px] text-muted">
-                <Lock className="size-3" /> 읽기 전용(커밋 버전)
+                <Lock className="size-3" /> 스키마 잠김
               </span>
             )}
           </h2>
           <p className="text-[12px] text-muted">
-            {tables.length}개 테이블 · 가상 ERD {readOnly ? '· 열람' : '· 편집(관계는 컬럼 점을 끌어 연결)'}
+            {tables.length}개 테이블 · 가상 ERD{readOnly ? '' : ' · 편집(관계는 컬럼 점을 끌어 연결)'}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* 배치·그룹은 **커밋 버전에서도** 연다 — 그림은 스냅샷(정본)이 아니라 보기용이고,
+              버전에서 옮긴 자리는 그 버전 키에만 쌓인다(Draft 그림은 그대로). */}
+          <Button size="sm" variant="ghost" onClick={() => void layout.resetLayout()}>
+            <LayoutGrid /> 자동 배치
+          </Button>
           {!readOnly && (
             <>
-              <Button size="sm" variant="ghost" onClick={() => void layout.resetLayout()}>
-                <LayoutGrid /> 자동 배치
-              </Button>
               <Button size="sm" variant="outline" onClick={() => addTable(design.id)}>
                 <Plus /> 테이블 추가
               </Button>
               <Button size="sm" variant="ghost" onClick={() => addView(design.id)}>
                 <Eye /> 뷰 추가
               </Button>
-              {/* 그룹도 여기서 만든다 — 왼쪽 `그룹` 탭을 열어야만 만들 수 있으면 못 찾는다.
-                  상자는 지금 보고 있는 자리에 생긴다(§diagram.group AC-6). */}
-              <Button size="sm" variant="ghost" data-group-create-toolbar onClick={() => layout.createGroup()}>
-                <Layers /> 그룹 추가
-              </Button>
-              {canImport && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-import-tables
-                  title="다른 설계의 테이블을 이 설계로 복제"
-                  onClick={() => setImportOpen(true)}
-                >
-                  <CopyPlus /> 가져오기
-                </Button>
-              )}
             </>
+          )}
+          {/* 그룹도 여기서 만든다 — 왼쪽 `그룹` 탭을 열어야만 만들 수 있으면 못 찾는다.
+              상자는 지금 보고 있는 자리에 생긴다(§diagram.group AC-6). */}
+          <Button size="sm" variant="ghost" data-group-create-toolbar onClick={() => layout.createGroup()}>
+            <Layers /> 그룹 추가
+          </Button>
+          {!readOnly && canImport && (
+            <Button
+              size="sm"
+              variant="ghost"
+              data-import-tables
+              title="다른 설계의 테이블을 이 설계로 복제"
+              onClick={() => setImportOpen(true)}
+            >
+              <CopyPlus /> 가져오기
+            </Button>
           )}
         </div>
       </div>
@@ -156,13 +168,14 @@ export function DesignDiagramWorkspace() {
           )}
         </div>
       ) : (
-        <ReactFlowProvider key={`${design.id}:${layout.nonce}`}>
+        // 스코프 키를 키에 넣는다 — 렌즈를 바꾸면 캔버스를 **그 자리에서** 갈아치워야
+        // 옛 화면이 새 키로 저장을 흘리지 않고, 첫 seed 도 새 저장본에서 다시 잡힌다.
+        <ReactFlowProvider key={`${scopeKey}:${layout.nonce}`}>
           <DiagramSurface
             tables={tables}
             exportName={design.name}
-            draggable={!readOnly}
+            draggable
             editable={!readOnly}
-            persist={!readOnly}
             layout={layout}
             selectedId={selectedId}
             onSelect={handleSelect}
@@ -174,10 +187,15 @@ export function DesignDiagramWorkspace() {
             // 설계부에서만 — 그룹을 지울 때 소속 테이블까지 지울 수 있다(확인 문구 입력).
             //   설계 테이블은 이 앱이 가진 도면이라 여기서 지우는 게 자연스럽다.
             //   실 DB 는 안 건드린다(반영은 Migration 몫).
-            onDeleteTables={(ids) => {
-              const st = useDefinitionStore.getState()
-              for (const id of ids) st.deleteTable(id)
-            }}
+            // ⚠ 커밋 버전에서는 넘기지 않는다 — 배치를 열어도 스키마를 지우는 길까지 열리면 안 된다.
+            onDeleteTables={
+              readOnly
+                ? undefined
+                : (ids) => {
+                    const st = useDefinitionStore.getState()
+                    for (const id of ids) st.deleteTable(id)
+                  }
+            }
           />
         </ReactFlowProvider>
       )}

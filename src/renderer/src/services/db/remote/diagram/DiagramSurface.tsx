@@ -22,7 +22,6 @@ export interface DiagramSurfaceProps {
   draggable: boolean
   /** 스키마(FK)를 고칠 수 있는가. */
   editable: boolean
-  persist: boolean
   layout: DiagramLayoutApi
   selectedId: string | null
   onSelect: (id: string | null) => void
@@ -58,7 +57,6 @@ export function DiagramSurface({
   exportName,
   draggable,
   editable,
-  persist,
   layout,
   selectedId,
   onSelect,
@@ -187,7 +185,6 @@ export function DiagramSurface({
               exportName={exportName}
               draggable={draggable}
               editable={editable}
-              persist={persist}
               onSaveLayout={layout.saveLayout}
               onConnectFk={onConnectFk}
               selectedId={selectedId}

@@ -72,8 +72,6 @@ export interface ErdCanvasProps {
   draggable: boolean
   /** 스키마를 고칠 수 있는가 — 모든 컬럼에 관계(FK) 핸들을 열고 드래그 연결을 받는다. */
   editable: boolean
-  /** 배치·그룹을 저장할지(커밋 버전 열람 등 읽기 전용이면 false). */
-  persist: boolean
   onSaveLayout: (patch: { positions?: Positions; viewport?: Viewport | null }) => void
   onConnectFk?: (c: Connection) => void
   selectedId: string | null
@@ -109,7 +107,6 @@ export function ErdCanvas({
   exportName,
   draggable,
   editable,
-  persist,
   onSaveLayout,
   onConnectFk,
   selectedId,
@@ -266,7 +263,6 @@ export function ErdCanvas({
 
   /** 저장(즉시) — 화면 위치를 이미 아는 위치 위에 얹어, 필터로 숨은 테이블 자리를 지킨다. */
   const persistNow = useCallback(() => {
-    if (!persist) return
     // 밖 카드 자리도 함께 저장한다 — 안 그러면 옮겨도 새로고침에 제자리로 돌아간다.
     const placeable = rf.getNodes().filter((n) => n.type === 'tableErd' || n.type === 'outsideErd')
     const outsideIds = rf.getNodes().filter((n) => n.type === 'outsideErd').map((n) => n.id)
@@ -274,7 +270,7 @@ export function ErdCanvas({
     layoutRef.current = merged
     const vp = rf.getViewport()
     onSaveLayout({ positions: merged, viewport: { x: vp.x, y: vp.y, zoom: vp.zoom } })
-  }, [persist, rf, allTableIds, onSaveLayout, positionsOf])
+  }, [rf, allTableIds, onSaveLayout, positionsOf])
 
   // 스키마/필터 변경 시 재배치. 첫 seed 는 저장된 위치를, 이후엔 현재 화면 위치를 덮어써
   // 사용자가 옮긴 배치를 보존하고 새 테이블만 dagre 자리로 채운다.
@@ -401,13 +397,12 @@ export function ErdCanvas({
   )
 
   const onMoveEnd = useCallback(() => {
-    if (!persist) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null
       persistNow()
     }, MOVE_SAVE_DELAY)
-  }, [persist, persistNow])
+  }, [persistNow])
 
   /**
    * 저장된 시점이 없을 때의 첫 "전체 맞춤"을 캔버스 **크기가 정해진 뒤에** 다시 잡는다.

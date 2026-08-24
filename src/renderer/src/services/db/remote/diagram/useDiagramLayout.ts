@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Viewport } from '@xyflow/react'
 import type { Positions } from './layout'
+import { withInheritedLayout, type InheritedLayout, type LayoutPatch } from './inherit'
 import { nextGroupAnchor, nextGroupId, type DiagramGroup } from './group'
 
 /** 그룹 저장 지연 — 이름표를 끄는 동안 매 프레임 IPC 를 때리지 않기 위한 것. */
@@ -37,12 +38,21 @@ export interface DiagramLayoutApi {
 }
 
 /**
- * ERD 배치·그룹의 로드/저장(세 캔버스 공용). 스코프 키는 Remote = 연결 id, Design = `design:<설계 id>`.
+ * ERD 배치·그룹의 로드/저장(세 캔버스 공용). 스코프 키는 Remote = 연결 id,
+ * Design = `design:<설계 id>`(Draft) · `design:<설계 id>@<버전 번호>`(커밋 버전).
  *
  * 저장은 **부분 갱신**이다 — 캔버스는 위치·뷰포트만, 패널은 그룹만 넘긴다.
  * 메인 저장소가 안 넘어온 항목을 그대로 두므로 서로의 저장을 지우지 않는다.
+ *
+ * `fallbackScopeKey` 를 주면 **자기 기록이 없는 동안 그 스코프의 배치를 물려받아** 보여 준다
+ * (커밋 버전 → Draft). 처음 손대는 순간 물려받은 한 벌을 통째로 자기 키에 적고 갈라선다 —
+ * 그 뒤로 Draft 를 아무리 고쳐도 이 버전의 그림은 그대로다.
+ *
+ * ⚠ 저장 함수는 `scopeKey` 를 **인자로 묶는다**(ref 로 읽지 않는다). 렌즈를 바꾸는 순간
+ *   대기 중이던 저장이 flush 되는데, ref 로 읽으면 그 값이 이미 **새 키**라 옛 화면의 배치가
+ *   새 버전 키에 적힌다.
  */
-export function useDiagramLayout(scopeKey: string | null, persist: boolean): DiagramLayoutApi {
+export function useDiagramLayout(scopeKey: string | null, fallbackScopeKey: string | null = null): DiagramLayoutApi {
   const [storedPositions, setStoredPositions] = useState<Positions>({})
   const [storedViewport, setStoredViewport] = useState<Viewport | null>(null)
   const [groups, setGroupsState] = useState<DiagramGroup[]>([])
@@ -55,40 +65,55 @@ export function useDiagramLayout(scopeKey: string | null, persist: boolean): Dia
   const viewCenterProbe = useRef<(() => { x: number; y: number } | null) | null>(null)
   const groupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingGroups = useRef<DiagramGroup[] | null>(null)
-  const scopeRef = useRef(scopeKey)
-  scopeRef.current = scopeKey
-  const persistRef = useRef(persist)
-  persistRef.current = persist
+  /** 윗대에서 물려받아 화면에 깔린 배치 — 자기 행을 만드는 첫 저장에 통째로 실린다. */
+  const inheritedRef = useRef<InheritedLayout | null>(null)
 
   useEffect(() => {
     if (!scopeKey) return
     let alive = true
     setLoaded(false)
-    void window.rockury.diagram
-      .getLayout(scopeKey)
-      .then((l) => {
-        if (!alive) return
-        setStoredPositions(l?.positions ?? {})
-        setStoredViewport(l?.viewport ?? null)
-        setGroupsState(l?.groups ?? [])
-        positionsRef.current = l?.positions ?? {}
-        setLoaded(true)
-      })
-      .catch(() => alive && setLoaded(true))
+    void (async () => {
+      const own = await window.rockury.diagram.getLayout(scopeKey).catch(() => null)
+      const rec = own ?? (fallbackScopeKey ? await window.rockury.diagram.getLayout(fallbackScopeKey).catch(() => null) : null)
+      if (!alive) return
+      const positions = rec?.positions ?? {}
+      const viewport = rec?.viewport ?? null
+      const nextGroups = rec?.groups ?? []
+      setStoredPositions(positions)
+      setStoredViewport(viewport)
+      setGroupsState(nextGroups)
+      positionsRef.current = positions
+      // 자기 행이 없어 윗대 것을 빌려 왔을 때만 물려받은 상태다.
+      inheritedRef.current = !own && rec ? { positions, viewport, groups: nextGroups } : null
+      setLoaded(true)
+    })()
     return () => {
       alive = false
     }
-  }, [scopeKey, nonce])
+  }, [scopeKey, fallbackScopeKey, nonce])
+
+  /** 저장 한 통로 — 물려받은 상태면 안 넘어온 항목을 채워 자기 행을 통째로 만든다. */
+  const write = useCallback(
+    (patch: LayoutPatch): Promise<unknown> => {
+      if (!scopeKey) return Promise.resolve()
+      const full = withInheritedLayout(inheritedRef.current, patch)
+      // 곧바로 비운다 — 뒤이어 오는 부분 저장(예: 그룹만)이 물려받은 위치를 다시 실어
+      // 방금 옮긴 자리를 되돌리면 안 된다. 이 저장으로 자기 행이 생기므로 그 뒤는 부분 갱신이 맞다.
+      inheritedRef.current = null
+      return window.rockury.diagram.saveLayout({ connectionId: scopeKey, ...full }).catch(() => {})
+    },
+    [scopeKey]
+  )
 
   const flushGroups = useCallback(() => {
     const next = pendingGroups.current
     pendingGroups.current = null
-    const scope = scopeRef.current
-    if (!next || !scope || !persistRef.current) return
-    void window.rockury.diagram.saveLayout({ connectionId: scope, groups: next }).catch(() => {})
-  }, [])
+    if (!next) return
+    void write({ groups: next })
+  }, [write])
 
-  // 떠날 때 대기 중이던 그룹 저장을 마저 보낸다 — 취소만 하면 마지막 변경이 날아간다.
+  // 떠날 때(스코프가 바뀔 때 포함) 대기 중이던 그룹 저장을 마저 보낸다 —
+  // 취소만 하면 마지막 변경이 날아간다. `write` 가 옛 스코프에 묶여 있어 옛 키로 간다.
   useEffect(() => {
     return () => {
       if (groupTimer.current) {
@@ -102,7 +127,7 @@ export function useDiagramLayout(scopeKey: string | null, persist: boolean): Dia
   const setGroups = useCallback(
     (next: DiagramGroup[]) => {
       setGroupsState(next)
-      if (!persistRef.current || !scopeRef.current) return
+      if (!scopeKey) return
       pendingGroups.current = next
       if (groupTimer.current) clearTimeout(groupTimer.current)
       groupTimer.current = setTimeout(() => {
@@ -110,15 +135,16 @@ export function useDiagramLayout(scopeKey: string | null, persist: boolean): Dia
         flushGroups()
       }, GROUP_SAVE_DELAY)
     },
-    [flushGroups]
+    [scopeKey, flushGroups]
   )
 
-  const saveLayout = useCallback((patch: { positions?: Positions; viewport?: Viewport | null }) => {
-    const scope = scopeRef.current
-    if (!scope || !persistRef.current) return
-    if (patch.positions) positionsRef.current = patch.positions
-    void window.rockury.diagram.saveLayout({ connectionId: scope, ...patch }).catch(() => {})
-  }, [])
+  const saveLayout = useCallback(
+    (patch: { positions?: Positions; viewport?: Viewport | null }) => {
+      if (patch.positions) positionsRef.current = patch.positions
+      void write(patch)
+    },
+    [write]
+  )
 
   const createGroup = useCallback((): string => {
     const id = nextGroupId(groups)
@@ -163,12 +189,18 @@ export function useDiagramLayout(scopeKey: string | null, persist: boolean): Dia
       groupTimer.current = null
       flushGroups()
     }
-    await window.rockury.diagram.clearLayout(scopeKey).catch(() => {})
+    if (fallbackScopeKey) {
+      // 물려받는 스코프에서는 행을 **지우면 안 된다** — 지우는 순간 다시 윗대(Draft) 배치를
+      // 물려받아 자동 배치가 없던 일이 된다. 빈 배치를 명시로 적어 자기 행을 세운다.
+      await write({ positions: {}, viewport: null, groups })
+    } else {
+      await window.rockury.diagram.clearLayout(scopeKey).catch(() => {})
+    }
     setStoredPositions({})
     setStoredViewport(null)
     positionsRef.current = {}
     setNonce((x) => x + 1)
-  }, [scopeKey, flushGroups])
+  }, [scopeKey, fallbackScopeKey, groups, write, flushGroups])
 
   const reload = useCallback(() => setNonce((x) => x + 1), [])
 

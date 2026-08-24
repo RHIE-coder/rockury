@@ -378,14 +378,19 @@ export async function run(ctx) {
     await page.waitForTimeout(300)
   }
 
-  // ⭐ CASE-design-065 — 커밋 버전을 **열람**하는 동안에는 배치·그룹을 저장하지 않는다.
-  //    지나간 버전의 화면을 만졌다고 정본이 바뀌면 안 된다(정본 db-design.diagram.scope AC-2).
+  // ⭐ CASE-design-065 — 커밋 버전에서도 **배치는 바꾼다**. 잠기는 것은 스키마뿐이다.
+  //    옛 규칙은 "커밋 버전을 열람하는 동안 배치·그룹을 저장하지 않는다"였는데, 그 바람에
+  //    자동 배치조차 못 눌러 지나간 버전의 그림을 바로잡을 수가 없었다(2026-08-21 사용자 제보).
+  //    지금은 배치 저장 자리가 시점마다 갈려서(`design:<id>@<번호>`), 버전 화면을 만져도
+  //    작업본(Draft)의 그림은 그대로다 — 원칙을 지키면서 잠금만 푼 것이다.
   {
-    const savedLayout = () =>
-      page.evaluate(async () => {
-        const l = await window.rockury.diagram.getLayout('design:commerce-core')
+    const savedLayout = (scope) =>
+      page.evaluate(async (s) => {
+        const l = await window.rockury.diagram.getLayout(s)
         return JSON.stringify({ p: l?.positions ?? {}, g: l?.groups ?? [] })
-      })
+      }, scope)
+    const DRAFT_SCOPE = 'design:commerce-core'
+    const VER_SCOPE = 'design:commerce-core@v0.3.15'
     // 시점 손잡이는 뷰 탭 줄 오른쪽 끝 '설계' 손잡이 안에 있다
     // (자리 이력: 컨텍스트 바 → Design 도구줄 → 모듈 줄 설계 뱃지 → 뷰 탭 줄 · 2026-08-02).
     // 설계부 어느 화면에서나 같은 자리라, 화면을 옮겨도 하나만 떠 있어야 한다.
@@ -393,14 +398,47 @@ export async function run(ctx) {
     await click('button:has-text("Diagram")')
     await page.waitForSelector('.react-flow__node[data-id]', { timeout: 10_000 })
     check('Design › Diagram: 설계 손잡이에 시점 칸이 하나 있다', (await page.locator('[data-version-lens]').count()) === 1)
+
+    const draftBefore = await savedLayout(DRAFT_SCOPE)
+    // 노드별 화면 자리 — 렌즈를 바꿔도 그림이 그대로인지(물려받기) 보려고 찍어 둔다.
+    const nodeMap = () =>
+      page.evaluate(() =>
+        Object.fromEntries(
+          [...document.querySelectorAll('.react-flow__node[data-id]')]
+            .filter((el) => !el.getAttribute('data-id').startsWith('grp:'))
+            .map((el) => [el.getAttribute('data-id'), el.style.transform])
+        )
+      )
+    const draftNodes = await nodeMap()
     await click('[data-version-lens]')
     await click('[data-version-lens-option="v0.3.15"]')
     await page.waitForTimeout(400)
     await page.waitForSelector('.react-flow__node[data-id]', { timeout: 10_000 })
     await page.waitForTimeout(500)
-    check('Design › Diagram(커밋 버전): 읽기 전용 배지', (await body()).includes('읽기 전용'))
+    check('Design › Diagram(커밋 버전): 스키마 잠김 배지', (await body()).includes('스키마 잠김'))
+    check(
+      'Design › Diagram(커밋 버전): 스키마를 늘리는 손잡이는 잠겨 있다',
+      (await page.locator('button:has-text("테이블 추가")').count()) === 0
+    )
+    check(
+      'Design › Diagram(커밋 버전): 자동 배치는 열려 있다',
+      (await page.locator('button:has-text("자동 배치")').count()) > 0
+    )
+    // ⭐ 물려받기 — 갓 컷한 버전에는 제 배치가 없다. 그동안은 Draft 그림을 그대로 깔아 준다.
+    //    이게 없으면 컷하자마자 그림이 dagre 자동 배치로 튀어 보던 모습과 딴판이 된다.
+    {
+      const verNodes = await nodeMap()
+      const shared = Object.keys(verNodes).filter((id) => id in draftNodes)
+      check(
+        'Design › Diagram(커밋 버전): 처음 열면 Draft 배치를 물려받아 같은 모습이다',
+        shared.length > 0 && shared.every((id) => verNodes[id] === draftNodes[id])
+      )
+      check(
+        'Design › Diagram(커밋 버전): 보기만 해서는 버전 키에 아무것도 안 적힌다',
+        Object.keys(JSON.parse(await savedLayout(VER_SCOPE)).p).length === 0
+      )
+    }
 
-    const before = await savedLayout()
     const nd = page.locator('.react-flow__node:not([data-id^="grp:"])').first()
     const box = await nd.boundingBox()
     const tfPre = await nd.evaluate((el) => el.style.transform)
@@ -410,32 +448,34 @@ export async function run(ctx) {
     await page.mouse.up()
     await page.waitForTimeout(700)
     check(
-      'Design › Diagram(커밋 버전): 노드가 안 움직인다(배치 잠금)',
-      (await nd.evaluate((el) => el.style.transform)) === tfPre
+      'Design › Diagram(커밋 버전): 노드가 움직인다(배치는 열려 있다)',
+      (await nd.evaluate((el) => el.style.transform)) !== tfPre
     )
-    check('Design › Diagram(커밋 버전): 저장본이 그대로', (await savedLayout()) === before)
-    // 그룹 패널을 펼친 상태에서 센다 — 안 펼치면 읽기 전용이 아니어도 0 이라 검증이 안 된다.
+    // ⭐ 이 케이스의 핵심 — 옮긴 자리는 **그 버전 몫**으로만 쌓인다.
+    check(
+      'Design › Diagram(커밋 버전): 옮긴 자리가 버전 키에 쌓인다',
+      Object.keys(JSON.parse(await savedLayout(VER_SCOPE)).p).length > 0
+    )
+    check('Design › Diagram(커밋 버전): 그래도 Draft 저장본은 그대로', (await savedLayout(DRAFT_SCOPE)) === draftBefore)
+    // 그룹 패널을 펼친 상태에서 센다 — 안 펼치면 열려 있어도 0 이라 검증이 안 된다.
     await page.locator('[data-side-tab="groups"]').first().click()
     await page.waitForTimeout(300)
     check(
-      'Design › Diagram(커밋 버전): 그룹 만들기 버튼 없음',
+      'Design › Diagram(커밋 버전): 그룹 만들기도 열려 있다(그룹은 배치 갈래다)',
       (await page.locator('[data-diagram-group-panel]').count()) > 0 &&
-        (await page.locator('[data-group-create]').count()) === 0
+        (await page.locator('[data-group-create]').count()) > 0
     )
 
     // 렌즈를 Draft 로, 화면을 Design › Versions 로 되돌린다 —
     // 다음 스위트(05-mcp-write)는 타임라인이 열린 채로 시작한다고 본다(상태 의존 순서).
     await click('[data-version-lens]')
     await click('[data-version-lens-option="draft"]')
-    await page.waitForTimeout(400)
-    // 그룹 패널을 실제로 펼쳐서 본다 — `data-group-create` 는 그 패널 안에만 있어서,
-    // 안 펼치고 세면 읽기 전용이든 아니든 0 이라 아무것도 검증하지 못한다.
-    await page.locator('[data-side-tab="groups"]').first().click()
-    await page.waitForTimeout(300)
-    check('Design › Diagram: Draft 로 돌아오면 편집이 풀린다(그룹 만들기 복귀)',
-      (await page.locator('[data-group-create]').count()) > 0)
-    check('Design › Diagram: Draft 로 돌아오면 읽기 전용 배지가 사라진다',
-      !(await body()).includes('읽기 전용(커밋 버전)'))
+    await page.waitForTimeout(700)
+    check('Design › Diagram: Draft 로 돌아오면 스키마 잠김 배지가 사라진다', !(await body()).includes('스키마 잠김'))
+    check(
+      'Design › Diagram: Draft 로 돌아와도 Draft 배치는 손대지 않은 그대로',
+      (await savedLayout(DRAFT_SCOPE)) === draftBefore
+    )
     await click('button:has-text("Versions")')
     await page.waitForTimeout(400)
   }

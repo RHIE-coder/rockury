@@ -40,7 +40,7 @@ export function DiagramView() {
   const editConnId = useSchemaEditStore((s) => s.connId)
   const begin = useSchemaEditStore((s) => s.begin)
 
-  const layout = useDiagramLayout(connId, true)
+  const layout = useDiagramLayout(connId)
   // 고른 표는 운영부가 함께 쓰는 값이다(`focus`) — Definition·Data 로 옮겨도 그대로다.
   // 여기 들어올 때 서랍이 저절로 열리지는 않는다: 서랍은 `DiagramSurface` 가 **누른 순간**만 연다.
   const selected = useRemoteFocus(connId)
@@ -146,7 +146,6 @@ export function DiagramView() {
             exportName={conn.name}
             draggable
             editable={false}
-            persist
             layout={layout}
             selectedId={selected}
             onSelect={(id) => setFocus(connId, id)}
