@@ -239,14 +239,17 @@ export async function run(ctx) {
   // ── ⑼ Design › Query·Collection 은 Remote 와 **같은 화면**이다 ──
   // 회귀(2026-08-05): 라이브러리 소속을 설계로 옮기면서 설계부용으로 **줄인 화면을 따로 만들었다.**
   // 그래서 오른쪽 패널도 필터도 결과 영역도 없었다 — 시킨 것은 옮기는 일이었다. 지금은 한
-  // 컴포넌트가 둘을 다 그리고, 갈리는 것은 접속이 필요한 동작(Run·EXPLAIN)뿐이다.
+  // 컴포넌트가 둘을 다 그리고, 갈리는 것은 접속이 필요한 동작(Run·EXPLAIN)과 거기서 파생된
+  // 결과 영역뿐이다.
   await click('[data-nav-module="design"]')
   await page.waitForTimeout(300)
   await click('[data-nav-view="query"]')
   await page.waitForTimeout(600)
   check('DB › Design › Query: 왼쪽 트리 필터가 있다', (await page.locator('input[placeholder="Filter queries..."]').count()) === 1)
   check('DB › Design › Query: 오른쪽 Schema 패널이 있다', (await page.locator('input[placeholder="Filter..."]').count()) === 1)
-  check('DB › Design › Query: 결과 영역이 있다', (await body()).includes('SQL 을 실행하면 결과가 여기 표시됩니다'))
+  // 결과 영역은 **일부러 걷었다**(2026-09-01 제보 ②) — 설계부엔 실행이 없어 영원히 빈 칸이었다.
+  // 위 두 줄(트리 필터·Schema 패널)이 "줄인 화면을 따로 만들지 않았다"는 원래 회귀를 계속 지킨다.
+  check('DB › Design › Query: 결과 영역이 없다', !(await body()).includes('SQL 을 실행하면 결과가 여기 표시됩니다'))
   // 접속이 없으니 못 돌린다 — **여기만** 잠긴다.
   check('DB › Design › Query: Run 이 잠겨 있다', !(await page.locator('button:has-text("Run")').first().isEnabled()))
   check('DB › Design › Query: 왜 못 돌리는지 말한다', (await body()).includes('실행은 Remote 에서'))

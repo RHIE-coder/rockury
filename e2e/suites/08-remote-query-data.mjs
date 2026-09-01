@@ -78,6 +78,24 @@ export async function run(ctx) {
     )
   }
 
+  // ⭐ 편집기 ─ 결과 높이 조절 — 편집기가 176px 에 못 박혀 있던 것을 끌어 바꾼다(2026-09-01 제보 ①)
+  {
+    const paneH = async () =>
+      Math.round((await page.locator('[data-query-editor-pane]').first().boundingBox())?.height ?? -1)
+    const before = await paneH()
+    const grip = await page.locator('[data-query-vsplit]').first().boundingBox()
+    check('Remote › Query: 편집기와 결과 사이에 위아래 손잡이가 있다', !!grip)
+    if (grip) {
+      await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(grip.x + grip.width / 2, grip.y + 160, { steps: 12 })
+      await page.mouse.up()
+      await page.waitForTimeout(400)
+      const after = await paneH()
+      check(`Remote › Query: 끌면 편집기가 커진다 (${before} → ${after})`, before > 0 && after > before + 80)
+    }
+  }
+
   // ⭐ 결과 행 상세 모달 — 표에서 잘리는 긴 값·JSON 을 자르지 않고 펴 본다 (§result-grid.row-detail)
   {
     await typeSql('SELECT id, preferences FROM user_profiles LIMIT 3')
@@ -177,6 +195,8 @@ export async function run(ctx) {
 
   // ⭐ Data 의 행 상세 — 행 번호가 손잡이다(셀은 눌러 편집하는 자리라 행 전체는 못 쓴다).
   {
+    // 번호만 있으면 눌리는 줄 모른다 — 제보 ③(2026-09-01) 이후 펼치기 표가 같이 선다.
+    check('Remote › Data: 행에 펼치기 손잡이가 있다', (await page.locator('[data-row-expand]').count()) > 0)
     await page.locator('[data-result-row="0"]').first().click()
     await page.waitForSelector('[data-row-detail]', { timeout: 8_000 })
     const detail = await page.locator('[data-row-detail]').innerText()

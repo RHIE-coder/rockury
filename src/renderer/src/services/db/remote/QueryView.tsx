@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
   AlertTriangle,
   ChevronDown,
@@ -102,9 +103,12 @@ function cell(v: unknown): { text: string; muted?: boolean } {
  * (`@shared/db/libraryOwner`) 설계부에도 같은 화면이 필요해졌는데, 처음엔 "준비 전용이니
  * 가벼운 걸로"라며 **줄인 화면을 따로 만들었다.** 그래서 설계부에서는 오른쪽 스키마 패널도,
  * 필터도, 끌어 옮기기도, 결과 영역도 없었다 — 시킨 것은 옮기는 일이었는데 새로 만든 것이다.
- * 지금은 한 컴포넌트가 둘을 다 그린다. **모드가 가르는 것은 딱 두 가지뿐이다:**
+ * 지금은 한 컴포넌트가 둘을 다 그린다. **모드가 가르는 것은 셋뿐이다:**
  *   ⑴ 라이브러리 소속(`scope`) — 설계부는 설계, 운영부는 연결
  *   ⑵ 접속이 필요한 동작 — 실행·EXPLAIN·표 미리보기·실 DB 스키마. 설계부엔 접속이 없다.
+ *   ⑶ 결과 영역 — 설계부엔 **없다**. 실행이 없으니 영원히 빈 칸이라, 있는 기능처럼 보이던 자리를
+ *      걷고 편집기가 높이를 다 쓴다(2026-09-01 제보 ②). ⑵ 에서 파생된 의도적 차이이지,
+ *      2026-08-05 처럼 "줄인 화면을 따로 만든 것"이 아니다.
  * 나머지(트리·검색·이름 편집·자동저장·파라미터·편집기)는 두 화면이 **똑같이** 쓴다.
  */
 type QueryMode = 'remote' | 'design'
@@ -343,6 +347,59 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
     void kind
   }
 
+  /** SQL 편집기 — 배치가 둘이라(설계부는 화면 전부, 운영부는 결과와 높이를 나눔) 여기 한 번만 적는다. */
+  const editor = (
+    <SqlEditor
+      value={sql}
+      onChange={editSql}
+      onRun={() => canRun && conn && void run(conn.id, effectiveSql())}
+      schema={buildSchemaMap(tables ?? [])}
+      dialect={dialect}
+      placeholder="SELECT * FROM users WHERE id = {{userId}};"
+    />
+  )
+
+  /** 편집기 아래 상태 줄들 — 파라미터·트랜잭션·DDL 경고·접속 오류·실행 계획·실패 한 줄. */
+  const strips = (
+    <>
+      {keywords.length > 0 && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel/40 px-5 py-2 text-[12px]">
+          <span className="text-muted">파라미터:</span>
+          {keywords.map((k) => (
+            <label key={k} className="flex items-center gap-1">
+              <span className="font-mono text-[11px] text-accent">{`{{${k}}}`}</span>
+              <input value={kw[k] ?? ''} onChange={(e) => setKw((v) => ({ ...v, [k]: e.target.value }))} placeholder="값" className="h-7 w-32 rounded border border-line bg-canvas px-1.5 text-[12px] outline-none" />
+            </label>
+          ))}
+          {missing.length > 0 && <span className="text-[11px] text-destructive">미입력: {missing.join(', ')}</span>}
+        </div>
+      )}
+
+      {tx && (
+        <div className={cn('flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-[12.5px]', tx.destructive ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-accent/30 bg-accent-soft/50 text-fg')}>
+          {tx.destructive && <AlertTriangle className="size-4 shrink-0 text-destructive" />}
+          <span className="min-w-0 flex-1"><span className="font-semibold">{tx.verb}</span> 실행됨 · 영향 <span className="font-mono font-semibold">{tx.affectedRows}</span>행 · 아직 커밋되지 않았습니다{tx.destructive && ' — WHERE 절이 없어 전체가 영향받습니다'}</span>
+          <Button size="sm" variant="ghost" onClick={() => void rollback()}>롤백</Button>
+          <Button size="sm" variant={tx.destructive ? 'destructive' : 'default'} onClick={() => void confirm()}>커밋</Button>
+        </div>
+      )}
+      {ddlWarning && !tx && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-5 py-2 text-[12px] text-muted"><AlertTriangle className="size-3.5" /> DDL 은 즉시 자동 커밋되었습니다(롤백 불가).</div>
+      )}
+      {/* 연결이 안 되면 Run 도 스키마 패널도 안 된다 — 쓰기 전에 알린다(예전엔 아무 말이 없었다). */}
+      {conn && introError && (
+        <ConnectionError
+          variant="inline"
+          error={introError}
+          retrying={introLoading}
+          onRetry={() => void loadIntro(conn.id, conn.id, true)}
+        />
+      )}
+      {explain && dialect && <ExplainPanel explain={explain} dialect={dialect} />}
+      <ErrorBar error={error} onDismiss={dismissError} />
+    </>
+  )
+
   return (
     <div className="h-full min-h-0" onClick={() => ctx && setCtx(null)}>
       <WorkspacePanels
@@ -458,98 +515,75 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
           </div>
         </div>
 
-        <div className="h-44 shrink-0 overflow-auto border-b border-line px-2 py-1">
-          <SqlEditor
-            value={sql}
-            onChange={editSql}
-            onRun={() => canRun && conn && void run(conn.id, effectiveSql())}
-            schema={buildSchemaMap(tables ?? [])}
-            dialect={dialect}
-            placeholder="SELECT * FROM users WHERE id = {{userId}};"
-          />
-        </div>
-
-        {keywords.length > 0 && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel/40 px-5 py-2 text-[12px]">
-            <span className="text-muted">파라미터:</span>
-            {keywords.map((k) => (
-              <label key={k} className="flex items-center gap-1">
-                <span className="font-mono text-[11px] text-accent">{`{{${k}}}`}</span>
-                <input value={kw[k] ?? ''} onChange={(e) => setKw((v) => ({ ...v, [k]: e.target.value }))} placeholder="값" className="h-7 w-32 rounded border border-line bg-canvas px-1.5 text-[12px] outline-none" />
-              </label>
-            ))}
-            {missing.length > 0 && <span className="text-[11px] text-destructive">미입력: {missing.join(', ')}</span>}
-          </div>
-        )}
-
-        {tx && (
-          <div className={cn('flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-[12.5px]', tx.destructive ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-accent/30 bg-accent-soft/50 text-fg')}>
-            {tx.destructive && <AlertTriangle className="size-4 shrink-0 text-destructive" />}
-            <span className="min-w-0 flex-1"><span className="font-semibold">{tx.verb}</span> 실행됨 · 영향 <span className="font-mono font-semibold">{tx.affectedRows}</span>행 · 아직 커밋되지 않았습니다{tx.destructive && ' — WHERE 절이 없어 전체가 영향받습니다'}</span>
-            <Button size="sm" variant="ghost" onClick={() => void rollback()}>롤백</Button>
-            <Button size="sm" variant={tx.destructive ? 'destructive' : 'default'} onClick={() => void confirm()}>커밋</Button>
-          </div>
-        )}
-        {ddlWarning && !tx && (
-          <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-5 py-2 text-[12px] text-muted"><AlertTriangle className="size-3.5" /> DDL 은 즉시 자동 커밋되었습니다(롤백 불가).</div>
-        )}
-        {/* 연결이 안 되면 Run 도 스키마 패널도 안 된다 — 쓰기 전에 알린다(예전엔 아무 말이 없었다). */}
-        {conn && introError && (
-          <ConnectionError
-            variant="inline"
-            error={introError}
-            retrying={introLoading}
-            onRetry={() => void loadIntro(conn.id, conn.id, true)}
-          />
-        )}
-        {explain && dialect && <ExplainPanel explain={explain} dialect={dialect} />}
-        <ErrorBar error={error} onDismiss={dismissError} />
-
-        <div className="min-h-0 flex-1 overflow-auto">
-          {loading ? (
-            <div className="flex h-full items-center justify-center text-[13px] text-muted"><Loader2 className="mr-2 size-4 animate-spin" /> 실행 중…</div>
-          ) : result && result.columns.length > 0 ? (
-            <div className="overflow-auto">
-              <table className="w-full border-collapse text-[12px]">
-                <thead className="sticky top-0 bg-panel">
-                  <tr>
-                    <th className="border-b border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
-                    {result.columns.map((c) => <th key={c} className="border-b border-line px-3 py-1.5 text-left font-mono font-semibold text-fg">{c}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.map((row, i) => (
-                    // 칸이 잘려 긴 값은 표에서 못 읽는다 — 누르면 상세 모달이 자르지 않고 펴 보인다.
-                    <tr
-                      key={i}
-                      data-result-row={i}
-                      onClick={() => setDetailRow(i)}
-                      className="cursor-pointer hover:bg-panel/60"
-                    >
-                      <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-muted">{i + 1}</td>
-                      {result.columns.map((c) => {
-                        const { text, muted } = cell(row[c])
-                        return <td key={c} className={cn('max-w-[360px] truncate border-b border-line/50 px-3 py-1 font-mono', muted ? 'italic text-muted' : 'text-fg')} title={text}>{text}</td>
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex items-center gap-3 px-5 py-2 text-[11px] text-muted">
-                <span>{result.rowCount}행{rows.length > MAX_ROWS && ` · 상위 ${MAX_ROWS}행만 표시`}{typeof result.executionTimeMs === 'number' && ` · ${result.executionTimeMs}ms`}</span>
-                <button type="button" className="flex items-center gap-1 hover:text-accent" onClick={() => downloadText('query-result.csv', toCsv(result.columns, rows), 'text/csv')}><Download className="size-3" /> CSV</button>
-                <button type="button" className="flex items-center gap-1 hover:text-accent" onClick={() => downloadText('query-result.json', toJson(rows), 'application/json')}><Download className="size-3" /> JSON</button>
+        {/*
+          편집기 ─ 결과: **위아래 높이를 끌어 바꾼다**(2026-09-01 제보 ①). 예전엔 편집기가 176px 에
+          못 박혀 있어 긴 SQL 은 좁은 칸에서만 훑을 수 있었다.
+        */}
+        {isDesign ? (
+          // 설계부엔 실행이 없다(Run 이 잠긴다) — 결과 칸을 두면 **영원히 빈 자리**다. 나눌 것이
+          // 없으니 손잡이도 없고 편집기가 높이를 다 쓴다(2026-09-01 제보 ②).
+          <>
+            <div className="min-h-0 flex-1 overflow-auto border-b border-line px-2 py-1">{editor}</div>
+            {strips}
+          </>
+        ) : (
+          <PanelGroup direction="vertical" autoSaveId="db.console.query.split" className="min-h-0 flex-1">
+            {/* 기본 20% ≒ 예전 176px — 쓰던 사람이 열었을 때 자리가 그대로이도록. */}
+            {/* 스크롤은 안쪽 div 가 맡는다 — Panel 은 `overflow:hidden` 을 인라인으로 박아, 클래스로는 못 바꾼다. */}
+            <Panel id="editor" order={1} data-query-editor-pane defaultSize={20} minSize={8} className="flex min-h-0 flex-col">
+              <div className="min-h-0 flex-1 overflow-auto px-2 py-1">{editor}</div>
+            </Panel>
+            <VSplit />
+            <Panel id="result" order={2} minSize={10} className="flex min-h-0 flex-col">
+              {strips}
+              <div className="min-h-0 flex-1 overflow-auto">
+                {loading ? (
+                  <div className="flex h-full items-center justify-center text-[13px] text-muted"><Loader2 className="mr-2 size-4 animate-spin" /> 실행 중…</div>
+                ) : result && result.columns.length > 0 ? (
+                  <div className="overflow-auto">
+                    <table className="w-full border-collapse text-[12px]">
+                      <thead className="sticky top-0 bg-panel">
+                        <tr>
+                          <th className="border-b border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
+                          {result.columns.map((c) => <th key={c} className="border-b border-line px-3 py-1.5 text-left font-mono font-semibold text-fg">{c}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shown.map((row, i) => (
+                          // 칸이 잘려 긴 값은 표에서 못 읽는다 — 누르면 상세 모달이 자르지 않고 펴 보인다.
+                          <tr
+                            key={i}
+                            data-result-row={i}
+                            onClick={() => setDetailRow(i)}
+                            className="cursor-pointer hover:bg-panel/60"
+                          >
+                            <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-muted">{i + 1}</td>
+                            {result.columns.map((c) => {
+                              const { text, muted } = cell(row[c])
+                              return <td key={c} className={cn('max-w-[360px] truncate border-b border-line/50 px-3 py-1 font-mono', muted ? 'italic text-muted' : 'text-fg')} title={text}>{text}</td>
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="flex items-center gap-3 px-5 py-2 text-[11px] text-muted">
+                      <span>{result.rowCount}행{rows.length > MAX_ROWS && ` · 상위 ${MAX_ROWS}행만 표시`}{typeof result.executionTimeMs === 'number' && ` · ${result.executionTimeMs}ms`}</span>
+                      <button type="button" className="flex items-center gap-1 hover:text-accent" onClick={() => downloadText('query-result.csv', toCsv(result.columns, rows), 'text/csv')}><Download className="size-3" /> CSV</button>
+                      <button type="button" className="flex items-center gap-1 hover:text-accent" onClick={() => downloadText('query-result.json', toJson(rows), 'application/json')}><Download className="size-3" /> JSON</button>
+                    </div>
+                  </div>
+                ) : result ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-1 text-[13px] text-muted">
+                    <span>{typeof result.affectedRows === 'number' ? `${result.affectedRows}행 영향` : '결과 집합 없음'}</span>
+                    <span className="text-[11px]">{result.executionTimeMs}ms</span>
+                  </div>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-[13px] text-muted">SQL 을 실행하면 결과가 여기 표시됩니다</div>
+                )}
               </div>
-            </div>
-          ) : result ? (
-            <div className="flex h-full flex-col items-center justify-center gap-1 text-[13px] text-muted">
-              <span>{typeof result.affectedRows === 'number' ? `${result.affectedRows}행 영향` : '결과 집합 없음'}</span>
-              <span className="text-[11px]">{result.executionTimeMs}ms</span>
-            </div>
-          ) : (
-            <div className="flex h-full items-center justify-center text-[13px] text-muted">SQL 을 실행하면 결과가 여기 표시됩니다</div>
-          )}
-        </div>
+            </Panel>
+          </PanelGroup>
+        )}
       </div>
       ) : (
         // 빈 상태에도 오류 줄은 둔다 — 쿼리를 여는 데 실패했다면 그 말이 여기 떠야 한다.
@@ -586,6 +620,20 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * 편집기와 결과 사이의 가로 손잡이 — 끌어 위아래 높이를 바꾼다.
+ * 굵기는 다른 분할선과 같은 1px 로 둔다 — 부품이 손잡이 둘레에 잡히는 여백을 따로 붙여 주므로
+ * 1px 로 그려도 집힌다(굵게 그리면 이 화면에만 굵은 선이 하나 생긴다).
+ */
+function VSplit() {
+  return (
+    <PanelResizeHandle
+      data-query-vsplit
+      className="h-px shrink-0 bg-line transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent data-[resize-handle-state=drag]:bg-accent"
+    />
   )
 }
 

@@ -12,6 +12,7 @@ import {
   Filter as FilterIcon,
   Loader2,
   Lock,
+  Maximize2,
   Plus,
   RefreshCw,
   Search,
@@ -220,7 +221,8 @@ export function DataView() {
     void s.selectTable(connId, dialect, target)
   }, [connId, dialect, focusId, tables])
 
-  const NUM_COL_W = 56
+  // 행 번호 + 펼치기 표가 나란히 선다 — 200/p 의 세 자리도 안 눌리게 폭을 잡는다.
+  const NUM_COL_W = 64
   const ACT_COL_W = 32
 
   if (!conn) {
@@ -585,17 +587,21 @@ export function DataView() {
                       const edited = d.edits[key]
                       return (
                         <tr key={ri} className={cn('group hover:bg-panel/50', deleted && 'opacity-40 line-through')}>
-                          <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-muted">
+                          <td className="border-b border-line/50 px-2 py-1 font-mono text-muted">
                             {/* 셀은 눌러 편집하는 자리라 행 전체 클릭은 편집과 부딪힌다 — 편집 대상이
-                                아닌 행 번호가 상세를 여는 손잡이다(복사는 모달 안에 있다). */}
+                                아닌 행 번호가 상세를 여는 손잡이다(복사는 모달 안에 있다).
+                                번호만 두면 **눌리는 줄 모른다** — 실제로 "긴 값을 다 볼 수 없다"는
+                                제보를 받았다(2026-09-01 ③). 행에 손을 올리면 펼치기 표가 뜬다. */}
                             <button
                               type="button"
                               data-result-row={ri}
-                              title="행 상세 보기"
+                              data-row-expand
+                              title="행 상세 보기 — 잘린 값도 자르지 않고 편다"
                               onClick={() => setDetailRow(ri)}
-                              className="outline-none hover:text-accent hover:underline"
+                              className="flex w-full items-center justify-end gap-1 outline-none hover:text-accent focus-visible:text-accent"
                             >
-                              {ri + 1}
+                              <span className="group-hover:underline">{ri + 1}</span>
+                              <Maximize2 className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
                             </button>
                           </td>
                           {editable && (
