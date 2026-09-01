@@ -556,13 +556,16 @@ export function DataView() {
                   <thead>
                     <tr>
                       {/*
-                        # 칸은 **가로로도 얼어붙는다**(2026-09-01 제보). 행 상세를 여는 손잡이가
-                        이 칸 하나뿐인데, 컬럼이 많은 표를 오른쪽으로 밀면 칸째 화면 밖으로 나가
-                        여는 방법이 사라졌다. z 는 30 — 다른 머리 칸(20)보다 위에 있어야 가로로
-                        밀린 머리 칸이 이 위로 지나가지 않는다.
+                        # 칸과 그 옆 삭제 칸은 **DB 컬럼이 아니다.** 데이터 칸과 같은 흰 바탕에
+                        세워 두니 컬럼 하나로 읽혔다(2026-09-01 제보) — 그래서 둘을 한 덩이의
+                        **곁칸 띠**로 묶어 바탕색을 달리한다.
+                        가로로도 얼어붙는다: 행 상세를 여는 손잡이가 이 칸뿐인데, 컬럼이 많은 표를
+                        오른쪽으로 밀면 칸째 화면 밖으로 나가 여는 방법이 사라졌다.
+                        z 는 30 — 다른 머리 칸(20)보다 위여야 밀린 칸이 이 위를 지나가지 않는다.
+                        띠의 오른쪽 끝에만 선을 둔다(삭제 칸이 있으면 그쪽이 끝이다).
                       */}
-                      <th className="sticky left-0 top-0 z-30 border-b border-r border-line bg-panel px-2 py-1.5 text-right font-medium text-muted">#</th>
-                      {editable && <th className="sticky top-0 z-20 border-b border-line bg-panel px-1 py-1.5" />}
+                      <th className={cn('sticky left-0 top-0 z-30 border-b border-line bg-panel-strong px-2 py-1.5 text-right font-medium text-muted', !editable && 'border-r')}>#</th>
+                      {editable && <th style={{ left: NUM_COL_W }} className="sticky top-0 z-30 border-b border-r border-line bg-panel-strong px-1 py-1.5" />}
                       {shownColumns.map((c) => {
                         const sorted = d.orderBy?.column === c.name ? d.orderBy.direction : null
                         const badges = badgeLabels(keyKinds.get(c.id))
@@ -593,10 +596,10 @@ export function DataView() {
                       const edited = d.edits[key]
                       return (
                         <tr key={ri} className={cn('group hover:bg-panel/50', deleted && 'opacity-40 line-through')}>
-                          {/* 얼어붙은 칸은 **제 바탕**을 갖는다(`bg-canvas`) — 반투명이면 밑으로
-                              지나가는 셀이 비쳐 글자가 겹쳐 읽힌다. 그래서 행에 마우스를 올렸을 때의
-                              옅은 칠도 이 칸에는 안 든다. 오른쪽 선이 "여기까지가 고정"을 말한다. */}
-                          <td className="sticky left-0 z-10 border-b border-r border-b-line/50 border-r-line bg-canvas px-2 py-1 font-mono text-muted">
+                          {/* 곁칸은 **제 바탕**을 갖는다 — ⑴ 반투명이면 밑으로 지나가는 셀이 비쳐
+                              글자가 겹치고, ⑵ 그 색이 곧 "이건 DB 컬럼이 아니다"라는 말이다.
+                              그래서 행에 마우스를 올렸을 때의 옅은 칠도 이 칸에는 안 든다. */}
+                          <td className={cn('sticky left-0 z-10 border-b border-b-line/50 bg-panel px-2 py-1 font-mono text-muted', !editable && 'border-r border-r-line')}>
                             {/* 셀은 눌러 편집하는 자리라 행 전체 클릭은 편집과 부딪힌다 — 편집 대상이
                                 아닌 행 번호가 상세를 여는 손잡이다(복사는 모달 안에 있다).
                                 번호만 두면 **눌리는 줄 모른다** — 실제로 "긴 값을 다 볼 수 없다"는
@@ -614,8 +617,19 @@ export function DataView() {
                             </button>
                           </td>
                           {editable && (
-                            <td className="border-b border-line/50 px-1 py-0.5 text-center">
-                              <button type="button" title={deleted ? '삭제 취소' : '행 삭제'} onClick={() => d.toggleDelete(key)} className={cn('text-muted hover:text-destructive', deleted && 'text-destructive')}>
+                            <td style={{ left: NUM_COL_W }} className="sticky z-10 border-b border-r border-b-line/50 border-r-line bg-panel px-1 py-0.5 text-center">
+                              {/* 늘 떠 있으면 표가 손잡이로 뒤덮여 정작 값이 안 읽힌다 — 그 행에
+                                  손을 올렸을 때만 나온다(2026-09-01 제보). 지운 표시가 붙은 행은
+                                  예외로 늘 보인다: 되돌릴 손잡이가 그것 하나뿐이다. */}
+                              <button
+                                type="button"
+                                title={deleted ? '삭제 취소' : '행 삭제'}
+                                onClick={() => d.toggleDelete(key)}
+                                className={cn(
+                                  'text-muted transition-opacity hover:text-destructive focus-visible:opacity-100',
+                                  deleted ? 'text-destructive' : 'opacity-0 group-hover:opacity-100'
+                                )}
+                              >
                                 <Trash2 className="size-3.5" />
                               </button>
                             </td>
@@ -671,8 +685,9 @@ export function DataView() {
                     {editable &&
                       d.inserts.map((ins) => (
                         <tr key={ins.tempId} className="bg-success-soft/40">
-                          <td className="sticky left-0 z-10 border-b border-r border-b-line/50 border-r-line bg-canvas px-2 py-1 text-right font-mono text-[10px] font-bold text-success">NEW</td>
-                          <td className="border-b border-line/50 px-1 py-0.5 text-center">
+                          {/* 새 행의 곁칸은 그 행 색(연두)을 그대로 쓴다 — 회색으로 두면 한 행이 두 동강 나 보인다. */}
+                          <td className="sticky left-0 z-10 border-b border-b-line/50 bg-success-soft px-2 py-1 text-right font-mono text-[10px] font-bold text-success">NEW</td>
+                          <td style={{ left: NUM_COL_W }} className="sticky z-10 border-b border-r border-b-line/50 border-r-line bg-success-soft px-1 py-0.5 text-center">
                             <button type="button" title="추가 취소" onClick={() => d.removeInsert(ins.tempId)} className="text-muted hover:text-destructive"><X className="size-3.5" /></button>
                           </td>
                           {shownColumns.map((c) => (
@@ -940,8 +955,22 @@ function EditableCell({
   onFk: (ref: FkTarget) => void
 }) {
   const base = cn('w-full min-w-0 bg-transparent px-3 py-1 font-mono text-[12px] outline-none focus:bg-accent-soft/40', changed ? 'text-accent-2' : 'text-fg')
+  /**
+   * NULL 로 만드는 손잡이. **늘 떠 있으면 값으로 읽힌다** — 칸마다 "NULL" 이 박혀 있어 그
+   * 컬럼이 비어 있는 줄 알았다는 제보를 받았다(2026-09-01). 셀에 손을 올렸을 때만 뜬다.
+   * 자리는 늘 차지한다(`opacity-0`) — 뜰 때마다 입력칸 폭이 흔들리면 그게 더 거슬린다.
+   * 키보드로도 닿아야 하므로 셀 안에 초점이 들어와도 뜬다(`group-focus-within`).
+   */
   const nullBtn = (
-    <button type="button" title="NULL 로 설정" disabled={disabled} onClick={() => onChange(null)} className="px-1 text-[10px] text-muted hover:text-destructive">NULL</button>
+    <button
+      type="button"
+      title="NULL 로 설정"
+      disabled={disabled}
+      onClick={() => onChange(null)}
+      className="px-1 text-[10px] text-muted opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/cell:opacity-100 group-focus-within/cell:opacity-100"
+    >
+      NULL
+    </button>
   )
 
   // FK 컬럼은 종류/NULL 무관하게 항상 참조 선택 트리거를 보인다(값 클릭 또는 FK 버튼 → 모달).
@@ -951,7 +980,7 @@ function EditableCell({
     const isNull = value == null
     const t = isNull ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value)
     return (
-      <div className="flex items-center">
+      <div className="group/cell flex items-center">
         <input value={t} placeholder="NULL" readOnly disabled={disabled} title={t} onClick={() => !disabled && onFk(fk)} className={cn(base, isNull && 'italic', 'cursor-pointer')} />
         <button type="button" disabled={disabled} onClick={() => onFk(fk)} className="shrink-0 px-1 text-[10px] font-bold text-sky-600 hover:text-accent" title={`${fk.table} 참조 선택`}>FK</button>
         {nullBtn}
@@ -964,7 +993,7 @@ function EditableCell({
 
   if (value == null) {
     return (
-      <div className="flex items-center">
+      <div className="group/cell flex items-center">
         <input value="" placeholder="NULL" disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cn(base, 'italic')} />
       </div>
     )
@@ -972,7 +1001,7 @@ function EditableCell({
   const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
   if (kind === 'boolean') {
     return (
-      <div className="flex items-center">
+      <div className="group/cell flex items-center">
         <select value={text} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cn(base, 'appearance-none')}>
           <option value="true">true</option>
           <option value="false">false</option>
@@ -985,14 +1014,14 @@ function EditableCell({
   }
   if (kind === 'json') {
     return (
-      <div className="flex items-center">
+      <div className="group/cell flex items-center">
         <JsonCellButton text={text} disabled={disabled} changed={changed} onOpen={onJson} />
         {nullBtn}
       </div>
     )
   }
   return (
-    <div className="flex items-center">
+    <div className="group/cell flex items-center">
       <input value={text} disabled={disabled} title={text} onChange={(e) => onChange(e.target.value)} className={base} />
       {nullBtn}
     </div>
