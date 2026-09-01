@@ -570,7 +570,7 @@ export function DataView() {
                         const sorted = d.orderBy?.column === c.name ? d.orderBy.direction : null
                         const badges = badgeLabels(keyKinds.get(c.id))
                         return (
-                          <th key={c.id} className="sticky top-0 z-20 border-b border-line bg-panel px-3 py-1.5 text-left align-top font-mono font-semibold text-fg">
+                          <th key={c.id} className="sticky top-0 z-20 border-b border-r border-line bg-panel px-3 py-1.5 text-left align-top font-mono font-semibold text-fg">
                             <button type="button" onClick={() => dialect && void d.toggleSort(connId!, dialect, selected, c.name)} className="flex w-full items-center gap-1.5 overflow-hidden outline-none hover:text-accent" title="정렬">
                               {badges.map((b) => <span key={b} className="shrink-0 rounded bg-accent-soft px-1 text-[9px] font-bold text-accent">{b}</span>)}
                               <span className="min-w-0 flex-1 truncate text-left">{c.name}</span>
@@ -642,7 +642,7 @@ export function DataView() {
                               // 읽기 전용(뷰·PK 없는 테이블)에서도 JSON 은 뷰어로 열 수 있어야 한다 — 셀 폭 안에서는 못 읽는다.
                               if (kind === 'json' && row[c.name] != null) {
                                 return (
-                                  <td key={c.id} className="overflow-hidden border-b border-line/50 p-0">
+                                  <td key={c.id} className="overflow-hidden border-b border-r border-line/50 p-0">
                                     <JsonCellButton
                                       text={display(row[c.name])}
                                       onOpen={() => setJsonView({ col: c.name, text: display(row[c.name]) })}
@@ -652,7 +652,7 @@ export function DataView() {
                               }
                               const shownVal = row[c.name] == null ? 'NULL' : kind === 'date' ? formatDateCell(row[c.name], tzMode, tz) : display(row[c.name])
                               return (
-                                <td key={c.id} className="group/cell relative overflow-hidden border-b border-line/50 px-3 py-1 font-mono">
+                                <td key={c.id} className="group/cell relative overflow-hidden border-b border-r border-line/50 px-3 py-1 font-mono">
                                   <span className={cn('block truncate', row[c.name] == null ? 'italic text-muted' : 'text-fg')} title={display(row[c.name])}>{shownVal}</span>
                                   {row[c.name] != null && (
                                     <button type="button" title="셀 값 복사" onClick={() => copy(display(row[c.name]))} className="absolute right-1 top-1/2 hidden -translate-y-1/2 text-muted hover:text-accent group-hover/cell:block"><Copy className="size-3" /></button>
@@ -661,7 +661,7 @@ export function DataView() {
                               )
                             }
                             return (
-                              <td key={c.id} className="border-b border-line/50 overflow-hidden p-0">
+                              <td key={c.id} className="border-b border-r border-line/50 overflow-hidden p-0">
                                 <EditableCell
                                   kind={kind}
                                   value={val}
@@ -691,7 +691,7 @@ export function DataView() {
                             <button type="button" title="추가 취소" onClick={() => d.removeInsert(ins.tempId)} className="text-muted hover:text-destructive"><X className="size-3.5" /></button>
                           </td>
                           {shownColumns.map((c) => (
-                            <td key={c.id} className="border-b border-line/50 overflow-hidden p-0">
+                            <td key={c.id} className="border-b border-r border-line/50 overflow-hidden p-0">
                               <NewCell
                                 kind={columnKind(c.type)}
                                 value={ins.values[c.name]}
