@@ -544,8 +544,8 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
                     <table className="w-full border-collapse text-[12px]">
                       <thead className="sticky top-0 bg-panel">
                         <tr>
-                          <th className="border-b border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
-                          {result.columns.map((c) => <th key={c} className="border-b border-line px-3 py-1.5 text-left font-mono font-semibold text-fg">{c}</th>)}
+                          <th className="border-b border-r border-line px-2 py-1.5 text-right font-medium text-muted">#</th>
+                          {result.columns.map((c) => <th key={c} className="border-b border-r border-line px-3 py-1.5 text-left font-mono font-semibold text-fg">{c}</th>)}
                         </tr>
                       </thead>
                       <tbody>
@@ -557,10 +557,10 @@ function QueryScreen({ mode }: { mode: QueryMode }) {
                             onClick={() => setDetailRow(i)}
                             className="cursor-pointer hover:bg-panel/60"
                           >
-                            <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-muted">{i + 1}</td>
+                            <td className="border-b border-r border-line/50 px-2 py-1 text-right font-mono text-muted">{i + 1}</td>
                             {result.columns.map((c) => {
                               const { text, muted } = cell(row[c])
-                              return <td key={c} className={cn('max-w-[360px] truncate border-b border-line/50 px-3 py-1 font-mono', muted ? 'italic text-muted' : 'text-fg')} title={text}>{text}</td>
+                              return <td key={c} className={cn('max-w-[360px] truncate border-b border-r border-line/50 px-3 py-1 font-mono', muted ? 'italic text-muted' : 'text-fg')} title={text}>{text}</td>
                             })}
                           </tr>
                         ))}

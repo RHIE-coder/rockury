@@ -484,7 +484,7 @@ function InlineResult({ result }: { result: QueryResult }) {
           <thead>
             <tr>
               {result.columns.map((c) => (
-                <th key={c} className="sticky top-0 z-10 whitespace-nowrap border-b border-line bg-panel px-2 py-1 text-left font-mono font-semibold text-fg">{c}</th>
+                <th key={c} className="sticky top-0 z-10 whitespace-nowrap border-b border-r border-line bg-panel px-2 py-1 text-left font-mono font-semibold text-fg">{c}</th>
               ))}
             </tr>
           </thead>
@@ -496,7 +496,7 @@ function InlineResult({ result }: { result: QueryResult }) {
                   const v = row[c]
                   const isNull = v === null || v === undefined
                   const text = isNull ? 'NULL' : typeof v === 'object' ? JSON.stringify(v) : String(v)
-                  return <td key={c} className={cn('max-w-[240px] truncate border-b border-line/50 px-2 py-1 font-mono', isNull ? 'italic text-muted' : 'text-fg')} title={text}>{text}</td>
+                  return <td key={c} className={cn('max-w-[240px] truncate border-b border-r border-line/50 px-2 py-1 font-mono', isNull ? 'italic text-muted' : 'text-fg')} title={text}>{text}</td>
                 })}
               </tr>
             ))}
