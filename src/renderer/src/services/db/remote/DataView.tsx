@@ -555,7 +555,13 @@ export function DataView() {
                   {/* sticky·배경·z 를 <th> 셀마다 건다 — thead 에만 걸면 border-collapse 에서 본문이 헤더 위로 비친다. */}
                   <thead>
                     <tr>
-                      <th className="sticky top-0 z-20 border-b border-line bg-panel px-2 py-1.5 text-right font-medium text-muted">#</th>
+                      {/*
+                        # 칸은 **가로로도 얼어붙는다**(2026-09-01 제보). 행 상세를 여는 손잡이가
+                        이 칸 하나뿐인데, 컬럼이 많은 표를 오른쪽으로 밀면 칸째 화면 밖으로 나가
+                        여는 방법이 사라졌다. z 는 30 — 다른 머리 칸(20)보다 위에 있어야 가로로
+                        밀린 머리 칸이 이 위로 지나가지 않는다.
+                      */}
+                      <th className="sticky left-0 top-0 z-30 border-b border-r border-line bg-panel px-2 py-1.5 text-right font-medium text-muted">#</th>
                       {editable && <th className="sticky top-0 z-20 border-b border-line bg-panel px-1 py-1.5" />}
                       {shownColumns.map((c) => {
                         const sorted = d.orderBy?.column === c.name ? d.orderBy.direction : null
@@ -587,7 +593,10 @@ export function DataView() {
                       const edited = d.edits[key]
                       return (
                         <tr key={ri} className={cn('group hover:bg-panel/50', deleted && 'opacity-40 line-through')}>
-                          <td className="border-b border-line/50 px-2 py-1 font-mono text-muted">
+                          {/* 얼어붙은 칸은 **제 바탕**을 갖는다(`bg-canvas`) — 반투명이면 밑으로
+                              지나가는 셀이 비쳐 글자가 겹쳐 읽힌다. 그래서 행에 마우스를 올렸을 때의
+                              옅은 칠도 이 칸에는 안 든다. 오른쪽 선이 "여기까지가 고정"을 말한다. */}
+                          <td className="sticky left-0 z-10 border-b border-r border-b-line/50 border-r-line bg-canvas px-2 py-1 font-mono text-muted">
                             {/* 셀은 눌러 편집하는 자리라 행 전체 클릭은 편집과 부딪힌다 — 편집 대상이
                                 아닌 행 번호가 상세를 여는 손잡이다(복사는 모달 안에 있다).
                                 번호만 두면 **눌리는 줄 모른다** — 실제로 "긴 값을 다 볼 수 없다"는
@@ -662,7 +671,7 @@ export function DataView() {
                     {editable &&
                       d.inserts.map((ins) => (
                         <tr key={ins.tempId} className="bg-success-soft/40">
-                          <td className="border-b border-line/50 px-2 py-1 text-right font-mono text-[10px] font-bold text-success">NEW</td>
+                          <td className="sticky left-0 z-10 border-b border-r border-b-line/50 border-r-line bg-canvas px-2 py-1 text-right font-mono text-[10px] font-bold text-success">NEW</td>
                           <td className="border-b border-line/50 px-1 py-0.5 text-center">
                             <button type="button" title="추가 취소" onClick={() => d.removeInsert(ins.tempId)} className="text-muted hover:text-destructive"><X className="size-3.5" /></button>
                           </td>

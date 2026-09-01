@@ -197,6 +197,12 @@ export async function run(ctx) {
   {
     // 번호만 있으면 눌리는 줄 모른다 — 제보 ③(2026-09-01) 이후 펼치기 표가 같이 선다.
     check('Remote › Data: 행에 펼치기 손잡이가 있다', (await page.locator('[data-row-expand]').count()) > 0)
+    // 그 손잡이가 **가로 스크롤에 밀려 사라지면** 없는 것과 같다 — # 칸은 왼쪽에 얼어붙어 있어야 한다.
+    const numCellPos = await page
+      .locator('[data-row-expand]')
+      .first()
+      .evaluate((el) => getComputedStyle(el.closest('td')).position)
+    check('Remote › Data: # 칸이 왼쪽에 고정돼 있다', numCellPos === 'sticky')
     await page.locator('[data-result-row="0"]').first().click()
     await page.waitForSelector('[data-row-detail]', { timeout: 8_000 })
     const detail = await page.locator('[data-row-detail]').innerText()
