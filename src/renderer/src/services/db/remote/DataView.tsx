@@ -42,7 +42,7 @@ import { canEdit, pkColumns, quoteTable, type SqlDialect } from './data/sqlBuild
 import { columnKind } from './data/cellKind'
 import { autoColumnWidths, COL_WIDTH_DEFAULTS } from './data/colWidth'
 import { compactJson, jsonError, prettyJson, summarizeJson } from './data/jsonCell'
-import { badgeLabels, typeLabel } from './data/columnMeta'
+import { badgeLabels, badgeTone, BADGE_TONE_CLASS, HEAD_TONE_CLASS, typeLabel } from './data/columnMeta'
 import { genUuid } from './data/genValue'
 import { normalizeDateTime, nowDateTime } from './data/timeValue'
 import { formatDateCell, timezoneOptions, TZ_MODES, type TzMode } from './data/timezone'
@@ -569,10 +569,13 @@ export function DataView() {
                       {shownColumns.map((c) => {
                         const sorted = d.orderBy?.column === c.name ? d.orderBy.direction : null
                         const badges = badgeLabels(keyKinds.get(c.id))
+                        // 머리 바탕은 **맨 앞 배지**를 따른다 — PK 이자 FK 인 컬럼은 PK 로 읽는다
+                        // (배지 순서가 pk → fk 라 자연히 그렇게 된다).
+                        const tone = badges.length > 0 ? badgeTone(badges[0]) : 'other'
                         return (
-                          <th key={c.id} className="sticky top-0 z-20 border-b border-r border-line bg-panel px-3 py-1.5 text-left align-top font-mono font-semibold text-fg">
+                          <th key={c.id} className={cn('sticky top-0 z-20 border-b border-r border-line px-3 py-1.5 text-left align-top font-mono font-semibold text-fg', HEAD_TONE_CLASS[tone])}>
                             <button type="button" onClick={() => dialect && void d.toggleSort(connId!, dialect, selected, c.name)} className="flex w-full items-center gap-1.5 overflow-hidden outline-none hover:text-accent" title="정렬">
-                              {badges.map((b) => <span key={b} className="shrink-0 rounded bg-accent-soft px-1 text-[9px] font-bold text-accent">{b}</span>)}
+                              {badges.map((b) => <span key={b} className={cn('shrink-0 rounded px-1 text-[9px] font-bold', BADGE_TONE_CLASS[badgeTone(b)])}>{b}</span>)}
                               <span className="min-w-0 flex-1 truncate text-left">{c.name}</span>
                               {sorted === 'ASC' && <ChevronUp className="size-3 shrink-0" />}
                               {sorted === 'DESC' && <ChevronDown className="size-3 shrink-0" />}
@@ -982,7 +985,17 @@ function EditableCell({
     return (
       <div className="group/cell flex items-center">
         <input value={t} placeholder="NULL" readOnly disabled={disabled} title={t} onClick={() => !disabled && onFk(fk)} className={cn(base, isNull && 'italic', 'cursor-pointer')} />
-        <button type="button" disabled={disabled} onClick={() => onFk(fk)} className="shrink-0 px-1 text-[10px] font-bold text-sky-600 hover:text-accent" title={`${fk.table} 참조 선택`}>FK</button>
+        {/* NULL 과 같은 규율 — 늘 떠 있으면 값처럼 읽힌다. 색은 FK 배지와 같은 파랑(info)으로
+            맞춘다(예전 `sky-600` 은 토큰 밖 색이라 배지와 미묘하게 달랐다). */}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onFk(fk)}
+          title={`${fk.table} 참조 선택`}
+          className="shrink-0 px-1 text-[10px] font-bold text-info opacity-0 transition-opacity hover:text-accent focus-visible:opacity-100 group-hover/cell:opacity-100 group-focus-within/cell:opacity-100"
+        >
+          FK
+        </button>
         {nullBtn}
       </div>
     )

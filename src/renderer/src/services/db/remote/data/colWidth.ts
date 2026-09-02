@@ -19,15 +19,28 @@ export interface AutoWidthOptions {
   badgePx?: number
   /** 폭 계산에 참고할 행 수 상한 — 페이지가 커도 비용을 묶어 둔다. */
   sampleRows?: number
+  /**
+   * 폭을 이 배수로 **올림**한다. 글자 수를 그대로 픽셀로 옮기면 칸마다 폭이 제각각이라
+   * (121·137·204…) 표가 들쭉날쭉해 보였다(2026-09-02 요청). 같은 눈금 위에 세우면
+   * 폭이 여전히 내용에 맞으면서도 줄 맞은 것처럼 읽힌다.
+   */
+  step?: number
 }
 
+/**
+ * 폭의 최소·최대를 **좁혀** 잡는다(2026-09-02 요청 — "열 넓이가 다 다르다").
+ * 88~420 은 다섯 배 차이라 한 표 안에서 칸 크기가 널뛰었다. 120~320 에 20px 눈금이면
+ * 폭이 열 단계 안에 들어와 고르게 보인다. 그래도 모자란 칸은 머리줄 오른쪽 끝을
+ * 끌어 직접 넓힐 수 있고, 잘린 값은 행 상세에서 통째로 본다.
+ */
 export const COL_WIDTH_DEFAULTS: Required<AutoWidthOptions> = {
-  min: 88,
-  max: 420,
+  min: 120,
+  max: 320,
   charPx: 7.2,
   padPx: 30,
   badgePx: 22,
-  sampleRows: 200
+  sampleRows: 200,
+  step: 20
 }
 
 export interface WidthColumn {
@@ -78,7 +91,9 @@ export function autoColumnWidths(
       if (len > longest) longest = len
     }
     const raw = longest * o.charPx + o.padPx + (c.badges ?? 0) * o.badgePx + (c.trailingPx ?? 0)
-    out[c.name] = Math.round(Math.min(o.max, Math.max(o.min, raw)))
+    // 눈금에 올린 **뒤** 상·하한을 다시 씌운다 — 올림이 상한을 넘겨 버리면 안 된다.
+    const stepped = o.step > 1 ? Math.ceil(raw / o.step) * o.step : raw
+    out[c.name] = Math.round(Math.min(o.max, Math.max(o.min, stepped)))
   }
   return out
 }

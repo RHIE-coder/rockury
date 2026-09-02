@@ -58,7 +58,13 @@ describe('autoColumnWidths', () => {
   it('셀 안 버튼/칩 폭(trailingPx)만큼 더 넓어진다 — 값이 버튼에 가려 잘리지 않게', () => {
     const plain = autoColumnWidths([{ name: 'bio' }], [{ bio: 'Software engineer at Acme' }])
     const withBtn = autoColumnWidths([{ name: 'bio', trailingPx: 34 }], [{ bio: 'Software engineer at Acme' }])
-    expect(withBtn.bio).toBe(plain.bio + 34)
+    // 눈금(step)에 올림하므로 딱 +34 는 아니다 — **버튼 자리가 실제로 확보되는가**가 요점이라
+    // `+34 이상`으로 잰다(올림은 언제나 넓히는 쪽이라 이 검사가 느슨해지지 않는다).
+    expect(withBtn.bio).toBeGreaterThanOrEqual(plain.bio + 34)
+    // 눈금을 끄면 예전처럼 정확히 그만큼이다.
+    const exactPlain = autoColumnWidths([{ name: 'bio' }], [{ bio: 'Software engineer at Acme' }], { step: 1 })
+    const exactBtn = autoColumnWidths([{ name: 'bio', trailingPx: 34 }], [{ bio: 'Software engineer at Acme' }], { step: 1 })
+    expect(exactBtn.bio).toBe(exactPlain.bio + 34)
   })
 
   it('trailingPx 를 더해도 최대 폭 상한은 지킨다', () => {
@@ -82,5 +88,38 @@ describe('autoColumnWidths', () => {
   it('NULL 만 있는 컬럼도 최소 폭을 지킨다', () => {
     const w = autoColumnWidths([{ name: 'deleted_at' }], [{ deleted_at: null }])
     expect(w.deleted_at).toBeGreaterThanOrEqual(min)
+  })
+})
+
+describe('autoColumnWidths — 폭을 눈금에 맞춰 고르게', () => {
+  const { min, max, step } = COL_WIDTH_DEFAULTS
+
+  it('모든 폭이 눈금(step)의 배수다 — 칸마다 제각각이면 표가 들쭉날쭉해 보인다', () => {
+    const cols = [{ name: 'id' }, { name: 'email' }, { name: 'a_rather_long_column_name' }, { name: 'note' }]
+    const rows = [
+      { id: 1, email: 'someone@example.com', a_rather_long_column_name: 'x', note: 'y'.repeat(120) },
+      { id: 22, email: 'a@b.co', a_rather_long_column_name: 'zz', note: 'y' }
+    ]
+    for (const w of Object.values(autoColumnWidths(cols, rows))) {
+      expect(w % step).toBe(0)
+    }
+  })
+
+  it('가장 좁은 칸과 가장 넓은 칸의 차이가 눈금 열 칸 안에 든다', () => {
+    const cols = [{ name: 'ok' }, { name: 'body' }]
+    const w = autoColumnWidths(cols, [{ ok: 1, body: 'x'.repeat(5000) }])
+    expect((w.body - w.ok) / step).toBeLessThanOrEqual((max - min) / step)
+    expect(w.ok).toBe(min)
+    expect(w.body).toBe(max)
+  })
+
+  it('눈금 올림이 상한을 넘기지 않는다', () => {
+    const w = autoColumnWidths([{ name: 'c' }], [{ c: 'x'.repeat(400) }], { max: 250, step: 40 })
+    expect(w.c).toBeLessThanOrEqual(250)
+  })
+
+  it('step 1 이면 눈금을 안 쓴다 — 예전 계산 그대로', () => {
+    const w = autoColumnWidths([{ name: 'c' }], [{ c: 'x'.repeat(30) }], { step: 1, min: 0, max: 9999 })
+    expect(w.c).toBe(Math.round(30 * COL_WIDTH_DEFAULTS.charPx + COL_WIDTH_DEFAULTS.padPx))
   })
 })

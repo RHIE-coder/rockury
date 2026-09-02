@@ -52,7 +52,7 @@ import { quoteTable, type SqlDialect } from './data/sqlBuilder'
 import { useRemoteStore } from './store'
 import { ConnectionError } from './ConnectionError'
 import { columnKeyKinds } from './introspection'
-import { badgeLabels } from './data/columnMeta'
+import { badgeLabels, badgeTone, BADGE_TONE_CLASS } from './data/columnMeta'
 import { buildSchemaMap, formatSql } from './query/schema'
 import { applyKeywords, extractKeywords } from './query/keywords'
 import { parseExplainTree } from './query/explainTree'
@@ -720,7 +720,7 @@ function SchemaPanel({ tables, onInsert, onPreview }: { tables: TableDef[]; onIn
                 const badges = badgeLabels(kinds.get(c.id))
                 return (
                   <button key={c.id} type="button" onClick={() => onInsert(c.name)} className="flex w-full items-center gap-1.5 py-0.5 pl-8 pr-2 text-left font-mono text-[11px] text-muted hover:bg-panel hover:text-accent">
-                    {badges.map((b) => <span key={b} className="rounded bg-accent-soft px-1 text-[8.5px] font-bold text-accent">{b}</span>)}
+                    {badges.map((b) => <span key={b} className={cn('rounded px-1 text-[8.5px] font-bold', BADGE_TONE_CLASS[badgeTone(b)])}>{b}</span>)}
                     <span className="min-w-0 flex-1 truncate">{c.name}</span>
                     <span className="shrink-0 text-[10px] opacity-60">{c.type}</span>
                   </button>

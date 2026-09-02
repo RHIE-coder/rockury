@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { badgeLabels, typeLabel } from './columnMeta'
+import { badgeLabels, badgeTone, BADGE_TONE_CLASS, HEAD_TONE_CLASS, typeLabel } from './columnMeta'
 import type { ConstraintKind } from '../../workspaces/definition/types'
 
 const set = (...k: ConstraintKind[]): Set<ConstraintKind> => new Set(k)
@@ -36,5 +36,25 @@ describe('typeLabel — 컬럼 타입 라벨', () => {
     expect(typeLabel('  INT ')).toBe('int')
     expect(typeLabel('character   varying(255)')).toBe('character varying(255)')
     expect(typeLabel('DATETIME')).toBe('datetime')
+  })
+})
+
+describe('badgeTone — PK 와 FK 는 서로 다른 색이어야 한다', () => {
+  it('PK 와 FK 는 서로 다른 갈래다', () => {
+    expect(badgeTone('PK')).toBe('pk')
+    expect(badgeTone('FK')).toBe('fk')
+    expect(badgeTone('PK')).not.toBe(badgeTone('FK'))
+  })
+
+  it('나머지 배지는 한 갈래로 묶인다 — 다섯 색이면 아무것도 안 도드라진다', () => {
+    expect(badgeTone('UK')).toBe('other')
+    expect(badgeTone('IDX')).toBe('other')
+    expect(badgeTone('CHECK')).toBe('other')
+  })
+
+  it('갈래마다 실제 클래스가 다르다(같으면 색을 가른 뜻이 없다)', () => {
+    const tones = [BADGE_TONE_CLASS.pk, BADGE_TONE_CLASS.fk, BADGE_TONE_CLASS.other]
+    expect(new Set(tones).size).toBe(3)
+    expect(new Set([HEAD_TONE_CLASS.pk, HEAD_TONE_CLASS.fk, HEAD_TONE_CLASS.other]).size).toBe(3)
   })
 })
