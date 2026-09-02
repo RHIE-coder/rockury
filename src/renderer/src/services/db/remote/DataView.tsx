@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ChevronDown,
   ChevronLeft,
@@ -42,7 +42,7 @@ import { canEdit, pkColumns, quoteTable, type SqlDialect } from './data/sqlBuild
 import { columnKind } from './data/cellKind'
 import { autoColumnWidths, COL_WIDTH_DEFAULTS } from './data/colWidth'
 import { compactJson, jsonError, prettyJson, summarizeJson } from './data/jsonCell'
-import { badgeLabels, badgeTone, BADGE_TONE_CLASS, HEAD_TONE_CLASS, typeLabel } from './data/columnMeta'
+import { badgeLabels, badgeTone, BADGE_TONE_CLASS, CELL_TONE_CLASS, HEAD_TONE_CLASS, typeLabel, type BadgeTone } from './data/columnMeta'
 import { genUuid } from './data/genValue'
 import { normalizeDateTime, nowDateTime } from './data/timeValue'
 import { formatDateCell, timezoneOptions, TZ_MODES, type TzMode } from './data/timezone'
@@ -264,15 +264,14 @@ export function DataView() {
   const shownColumns = selected ? selected.columns.filter((c) => !hidden.has(c.name)) : []
 
   // 컬럼 폭은 내용에 맞춰 자동으로 잡는다(상한까지). 사용자가 직접 끌어 조절한 컬럼(colW)은 그 값이 이긴다.
-  // 셀 오른쪽 도우미(NULL·FK 버튼)와 JSON 요약 칩은 값이 쓸 수 있는 폭을 줄이므로 폭에 얹는다.
-  const NULL_BTN_W = 36
-  const FK_BTN_W = 22
+  // JSON 요약 칩만 폭에 얹는다 — 늘 보이는 **내용**이라 값 자리를 실제로 줄인다.
+  // NULL·FK 버튼은 셀 위에 떠 있으므로(CellTools) 자리를 안 먹는다 — 얹으면 안 쓰는 동안에도
+  // 그만큼 칸이 넓어져 표가 헐거워 보인다(2026-09-02 요청).
   const JSON_CHIP_W = 34
   const autoW = autoColumnWidths(
     shownColumns.map((c) => {
       const kind = columnKind(c.type)
-      const trailingPx =
-        (editable ? NULL_BTN_W : 0) + (editable && fks[c.name] ? FK_BTN_W : 0) + (kind === 'json' ? JSON_CHIP_W : 0)
+      const trailingPx = kind === 'json' ? JSON_CHIP_W : 0
       return {
         name: c.name,
         typeLabel: typeLabel(c.type),
@@ -281,6 +280,14 @@ export function DataView() {
       }
     }),
     d.rows
+  )
+  /** 컬럼별 색 갈래(PK/FK/그 밖) — 머리 칸과 본문 칸이 **같은 색**을 쓴다. */
+  const toneOf = new Map<string, BadgeTone>(
+    shownColumns.map((c) => {
+      const b = badgeLabels(keyKinds.get(c.id))
+      // 맨 앞 배지를 따른다 — PK 이자 FK 인 컬럼은 PK 로 읽는다(배지 순서가 pk → fk).
+      return [c.id, b.length > 0 ? badgeTone(b[0]) : 'other']
+    })
   )
   const widthOf = (name: string): number => colW[name] ?? autoW[name] ?? COL_WIDTH_DEFAULTS.min
   const startResize = (name: string, e: React.MouseEvent): void => {
@@ -569,9 +576,7 @@ export function DataView() {
                       {shownColumns.map((c) => {
                         const sorted = d.orderBy?.column === c.name ? d.orderBy.direction : null
                         const badges = badgeLabels(keyKinds.get(c.id))
-                        // 머리 바탕은 **맨 앞 배지**를 따른다 — PK 이자 FK 인 컬럼은 PK 로 읽는다
-                        // (배지 순서가 pk → fk 라 자연히 그렇게 된다).
-                        const tone = badges.length > 0 ? badgeTone(badges[0]) : 'other'
+                        const tone = toneOf.get(c.id) ?? 'other'
                         return (
                           <th key={c.id} className={cn('sticky top-0 z-20 border-b border-r border-line px-3 py-1.5 text-left align-top font-mono font-semibold text-fg', HEAD_TONE_CLASS[tone])}>
                             <button type="button" onClick={() => dialect && void d.toggleSort(connId!, dialect, selected, c.name)} className="flex w-full items-center gap-1.5 overflow-hidden outline-none hover:text-accent" title="정렬">
@@ -613,10 +618,13 @@ export function DataView() {
                               data-row-expand
                               title="행 상세 보기 — 잘린 값도 자르지 않고 편다"
                               onClick={() => setDetailRow(ri)}
-                              className="flex w-full items-center justify-end gap-1 outline-none hover:text-accent focus-visible:text-accent"
+                              className="relative flex w-full items-center justify-end outline-none hover:text-accent focus-visible:text-accent"
                             >
+                              {/* 펼치기 표는 **떠 있다.** 흐름 안에 두면 그 폭만큼 숫자가 왼쪽으로
+                                  밀려 머리줄의 `#` 와 어긋난다(2026-09-02 제보). 숫자는 오른쪽 끝에
+                                  붙고 표는 빈 왼쪽에 뜬다 — 세 자리 수여도 겹치지 않는다. */}
+                              <Maximize2 className="pointer-events-none absolute left-0 size-3 opacity-0 transition-opacity group-hover:opacity-100" />
                               <span className="group-hover:underline">{ri + 1}</span>
-                              <Maximize2 className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
                             </button>
                           </td>
                           {editable && (
@@ -645,7 +653,7 @@ export function DataView() {
                               // 읽기 전용(뷰·PK 없는 테이블)에서도 JSON 은 뷰어로 열 수 있어야 한다 — 셀 폭 안에서는 못 읽는다.
                               if (kind === 'json' && row[c.name] != null) {
                                 return (
-                                  <td key={c.id} className="overflow-hidden border-b border-r border-line/50 p-0">
+                                  <td key={c.id} className={cn('overflow-hidden border-b border-r border-line/50 p-0', CELL_TONE_CLASS[toneOf.get(c.id) ?? 'other'])}>
                                     <JsonCellButton
                                       text={display(row[c.name])}
                                       onOpen={() => setJsonView({ col: c.name, text: display(row[c.name]) })}
@@ -655,7 +663,7 @@ export function DataView() {
                               }
                               const shownVal = row[c.name] == null ? 'NULL' : kind === 'date' ? formatDateCell(row[c.name], tzMode, tz) : display(row[c.name])
                               return (
-                                <td key={c.id} className="group/cell relative overflow-hidden border-b border-r border-line/50 px-3 py-1 font-mono">
+                                <td key={c.id} className={cn('group/cell relative overflow-hidden border-b border-r border-line/50 px-3 py-1 font-mono', CELL_TONE_CLASS[toneOf.get(c.id) ?? 'other'])}>
                                   <span className={cn('block truncate', row[c.name] == null ? 'italic text-muted' : 'text-fg')} title={display(row[c.name])}>{shownVal}</span>
                                   {row[c.name] != null && (
                                     <button type="button" title="셀 값 복사" onClick={() => copy(display(row[c.name]))} className="absolute right-1 top-1/2 hidden -translate-y-1/2 text-muted hover:text-accent group-hover/cell:block"><Copy className="size-3" /></button>
@@ -664,7 +672,7 @@ export function DataView() {
                               )
                             }
                             return (
-                              <td key={c.id} className="border-b border-r border-line/50 overflow-hidden p-0">
+                              <td key={c.id} className={cn('border-b border-r border-line/50 overflow-hidden p-0', CELL_TONE_CLASS[toneOf.get(c.id) ?? 'other'])}>
                                 <EditableCell
                                   kind={kind}
                                   value={val}
@@ -931,6 +939,21 @@ function JsonCellButton({
   )
 }
 
+/**
+ * 셀 오른쪽에 **떠 있는** 손잡이 묶음(NULL·FK).
+ *
+ * 흐름 안에 두면 ⑴ 그 폭만큼 값이 밀려 머리줄과 어긋나고 ⑵ 안 쓰는 동안에도 칸이 그만큼
+ * 넓어져 표가 헐거워 보인다(2026-09-02 제보). 띄우면 값을 잠깐 가리지만, 가리는 동안은
+ * 마우스가 그 칸에 있을 때뿐이다. 값 위에 뜨므로 제 바탕(칩)을 깔아야 글자가 안 겹쳐 읽힌다.
+ */
+function CellTools({ children }: { children: ReactNode }) {
+  return (
+    <span className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded bg-panel-strong/95 px-0.5 opacity-0 shadow-sm transition-opacity group-hover/cell:opacity-100 group-focus-within/cell:opacity-100">
+      {children}
+    </span>
+  )
+}
+
 /** 타입별 편집 셀 — NULL 토글 + 종류별 도우미(시간값/UUID/JSON/FK). */
 function EditableCell({
   kind,
@@ -959,10 +982,9 @@ function EditableCell({
 }) {
   const base = cn('w-full min-w-0 bg-transparent px-3 py-1 font-mono text-[12px] outline-none focus:bg-accent-soft/40', changed ? 'text-accent-2' : 'text-fg')
   /**
-   * NULL 로 만드는 손잡이. **늘 떠 있으면 값으로 읽힌다** — 칸마다 "NULL" 이 박혀 있어 그
-   * 컬럼이 비어 있는 줄 알았다는 제보를 받았다(2026-09-01). 셀에 손을 올렸을 때만 뜬다.
-   * 자리는 늘 차지한다(`opacity-0`) — 뜰 때마다 입력칸 폭이 흔들리면 그게 더 거슬린다.
-   * 키보드로도 닿아야 하므로 셀 안에 초점이 들어와도 뜬다(`group-focus-within`).
+   * NULL 로 만드는 손잡이. **늘 보이면 값으로 읽힌다** — 칸마다 "NULL" 이 박혀 있어 그
+   * 컬럼이 비어 있는 줄 알았다는 제보를 받았다(2026-09-01). 뜨고 지는 것도, 자리를 안
+   * 먹는 것도 `CellTools` 가 맡는다.
    */
   const nullBtn = (
     <button
@@ -970,7 +992,7 @@ function EditableCell({
       title="NULL 로 설정"
       disabled={disabled}
       onClick={() => onChange(null)}
-      className="px-1 text-[10px] text-muted opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/cell:opacity-100 group-focus-within/cell:opacity-100"
+      className="px-1 text-[10px] text-muted hover:text-destructive"
     >
       NULL
     </button>
@@ -983,20 +1005,21 @@ function EditableCell({
     const isNull = value == null
     const t = isNull ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value)
     return (
-      <div className="group/cell flex items-center">
+      <div className="group/cell relative flex items-center">
         <input value={t} placeholder="NULL" readOnly disabled={disabled} title={t} onClick={() => !disabled && onFk(fk)} className={cn(base, isNull && 'italic', 'cursor-pointer')} />
-        {/* NULL 과 같은 규율 — 늘 떠 있으면 값처럼 읽힌다. 색은 FK 배지와 같은 파랑(info)으로
-            맞춘다(예전 `sky-600` 은 토큰 밖 색이라 배지와 미묘하게 달랐다). */}
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onFk(fk)}
-          title={`${fk.table} 참조 선택`}
-          className="shrink-0 px-1 text-[10px] font-bold text-info opacity-0 transition-opacity hover:text-accent focus-visible:opacity-100 group-hover/cell:opacity-100 group-focus-within/cell:opacity-100"
-        >
-          FK
-        </button>
-        {nullBtn}
+        <CellTools>
+          {/* 색은 FK 배지와 같은 파랑(info) — 예전 `sky-600` 은 토큰 밖이라 배지와 미묘하게 달랐다. */}
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onFk(fk)}
+            title={`${fk.table} 참조 선택`}
+            className="px-1 text-[10px] font-bold text-info hover:text-accent"
+          >
+            FK
+          </button>
+          {nullBtn}
+        </CellTools>
       </div>
     )
   }
@@ -1014,29 +1037,29 @@ function EditableCell({
   const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
   if (kind === 'boolean') {
     return (
-      <div className="group/cell flex items-center">
+      <div className="group/cell relative flex items-center">
         <select value={text} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cn(base, 'appearance-none')}>
           <option value="true">true</option>
           <option value="false">false</option>
           <option value="1">1</option>
           <option value="0">0</option>
         </select>
-        {nullBtn}
+        <CellTools>{nullBtn}</CellTools>
       </div>
     )
   }
   if (kind === 'json') {
     return (
-      <div className="group/cell flex items-center">
+      <div className="group/cell relative flex items-center">
         <JsonCellButton text={text} disabled={disabled} changed={changed} onOpen={onJson} />
-        {nullBtn}
+        <CellTools>{nullBtn}</CellTools>
       </div>
     )
   }
   return (
-    <div className="group/cell flex items-center">
+    <div className="group/cell relative flex items-center">
       <input value={text} disabled={disabled} title={text} onChange={(e) => onChange(e.target.value)} className={base} />
-      {nullBtn}
+      <CellTools>{nullBtn}</CellTools>
     </div>
   )
 }

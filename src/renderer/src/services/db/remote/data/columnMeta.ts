@@ -58,9 +58,21 @@ export const BADGE_TONE_CLASS: Record<BadgeTone, string> = {
   other: 'bg-accent-soft text-accent'
 }
 
-/** 그 컬럼 **머리 칸**의 바탕 — 배지와 같은 갈래로 물들여 열 전체를 가른다. */
+/** 그 컬럼 **머리 칸**의 바탕 — 배지와 같은 갈래로 물들인다. */
 export const HEAD_TONE_CLASS: Record<BadgeTone, string> = {
   pk: 'bg-accent-2-soft',
   fk: 'bg-info-soft',
   other: 'bg-panel'
+}
+
+/**
+ * 그 컬럼 **본문 칸**의 바탕 — 머리와 같은 색을 **훨씬 옅게**.
+ * 머리만 물들이면 아래로 내려갈수록 어느 열이었는지 잊는다(2026-09-02 요청).
+ * 다만 값이 읽히는 자리라 머리와 같은 진하기로 깔면 글자가 색 위에 뜬다 — 40% 로 눌러
+ * "이 열이구나"만 남긴다.
+ */
+export const CELL_TONE_CLASS: Record<BadgeTone, string> = {
+  pk: 'bg-accent-2-soft/40',
+  fk: 'bg-info-soft/40',
+  other: ''
 }
