@@ -339,13 +339,28 @@ export function DataView() {
             {introError ? '연결 안 됨' : introLoading ? '실 DB 역설계 중…' : `${all.length}개 테이블`}
           </p>
         </div>
-        <span
-          title="연결 방언"
-          className="flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-medium text-fg"
-        >
-          <DialectMark dialect={conn.dbType} />
-          {dialectInfo(conn.dbType).label}
-        </span>
+        {/* 새로고침은 **머리줄**에 둔다 — Definition·Diagram·Object 와 같은 자리다.
+            예전엔 고른 표의 도구줄 안에 있었는데, 이 버튼이 다시 읽는 것은 그 표의 행이 아니라
+            역설계 전체(목록·이름·컬럼)라 그 줄의 소관을 넘었다. 게다가 선택을 푸는 길이 없어
+            목록을 갱신하려면 늘 어떤 표를 골라 둔 채여야 했다(2026-09-03 지적).
+            행을 읽는 중에도 눌린다 — 늦게 온 조회는 `loadSeq` 가 버린다. */}
+        <div className="flex items-center gap-2">
+          <span
+            title="연결 방언"
+            className="flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-medium text-fg"
+          >
+            <DialectMark dialect={conn.dbType} />
+            {dialectInfo(conn.dbType).label}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={introLoading}
+            onClick={() => connId && dialect && void refreshWithSchema(connId, dialect)}
+          >
+            {introLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
+          </Button>
+        </div>
       </div>
 
       {/* 연결이 안 되면 표 목록이 빈 것과 구분되지 않는다 — "테이블 없음" 은 연결 실패의 답이 아니다. */}
@@ -380,18 +395,8 @@ export function DataView() {
         >
           <div className="flex h-full min-w-0 flex-col">
             {!selected ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-muted">
+              <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
                 선택된 테이블 없음
-                {/* 보던 표가 밖에서 지워지면 이 자리가 된다 — 툴바가 통째로 사라지는 자리라
-                    여기에 다시 읽기가 없으면, 새로 만든 표를 목록에 올릴 길이 앱 재시작뿐이다. */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={introLoading}
-                  onClick={() => connId && dialect && void refreshWithSchema(connId, dialect)}
-                >
-                  {introLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />} 새로고침
-                </Button>
               </div>
             ) : (
             <>
@@ -469,19 +474,6 @@ export function DataView() {
                       <Plus /> 행
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={d.loading || introLoading}
-                    onClick={() => connId && dialect && void refreshWithSchema(connId, dialect)}
-                  >
-                    {d.loading || introLoading ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <RefreshCw />
-                    )}{' '}
-                    새로고침
-                  </Button>
                 </div>
               </div>
 
