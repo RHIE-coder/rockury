@@ -23,6 +23,30 @@ interface RemoteState {
   load: (envId: string, designId: string, force?: boolean, schemas?: string[]) => Promise<void>
 }
 
+/**
+ * 읽는 중에 들어온 **강제** 재조회를 담아 두는 자리(연결 → 읽을 범위). 끝나면 한 번 더 읽는다.
+ *
+ * 왜 버리면 안 되나: Query 로 DDL 을 두 번 잇달아 치면 두 번째 요청이 첫 조회가 도는 동안
+ * 도착한다. 그걸 버리면 **첫 DDL 만 반영된 목록**이 최종본으로 굳고, 다시 읽힐 계기가 없어
+ * 사용자는 자동 반영이 또 안 된다고 본다.
+ * 강제가 아닌 요청은 담지 않는다 — 캐시가 있으면 어차피 건너뛸 것이라 예약할 것이 없다.
+ */
+const queued = new Map<string, string[] | undefined>()
+
+/**
+ * 실 DB 구조가 바뀌었으니 역설계를 다시 읽으라고 **시킨다**(끝나기를 기다리지 않는다).
+ *
+ * Data·Definition·Diagram·Object·Query 가 한 캐시(연결별)를 보므로 여기 한 번이면 다 맞춰진다.
+ * 부르는 쪽은 DDL 을 실행한 자리들이다 — Definition 의 스키마 편집, Query 의 실행,
+ * Collection 의 일괄 실행. 한 군데라도 빠지면 **같은 `ALTER TABLE` 을 어디서 쳤느냐**에 따라
+ * 목록이 다르게 굴어서, 사용자에겐 새로고침이 고장난 것으로 보인다(2026-09-03 지적).
+ *
+ * 실패는 `load` 가 삼켜 화면의 오류 자리로 보낸다.
+ */
+export function reintrospect(connectionId: string): void {
+  void useRemoteStore.getState().load(connectionId, connectionId, true)
+}
+
 export const useRemoteStore = create<RemoteState>()((set, get) => ({
   byEnv: {},
   loading: {},
@@ -30,7 +54,10 @@ export const useRemoteStore = create<RemoteState>()((set, get) => ({
   warnings: {},
   load: async (envId, designId, force = false, schemas) => {
     if (!force && get().byEnv[envId]) return
-    if (get().loading[envId]) return
+    if (get().loading[envId]) {
+      if (force) queued.set(envId, schemas)
+      return
+    }
     set((s) => ({ loading: { ...s.loading, [envId]: true }, error: { ...s.error, [envId]: null } }))
     try {
       const ir = await window.rockury.introspection.run(envId, schemas)
@@ -45,6 +72,13 @@ export const useRemoteStore = create<RemoteState>()((set, get) => ({
         loading: { ...s.loading, [envId]: false },
         error: { ...s.error, [envId]: e instanceof Error ? e.message : String(e) }
       }))
+    }
+    // 읽는 동안 밀려 있던 강제 재조회를 이어서 한 번 더. 먼저 지우고 부른다 — 안 그러면
+    // 그 조회가 또 자기를 예약해 끝나지 않는다.
+    if (queued.has(envId)) {
+      const next = queued.get(envId)
+      queued.delete(envId)
+      await get().load(envId, designId, true, next)
     }
   }
 }))

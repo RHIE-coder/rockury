@@ -214,4 +214,38 @@ export async function run(ctx) {
   await page.waitForTimeout(250)
   check('Remote › History: 그룹 펼치면 컬렉션 내 순번(#1/#2)', (await body()).includes('#1') && (await body()).includes('#2'))
 
+  // ⭐ 컬렉션으로 돌린 DDL 도 표 목록에 **저절로** 반영된다 (2026-09-03 사용자 지적)
+  // Query 탭만 고치면 **어디서 돌렸느냐**에 따라 화면이 또 다르게 군다. 여기서도 새로고침을
+  // 누르지 않는다. 컬렉션은 커밋 전까지 원자적이라 **커밋한 뒤**가 반영 시점이다.
+  {
+    await page.evaluate(async () => {
+      const cid = (await window.rockury.connections.list())[0].id
+      await window.rockury.query.run(cid, 'DROP TABLE IF EXISTS coll_ddl_probe')
+      const c = await window.rockury.collections.create({ scope: { connectionId: cid }, name: 'DDL_COLL', folderId: null })
+      await window.rockury.collections.addItem({ collectionId: c.id, name: 'd1', sql: 'CREATE TABLE coll_ddl_probe (id int primary key)' })
+    })
+    await click('button:has-text("Collection")')
+    await page.waitForSelector('text=DDL_COLL', { timeout: 8_000 })
+    await page.locator('[data-workspace-sidebar]').first().locator('button:has-text("DDL_COLL")').first().click()
+    await page.waitForTimeout(300)
+    await click('button:has-text("Run All")')
+    await page.waitForSelector('text=아직 커밋되지', { timeout: 15_000 })
+    await click('button:has-text("커밋")')
+    await page.waitForTimeout(500)
+
+    await click('button:has-text("Data")')
+    // 못 기다리면 예외 대신 false — 이 검사 하나가 스위트 전체를 끊지 않게.
+    const listed = await page
+      .waitForSelector('[data-table-row="coll_ddl_probe"]', { timeout: 20_000 })
+      .then(() => true, () => false)
+    check('Remote › Collection: 커밋한 DDL 이 새로고침 없이 표 목록에 뜬다', listed)
+
+    // 뒷정리 — IPC 로 직접 지우면 앱은 모르므로, 여기서만은 새로고침을 눌러 캐시를 맞춘다.
+    await page.evaluate(async () => {
+      const cid = (await window.rockury.connections.list())[0].id
+      await window.rockury.query.run(cid, 'DROP TABLE IF EXISTS coll_ddl_probe')
+    })
+    await click('button:has-text("새로고침")')
+    await page.waitForTimeout(1500)
+  }
 }

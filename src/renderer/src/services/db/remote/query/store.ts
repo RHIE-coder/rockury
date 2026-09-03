@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { classifyScript, classifyStatement } from './classify'
+import { classifyScript, classifyStatement, hasDdl } from './classify'
+import { reintrospect } from '../store'
 
 /** main queryService.QueryResult 와 동일 형태(구조적). */
 export interface QueryResult {
@@ -15,6 +16,12 @@ interface PendingTx {
   verb: string
   affectedRows: number
   destructive: boolean
+  /**
+   * 이 트랜잭션에 DDL 이 섞여 있었나 — 커밋/롤백 뒤 역설계를 다시 읽을지의 판정.
+   * DDL+DML 스크립트는 게이트를 살리려고 전체가 dml 로 접혀서, 여기 적어 두지 않으면
+   * "구조도 바뀌었다"는 사실이 커밋 시점에 남아 있지 않다.
+   */
+  hadDdl: boolean
 }
 
 export interface ExplainState {
@@ -131,17 +138,27 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
         const r = await window.rockury.query.txExec(txId, sql)
         set({
           result: r,
-          tx: { txId, verb: c.verb, affectedRows: r.affectedRows ?? 0, destructive: c.destructive }
+          tx: {
+            txId,
+            verb: c.verb,
+            affectedRows: r.affectedRows ?? 0,
+            destructive: c.destructive,
+            hadDdl: hasDdl(sql)
+          }
         })
       } else {
         const r = await window.rockury.query.run(connectionId, sql)
         set({ result: r, ddlWarning: c.kind === 'ddl' })
+        if (hasDdl(sql)) reintrospect(connectionId)
         await recordHistory(connectionId, sql, c.kind, 'success', { rowCount: r.rowCount, affectedRows: r.affectedRows ?? null, execMs: r.executionTimeMs })
         await get().loadHistory(connectionId)
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       set({ error: msg })
+      // 실패해도 다시 읽는다 — 여러 문 스크립트는 앞 문이 이미 나간 뒤 뒤 문에서 깨질 수 있고,
+      // 그때 화면이 든 목록은 이미 실제와 다르다.
+      if (hasDdl(sql)) reintrospect(connectionId)
       if (c.kind !== 'dml') {
         await recordHistory(connectionId, sql, c.kind, 'error', { error: msg })
         await get().loadHistory(connectionId)
@@ -172,6 +189,7 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
     try {
       await window.rockury.query.txCommit(tx.txId)
       set({ tx: null })
+      if (tx.hadDdl && lastConn) reintrospect(lastConn)
       if (lastConn) {
         await recordHistory(lastConn, sql, 'dml', 'success', { affectedRows: tx.affectedRows })
         await get().loadHistory(lastConn)
@@ -184,12 +202,16 @@ export const useQueryStore = create<QueryState>()((set, get) => ({
   rollback: async () => {
     const tx = get().tx
     if (!tx) return
+    const lastConn = get().lastConn
     try {
       await window.rockury.query.txRollback(tx.txId)
     } catch {
       // 이미 정리됐을 수 있음 — 무시
     }
     set({ tx: null, result: null })
+    // 되돌려도 다시 읽는다 — MySQL 은 DDL 을 못 되돌리므로 구조가 그대로 바뀐 채 남는다.
+    // 되돌아가는 벤더(PostgreSQL)면 되돌아간 모습을 읽어 오니 어느 쪽이든 화면이 실제와 맞는다.
+    if (tx.hadDdl && lastConn) reintrospect(lastConn)
   },
 
   loadHistory: async (connectionId) => {

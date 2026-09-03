@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { LibNode } from './tree'
 import type { QueryResult } from '../query/store'
-import { allReadOnly, classifyStatement } from '../query/classify'
+import { allReadOnly, classifyStatement, hasDdl } from '../query/classify'
+import { reintrospect } from '../store'
 
 /** 구조적 레코드 타입(main 과 동일 형태). */
 interface Folder { id: string; connectionId: string; designId: string; parentId: string | null; name: string; sortOrder: number }
@@ -45,7 +46,11 @@ interface CollectionState {
   itemStatus: Record<string, ItemStatus>
   /** SELECT 아이템의 결과(인라인 펼침용). 아이템 id → 결과. */
   results: Record<string, QueryResult>
-  tx: { txId: string; affected: number } | null
+  /**
+   * 커밋 대기 중인 트랜잭션. `hadDdl` 은 **여기까지 실행된 아이템에 DDL 이 있었나** —
+   * 커밋/롤백/실패 뒤 역설계를 다시 읽을지를 이것으로 가른다(MySQL 은 DDL 을 못 되돌린다).
+   */
+  tx: { txId: string; affected: number; hadDdl: boolean } | null
   error: string | null
   /** 읽기 전용 실행처럼 커밋이 필요 없을 때 보여줄 안내(다음 실행/선택 시 사라짐). */
   info: string | null
@@ -324,6 +329,8 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
     try {
       const { txId } = await window.rockury.query.txBegin(connectionId)
       let affected = 0
+      // 아직 안 나간 아이템의 DDL 은 세지 않는다 — 중간에 끊기면 뒤는 실행되지 않았다.
+      let ranDdl = false
       for (const item of items) {
         // 중단 요청 시 남은 아이템 skip + 세션 롤백.
         if (get().aborting) {
@@ -335,12 +342,14 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
           })
           try { await window.rockury.query.txRollback(txId) } catch { /* 이미 정리됨 */ }
           set({ running: false, aborting: false, tx: null, error: '실행을 중단하고 롤백했습니다.' })
+          if (ranDdl) reintrospect(connectionId)
           return
         }
         set((s) => ({ itemStatus: { ...s.itemStatus, [item.id]: 'running' } }))
         try {
           const r = await window.rockury.query.txExec(txId, item.sql)
           affected += r.affectedRows ?? 0
+          if (hasDdl(item.sql)) ranDdl = true
           // SELECT 결과는 모달로 볼 수 있게 보관.
           if (classifyStatement(item.sql).kind === 'read' && r.columns.length > 0) {
             set((s) => ({ results: { ...s.results, [item.id]: r } }))
@@ -354,6 +363,8 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
             for (const later of items.slice(idx + 1)) status[later.id] = 'skipped'
             return { itemStatus: status, error: e instanceof Error ? e.message : String(e), running: false, aborting: false, tx: null }
           })
+          // 깨진 아이템 자신도 센다 — 여러 문이면 앞 문이 이미 나간 뒤 뒤 문에서 깨질 수 있다.
+          if (ranDdl || hasDdl(item.sql)) reintrospect(connectionId)
           return
         }
       }
@@ -363,7 +374,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
         await logCollectionHistory(connectionId, activeCollId(get().collections, get().activeCollectionId), crypto.randomUUID(), items, get().itemStatus, get().results)
         set({ running: false, tx: null, info: `조회 완료 · ${items.length}개 쿼리 · 커밋 불필요 (읽기 전용)` })
       } else {
-        set({ tx: { txId, affected }, running: false })
+        set({ tx: { txId, affected, hadDdl: ranDdl }, running: false })
       }
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), running: false, aborting: false, tx: null })
@@ -382,6 +393,8 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
       // 열린 트랜잭션이 있으면 그 위에 이어 붙이고, 없으면 새로 연다 → 하나씩 실행해도 한 덩어리.
       let txId = tx?.txId
       let affected = tx?.affected ?? 0
+      // 열린 트랜잭션에 이어 붙이는 것이라 앞서 쌓인 DDL 판정을 그대로 물려받는다.
+      const ranDdl = (tx?.hadDdl ?? false) || hasDdl(item.sql)
       if (!txId) txId = (await window.rockury.query.txBegin(connectionId)).txId
       set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'running' } }))
       try {
@@ -396,11 +409,12 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
           await logCollectionHistory(connectionId, activeCollId(get().collections, get().activeCollectionId), crypto.randomUUID(), items, { [itemId]: 'ok' }, get().results)
           set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'ok' }, tx: null, running: false, info: '조회 완료 · 커밋 불필요 (읽기 전용)' }))
         } else {
-          set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'ok' }, tx: { txId: txId!, affected }, running: false }))
+          set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'ok' }, tx: { txId: txId!, affected, hadDdl: ranDdl }, running: false }))
         }
       } catch (e) {
         // 실패 → main 이 세션 전체를 롤백/정리 → 이미 실행한 아이템도 무효(원자성). 열린 tx 폐기.
         set((s) => ({ itemStatus: { ...s.itemStatus, [itemId]: 'error' }, error: e instanceof Error ? e.message : String(e), tx: null, running: false }))
+        if (ranDdl) reintrospect(connectionId)
       }
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), running: false, tx: null })
@@ -422,6 +436,7 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
     if (!tx) return
     try {
       await window.rockury.query.txCommit(tx.txId)
+      if (tx.hadDdl && connectionId) reintrospect(connectionId)
       // 커밋된(ok) 아이템을 History 에 기록(source=collection · 한 커밋 = 한 실행배치).
       if (connectionId) await logCollectionHistory(connectionId, activeCollId(get().collections, get().activeCollectionId), crypto.randomUUID(), items, itemStatus, results)
     } catch (e) {
@@ -432,12 +447,16 @@ export const useCollectionStore = create<CollectionState>()((set, get) => ({
   rollback: async () => {
     const tx = get().tx
     if (!tx) return
+    const connectionId = get().connectionId
     try {
       await window.rockury.query.txRollback(tx.txId)
     } catch {
       // 이미 정리됐을 수 있음
     }
     set({ tx: null, itemStatus: {}, info: null })
+    // 되돌려도 다시 읽는다 — MySQL 은 DDL 을 못 되돌리므로 구조가 바뀐 채 남는다.
+    // 되돌아가는 벤더면 되돌아간 모습을 읽어 오니 어느 쪽이든 화면이 실제와 맞는다.
+    if (tx.hadDdl && connectionId) reintrospect(connectionId)
   },
   dismissError: () => set({ error: null })
 }))

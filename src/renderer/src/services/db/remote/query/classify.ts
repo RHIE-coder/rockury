@@ -95,11 +95,6 @@ export function splitSql(sql: string): string[] {
 }
 
 /**
- * 스크립트(여러 문) 전체의 실행 성격을 판정한다 — 라우팅 안전용.
- * 어느 한 문장이라도 DML 이면 **전체를 트랜잭션 게이트로**(뒤에 숨은 DML 이 자동 커밋되는 구멍 차단).
- * DDL 만 섞였으면 ddl(자동 커밋 경고), 전부 읽기면 read. 단일 문은 classifyStatement 와 동일.
- */
-/**
  * 여러 SQL(컬렉션 아이템들)이 **전부 읽기(read)인지** 판정한다 — 읽기 전용이면 커밋이 필요 없다.
  * 빈 문(empty)은 무시(읽기로 간주). 하나라도 dml/ddl 이면 false. 순수 → 테스트 의무.
  */
@@ -110,6 +105,20 @@ export function allReadOnly(sqls: string[]): boolean {
   })
 }
 
+/**
+ * 이 스크립트에 DDL 문이 **하나라도** 있나 — 실행 뒤 역설계를 다시 읽어야 하는지의 판정.
+ * `classifyScript` 로는 못 가른다: DDL 과 DML 이 섞이면 게이트를 살리려고 전체가 dml 로 접혀
+ * "구조가 바뀌었다"는 사실이 결과에서 사라진다. 순수 → 테스트 의무.
+ */
+export function hasDdl(sql: string): boolean {
+  return splitSql(sql).some((s) => classifyStatement(s).kind === 'ddl')
+}
+
+/**
+ * 스크립트(여러 문) 전체의 실행 성격을 판정한다 — 라우팅 안전용.
+ * 어느 한 문장이라도 DML 이면 **전체를 트랜잭션 게이트로**(뒤에 숨은 DML 이 자동 커밋되는 구멍 차단).
+ * DDL 만 섞였으면 ddl(자동 커밋 경고), 전부 읽기면 read. 단일 문은 classifyStatement 와 동일.
+ */
 export function classifyScript(sql: string): StatementClass {
   const classes = splitSql(sql)
     .map(classifyStatement)

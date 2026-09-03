@@ -152,6 +152,46 @@ export async function run(ctx) {
     check('Remote › Query: 다시 열어도 저장소의 SQL 이 멀쩡하다', (await editorText()).includes('FROM users'))
   }
 
+  // ⭐ Query 로 친 DDL 이 목록에 **저절로** 반영된다 (2026-09-03 사용자 지적)
+  // 예전엔 Definition 의 스키마 편집만 역설계를 다시 읽었다. 같은 `CREATE TABLE` 을 Query 로
+  // 치면 Data 의 표 목록은 옛것인 채라, **어디서 쳤느냐**에 따라 화면이 다르게 굴었다.
+  // 여기서는 새로고침을 **누르지 않는다** — 누르면 이 검사가 무의미해진다.
+  {
+    // 못 기다리면 예외 대신 false — 이 검사 하나가 스위트 전체를 끊지 않게.
+    const listed = (name) =>
+      page
+        .waitForSelector(`[data-table-row="${name}"]`, { timeout: 20_000 })
+        .then(() => true, () => false)
+    const gone = (name) =>
+      page
+        .waitForFunction((n) => !document.querySelector(`[data-table-row="${n}"]`), name, { timeout: 20_000 })
+        .then(() => true, () => false)
+
+    await typeSql('DROP TABLE IF EXISTS ddl_auto_probe')
+    await click('button:has-text("Run")')
+    await page.waitForTimeout(1200)
+
+    await typeSql('CREATE TABLE ddl_auto_probe (id int primary key, memo text)')
+    await click('button:has-text("Run")')
+    // 같은 역설계 캐시를 보므로 Query 의 스키마 패널이 먼저 말한다.
+    const inPanel = await page
+      .waitForFunction(() => document.body.innerText.includes('ddl_auto_probe'), null, { timeout: 20_000 })
+      .then(() => true, () => false)
+    check('Remote › Query: 친 DDL 이 스키마 패널에 저절로 뜬다', inPanel)
+
+    await click('button:has-text("Data")')
+    check('Remote › Data: 새로고침 없이도 새 표가 목록에 있다', await listed('ddl_auto_probe'))
+
+    // 지운 것도 저절로 빠진다 — 뒷정리를 겸한다(뒤 블록들이 이 표를 안 보게).
+    await click('button:has-text("Query")')
+    await page.waitForSelector('.cm-content', { timeout: 15_000 })
+    await typeSql('DROP TABLE ddl_auto_probe')
+    await click('button:has-text("Run")')
+    await page.waitForTimeout(1200)
+    await click('button:has-text("Data")')
+    check('Remote › Data: 새로고침 없이도 지운 표가 목록에서 빠진다', await gone('ddl_auto_probe'))
+  }
+
   // Remote › Data — 조회 + 편집(수정→트랜잭션 게이트→롤백)(Phase 2b)
   await click('button:has-text("Data")')
   // 사이드 패널은 Definition·Diagram 과 같은 공용 부품이다 — 행은 이름 훅으로 집는다

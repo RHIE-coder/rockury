@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useQueryStore } from './store'
+import { useRemoteStore } from '../store'
 
 /**
  * Query 스토어 실행 라우팅 검증 — classify 결과에 따라 read/dml/ddl 로 분기하는지.
@@ -56,10 +57,67 @@ describe('run 라우팅', () => {
   })
 
   it('dml 커밋 → txCommit + 히스토리 기록', async () => {
-    useQueryStore.setState({ sql: 'DELETE FROM t WHERE id=1', lastConn: 'c1', tx: { txId: 'tx1', verb: 'DELETE', affectedRows: 1, destructive: false } })
+    useQueryStore.setState({ sql: 'DELETE FROM t WHERE id=1', lastConn: 'c1', tx: { txId: 'tx1', verb: 'DELETE', affectedRows: 1, destructive: false, hadDdl: false } })
     await useQueryStore.getState().confirm()
     expect(q.txCommit).toHaveBeenCalledWith('tx1')
     expect(q.historyAppend).toHaveBeenCalledTimes(1)
     expect(useQueryStore.getState().tx).toBeNull()
+  })
+})
+
+/**
+ * 회귀(2026-09-03 사용자 지적): Query 탭에서 `ALTER TABLE` 을 쳐도 Data 의 표 목록이 옛것이었다.
+ * Definition 의 스키마 편집만 재역설계를 부르고 Query 는 안 불러서, **같은 DDL 을 어디서 쳤느냐에
+ * 따라** 화면이 다르게 굴었다. 여기서 보는 것은 "역설계를 다시 읽으라고 시켰는가" 하나다.
+ */
+describe('DDL 실행 뒤 역설계 재조회', () => {
+  const load = vi.fn(async () => {})
+  beforeEach(() => {
+    load.mockClear()
+    useRemoteStore.setState({ load })
+  })
+
+  it('DDL(CREATE) → 강제 재조회를 부른다', async () => {
+    useQueryStore.setState({ sql: 'CREATE TABLE t (id int)' })
+    await useQueryStore.getState().run('c1')
+    expect(load).toHaveBeenCalledWith('c1', 'c1', true)
+  })
+
+  it('읽기(SELECT) → 부르지 않는다 — 구조는 그대로다', async () => {
+    useQueryStore.setState({ sql: 'SELECT 1' })
+    await useQueryStore.getState().run('c1')
+    expect(load).not.toHaveBeenCalled()
+  })
+
+  it('DML 만이면 부르지 않는다 — 커밋해도 마찬가지', async () => {
+    useQueryStore.setState({ sql: 'UPDATE t SET a=1 WHERE id=1' })
+    await useQueryStore.getState().run('c1')
+    await useQueryStore.getState().confirm()
+    expect(load).not.toHaveBeenCalled()
+  })
+
+  it('⭐ DDL+DML 섞인 스크립트 → 게이트를 여는 동안은 안 부르고, 커밋한 뒤에 부른다', async () => {
+    useQueryStore.setState({ sql: 'ALTER TABLE t ADD COLUMN c text; UPDATE t SET c = 1' })
+    await useQueryStore.getState().run('c1')
+    expect(useQueryStore.getState().tx).toMatchObject({ hadDdl: true })
+    expect(load).not.toHaveBeenCalled()
+    await useQueryStore.getState().confirm()
+    expect(load).toHaveBeenCalledWith('c1', 'c1', true)
+  })
+
+  it('⭐ 섞인 스크립트를 되돌려도 부른다 — MySQL 은 DDL 을 못 되돌린다', async () => {
+    useQueryStore.setState({ sql: 'ALTER TABLE t ADD COLUMN c text; UPDATE t SET c = 1' })
+    await useQueryStore.getState().run('c1')
+    load.mockClear()
+    await useQueryStore.getState().rollback()
+    expect(load).toHaveBeenCalledWith('c1', 'c1', true)
+  })
+
+  it('⭐ DDL 이 실패해도 부른다 — 앞 문이 이미 나갔을 수 있다', async () => {
+    q.run.mockRejectedValueOnce(new Error('boom'))
+    useQueryStore.setState({ sql: 'CREATE TABLE a (id int); CREATE TABLE b (bad' })
+    await useQueryStore.getState().run('c1')
+    expect(useQueryStore.getState().error).toBe('boom')
+    expect(load).toHaveBeenCalledWith('c1', 'c1', true)
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allReadOnly, classifyScript, classifyStatement, splitSql, stripLeadingComments } from './classify'
+import { allReadOnly, classifyScript, classifyStatement, hasDdl, splitSql, stripLeadingComments } from './classify'
 
 describe('allReadOnly', () => {
   it('전부 SELECT 면 true', () => {
@@ -115,3 +115,27 @@ describe('classifyScript — 스크립트 전체 판정(라우팅 안전)', () =
     expect(classifyScript('  ; -- x\n ; /* y */ ').kind).toBe('empty')
   })
 })
+
+describe('hasDdl — 실행 뒤 역설계를 다시 읽어야 하나', () => {
+  it('DDL 한 문이면 true', () => {
+    expect(hasDdl('ALTER TABLE t RENAME TO u')).toBe(true)
+  })
+  it('⭐ DML 에 섞여 있어도 찾아낸다 — classifyScript 는 dml 로 접어 버린다', () => {
+    const sql = 'ALTER TABLE t ADD COLUMN c text; UPDATE t SET c = 1'
+    expect(classifyScript(sql).kind).toBe('dml')
+    expect(hasDdl(sql)).toBe(true)
+  })
+  it('읽기·DML 뿐이면 false', () => {
+    expect(hasDdl('SELECT 1; UPDATE t SET a=1 WHERE id=1')).toBe(false)
+  })
+  it('주석에 가려진 DDL 도 찾아낸다 — 선행 주석은 판정에서 걷힌다', () => {
+    expect(hasDdl('-- 표를 만든다\nCREATE TABLE t (id int)')).toBe(true)
+  })
+  it('문자열 안의 세미콜론·DDL 낱말에는 안 속는다', () => {
+    expect(hasDdl("SELECT 'DROP TABLE t; ' AS s")).toBe(false)
+  })
+  it('빈 문/주석뿐이면 false', () => {
+    expect(hasDdl('  ; -- x\n ; /* y */ ')).toBe(false)
+  })
+})
+
