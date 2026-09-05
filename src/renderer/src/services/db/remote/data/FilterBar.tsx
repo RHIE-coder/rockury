@@ -277,7 +277,7 @@ function SavedFilterMenu({
       )}
 
       {open && (
-        <div className="absolute left-0 top-full z-30 mt-1.5 w-72 rounded-md border border-line bg-canvas p-1 shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-md border border-line bg-canvas p-1 shadow-lg">
           {items.length === 0 ? (
             <div className="px-2 py-3 text-center text-[11px] text-muted">저장한 필터 없음</div>
           ) : (

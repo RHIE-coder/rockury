@@ -120,8 +120,17 @@ export function SearchSelect({
         <ChevronDown className="size-3 shrink-0 text-muted" />
       </button>
 
+      {/* 떠 있는 것은 `z-50` — 이 집의 팝오버·메뉴·툴팁·대화상자가 전부 그 층이다.
+          z-30 이었을 때 Data 표의 얼어붙은 `#` 머리칸(같은 z-30)이 이 카드를 덮었다:
+          같은 층이면 DOM 뒤에 오는 표가 이긴다(2026-09-04 제보).
+
+          폭은 **내용에 맡긴다**(`w-max`). 고정 `w-56` 은 한쪽엔 좁고 한쪽엔 넓었다 —
+          컬럼 카드에선 `bigint(20) unsigned` 같은 타입 라벨이 자리를 먹어 이름이
+          `variant_…` 로 잘렸고(고르는 기준이 이름인데 둘이 똑같이 보였다), 연산자
+          카드에선 `= 같다` 한 줄에 224px 이 남아돌았다. 손잡이보다 좁아지지 않게
+          `min-w-full`, 이름이 아주 긴 표에서 화면을 밀지 않게 `max-w-96`. */}
       {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-md border border-line bg-canvas shadow-lg">
+        <div className="absolute left-0 top-full z-50 mt-1 w-max min-w-full max-w-96 overflow-hidden rounded-md border border-line bg-canvas shadow-lg">
           <div className="flex items-center gap-1.5 border-b border-line px-2 py-1.5">
             <Search className="size-3.5 shrink-0 text-muted" />
             <input
@@ -151,7 +160,13 @@ export function SearchSelect({
                 >
                   <Check className={cn('size-3 shrink-0', o.value !== value && 'invisible')} />
                   <span className={cn('min-w-0 flex-1 truncate', mono && 'font-mono text-[11px]')}>{o.label}</span>
-                  {o.hint && <span className="shrink-0 font-mono text-[10px] text-muted">{o.hint}</span>}
+                  {/* 이름이 먼저다 — 좁아지면 타입 라벨이 줄어 이름 자리를 남긴다.
+                      `shrink-0` 이던 시절엔 반대로 이름이 먼저 잘렸다. */}
+                  {o.hint && (
+                    <span className="min-w-0 max-w-[45%] shrink truncate font-mono text-[10px] text-muted">
+                      {o.hint}
+                    </span>
+                  )}
                 </button>
               ))
             )}

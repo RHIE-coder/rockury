@@ -419,7 +419,7 @@ export function DataView() {
                       <Clock /> {tzMode}
                     </Button>
                     {showTz && (
-                      <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-md border border-line bg-canvas p-1.5 text-[12px] shadow-lg">
+                      <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-md border border-line bg-canvas p-1.5 text-[12px] shadow-lg">
                         {TZ_MODES.map((m) => (
                           <button key={m} type="button" onClick={() => { setTzMode(m); if (m !== 'LOCAL') setShowTz(false) }} className={cn('block w-full rounded px-2 py-1 text-left outline-none hover:bg-panel', tzMode === m && 'text-accent')}>
                             {m}
@@ -438,7 +438,7 @@ export function DataView() {
                       <Columns3 />
                     </Button>
                     {showCols && (
-                      <div className="absolute right-0 top-full z-20 mt-1 max-h-72 w-56 overflow-auto rounded-md border border-line bg-canvas p-1.5 text-[12px] shadow-lg">
+                      <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-56 overflow-auto rounded-md border border-line bg-canvas p-1.5 text-[12px] shadow-lg">
                         <div className="mb-1 flex gap-1.5 px-1">
                           <button type="button" className="text-[11px] text-accent" onClick={() => setHidden(new Set())}>전체 표시</button>
                           <button type="button" className="text-[11px] text-muted" onClick={() => setHidden(new Set(selected.columns.map((c) => c.name)))}>전체 숨김</button>
